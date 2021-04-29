@@ -1,0 +1,46 @@
+image: "rust:latest"
+
+stages:
+  - lint
+  - build
+
+variables:
+  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+
+cache:
+  paths:
+  - .cargo/
+  - target/
+
+lint:fmt:
+  stage: lint
+  before_script:
+    - rustup component add rustfmt
+  script: cargo fmt -- --check
+
+lint:clippy:
+  stage: lint
+  before_script:
+    - rustup component add clippy
+  script: cargo clippy --all-features -- --deny warnings
+
+lint:dependency_check:
+  stage: lint
+  before_script:
+    - cargo install --locked cargo-deny
+  script: cargo deny check
+
+build:check:
+  stage: build
+  variables:
+    RUSTFLAGS: "-D warnings"
+  script: cargo check --tests --all-features
+
+build:binary:
+  stage: build
+  artifacts:
+    paths:
+      - target/release/k3k_controller
+  script:
+    - cargo build --release
+    - cargo test --release
