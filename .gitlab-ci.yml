@@ -8,6 +8,7 @@ variables:
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
 
 cache:
+  key: $CI_JOB_STAGE
   paths:
   - .cargo/
   - target/
