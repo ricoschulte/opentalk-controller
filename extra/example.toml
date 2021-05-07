@@ -1,0 +1,7 @@
+[database]
+server="localhost"
+port=5432
+name="migration_test"
+maxconnections=1
+user="postgres"
+password="password123"

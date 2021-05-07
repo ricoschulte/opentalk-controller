@@ -1,11 +1,19 @@
 image: "rust:latest"
 
+services:
+  - postgres:13-alpine
+
 stages:
   - lint
   - build
 
 variables:
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+
+  POSTGRES_DB: migration_test
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: "password123"
+  POSTGRES_HOST_AUTH_METHOD: trust
 
 cache:
   key: $CI_JOB_STAGE
@@ -39,6 +47,13 @@ build:check:
 
 build:binary:
   stage: build
+  variables:
+    K3K_CTRL_DATABASE_SERVER: "postgres"
+    K3K_CTRL_DATABASE_PORT: "5432"
+    K3K_CTRL_DATABASE_NAME: "migration_test"
+    K3K_CTRL_DATABASE_MAXCONNECTIONS: "1"
+    K3K_CTRL_DATABASE_USER: "postgres"
+    K3K_CTRL_DATABASE_PASSWORD: "password123"
   artifacts:
     paths:
       - target/release/k3k_controller
