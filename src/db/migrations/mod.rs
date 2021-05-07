@@ -1,4 +1,5 @@
 use crate::settings::Database;
+use actix_web::rt;
 use anyhow::{Context, Result};
 use refinery::include_migration_mods;
 use refinery_core::tokio_postgres::{connect, NoTls};
@@ -15,7 +16,7 @@ pub async fn start_migration(db_config: &Database) -> Result<()> {
         .await
         .context("Unable to connect to database")?;
 
-    tokio::spawn(async move {
+    rt::spawn(async move {
         if let Err(e) = conn.await {
             log::error!("connection error: {}", e)
         }
@@ -44,7 +45,7 @@ mod migration_tests {
     /// K3K_CTRL_DATABASE_USER=postgres
     /// K3K_CTRL_DATABASE_PASSWORD=password123
     /// ```
-    #[tokio::test]
+    #[actix_rt::test]
     async fn test_migration() -> Result<()> {
         let db_config = db_from_env()?;
 
