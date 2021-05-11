@@ -1,7 +1,35 @@
 [database]
-server="localhost"
-port=5432
-name="migration_test"
-maxconnections=1
-user="postgres"
-password="password123"
+# Database server address
+server = "localhost"
+
+# Database server port
+port = 5432
+
+# Database name
+name = "migration_test"
+
+# Maximum number of connections allowed to the server
+maxconnections = 100
+
+# Database user
+user = "postgres"
+
+# Database user password
+password = "password123"
+
+
+[http]
+# The port to bind the HTTP Server to (defaults to 80)
+port = 8000
+# URLs that requests are allowed from. Leave empty to allow all.
+cors.allowed_origin = ["https://localhost:8080"]
+
+[oidc.provider]
+# OIDC Issuer URL according to RFC8414
+issuer = "http://localhost:8080/auth/realms/K3K"
+
+# OIDC Client ID
+client_id = "Controller"
+
+# OIDC Client secret (application requires confidential client)
+client_secret = "c64c5854-3f02-4728-a617-bbe98ec42b8f"

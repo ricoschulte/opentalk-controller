@@ -19,11 +19,26 @@ serde = { version = "1", features = ["derive"] }
 
 ### Error handling
 anyhow = "1.0"
+thiserror = "1.0"
 
 ### Database migrations
 refinery = { version = "0.5", features = ["tokio-postgres", "tokio"] }
 refinery-core = "0.5"
 barrel = { version = "0.6", features = ["pg"] }
 
-### Runtime
-tokio = "1.5"
+### Web Framework & Runtime
+actix-web = "4.0.0-beta.6"
+actix-rt = "2.2"
+# Until https://github.com/actix/actix-extras/pull/181 gets merged into the main branch use the forked version of actix-extras
+actix-web-httpauth = { git = "https://github.com/nhruo123/actix-extras.git", rev = "b4e8db446843a99b06c7ec40f18ef7b59ee7e955" }
+actix-cors = { git = "https://github.com/nhruo123/actix-extras.git", rev = "b4e8db446843a99b06c7ec40f18ef7b59ee7e955" }
+
+### OpenID Connect & JWT
+openidconnect = { version = "2.0", features = ["reqwest"] }
+jsonwebtoken = "7"
+base64 = "0.13"
+chrono = "0.4"
+
+[dev-dependencies]
+# JWT Testing to create signatures
+ring = "0.16"
