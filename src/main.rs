@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     );
 
     // Start HTTP Server
-    let cors = settings.http.cors.clone();
+    let cors = settings.http.cors;
     let http_server = HttpServer::new(move || {
         let cors = setup_cors(&cors);
 
