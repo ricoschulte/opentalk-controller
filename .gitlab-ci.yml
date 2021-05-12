@@ -6,6 +6,7 @@ services:
 stages:
   - lint
   - build
+  - db
 
 variables:
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
@@ -25,7 +26,10 @@ lint:fmt:
   stage: lint
   before_script:
     - rustup component add rustfmt
-  script: cargo fmt -- --check
+  script:
+    # We can't ignore the schema.rs. Remove when rustfmt 2.0 is relased.
+    - /usr/local/cargo/bin/rustfmt src/db/schema.rs
+    - cargo fmt -- --check
 
 lint:clippy:
   stage: lint
@@ -60,3 +64,18 @@ build:binary:
   script:
     - cargo build --release
     - cargo test --release
+
+db:schema_validation:
+  stage: db
+  variables:
+    DATABASE_URL: "postgres://postgres:password123@postgres:5432/migration_test"
+    K3K_CTRL_DATABASE_SERVER: "postgres"
+    K3K_CTRL_DATABASE_PORT: "5432"
+    K3K_CTRL_DATABASE_NAME: "migration_test"
+    K3K_CTRL_DATABASE_MAXCONNECTIONS: "1"
+    K3K_CTRL_DATABASE_USER: "postgres"
+    K3K_CTRL_DATABASE_PASSWORD: "password123"
+  script:
+    - cargo test --release
+    - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"
+    - ./.cargo/bin/diesel print-schema | diff src/db/schema.rs -

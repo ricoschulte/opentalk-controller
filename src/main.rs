@@ -11,6 +11,9 @@ mod db;
 mod oidc;
 mod settings;
 
+#[macro_use]
+extern crate diesel;
+
 #[actix_web::main]
 async fn main() -> Result<()> {
     setup_logging()?;
