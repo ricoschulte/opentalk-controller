@@ -21,6 +21,10 @@ serde = { version = "1", features = ["derive"] }
 anyhow = "1.0"
 thiserror = "1.0"
 
+### Database ORM
+rbatis = "1.8"
+uuid = "0.8"
+
 ### Database migrations
 refinery = { version = "0.5", features = ["tokio-postgres", "tokio"] }
 refinery-core = "0.5"
