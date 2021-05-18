@@ -22,12 +22,13 @@ anyhow = "1.0"
 thiserror = "1.0"
 
 ### Database ORM
-rbatis = "1.8"
-uuid = "0.8"
+diesel = { version = "1.4.6", features = ["postgres", "uuid", "uuidv07"] }
+uuid = { version = "0.8.2", features = ["serde", "v4"] }
 
 ### Database migrations
 refinery = { version = "0.5", features = ["tokio-postgres", "tokio"] }
 refinery-core = "0.5"
+diesel_migrations = "1.4"
 barrel = { version = "0.6", features = ["pg"] }
 
 ### Web Framework & Runtime

@@ -4,7 +4,10 @@ use anyhow::{Context, Result};
 use refinery::include_migration_mods;
 use refinery_core::tokio_postgres::{connect, NoTls};
 
-include_migration_mods!("src/db/migrations");
+#[path = "../../diesel/migrations/v1_initial/mod.rs"]
+mod v1_diesel;
+
+include_migration_mods!("src/db/schema_mgmt/refinery/migrations");
 
 pub async fn start_migration(db_config: &Database) -> Result<()> {
     let connection_config = format!(
