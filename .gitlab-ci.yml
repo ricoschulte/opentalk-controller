@@ -27,8 +27,6 @@ lint:fmt:
   before_script:
     - rustup component add rustfmt
   script:
-    # We can't ignore the schema.rs. Remove when rustfmt 2.0 is relased.
-    - /usr/local/cargo/bin/rustfmt src/db/schema.rs
     - cargo fmt -- --check
 
 lint:clippy:
@@ -75,7 +73,13 @@ db:schema_validation:
     K3K_CTRL_DATABASE_MAXCONNECTIONS: "1"
     K3K_CTRL_DATABASE_USER: "postgres"
     K3K_CTRL_DATABASE_PASSWORD: "password123"
+  before_script:
+    - rustup component add rustfmt
   script:
     - cargo test --release
+    - apt-get update && apt-get install -y postgresql-client-11
+    # Due to refinery creating a table and therefore changing the generated diesel schema, we have to drop
+    # refinery_schema_history before we generate our diesel schema
+    - psql -U postgres -h postgres -d migration_test -c 'DROP TABLE IF EXISTS refinery_schema_history;'
     - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"
-    - ./.cargo/bin/diesel print-schema | diff src/db/schema.rs -
+    - ./.cargo/bin/diesel print-schema | /usr/local/cargo/bin/rustfmt | diff src/db/schema.rs -

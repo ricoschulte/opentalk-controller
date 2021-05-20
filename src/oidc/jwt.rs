@@ -9,6 +9,8 @@ use std::time::SystemTime;
 pub enum VerifyError {
     #[error("Not a JWT")]
     InvalidJwt,
+    #[error("invalid JWT claims")]
+    InvalidClaims,
     #[error("JWT is expired")]
     Expired,
     #[error("JWT header does not specify a KeyID (kid)")]
@@ -30,7 +32,13 @@ pub struct VerifyClaims {
     pub iat: DateTime<Utc>,
     /// Subject (User ID)
     pub sub: String,
-    /// Groups the user belongs to.  
+    /// The users email
+    pub email: String,
+    /// The users firstname
+    pub given_name: String,
+    /// The users lastname
+    pub family_name: String,
+    /// Groups the user belongs to.
     /// This is a custom field not specified by the OIDC Standard
     pub x_grp: Vec<String>,
 }
@@ -43,7 +51,7 @@ pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, 
 
     // Just parse the token out, no verification
     let token =
-        dangerous_insecure_decode::<VerifyClaims>(token).map_err(|_| VerifyError::InvalidJwt)?;
+        dangerous_insecure_decode::<VerifyClaims>(token).map_err(|_| VerifyError::InvalidClaims)?;
 
     let now = DateTime::<Utc>::from(SystemTime::now());
 
@@ -167,7 +175,11 @@ mod test {
                 "sub": "admin",
                 "iat": {},
                 "exp": {},
-                "x_grp": ["/admin"]
+                "x_grp": ["/admin"],
+                "preferred_username": "admin",
+                "given_name": "the",
+                "family_name": "admin",
+                "email": "admin@mail.de"
                 }}"#,
             iat, exp,
         );
