@@ -55,6 +55,5 @@ chrono = "0.4"
 async-tungstenite = "0.13"
 actix-web-actors = { git = "https://github.com/actix/actix-web.git" }
 
-[dev-dependencies]
-# JWT Testing to create signatures
+# Rust Encryption
 ring = "0.16"

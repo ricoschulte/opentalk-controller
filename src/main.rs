@@ -38,6 +38,7 @@ async fn main() -> Result<()> {
             .context("Failed to initialize OIDC Context")?,
     );
 
+
     let mut application = modules::ApplicationBuilder::default();
     let mut signaling = WebSocketHttpModule::new("/signaling", &["k3k-signaling-json-v1"]);
     signaling.add_module::<Echo>(());
@@ -47,14 +48,14 @@ async fn main() -> Result<()> {
     // Start HTTP Server
     let cors = settings.http.cors;
     let http_server = HttpServer::new(move || {
-        let cors = setup_cors(&cors);
+    let cors = setup_cors(&cors);
 
-        App::new()
-            .wrap(cors)
-            .app_data(db_ctx.clone())
-            .app_data(oidc_ctx.clone())
-            .service(v1_scope(db_ctx.clone(), oidc_ctx.clone()))
-            .configure(application.configure())
+    App::new()
+        .wrap(cors)
+        .app_data(db_ctx.clone())
+        .app_data(oidc_ctx.clone())
+        .service(v1_scope(db_ctx.clone(), oidc_ctx.clone()))
+        .configure(application.configure())
     });
 
     let http_server = http_server.bind((Ipv4Addr::UNSPECIFIED, settings.http.port))?;
