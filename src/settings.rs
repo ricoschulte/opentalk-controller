@@ -31,7 +31,7 @@ pub struct Settings {
     pub database: Database,
     pub oidc: Oidc,
     pub http: Http,
-    pub turn: Option<Turn>
+    pub turn: Option<Turn>,
 }
 
 impl Settings {
@@ -95,12 +95,15 @@ fn default_http_port() -> u16 {
     80
 }
 
-
-
-fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error> where D: Deserializer<'de> {
+fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
     let duration: u64 = Deserialize::deserialize(deserializer)?;
 
-    Ok(chrono::Duration::seconds(i64::try_from(duration).map_err(serde::de::Error::custom)?))
+    Ok(chrono::Duration::seconds(
+        i64::try_from(duration).map_err(serde::de::Error::custom)?,
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -109,7 +112,7 @@ pub struct Turn {
     #[serde(deserialize_with = "duration_from_secs")]
     pub lifetime: chrono::Duration,
     /// List of configured TURN servers.
-    pub servers: Vec<TurnServer>
+    pub servers: Vec<TurnServer>,
 }
 
 #[derive(Debug, Deserialize)]

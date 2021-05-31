@@ -38,24 +38,26 @@ async fn main() -> Result<()> {
             .context("Failed to initialize OIDC Context")?,
     );
 
-
     let mut application = modules::ApplicationBuilder::default();
     let mut signaling = WebSocketHttpModule::new("/signaling", &["k3k-signaling-json-v1"]);
     signaling.add_module::<Echo>(());
     application.add_http_module(signaling);
     let application = application.finish();
 
+    let turn_servers = Data::new(settings.turn);
+
     // Start HTTP Server
     let cors = settings.http.cors;
     let http_server = HttpServer::new(move || {
-    let cors = setup_cors(&cors);
+        let cors = setup_cors(&cors);
 
-    App::new()
-        .wrap(cors)
-        .app_data(db_ctx.clone())
-        .app_data(oidc_ctx.clone())
-        .service(v1_scope(db_ctx.clone(), oidc_ctx.clone()))
-        .configure(application.configure())
+        App::new()
+            .wrap(cors)
+            .app_data(db_ctx.clone())
+            .app_data(oidc_ctx.clone())
+            .app_data(turn_servers.clone())
+            .service(v1_scope(db_ctx.clone(), oidc_ctx.clone()))
+            .configure(application.configure())
     });
 
     let http_server = http_server.bind((Ipv4Addr::UNSPECIFIED, settings.http.port))?;
@@ -82,7 +84,8 @@ fn v1_scope(db_ctx: Data<DbInterface>, oidc_ctx: Data<OidcContext>) -> Scope {
                 .service(api::v1::rooms::new)
                 .service(api::v1::rooms::modify)
                 .service(api::v1::rooms::get)
-                .service(api::v1::rooms::start),
+                .service(api::v1::rooms::start)
+                .service(api::v1::turn::get),
         )
 }
 
