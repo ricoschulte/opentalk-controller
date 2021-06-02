@@ -1,13 +1,14 @@
+use crate::db::DbInterface;
 use crate::oidc::OidcContext;
 use actix_cors::Cors;
 use actix_web::http::{header, Method};
 use actix_web::web::Data;
-use actix_web::{App, HttpServer};
+use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{Context, Result};
 use std::net::Ipv4Addr;
 
 mod api;
-mod db;
+pub(crate) mod db;
 mod oidc;
 mod settings;
 
@@ -23,6 +24,11 @@ async fn main() -> Result<()> {
     // Run database migration
     db::migrations::start_migration(&settings.database).await?;
 
+    let db_ctx = Data::new(
+        DbInterface::connect(settings.database)
+            .context("Failed to initialize Database connection")?,
+    );
+
     // Discover OIDC Provider
     let oidc_ctx = Data::new(
         OidcContext::from_config(settings.oidc)
@@ -37,9 +43,9 @@ async fn main() -> Result<()> {
 
         App::new()
             .wrap(cors)
+            .app_data(db_ctx.clone())
             .app_data(oidc_ctx.clone())
-            .service(api::api_example)
-            .service(api::auth::login)
+            .service(v1_scope(db_ctx.clone(), oidc_ctx.clone()))
     });
 
     let http_server = http_server.bind((Ipv4Addr::UNSPECIFIED, settings.http.port))?;
@@ -47,6 +53,27 @@ async fn main() -> Result<()> {
     http_server.run().await?;
 
     Ok(())
+}
+
+fn v1_scope(db_ctx: Data<DbInterface>, oidc_ctx: Data<OidcContext>) -> Scope {
+    // the latest version contains the root services
+    web::scope("/v1")
+        .service(api::v1::auth::login)
+        .service(api::v1::auth::oidc_providers)
+        .service(
+            // empty scope to differentiate between auth endpoints
+            web::scope("")
+                .wrap(api::v1::middleware::oidc_auth::OidcAuth { db_ctx, oidc_ctx })
+                .service(api::v1::users::all)
+                .service(api::v1::users::set_current_user_profile)
+                .service(api::v1::users::current_user_profile)
+                .service(api::v1::users::user_details)
+                .service(api::v1::rooms::owned)
+                .service(api::v1::rooms::new)
+                .service(api::v1::rooms::modify)
+                .service(api::v1::rooms::get)
+                .service(api::v1::rooms::start),
+        )
 }
 
 fn setup_cors(settings: &settings::Cors) -> Cors {

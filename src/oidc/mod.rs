@@ -21,6 +21,7 @@ impl OidcContext {
     /// This reads the OidcProvider configuration and tries to fetch the metadata from it.
     /// If a provider is misconfigured or not reachable this function will fail.
     pub async fn from_config(oidc_config: settings::Oidc) -> Result<Self> {
+        // TODO: support multiple oidc providers
         let client = ProviderClient::discover(oidc_config.provider).await?;
 
         Ok(Self { provider: client })
@@ -77,8 +78,15 @@ impl OidcContext {
         Ok(IdTokenInfo {
             sub: claims.sub,
             expiration: claims.exp,
+            email: claims.email,
+            firstname: claims.given_name,
+            lastname: claims.family_name,
             x_grp: claims.x_grp,
         })
+    }
+
+    pub fn provider_url(&self) -> String {
+        self.provider.metadata.issuer().to_string()
     }
 }
 
@@ -97,5 +105,8 @@ pub struct AccessTokenIntrospectInfo {
 pub struct IdTokenInfo {
     pub sub: String,
     pub expiration: DateTime<Utc>,
+    pub email: String,
+    pub firstname: String,
+    pub lastname: String,
     pub x_grp: Vec<String>,
 }
