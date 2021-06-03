@@ -80,6 +80,8 @@ pub struct Http {
     // TODO ADD TLS SETTINGS
     #[serde(default = "default_http_port")]
     pub port: u16,
+    #[serde(default = "internal_http_port")]
+    pub internal_port: u16,
     #[serde(default)]
     pub cors: Cors,
 }
@@ -91,8 +93,12 @@ pub struct Cors {
     pub allowed_origin: Vec<String>,
 }
 
-fn default_http_port() -> u16 {
+const fn default_http_port() -> u16 {
     80
+}
+
+const fn internal_http_port() -> u16 {
+    8844
 }
 
 fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>

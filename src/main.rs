@@ -4,6 +4,7 @@ use actix_web::web::Data;
 use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{Context, Result};
 use db::DbInterface;
+use futures_util::future::{select, Either};
 use modules::http::ws::{Echo, WebSocketHttpModule};
 use oidc::OidcContext;
 use std::net::Ipv4Addr;
@@ -46,9 +47,22 @@ async fn main() -> Result<()> {
 
     let turn_servers = Data::new(settings.turn);
 
-    // Start HTTP Server
+    // Start internal HTTP Server
+    let internal_db_ctx = db_ctx.clone();
+    let internal_oidc_ctx = oidc_ctx.clone();
+    let internal_http_server = HttpServer::new(move || {
+        App::new()
+            .app_data(internal_db_ctx.clone())
+            .app_data(internal_oidc_ctx.clone())
+            .service(api::internal::introspect)
+    });
+
+    let internal_http_server =
+        internal_http_server.bind((Ipv4Addr::UNSPECIFIED, settings.http.internal_port))?;
+
+    // Start external HTTP Server
     let cors = settings.http.cors;
-    let http_server = HttpServer::new(move || {
+    let ext_http_server = HttpServer::new(move || {
         let cors = setup_cors(&cors);
 
         App::new()
@@ -60,9 +74,16 @@ async fn main() -> Result<()> {
             .configure(application.configure())
     });
 
-    let http_server = http_server.bind((Ipv4Addr::UNSPECIFIED, settings.http.port))?;
+    let ext_http_server = ext_http_server.bind((Ipv4Addr::UNSPECIFIED, settings.http.port))?;
 
-    http_server.run().await?;
+    match select(ext_http_server.run(), internal_http_server.run()).await {
+        Either::Left((external_res, _external_server)) => {
+            external_res.expect("External server error: {}")
+        }
+        Either::Right((internal_res, _internal_server)) => {
+            internal_res.expect("Internal server error: {}")
+        }
+    };
 
     Ok(())
 }
