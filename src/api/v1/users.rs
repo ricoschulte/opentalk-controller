@@ -9,6 +9,7 @@ use crate::db::DbInterface;
 use actix_web::web::{Data, Json, Path, ReqData};
 use actix_web::{get, put, web};
 use serde::{Deserialize, Serialize};
+use validator::{Validate, ValidationError};
 
 /// Public user details.
 ///
@@ -39,11 +40,29 @@ pub struct UserProfile {
 }
 
 /// Used to modify user settings
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Validate, Deserialize)]
+#[validate(schema(function = "disallow_empty"))]
 pub struct ModifyUser {
+    #[validate(length(max = 255))]
     pub title: Option<String>,
+    #[validate(length(max = 255))]
     pub theme: Option<String>,
+    #[validate(length(max = 35))]
     pub language: Option<String>,
+}
+
+fn disallow_empty(modify_user: &ModifyUser) -> Result<(), ValidationError> {
+    let ModifyUser {
+        title,
+        theme,
+        language,
+    } = modify_user;
+
+    if title.is_none() && theme.is_none() && language.is_none() {
+        Err(ValidationError::new("ModifyUser has no set fields"))
+    } else {
+        Ok(())
+    }
 }
 
 /// API Endpoint *GET /users*
@@ -84,6 +103,11 @@ pub async fn set_current_user_profile(
     modify_user: Json<ModifyUser>,
 ) -> Result<Json<UserProfile>, ApiError> {
     let modify_user = modify_user.into_inner();
+
+    if let Err(e) = modify_user.validate() {
+        log::warn!("API modify user validation error {}", e);
+        return Err(ApiError::ValidationFailed);
+    }
 
     let db_user = web::block(move || -> Result<db_users::User, ApiError> {
         let modify_user = db_users::ModifyUser {

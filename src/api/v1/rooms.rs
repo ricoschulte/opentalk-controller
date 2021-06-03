@@ -11,6 +11,7 @@ use actix_web::web::{Data, Json, Path, ReqData};
 use actix_web::{get, post, put, web, HttpRequest, HttpResponse};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use validator::{Validate, ValidationError};
 
 /// A Room
 ///
@@ -37,19 +38,36 @@ pub struct RoomDetails {
 }
 
 /// API request parameters to create a new room
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Validate, Deserialize)]
 pub struct NewRoom {
+    #[validate(length(max = 255))]
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
 }
 
 /// API request parameters to modify a room.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Validate, Deserialize)]
+#[validate(schema(function = "disallow_empty"))]
 pub struct ModifyRoom {
+    #[validate(length(max = 255))]
     pub password: Option<String>,
     pub wait_for_moderator: Option<bool>,
     pub listen_only: Option<bool>,
+}
+
+fn disallow_empty(modify_room: &ModifyRoom) -> Result<(), ValidationError> {
+    let ModifyRoom {
+        password,
+        wait_for_moderator,
+        listen_only,
+    } = modify_room;
+
+    if password.is_none() && wait_for_moderator.is_none() && listen_only.is_none() {
+        Err(ValidationError::new("ModifyRoom has no set fields"))
+    } else {
+        Ok(())
+    }
 }
 
 /// API Endpoint *GET /rooms*
@@ -95,6 +113,11 @@ pub async fn new(
 ) -> Result<Json<Room>, ApiError> {
     let new_room = new_room.into_inner();
 
+    if let Err(e) = new_room.validate() {
+        log::warn!("API new room validation error {}", e);
+        return Err(ApiError::ValidationFailed);
+    }
+
     let db_room = web::block(move || -> Result<db_rooms::Room, ApiError> {
         let new_room = db_rooms::NewRoom {
             uuid: uuid::Uuid::new_v4(),
@@ -134,9 +157,13 @@ pub async fn modify(
     room_uuid: Path<Uuid>,
     modify_room: Json<ModifyRoom>,
 ) -> Result<Json<Room>, ApiError> {
-    // TODO: dont allow empty ModifyRoom structs, will result in diesel error (use validator crate)
     let room_uuid = room_uuid.into_inner();
     let modify_room = modify_room.into_inner();
+
+    if let Err(e) = modify_room.validate() {
+        log::warn!("API modify room validation error {}", e);
+        return Err(ApiError::ValidationFailed);
+    }
 
     let db_room = web::block(move || {
         let room = db_ctx.get_room_by_uuid(&room_uuid)?;
