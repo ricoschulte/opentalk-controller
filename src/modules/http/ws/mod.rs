@@ -1,7 +1,10 @@
 use super::HttpModule;
+use crate::api::v1::middleware::oidc_auth::check_access_token;
+use crate::db::DbInterface;
+use crate::oidc::OidcContext;
 use actix_web::dev::Extensions;
 use actix_web::http::{header, HeaderValue};
-use actix_web::web::ServiceConfig;
+use actix_web::web::{Data, ServiceConfig};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use adapter::ActixTungsteniteAdapter;
@@ -9,8 +12,8 @@ use async_tungstenite::tungstenite::protocol::Role;
 use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
 use futures::Stream;
-use modules::Modules;
-use modules::{ModuleBuilder, ModuleBuilderImpl};
+use modules::{ModuleBuilder, ModuleBuilderImpl, Modules};
+use openidconnect::AccessToken;
 use runner::{Namespaced, Runner};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -173,14 +176,23 @@ impl HttpModule for WebSocketHttpModule {
 
         app.service(web::scope("").route(
             self.path,
-            web::get().to(move |req: HttpRequest, stream: web::Payload| {
-                ws_service(protocols, Rc::clone(&modules), req, stream)
+            web::get().to(move |db_ctx, oidc_ctx, req, stream| {
+                ws_service(
+                    db_ctx,
+                    oidc_ctx,
+                    protocols,
+                    Rc::clone(&modules),
+                    req,
+                    stream,
+                )
             }),
         ));
     }
 }
 
 async fn ws_service(
+    db_ctx: Data<DbInterface>,
+    oidc_ctx: Data<OidcContext>,
     protocols: &'static [&'static str],
     modules: Rc<[Box<dyn ModuleBuilder>]>,
     req: HttpRequest,
@@ -208,7 +220,7 @@ async fn ws_service(
         }
     }
 
-    let (protocol, _access_token) = match (protocol, access_token) {
+    let (protocol, access_token) = match (protocol, access_token) {
         (Some(protocol), Some(access_token)) => (protocol, access_token),
         // TODO how to handle the rejection properly
         // usually if no protocol offered by the client is compatible, the server should continue
@@ -227,7 +239,7 @@ async fn ws_service(
         _ => return Ok(HttpResponse::Forbidden().finish()),
     };
 
-    // TODO CHECK ACCESS TOKEN
+    let user = check_access_token(db_ctx, oidc_ctx, AccessToken::new(access_token.into())).await?;
 
     let mut response = ws::handshake(&req)?;
 
@@ -240,7 +252,7 @@ async fn ws_service(
         module.build(&mut builder, protocol).await;
     }
 
-    task::spawn_local(Runner::new(builder, websocket).run());
+    task::spawn_local(Runner::new(builder, websocket, user).run());
 
     // TODO: maybe change the SEC_WEBSOCKET_PROTOCOL header to access_token=kdpaosd2eja9dj,k3k-signaling-json-v1 to avoid ordering
     response.insert_header((

@@ -1,5 +1,6 @@
 use super::modules::{DynEvent, DynEventCtx, Modules, NoSuchModuleError};
 use super::WebSocket;
+use crate::db::users::User;
 use actix_web::dev::Extensions;
 use async_tungstenite::tungstenite::Message;
 use futures::SinkExt;
@@ -15,23 +16,30 @@ const WS_MSG_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub struct Runner {
     websocket: WebSocket,
+    // Websocket final message timeout, when reached the runner will exit
     timeout: Pin<Box<Sleep>>,
 
+    // When set to true the runner will gracefully exit on next loop
     exit: bool,
 
+    // All registered and initialized modules
     modules: Modules,
 
+    // Websocket specific data
     local_state: Extensions,
 }
 
 impl Runner {
-    pub fn new(modules: Modules, websocket: WebSocket) -> Self {
+    pub fn new(modules: Modules, websocket: WebSocket, user: User) -> Self {
+        let mut local_state = Extensions::new();
+        local_state.insert(user);
+
         Self {
             websocket,
             exit: false,
             timeout: Box::pin(sleep(WS_MSG_TIMEOUT)),
             modules,
-            local_state: Default::default(),
+            local_state,
         }
     }
 
