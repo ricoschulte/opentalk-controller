@@ -17,13 +17,15 @@ pub mod users;
 /// Error type of all frontend REST-endpoints
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
-    #[error("authentication error")]
+    #[error("Authentication error")]
     Auth(#[from] AuthenticationError<Bearer>),
-    #[error("insufficient permissions")]
+    #[error("Insufficient permissions")]
     InsufficientPermission,
-    #[error("not found")]
+    #[error("Not found")]
     NotFound,
-    #[error("internal server error")]
+    #[error("The provided object does not follow the specified field constraints")]
+    ValidationFailed,
+    #[error("Internal server error")]
     Internal,
 }
 
@@ -46,6 +48,8 @@ impl ResponseError for ApiError {
             ApiError::InsufficientPermission => StatusCode::FORBIDDEN,
 
             ApiError::NotFound => StatusCode::NOT_FOUND,
+
+            ApiError::ValidationFailed => StatusCode::BAD_REQUEST,
 
             ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }

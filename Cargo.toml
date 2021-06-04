@@ -19,6 +19,7 @@ serde = { version = "1", features = ["derive"] }
 ### Error handling
 anyhow = "1.0"
 thiserror = "1.0"
+validator = { version = "0.13", features = ["derive"] }
 
 ### Database ORM
 diesel = { version = "1.4.6", features = ["postgres", "uuid", "uuidv07", "r2d2"] }
