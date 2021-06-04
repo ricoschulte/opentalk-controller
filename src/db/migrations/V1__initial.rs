@@ -1,7 +1,9 @@
-use barrel::{types, Migration};
+use barrel::backend::Pg;
+use barrel::{Migration, types};
 
-/// Handle up schema_mgmt
-pub fn up(migr: &mut Migration) {
+pub fn migration() -> String {
+    let mut migr = Migration::new();
+
     migr.create_table("users", |table| {
         table.add_column("id", types::custom("BIGSERIAL").primary(true));
         table.add_column("oidc_uuid", types::uuid());
@@ -22,11 +24,6 @@ pub fn up(migr: &mut Migration) {
         table.add_column("wait_for_moderator", types::boolean().nullable(false));
         table.add_column("listen_only", types::boolean().nullable(false));
     });
-}
 
-/// Handle down schema_mgmt
-#[allow(dead_code)]
-fn down(migr: &mut Migration) {
-    migr.drop_table("rooms");
-    migr.drop_table("users");
+    migr.make::<Pg>()
 }
