@@ -1,5 +1,6 @@
 //! Handles user Authentication in API requests
 use crate::api::v1::ApiError;
+use crate::db::users::User;
 use crate::db::DbInterface;
 use crate::oidc::OidcContext;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
@@ -91,64 +92,66 @@ where
 
         let access_token = AccessToken::new(auth.into_scheme().token().to_string());
 
-        let uuid = match oidc_ctx.verify_access_token(&access_token) {
-            Err(e) => {
-                log::warn!("Invalid access token, {}", e);
-                return Box::pin(ready(Ok(req.into_response(
-                    ApiError::auth_error("invalid access token")
-                        .error_response()
-                        .into_body(),
-                ))));
-            }
-            Ok(sub) => match Uuid::from_str(&sub) {
-                Ok(uuid) => uuid,
-                Err(e) => {
-                    log::error!("Unable to parse UUID from sub '{}', {}", &sub, e);
-                    return Box::pin(ready(Ok(req.into_response(
-                        ApiError::auth_error("invalid access token")
-                            .error_response()
-                            .into_body(),
-                    ))));
-                }
-            },
-        };
-
         Box::pin(async move {
-            let current_user = web::block(move || {
-                match db_ctx.get_user_by_uuid(&uuid)? {
-                    None => {
-                        // should only happen if a user gets deleted while in an active session
-                        log::error!("The requesting user could not be found in the database");
-                        Err(ApiError::Internal)
-                    }
-                    Some(user) => Ok(user),
-                }
-            })
-            .await
-            .map_err(|e| {
-                log::error!("BlockingError on Oidc Auth Middleware - {}", e);
-                ApiError::Internal
-            })??;
+            let current_user = check_access_token(db_ctx, oidc_ctx, access_token).await?;
 
-            // check if the access token is expired
-            if chrono::Utc::now().timestamp() > current_user.id_token_exp {
-                return Err(ApiError::auth_error("session expired").into());
-            }
-
-            let info = match oidc_ctx.introspect_access_token(&access_token).await {
-                Ok(info) => info,
-                Err(e) => {
-                    log::error!("Failed to check if AccessToken is active, {}", e);
-                    return Err(ApiError::Internal.into());
-                }
-            };
-
-            if info.active {
-                req.extensions_mut().insert(current_user);
-                service.call(req).await
-            } else {
-                Err(ApiError::auth_error("invalid access token").into())
-            }
+            req.extensions_mut().insert(current_user);
+            service.call(req).await
         })
+    }
+}
+
+pub async fn check_access_token(
+    db_ctx: Data<DbInterface>,
+    oidc_ctx: Data<OidcContext>,
+    access_token: AccessToken,
+) -> Result<User, ApiError> {
+    let uuid = match oidc_ctx.verify_access_token(&access_token) {
+        Err(e) => {
+            log::warn!("Invalid access token, {}", e);
+            return Err(ApiError::auth_error("invalid access token"));
+        }
+        Ok(sub) => match Uuid::from_str(&sub) {
+            Ok(uuid) => uuid,
+            Err(e) => {
+                log::error!("Unable to parse UUID from sub '{}', {}", &sub, e);
+                return Err(ApiError::auth_error("invalid access token"));
+            }
+        },
+    };
+
+    let current_user = web::block(move || {
+        match db_ctx.get_user_by_uuid(&uuid)? {
+            None => {
+                // should only happen if a user gets deleted while in an active session
+                log::error!("The requesting user could not be found in the database");
+                Err(ApiError::Internal)
+            }
+            Some(user) => Ok(user),
+        }
+    })
+    .await
+    .map_err(|e| {
+        log::error!("web::block failed, {}", e);
+        ApiError::Internal
+    })??;
+
+    // check if the access token is expired
+    if chrono::Utc::now().timestamp() > current_user.id_token_exp {
+        return Err(ApiError::auth_error("session expired"));
+    }
+
+    let info = match oidc_ctx.introspect_access_token(&access_token).await {
+        Ok(info) => info,
+        Err(e) => {
+            log::error!("Failed to check if AccessToken is active, {}", e);
+            return Err(ApiError::Internal);
+        }
+    };
+
+    if info.active {
+        Ok(current_user)
+    } else {
+        Err(ApiError::auth_error("inactive access token"))
     }
 }

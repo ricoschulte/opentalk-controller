@@ -1,14 +1,16 @@
-use crate::db::DbInterface;
-use crate::oidc::OidcContext;
 use actix_cors::Cors;
 use actix_web::http::{header, Method};
 use actix_web::web::Data;
 use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{Context, Result};
+use db::DbInterface;
+use modules::http::ws::{Echo, WebSocketHttpModule};
+use oidc::OidcContext;
 use std::net::Ipv4Addr;
 
 mod api;
-pub(crate) mod db;
+mod db;
+mod modules;
 mod oidc;
 mod settings;
 
@@ -36,6 +38,12 @@ async fn main() -> Result<()> {
             .context("Failed to initialize OIDC Context")?,
     );
 
+    let mut application = modules::ApplicationBuilder::default();
+    let mut signaling = WebSocketHttpModule::new("/signaling", &["k3k-signaling-json-v1"]);
+    signaling.add_module::<Echo>(());
+    application.add_http_module(signaling);
+    let application = application.finish();
+
     // Start HTTP Server
     let cors = settings.http.cors;
     let http_server = HttpServer::new(move || {
@@ -46,6 +54,7 @@ async fn main() -> Result<()> {
             .app_data(db_ctx.clone())
             .app_data(oidc_ctx.clone())
             .service(v1_scope(db_ctx.clone(), oidc_ctx.clone()))
+            .configure(application.configure())
     });
 
     let http_server = http_server.bind((Ipv4Addr::UNSPECIFIED, settings.http.port))?;

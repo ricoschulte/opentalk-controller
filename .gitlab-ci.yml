@@ -61,7 +61,7 @@ build:binary:
       - target/release/k3k_controller
   script:
     - cargo build --release
-    - cargo test --release
+    - cargo test
 
 db:schema_validation:
   stage: db

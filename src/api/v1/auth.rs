@@ -30,9 +30,9 @@ pub struct LoginResponse {
 /// Returns a [`LoginResponse`] containing the users permissions.
 #[post("/auth/login")]
 pub async fn login(
-    body: Json<Login>,
     db_ctx: Data<DbInterface>,
     oidc_ctx: Data<OidcContext>,
+    body: Json<Login>,
 ) -> Result<Json<LoginResponse>, ApiError> {
     let id_token = body.into_inner().id_token;
 
@@ -117,10 +117,7 @@ pub struct OidcProviders {
 ///
 /// Returns a list of available OIDC providers
 #[get("/auth/login")]
-pub async fn oidc_providers(
-    _db_ctx: Data<DbInterface>,
-    oidc_ctx: Data<OidcContext>,
-) -> Result<Json<OidcProviders>, ApiError> {
+pub async fn oidc_providers(oidc_ctx: Data<OidcContext>) -> Result<Json<OidcProviders>, ApiError> {
     let mut providers = HashSet::new();
 
     providers.insert(OidcProvider {
