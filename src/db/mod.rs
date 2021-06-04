@@ -5,7 +5,6 @@ use diesel::result::Error;
 use diesel::{r2d2, PgConnection};
 use std::time::Duration;
 
-#[path = "schema_mgmt/refinery/migrations/mod.rs"]
 pub mod migrations;
 pub mod rooms;
 mod schema;

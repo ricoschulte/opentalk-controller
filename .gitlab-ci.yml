@@ -6,7 +6,6 @@ services:
 stages:
   - lint
   - build
-  - db
 
 variables:
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
@@ -47,39 +46,17 @@ build:check:
     RUSTFLAGS: "-D warnings"
   script: cargo check --tests --all-features
 
-build:binary:
+build:test:
   stage: build
   variables:
-    K3K_CTRL_DATABASE_SERVER: "postgres"
-    K3K_CTRL_DATABASE_PORT: "5432"
-    K3K_CTRL_DATABASE_NAME: "migration_test"
-    K3K_CTRL_DATABASE_MAXCONNECTIONS: "1"
-    K3K_CTRL_DATABASE_USER: "postgres"
-    K3K_CTRL_DATABASE_PASSWORD: "password123"
+    DATABASE_URL: "postgres://postgres:password123@postgres:5432/migration_test"
   artifacts:
     paths:
       - target/release/k3k_controller
+  before_script:
+    - rustup component add rustfmt
+    - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"
   script:
     - cargo build --release
     - cargo test
-
-db:schema_validation:
-  stage: db
-  variables:
-    DATABASE_URL: "postgres://postgres:password123@postgres:5432/migration_test"
-    K3K_CTRL_DATABASE_SERVER: "postgres"
-    K3K_CTRL_DATABASE_PORT: "5432"
-    K3K_CTRL_DATABASE_NAME: "migration_test"
-    K3K_CTRL_DATABASE_MAXCONNECTIONS: "1"
-    K3K_CTRL_DATABASE_USER: "postgres"
-    K3K_CTRL_DATABASE_PASSWORD: "password123"
-  before_script:
-    - rustup component add rustfmt
-  script:
-    - cargo test --release
-    - apt-get update && apt-get install -y postgresql-client-11
-    # Due to refinery creating a table and therefore changing the generated diesel schema, we have to drop
-    # refinery_schema_history before we generate our diesel schema
-    - psql -U postgres -h postgres -d migration_test -c 'DROP TABLE IF EXISTS refinery_schema_history;'
-    - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"
     - ./.cargo/bin/diesel print-schema | /usr/local/cargo/bin/rustfmt | diff src/db/schema.rs -
