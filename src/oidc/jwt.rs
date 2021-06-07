@@ -5,14 +5,17 @@ use openidconnect::JsonWebKey;
 use serde::Deserialize;
 use std::time::SystemTime;
 
+/// Token Verification errors
+///
+/// The error messages will get displayed in a HTTP 401 response
 #[derive(Debug, thiserror::Error, PartialEq)]
 pub enum VerifyError {
-    #[error("Not a JWT")]
-    InvalidJwt,
-    #[error("invalid JWT claims")]
+    #[error("Not a valid JWT ({0})")]
+    InvalidJwt(String),
+    #[error("JWT has invalid claims")]
     InvalidClaims,
-    #[error("JWT is expired")]
-    Expired,
+    #[error("JWT token expired ({0})")]
+    Expired(String),
     #[error("JWT header does not specify a KeyID (kid)")]
     MissingKeyID,
     #[error("JWT header specified an unknown KeyID (kid)")]
@@ -47,27 +50,51 @@ pub struct VerifyClaims {
 ///
 /// Returns `Err(_)` if the JWT is invalid or expired.
 pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, VerifyError> {
-    let header = jsonwebtoken::decode_header(token).map_err(|_e| VerifyError::InvalidJwt)?;
+    let header = jsonwebtoken::decode_header(token).map_err(|e| {
+        log::warn!("Unable to parse token header, {}", e);
+        VerifyError::InvalidJwt("Unable to parse token header".to_string())
+    })?;
 
     // Get the token key id
-    let token_kid = header.kid.as_ref().ok_or(VerifyError::MissingKeyID)?;
+    let token_kid = match header.kid.as_ref() {
+        None => {
+            log::warn!("Missing key ID in token");
+            return Err(VerifyError::MissingKeyID);
+        }
+        Some(token_kid) => token_kid,
+    };
 
     // Find the public key using the key id
-    let signing_key = key_set
-        .keys()
-        .iter()
-        .find(|key| {
-            key.key_id()
-                .map(|kid| kid.as_str() == token_kid)
-                .unwrap_or_default()
-        })
-        .ok_or(VerifyError::UnknownKeyID)?;
+    let signing_key_opt = key_set.keys().iter().find(|key| {
+        key.key_id()
+            .map(|kid| kid.as_str() == token_kid)
+            .unwrap_or_default()
+    });
 
-    let (message, signature) = token.rsplit_once('.').ok_or(VerifyError::InvalidJwt)?;
+    let signing_key = match signing_key_opt {
+        None => {
+            log::warn!("Unknown key ID in token");
+            return Err(VerifyError::UnknownKeyID);
+        }
+        Some(signing_key) => signing_key,
+    };
+
+    let (message, signature) = match token.rsplit_once('.') {
+        None => {
+            let msg = "Unable to parse signature from JWT token";
+            log::warn!("{}", msg);
+            return Err(VerifyError::InvalidJwt(msg.to_string()));
+        }
+        Some((message, signature)) => (message, signature),
+    };
 
     // Decode the JWT signature
-    let signature = base64::decode_config(signature, base64::URL_SAFE_NO_PAD)
-        .map_err(|_| VerifyError::InvalidSignature)?;
+    let signature = base64::decode_config(signature, base64::URL_SAFE_NO_PAD).map_err({
+        |e| {
+            log::warn!("Token has invalid signature, {}", e);
+            VerifyError::InvalidSignature
+        }
+    })?;
 
     // Verify the signature
     let signing_alg = map_algorithm(header.alg);
@@ -77,14 +104,18 @@ pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, 
         .map_err(|_| VerifyError::InvalidSignature)?;
 
     // Just parse the token out, no verification
-    let token =
-        dangerous_insecure_decode::<VerifyClaims>(token).map_err(|_| VerifyError::InvalidClaims)?;
+    let token = dangerous_insecure_decode::<VerifyClaims>(token).map_err(|e| {
+        log::warn!("Unable to decode claims from provided id token, {}", e);
+        VerifyError::InvalidClaims
+    })?;
 
     let now = DateTime::<Utc>::from(SystemTime::now());
 
-    // Verify if expired
+    // Verify expiration
     if now > token.claims.exp {
-        return Err(VerifyError::Expired);
+        let msg = format!("The provided token expired at {}", token.claims.exp);
+        log::warn!("{}", msg);
+        return Err(VerifyError::Expired(msg));
     }
 
     Ok(token.claims)
@@ -264,11 +295,11 @@ mod test {
         match super::verify(&jwks, &jwt_enc) {
             Ok(_) => panic!("Test must fail, exp is set in the past"),
             Err(e) => {
-                assert_eq!(
-                    e,
-                    VerifyError::Expired,
-                    "Test must fail with VerifyError::Expired"
-                );
+                if let VerifyError::Expired(_) = e {
+                    // Test successful
+                } else {
+                    panic!("Test must fail with VerifyError::Expired(...)")
+                }
             }
         }
     }

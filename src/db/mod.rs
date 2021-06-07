@@ -55,7 +55,10 @@ impl DbInterface {
             .min_idle(Some(db_settings.min_idle_connections))
             .connection_timeout(Duration::from_secs(10))
             .build(manager)
-            .map_err(|e| DatabaseError::R2D2Error(e.to_string()))?;
+            .map_err(|e| {
+                log::error!("Unable to create database connection pool, {}", e);
+                DatabaseError::R2D2Error(e.to_string())
+            })?;
 
         Ok(Self { pool })
     }
@@ -67,7 +70,7 @@ impl DbInterface {
             Err(e) => {
                 let state = self.pool.state();
                 let msg = format!(
-                    "Unable to receive connection from connection pool.
+                    "Unable to get connection from connection pool.
                         Error: {}
                         Pool State:
                             {:?}",
