@@ -10,18 +10,18 @@ use std::convert::TryFrom;
 /// The application settings are set with a TOML config file. Settings specified in the config file
 /// can be overwritten by environment variables. To do so, set an environment variable
 /// with the prefix `K3K_CTRL_` followed by the field names you want to set. Fields are separated by an underscore `_`.
-/// ```
+/// ```sh
 /// K3K_CTRL_<field>_<field-of-field>...
 /// ```
 /// # Example
 ///
 /// set the `database.server` field:
-/// ```
+/// ```sh
 /// K3K_CTRL_DATABASE_SERVER=localhost
 /// ```
 /// However, the field names in the environment variables are not allowed to have underscores.
 /// So the field 'database.max_connections' would resolve to:
-/// ```
+/// ```sh
 /// K3K_CTRL_DATABASE_MAXCONNECTIONS=5
 /// ```
 /// # Note
@@ -80,6 +80,8 @@ pub struct Http {
     // TODO ADD TLS SETTINGS
     #[serde(default = "default_http_port")]
     pub port: u16,
+    #[serde(default = "internal_http_port")]
+    pub internal_port: u16,
     #[serde(default)]
     pub cors: Cors,
 }
@@ -91,8 +93,12 @@ pub struct Cors {
     pub allowed_origin: Vec<String>,
 }
 
-fn default_http_port() -> u16 {
+const fn default_http_port() -> u16 {
     80
+}
+
+const fn internal_http_port() -> u16 {
+    8844
 }
 
 fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>
