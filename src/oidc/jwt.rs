@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use jsonwebtoken::{dangerous_insecure_decode, Algorithm};
+use jsonwebtoken::{self, dangerous_insecure_decode, Algorithm};
 use openidconnect::core::{CoreJsonWebKeySet, CoreJwsSigningAlgorithm};
 use openidconnect::JsonWebKey;
 use serde::Deserialize;
@@ -47,21 +47,10 @@ pub struct VerifyClaims {
 ///
 /// Returns `Err(_)` if the JWT is invalid or expired.
 pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, VerifyError> {
-    let (message, signature) = token.rsplit_once('.').ok_or(VerifyError::InvalidJwt)?;
-
-    // Just parse the token out, no verification
-    let token =
-        dangerous_insecure_decode::<VerifyClaims>(token).map_err(|_| VerifyError::InvalidClaims)?;
-
-    let now = DateTime::<Utc>::from(SystemTime::now());
-
-    // Verify if expired
-    if now > token.claims.exp {
-        return Err(VerifyError::Expired);
-    }
+    let header = jsonwebtoken::decode_header(token).map_err(|_e| VerifyError::InvalidJwt)?;
 
     // Get the token key id
-    let token_kid = token.header.kid.as_ref().ok_or(VerifyError::MissingKeyID)?;
+    let token_kid = header.kid.as_ref().ok_or(VerifyError::MissingKeyID)?;
 
     // Find the public key using the key id
     let signing_key = key_set
@@ -74,16 +63,29 @@ pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, 
         })
         .ok_or(VerifyError::UnknownKeyID)?;
 
+    let (message, signature) = token.rsplit_once('.').ok_or(VerifyError::InvalidJwt)?;
+
     // Decode the JWT signature
     let signature = base64::decode_config(signature, base64::URL_SAFE_NO_PAD)
         .map_err(|_| VerifyError::InvalidSignature)?;
 
     // Verify the signature
-    let signing_alg = map_algorithm(token.header.alg);
+    let signing_alg = map_algorithm(header.alg);
 
     let () = signing_key
         .verify_signature(&signing_alg, message.as_ref(), signature.as_ref())
         .map_err(|_| VerifyError::InvalidSignature)?;
+
+    // Just parse the token out, no verification
+    let token =
+        dangerous_insecure_decode::<VerifyClaims>(token).map_err(|_| VerifyError::InvalidClaims)?;
+
+    let now = DateTime::<Utc>::from(SystemTime::now());
+
+    // Verify if expired
+    if now > token.claims.exp {
+        return Err(VerifyError::Expired);
+    }
 
     Ok(token.claims)
 }
