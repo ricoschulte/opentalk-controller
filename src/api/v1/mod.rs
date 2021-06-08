@@ -12,6 +12,7 @@ use std::fmt::Write;
 pub mod auth;
 pub mod middleware;
 pub mod rooms;
+pub mod turn;
 pub mod users;
 
 /// Error type of all frontend REST-endpoints

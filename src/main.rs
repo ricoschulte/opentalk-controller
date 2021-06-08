@@ -44,6 +44,8 @@ async fn main() -> Result<()> {
     application.add_http_module(signaling);
     let application = application.finish();
 
+    let turn_servers = Data::new(settings.turn);
+
     // Start HTTP Server
     let cors = settings.http.cors;
     let http_server = HttpServer::new(move || {
@@ -53,6 +55,7 @@ async fn main() -> Result<()> {
             .wrap(cors)
             .app_data(db_ctx.clone())
             .app_data(oidc_ctx.clone())
+            .app_data(turn_servers.clone())
             .service(v1_scope(db_ctx.clone(), oidc_ctx.clone()))
             .configure(application.configure())
     });
@@ -81,7 +84,8 @@ fn v1_scope(db_ctx: Data<DbInterface>, oidc_ctx: Data<OidcContext>) -> Scope {
                 .service(api::v1::rooms::new)
                 .service(api::v1::rooms::modify)
                 .service(api::v1::rooms::get)
-                .service(api::v1::rooms::start),
+                .service(api::v1::rooms::start)
+                .service(api::v1::turn::get),
         )
 }
 

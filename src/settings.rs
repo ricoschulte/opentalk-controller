@@ -2,7 +2,8 @@
 
 use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IssuerUrl};
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+use std::convert::TryFrom;
 
 /// Contains the application settings.
 ///
@@ -30,6 +31,7 @@ pub struct Settings {
     pub database: Database,
     pub oidc: Oidc,
     pub http: Http,
+    pub turn: Option<Turn>,
 }
 
 impl Settings {
@@ -91,4 +93,31 @@ pub struct Cors {
 
 fn default_http_port() -> u16 {
     80
+}
+
+fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let duration: u64 = Deserialize::deserialize(deserializer)?;
+
+    Ok(chrono::Duration::seconds(
+        i64::try_from(duration).map_err(serde::de::Error::custom)?,
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Turn {
+    /// How long should a credential pair be valid, in seconds
+    #[serde(deserialize_with = "duration_from_secs")]
+    pub lifetime: chrono::Duration,
+    /// List of configured TURN servers.
+    pub servers: Vec<TurnServer>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TurnServer {
+    // TURN URIs for this TURN server following rfc7065
+    pub uris: Vec<String>,
+    pub pre_shared_key: String,
 }
