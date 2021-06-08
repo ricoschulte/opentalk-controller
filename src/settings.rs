@@ -57,6 +57,8 @@ pub struct Database {
     pub name: String,
     #[serde(rename = "maxconnections")]
     pub max_connections: u32,
+    #[serde(rename = "minidleconnections")]
+    pub min_idle_connections: Option<u32>,
     pub user: String,
     pub password: String,
 }

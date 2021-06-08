@@ -11,6 +11,10 @@ name = "migration_test"
 # Maximum number of connections allowed to the server
 maxconnections = 100
 
+# Minimum number of connections that are open during runtime load independent
+# Defaults to maxconnections
+# minidleconnections = 10
+
 # Database user
 user = "postgres"
 
