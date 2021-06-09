@@ -1,35 +1,41 @@
 [database]
-# Database server address
+# Database server address.
 server = "localhost"
 
-# Database server port
+# Database server port.
 port = 5432
 
-# Database name
+# Database name.
 name = "migration_test"
 
-# Maximum number of connections allowed to the server
-maxconnections = 100
+# Maximum number of connections allowed to the server.
+# Defaults to 100 which is the default of postgres.
+# max_connections = 100
 
-# Database user
+# Minimum number of connections that are at least open.
+# If load increases the controller will open new connection, at most max_connections many.
+# Defaults to 10
+# min_idle_connections = 10
+
+# Database user.
 user = "postgres"
 
-# Database user password
+# Database user password.
 password = "password123"
 
 
 [http]
-# The port to bind the HTTP Server to (defaults to 80)
+# The port to bind the HTTP Server to (defaults to 80).
 port = 8000
 # URLs that requests are allowed from. Leave empty to allow all.
 cors.allowed_origin = ["https://localhost:8080"]
 
 [oidc.provider]
-# OIDC Issuer URL according to RFC8414
+# OIDC Issuer URL according to RFC8414.
 issuer = "http://localhost:8080/auth/realms/K3K"
 
-# OIDC Client ID
+# OIDC Client ID.
 client_id = "Controller"
 
-# OIDC Client secret (application requires confidential client)
+# OIDC Client secret (application requires confidential client).
 client_secret = "c64c5854-3f02-4728-a617-bbe98ec42b8f"
