@@ -3,6 +3,7 @@ use actix_web::rt;
 use anyhow::{Context, Result};
 use refinery::include_migration_mods;
 use refinery_core::tokio_postgres::{connect, NoTls};
+use tokio::sync::oneshot;
 
 include_migration_mods!("src/db/migrations");
 
@@ -11,14 +12,22 @@ async fn start_migration_from_url(url: String) -> Result<()> {
         .await
         .context("Unable to connect to database")?;
 
+    let (tx, rx) = oneshot::channel();
+
     rt::spawn(async move {
         if let Err(e) = conn.await {
             log::error!("connection error: {}", e)
         }
+        tx.send(()).expect("Channel unexpectedly dropped");
     });
 
     // The runner is specified through the `include_migration_mods` macro
     runner().run_async(&mut client).await?;
+
+    drop(client);
+
+    // wait for the connection to close
+    rx.await?;
 
     Ok(())
 }
