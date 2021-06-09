@@ -52,7 +52,7 @@ impl DbInterface {
 
         let pool = diesel::r2d2::Pool::builder()
             .max_size(db_settings.max_connections)
-            .min_idle(db_settings.min_idle_connections)
+            .min_idle(Some(db_settings.min_idle_connections))
             .connection_timeout(Duration::from_secs(10))
             .build(manager)
             .map_err(|e| DatabaseError::R2D2Error(e.to_string()))?;

@@ -23,7 +23,7 @@ async fn main() -> Result<()> {
     setup_logging()?;
 
     let settings = settings::Settings::load("config.toml")?;
-    log::warn!("Starting K3K Controller with settings {:?}", settings);
+    log::debug!("Starting K3K Controller with settings {:?}", settings);
     // Run database migration
     db::migrations::start_migration(&settings.database).await?;
 

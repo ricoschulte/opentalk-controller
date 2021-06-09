@@ -57,8 +57,10 @@ pub struct Database {
     pub server: String,
     pub port: u32,
     pub name: String,
+    #[serde(default = "default_max_connections")]
     pub max_connections: u32,
-    pub min_idle_connections: Option<u32>,
+    #[serde(default = "default_min_idle_connections")]
+    pub min_idle_connections: u32,
     pub user: String,
     pub password: String,
 }
@@ -101,6 +103,14 @@ const fn default_http_port() -> u16 {
 
 const fn internal_http_port() -> u16 {
     8844
+}
+
+fn default_max_connections() -> u32 {
+    100
+}
+
+fn default_min_idle_connections() -> u32 {
+    10
 }
 
 fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>
