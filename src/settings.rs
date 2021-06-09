@@ -92,6 +92,8 @@ pub struct Settings {
     pub oidc: Oidc,
     pub http: Http,
     pub turn: Option<Turn>,
+    pub rabbit_mq: RabbitMqConfig,
+    pub room_server: JanusMcuConfig,
     #[serde(default = "default_logging")]
     pub logging: Logging,
 }
@@ -172,22 +174,6 @@ pub struct Logging {
     pub file: Option<PathBuf>,
 }
 
-const fn default_http_port() -> u16 {
-    80
-}
-
-const fn internal_http_port() -> u16 {
-    8844
-}
-
-fn default_max_connections() -> u32 {
-    100
-}
-
-fn default_min_idle_connections() -> u32 {
-    10
-}
-
 fn default_log_level() -> log::Level {
     Level::Warn
 }
@@ -197,17 +183,6 @@ fn default_logging() -> Logging {
         level: default_log_level(),
         file: None,
     }
-}
-
-fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let duration: u64 = Deserialize::deserialize(deserializer)?;
-
-    Ok(chrono::Duration::seconds(
-        i64::try_from(duration).map_err(serde::de::Error::custom)?,
-    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -224,6 +199,94 @@ pub struct TurnServer {
     // TURN URIs for this TURN server following rfc7065
     pub uris: Vec<String>,
     pub pre_shared_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct JanusMcuConfig {
+    pub connection: JanusRabbitMqConnection,
+    /// Max bitrate allowed for `video` media sessions
+    #[serde(default = "default_max_video_bitrate")]
+    pub max_video_bitrate: u64,
+
+    /// Max bitrate allowed for `screen` media sessions
+    #[serde(default = "default_max_screen_bitrate")]
+    pub max_screen_bitrate: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RabbitMqConfig {
+    #[serde(default = "rabbitmq_default_url")]
+    pub url: String,
+}
+
+/// Take the settings from your janus rabbit mq transport configuration.
+#[derive(Debug, Deserialize)]
+pub struct JanusRabbitMqConnection {
+    #[serde(default = "default_to_janus_queue")]
+    pub to_janus_queue: String,
+    #[serde(default = "default_to_janus_routing_key")]
+    pub to_janus_routing_key: String,
+    #[serde(default = "default_janus_exchange")]
+    pub janus_exchange: String,
+    #[serde(default = "default_from_janus_routing_key")]
+    pub from_janus_routing_key: String,
+}
+
+const fn default_max_video_bitrate() -> u64 {
+    // 8kB/s
+    64000
+}
+
+const fn default_max_screen_bitrate() -> u64 {
+    // 1 MB/s
+    8_000_000
+}
+
+const fn default_http_port() -> u16 {
+    80
+}
+
+const fn internal_http_port() -> u16 {
+    8844
+}
+
+fn default_max_connections() -> u32 {
+    100
+}
+
+fn default_min_idle_connections() -> u32 {
+    10
+}
+
+fn rabbitmq_default_url() -> String {
+    "amqp://guest:guest@localhost:5672".to_owned()
+}
+
+fn default_to_janus_queue() -> String {
+    "janus-gateway".to_owned()
+}
+
+fn default_to_janus_routing_key() -> String {
+    "to-janus".to_owned()
+}
+
+fn default_janus_exchange() -> String {
+    "janus-exchange".to_owned()
+}
+
+fn default_from_janus_routing_key() -> String {
+    "from-janus".to_owned()
+}
+
+fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>
+    where
+        D: Deserializer<'de>,
+{
+    let duration: u64 = Deserialize::deserialize(deserializer)?;
+
+    Ok(chrono::Duration::seconds(
+        i64::try_from(duration).map_err(serde::de::Error::custom)?,
+    ))
 }
 
 #[cfg(test)]

@@ -1,0 +1,260 @@
+//! This crate wraps the Janus WebSocket asynchronous API to provide a more or less idiomatic Rust API.
+//!
+//! For this the client internally resolves futures based on the incoming responses and their respective transaction identifier.
+//! This is hidden to provide an API where you can simply call a function and .await the response.
+//! Thus this creates needs to be run in a async/.await runtime. Currently we only support the tokio runtime.
+//!
+//! # Examples
+//! ```should_panic
+//! # use janus_client::types::outgoing;
+//! # use janus_client::JanusPlugin;
+//! # use janus_client::{Client, RabbitMqConfig};
+//! # tokio_test::block_on(async {
+//! let connection = lapin::Connection::connect("amqp://janus-backend:5672", lapin::ConnectionProperties::default()).await.unwrap();
+//! let channel = connection.create_channel().await.unwrap();
+//! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway", "to-janus", "janus-exchange", "from-janus");
+//! let (client, _) = Client::new(config).await.unwrap();
+//! let session = client.create_session().await.unwrap();
+//! let echo_handle = session
+//!     .attach_to_plugin(JanusPlugin::Echotest)
+//!     .await
+//!     .unwrap();
+//!
+//! let echo = echo_handle
+//!     .send(outgoing::EchoPluginUnnamed {
+//!             audio: Some(true),
+//!             ..Default::default()
+//!     })
+//!     .await.unwrap();
+//! println!("Echo {:?}, JSEP: {:?}", &echo.0, &echo.1);
+//! # });
+//! ```
+//!
+//! Furtermore you can wrap the API and build upon that similar to spreed
+//! ```should_panic
+//! # use janus_client::{Client, Handle, JanusPlugin, RabbitMqConfig};
+//! # use janus_client::types::{TrickleCandidate, RoomId};
+//! # use janus_client::types::outgoing::{TrickleMessage, PluginBody, VideoRoomPluginJoin, VideoRoomPluginJoinSubscriber};
+//! pub struct SubscriberClient(Handle);
+//! impl SubscriberClient {
+//!     /// Joins a Room
+//!     pub async fn join_room(&self, candidate: String ) {
+//!         let roomId = 2.into();
+//!         let request =
+//!           VideoRoomPluginJoinSubscriber{
+//!             room: roomId,
+//!             feed: 1.into(),
+//! #           audio: None, video:None, data: None, close_pc: None, private_id: None, offer_audio: None, offer_video: None, offer_data: None, spatial_layer: None, temporal_layer: None, substream: None, temporal: None
+//!           };
+//!         self.0.send(request).await;
+//!     }
+//! }
+//!
+//! pub struct PublisherClient(Handle);
+//! impl PublisherClient {
+//!     /// Sends the candidate SDP string to Janus
+//!     pub async fn send_candidates(&self, candidate: String ) {
+//!         self.0.trickle(TrickleMessage::Candidate(TrickleCandidate{
+//!             candidate: "candidate:..".to_owned(),
+//!             sdp_m_id: "audio".to_owned(),
+//!             sdp_m_line_index: 1
+//!         })).await;
+//!     }
+//! }
+//! # fn main() {
+//! # tokio_test::block_on(async {
+//! let connection = lapin::Connection::connect("amqp://janus-backend:5672", lapin::ConnectionProperties::default()).await.unwrap();
+//! let channel = connection.create_channel().await.unwrap();
+//! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway", "to-janus", "janus-exchange", "from-janus");
+//! let (client, _) = janus_client::Client::new(config).await.unwrap();
+//! let session = client.create_session().await.unwrap();
+//!
+//! let echo_handle = session
+//!     .attach_to_plugin(JanusPlugin::VideoRoom)
+//!     .await
+//!     .unwrap();
+//! let publisher = PublisherClient(echo_handle);
+//!
+//! let echo_handle = session
+//!     .attach_to_plugin(JanusPlugin::VideoRoom)
+//!     .await
+//!     .unwrap();
+//! let subscriber = SubscriberClient(echo_handle);
+//! });
+//! }
+//!```
+//!
+//! # Features
+//! Specific plugins are hidden behind feature flags.
+//! Supported Janus plugins can be enabled with the following cargo features
+//! - `echotest` for the EchoTest Janus plugin
+//! - `videoroom` for the VideoRoom Janus plugin
+//!
+//! By default `echotest` and `videoroom` are enabled.
+
+use crate::client::{InnerClient, InnerHandle, InnerSession};
+use crate::outgoing::TrickleMessage;
+use std::sync::Arc;
+use tokio::sync::{broadcast, mpsc};
+
+mod async_types;
+mod client;
+pub mod error;
+pub mod rabbitmq;
+pub mod types;
+
+pub use crate::rabbitmq::RabbitMqConfig;
+pub use crate::types::incoming::JanusMessage;
+pub use crate::types::*;
+
+/// Janus API Client
+#[derive(Debug, Clone)]
+pub struct Client {
+    inner: Arc<InnerClient>,
+}
+
+impl Client {
+    /// Creates a new [`Client`](Client)
+    ///
+    /// Returns the client itself and a broadcast receiver for messages from Janus that are not a response
+    pub async fn new(
+        config: RabbitMqConfig,
+    ) -> Result<(Self, mpsc::Receiver<Arc<JanusMessage>>), error::Error> {
+        let (sn_sink, sn_recv) = mpsc::channel::<Arc<JanusMessage>>(10);
+        let mut inner_client = InnerClient::new(config, sn_sink.clone());
+
+        inner_client.connect().await?;
+        let client = Self {
+            inner: Arc::new(inner_client),
+        };
+        Ok((client, sn_recv))
+    }
+
+    /// Creates a Session
+    ///
+    /// Returns a [`Session`](Session) or [`Error`](error::Error) if something went wrong
+    pub async fn create_session(&self) -> Result<Session, error::Error> {
+        let session_id = self
+            .inner
+            .request_create_session()
+            .await?
+            .await
+            .ok_or(error::Error::FailedToCreateSession)?;
+        let session = Arc::new(InnerSession::new(Arc::downgrade(&self.inner), session_id));
+        self.inner
+            .sessions
+            .lock()
+            .insert(session_id, session.clone());
+        Ok(Session { inner: session })
+    }
+
+    /// Returns the [`Session`](Session) with the given `SessionId`
+    pub async fn find_session(&self, id: &SessionId) -> Result<Session, error::Error> {
+        self.inner
+            .sessions
+            .lock()
+            .get(id)
+            .cloned()
+            .map(|x| Session { inner: x })
+            .ok_or(error::Error::InvalidSession)
+    }
+}
+
+/// Janus API Session
+///
+/// Allows to receive events from Janus and to create a [`Handle`](Handle) for a specific janus plugin (e.g. videoroom)
+// todo expose a broadcast::Receiver as well for a Session as there might be Janus events that have a session but no sender
+#[derive(Clone, Debug)]
+pub struct Session {
+    inner: Arc<InnerSession>,
+}
+
+impl Session {
+    // Returns the SessionId
+    pub fn id(&self) -> SessionId {
+        self.inner.id
+    }
+
+    /// Returns the [`Handle`](Handle) with the given `HandleId`
+    pub fn find_handle(&self, id: &HandleId) -> Result<Handle, error::Error> {
+        Ok(Handle {
+            inner: self.inner.find_handle(id)?,
+        })
+    }
+
+    /// Attaches to the given plugin
+    ///
+    /// Returns a [`Handle`](Handle) or [`Error`](error::Error) if something went wrong
+    pub async fn attach_to_plugin(&self, plugin: JanusPlugin) -> Result<Handle, error::Error> {
+        Ok(Handle {
+            inner: self.inner.attach_to_plugin(plugin).await?,
+        })
+    }
+
+    /// Send Keep Alive
+    pub async fn keep_alive(&self) {
+        if let Err(e) = self.inner.keep_alive().await {
+            log::error!("Could not send keepalive: {}", e);
+        }
+    }
+
+    /// Removes the handle from this session
+    ///
+    /// The Janus detach command is only sent, when all references to this handle are dropped.
+    /// This function only removes the Arc from the internal tracking map
+    pub fn detach_handle(&self, id: &HandleId) {
+        self.inner.detach_handle(id);
+    }
+}
+
+/// Janus API Plugin sessionhandle
+///
+/// Allows to talk to a plugin and receive messages from the plugin
+/// You can [`Self::subscribe()`](Self::subscribe()) to the sink to receive messages that are not the response to a sent request
+#[derive(Clone, Debug)]
+pub struct Handle {
+    inner: Arc<InnerHandle>,
+}
+
+impl Handle {
+    /// Returns the HandleId
+    pub fn id(&self) -> HandleId {
+        self.inner.id
+    }
+
+    /// Returns the HandleId
+    pub fn session_id(&self) -> SessionId {
+        self.inner.session_id
+    }
+
+    /// Subscribe to messages that are not the response to a sent request
+    pub fn subscribe(&self) -> broadcast::Receiver<Arc<incoming::JanusMessage>> {
+        self.inner.subscribe()
+    }
+
+    /// Sends data to the attached plugin
+    ///
+    /// Checks if the returned result is of the correct type.
+    pub async fn send<R: PluginRequest>(
+        &self,
+        request: R,
+    ) -> Result<(R::PluginResponse, Option<Jsep>), error::Error> {
+        self.inner.send(request).await
+    }
+
+    /// Sends data to the attached plugin together with jsep
+    ///
+    /// Checks if the returned result is of the correct type.
+    pub async fn send_with_jsep<R: PluginRequest>(
+        &self,
+        request: R,
+        jsep: Jsep,
+    ) -> Result<(R::PluginResponse, Option<Jsep>), error::Error> {
+        self.inner.send_with_jsep(request, jsep).await
+    }
+
+    /// Sends the candidate SDP string to Janus
+    pub async fn trickle(&self, msg: TrickleMessage) -> Result<(), error::Error> {
+        self.inner.trickle(msg).await
+    }
+}

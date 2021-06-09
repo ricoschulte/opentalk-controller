@@ -1,0 +1,48 @@
+[package]
+name = "janus-client"
+version = "0.2.0"
+authors = ["Rudi Floren <r.floren@heinlein-video.de>"]
+edition = "2018"
+
+
+[dependencies]
+# RabbitMQ
+lapin = { version = "1.7.1" }
+tokio-amqp = { version = "1.0.0" }
+# Random Generators
+rand = {version = "0.8.3", features = ["std", "std_rng"] }
+# We use the std Futures and FutureExt from future-util which are both bundled in this crate
+futures = "0.3.14"
+# We currently only support tokio as the runtime
+tokio = { version = "1.0", features=["sync", "rt"] }
+# Used as an alternative to the std sync primitves
+parking_lot = "0.11.1"
+# Used to serialize from and to JSON
+serde = { version = "1.0.125", features=["derive"] }
+serde_json = "1.0.64"
+serde_repr = "0.1.6"
+
+# Error handling
+thiserror = "1.0.24"
+# Reduce clutter arround docs/error strings
+displaydoc = "0.2.1"
+# Logging
+log = "0.4.14"
+
+[dev-dependencies]
+pretty_assertions = "0.7.2"
+
+# Test runtime
+tokio-test = "0.4"
+# Used to get log output in integration tests if needed
+test-env-log = "0.2.7"
+env_logger = "0.8.3"
+
+# Enabling macros for tests
+tokio = { version = "1.0", features=["sync", "rt", "macros"] }
+
+
+[features]
+default = ["videoroom", "echotest"]
+videoroom = []
+echotest = []

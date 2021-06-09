@@ -1,6 +1,5 @@
-use crate::modules::http::ws::{Event, EventCtx, WebSocketModule};
+use crate::modules::http::ws::{Event, WebSocketModule, WsCtx};
 use serde_json::Value;
-use tokio_stream::Pending;
 
 /// A sample echo websocket module
 pub struct Echo;
@@ -12,17 +11,12 @@ impl WebSocketModule for Echo {
     type Incoming = Value;
     type Outgoing = Value;
     type ExtEvent = ();
-    type ExtEventStream = Pending<()>;
 
-    async fn init(_: &Self::Params, _: &'static str) -> Self {
+    async fn init(_: WsCtx<'_, Self>, _: &Self::Params, _: &'static str) -> Self {
         Self
     }
 
-    async fn events(&mut self) -> Option<Self::ExtEventStream> {
-        None
-    }
-
-    async fn on_event(&mut self, mut ctx: EventCtx<'_, Self>, event: Event<Self>) {
+    async fn on_event(&mut self, mut ctx: WsCtx<'_, Self>, event: Event<Self>) {
         match event {
             Event::WsMessage(incoming) => {
                 ctx.ws_send(incoming);

@@ -1,7 +1,5 @@
-use super::modules::{DynEvent, DynEventCtx, Modules, NoSuchModuleError};
+use super::modules::{DynEvent, Modules, NoSuchModuleError};
 use super::WebSocket;
-use crate::db::users::User;
-use actix_web::dev::Extensions;
 use async_tungstenite::tungstenite::Message;
 use futures::SinkExt;
 use serde::{Deserialize, Serialize};
@@ -24,22 +22,15 @@ pub struct Runner {
 
     // All registered and initialized modules
     modules: Modules,
-
-    // Websocket specific data
-    local_state: Extensions,
 }
 
 impl Runner {
-    pub fn new(modules: Modules, websocket: WebSocket, user: User) -> Self {
-        let mut local_state = Extensions::new();
-        local_state.insert(user);
-
+    pub fn new(modules: Modules, websocket: WebSocket) -> Self {
         Self {
             websocket,
             exit: false,
             timeout: Box::pin(sleep(WS_MSG_TIMEOUT)),
             modules,
-            local_state,
         }
     }
 
@@ -139,12 +130,9 @@ impl Runner {
     ) -> Result<(), NoSuchModuleError> {
         let mut ws_messages = vec![];
 
-        let ctx = DynEventCtx {
-            ws_messages: &mut ws_messages,
-            local_state: &mut self.local_state,
-        };
-
-        self.modules.on_event(ctx, module, dyn_event).await?;
+        self.modules
+            .on_event(&mut ws_messages, module, dyn_event)
+            .await?;
 
         for ws_message in ws_messages {
             self.ws_send(ws_message).await;

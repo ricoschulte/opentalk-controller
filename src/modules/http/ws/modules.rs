@@ -1,5 +1,5 @@
 use super::WebSocketModule;
-use super::{Event, EventCtx};
+use super::{Event, WsCtx};
 use actix_web::dev::Extensions;
 use async_tungstenite::tungstenite::Message;
 use futures::stream::SelectAll;
@@ -11,7 +11,14 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio_stream::{Stream, StreamExt};
 
-type AnyStream = Pin<Box<dyn Stream<Item = (&'static str, Box<dyn Any + 'static>)>>>;
+pub type AnyStream = Pin<Box<dyn Stream<Item = (&'static str, Box<dyn Any + 'static>)>>>;
+
+pub fn any_stream<S>(namespace: &'static str, stream: S) -> AnyStream
+where
+    S: Stream + 'static,
+{
+    Box::pin(stream.map(move |item| -> (_, Box<dyn Any + 'static>) { (namespace, Box::new(item)) }))
+}
 
 #[derive(Debug, thiserror::Error)]
 #[error("invalid module namespace")]
@@ -21,23 +28,22 @@ pub struct NoSuchModuleError(pub ());
 pub struct Modules {
     modules: HashMap<&'static str, Box<dyn ModuleCaller>>,
     events: SelectAll<AnyStream>,
+    local_state: Extensions,
 }
 
 impl Modules {
-    pub async fn add_module<M>(&mut self, mut module: M)
+    pub async fn add_module<M>(&mut self, module: M)
     where
         M: WebSocketModule,
     {
         log::debug!("Registering module {}", M::NAMESPACE);
 
-        if let Some(events) = module.events().await {
-            self.events.push(Box::pin(events.map(
-                |item| -> (_, Box<dyn Any + 'static>) { (M::NAMESPACE, Box::new(item)) },
-            )));
-        }
-
         self.modules
             .insert(M::NAMESPACE, Box::new(ModuleCallerImpl { module }));
+    }
+
+    pub fn local_state(&mut self) -> &mut Extensions {
+        &mut self.local_state
     }
 
     pub async fn poll_ext_events(&mut self) -> Option<(&'static str, DynEvent)> {
@@ -47,11 +53,17 @@ impl Modules {
 
     pub async fn on_event(
         &mut self,
-        ctx: DynEventCtx<'_>,
+        ws_messages: &mut Vec<Message>,
         module: &str,
         dyn_event: DynEvent,
     ) -> Result<(), NoSuchModuleError> {
         let module = self.modules.get_mut(module).ok_or(NoSuchModuleError(()))?;
+
+        let ctx = DynEventCtx {
+            ws_messages,
+            events: &mut self.events,
+            local_state: &mut self.local_state,
+        };
 
         module.on_event(ctx, dyn_event).await;
 
@@ -72,9 +84,10 @@ pub enum DynEvent {
     Ext(Box<dyn Any + 'static>),
 }
 
-pub struct DynEventCtx<'ctx> {
-    pub(crate) ws_messages: &'ctx mut Vec<Message>,
-    pub(crate) local_state: &'ctx mut Extensions,
+struct DynEventCtx<'ctx> {
+    ws_messages: &'ctx mut Vec<Message>,
+    events: &'ctx mut SelectAll<AnyStream>,
+    local_state: &'ctx mut Extensions,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -93,8 +106,9 @@ where
     M: WebSocketModule,
 {
     async fn on_event(&mut self, ctx: DynEventCtx<'_>, dyn_event: DynEvent) {
-        let ctx = EventCtx {
+        let ctx = WsCtx {
             ws_messages: ctx.ws_messages,
+            events: ctx.events,
             local_state: ctx.local_state,
             m: PhantomData::<fn() -> M>,
         };
@@ -138,9 +152,16 @@ where
     M: WebSocketModule,
 {
     async fn build(&self, builder: &mut Modules, protocol: &'static str) {
-        builder
-            .add_module(M::init(&*self.params, protocol).await)
-            .await
+        let ctx = WsCtx {
+            ws_messages: &mut vec![],
+            events: &mut builder.events,
+            local_state: &mut builder.local_state,
+            m: PhantomData::<fn() -> M>,
+        };
+
+        let module = M::init(ctx, &*self.params, protocol).await;
+
+        builder.add_module(module).await
     }
 
     fn clone_boxed(&self) -> Box<dyn ModuleBuilder> {

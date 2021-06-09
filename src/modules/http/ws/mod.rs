@@ -11,16 +11,15 @@ use adapter::ActixTungsteniteAdapter;
 use async_tungstenite::tungstenite::protocol::Role;
 use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
-use futures::Stream;
-use modules::{ModuleBuilder, ModuleBuilderImpl, Modules};
+use modules::{any_stream, AnyStream, ModuleBuilder, ModuleBuilderImpl, Modules};
 use openidconnect::AccessToken;
 use runner::{Namespaced, Runner};
 use serde::{Deserialize, Serialize};
-use std::any::Any;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use std::sync::Arc;
 use tokio::task;
+use tokio_stream::Stream;
 
 mod adapter;
 mod echo;
@@ -28,6 +27,7 @@ mod modules;
 mod runner;
 
 pub use echo::Echo;
+use futures::stream::SelectAll;
 
 type WebSocket = WebSocketStream<ActixTungsteniteAdapter>;
 
@@ -49,16 +49,17 @@ where
 /// Context of an Event
 ///
 /// Can be used to send websocket messages
-pub struct EventCtx<'ctx, M>
+pub struct WsCtx<'ctx, M>
 where
     M: WebSocketModule,
 {
     ws_messages: &'ctx mut Vec<Message>,
+    events: &'ctx mut SelectAll<AnyStream>,
     local_state: &'ctx mut Extensions,
     m: PhantomData<fn() -> M>,
 }
 
-impl<M> EventCtx<'_, M>
+impl<M> WsCtx<'_, M>
 where
     M: WebSocketModule,
 {
@@ -81,6 +82,13 @@ where
     /// Access to local state of the websocket
     pub fn local_state(&mut self) -> &mut Extensions {
         self.local_state
+    }
+
+    pub fn add_event_stream<S>(&mut self, stream: S)
+    where
+        S: Stream<Item = M::ExtEvent> + 'static,
+    {
+        self.events.push(any_stream(M::NAMESPACE, stream));
     }
 }
 
@@ -106,29 +114,18 @@ pub trait WebSocketModule: Sized + 'static {
     /// Optional event type, yielded by `ExtEventStream`
     ///
     /// If the module does not register external events it should be set to `()`.
-    type ExtEvent: Any + 'static;
-
-    /// Optional event stream which yields `ExtEvent`
-    ///
-    /// If the module does not register external events it can be set to `tokio_stream::Pending<()>`
-    type ExtEventStream: Stream<Item = Self::ExtEvent>;
+    type ExtEvent;
 
     /// Constructor of the module.
     ///
-    /// Provided with its initial data and the negotiated websocket protocol
-    async fn init(options: &Self::Params, protocol: &'static str) -> Self;
-
-    /// Getter function which, if any external events are registered, will return a stream yielding
-    /// external events.
+    /// Provided with the websocket context the modules params and the negotiated protocol.
     ///
-    /// This will be called only once after initialization of the module.
-    ///
-    /// If the module does not register external events it should just return `None`
-    async fn events(&mut self) -> Option<Self::ExtEventStream>;
+    /// Calls to [`WsCtx::ws_send`] are discarded
+    async fn init(ctx: WsCtx<'_, Self>, params: &Self::Params, protocol: &'static str) -> Self;
 
     /// Events related to this module will be passed into this function together with [EventCtx]
     /// which gives access to the websocket and other related information.
-    async fn on_event(&mut self, ctx: EventCtx<'_, Self>, event: Event<Self>);
+    async fn on_event(&mut self, ctx: WsCtx<'_, Self>, event: Event<Self>);
 
     /// Before dropping the module this function will be called
     async fn on_destroy(self);
@@ -248,11 +245,13 @@ async fn ws_service(
 
     let mut builder = Modules::default();
 
+    builder.local_state().insert(user);
+
     for module in modules.iter() {
         module.build(&mut builder, protocol).await;
     }
 
-    task::spawn_local(Runner::new(builder, websocket, user).run());
+    task::spawn_local(Runner::new(builder, websocket).run());
 
     // TODO: maybe change the SEC_WEBSOCKET_PROTOCOL header to access_token=kdpaosd2eja9dj,k3k-signaling-json-v1 to avoid ordering
     response.insert_header((

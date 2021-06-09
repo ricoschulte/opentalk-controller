@@ -1,3 +1,4 @@
+use crate::api::signaling;
 use crate::settings::{Logging, Settings};
 use actix_cors::Cors;
 use actix_web::http::{header, Method};
@@ -5,8 +6,8 @@ use actix_web::web::Data;
 use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{anyhow, Context, Result};
 use db::DbInterface;
+use fern::colors::{Color, ColoredLevelConfig};
 use futures_util::future::{select, Either};
-use modules::http::ws::{Echo, WebSocketHttpModule};
 use oidc::OidcContext;
 use rustls::internal::pemfile::{certs, rsa_private_keys};
 use std::fs::File;
@@ -55,9 +56,9 @@ async fn run_service(settings: Settings) -> Result<()> {
     );
 
     let mut application = modules::ApplicationBuilder::default();
-    let mut signaling = WebSocketHttpModule::new("/signaling", &["k3k-signaling-json-v1"]);
-    signaling.add_module::<Echo>(());
-    application.add_http_module(signaling);
+
+    signaling::attach(&mut application, settings.room_server, settings.rabbit_mq).await?;
+
     let application = application.finish();
 
     let turn_servers = Data::new(settings.turn);
@@ -164,12 +165,20 @@ fn setup_cors(settings: &settings::HttpCors) -> Cors {
 }
 
 fn setup_logging(logging: &Logging) -> Result<()> {
+    let colors = ColoredLevelConfig {
+        error: Color::Red,
+        warn: Color::Yellow,
+        info: Color::Green,
+        debug: Color::Blue,
+        trace: Color::White,
+    };
+
     let logger = fern::Dispatch::new()
-        .format(|out, message, record| {
+        .format(move |out, message, record| {
             out.finish(format_args!(
                 "{}[{}][{}] {}",
                 chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
-                record.level(),
+                colors.color(record.level()),
                 record.target(),
                 message
             ))
