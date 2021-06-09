@@ -9,20 +9,22 @@ use std::convert::TryFrom;
 ///
 /// The application settings are set with a TOML config file. Settings specified in the config file
 /// can be overwritten by environment variables. To do so, set an environment variable
-/// with the prefix `K3K_CTRL_` followed by the field names you want to set. Fields are separated by an underscore `_`.
+/// with the prefix `K3K_CTRL_` followed by the field names you want to set. Fields are separated by two underscores `__`.
 /// ```sh
-/// K3K_CTRL_<field>_<field-of-field>...
+/// K3K_CTRL__<field>__<field-of-field>...
 /// ```
+///
 /// # Example
 ///
 /// set the `database.server` field:
-/// ```sh
-/// K3K_CTRL_DATABASE_SERVER=localhost
 /// ```
+/// K3K_CTRL__DATABASE__SERVER=localhost
+/// ```
+///
 /// However, the field names in the environment variables are not allowed to have underscores.
 /// So the field 'database.max_connections' would resolve to:
 /// ```sh
-/// K3K_CTRL_DATABASE_MAXCONNECTIONS=5
+/// K3K_CTRL_DATABASE__MAX_CONNECTIONS=5
 /// ```
 /// # Note
 /// Fields set via environment variables do not affect the underlying config file.
@@ -42,7 +44,7 @@ impl Settings {
 
         cfg.merge(File::with_name(file_name))?;
 
-        let env = Environment::with_prefix("K3K_CTRL").separator("_");
+        let env = Environment::with_prefix("K3K_CTRL").separator("__");
 
         cfg.merge(env)?;
 
@@ -55,9 +57,7 @@ pub struct Database {
     pub server: String,
     pub port: u32,
     pub name: String,
-    #[serde(rename = "maxconnections")]
     pub max_connections: u32,
-    #[serde(rename = "minidleconnections")]
     pub min_idle_connections: Option<u32>,
     pub user: String,
     pub password: String,
