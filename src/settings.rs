@@ -4,6 +4,7 @@ use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IssuerUrl};
 use serde::{Deserialize, Deserializer};
 use std::convert::TryFrom;
+use std::path::PathBuf;
 
 /// Contains the application settings.
 ///
@@ -81,18 +82,25 @@ pub struct OidcProvider {
 
 #[derive(Debug, Deserialize)]
 pub struct Http {
-    // TODO ADD TLS SETTINGS
     #[serde(default = "default_http_port")]
     pub port: u16,
     #[serde(default = "internal_http_port")]
     pub internal_port: u16,
     #[serde(default)]
-    pub cors: Cors,
+    pub cors: HttpCors,
+    #[serde(default)]
+    pub tls: Option<HttpTls>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HttpTls {
+    pub certificate: PathBuf,
+    pub private_key: PathBuf,
 }
 
 /// Settings for CORS (Cross Origin Resource Sharing)
 #[derive(Default, Clone, Debug, Deserialize)]
-pub struct Cors {
+pub struct HttpCors {
     #[serde(default)]
     pub allowed_origin: Vec<String>,
 }

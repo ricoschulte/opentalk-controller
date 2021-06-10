@@ -61,10 +61,6 @@ impl OidcContext {
             .context("Failed to verify token using the introspect endpoint")?;
 
         Ok(AccessTokenIntrospectInfo {
-            sub: response
-                .sub()
-                .context("introspect did not contain sub")?
-                .into(),
             active: response.active(),
         })
     }
@@ -94,7 +90,6 @@ impl OidcContext {
 #[derive(Debug)]
 #[must_use]
 pub struct AccessTokenIntrospectInfo {
-    pub sub: String,
     pub active: bool,
 }
 

@@ -173,7 +173,9 @@ dependencies = [
  "futures-core",
  "http",
  "log",
+ "tokio-rustls",
  "tokio-util",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -199,6 +201,7 @@ dependencies = [
  "actix-rt",
  "actix-server",
  "actix-service",
+ "actix-tls",
  "actix-utils",
  "actix-web-codegen",
  "ahash",
@@ -1011,6 +1014,7 @@ dependencies = [
  "refinery",
  "refinery-core",
  "ring",
+ "rustls",
  "serde",
  "serde_json",
  "thiserror",
