@@ -202,10 +202,12 @@ impl WebSocketModule for RoomControl {
                     log::warn!("Unimplemented TrickleMessage::Completed received");
                 }
                 TrickleMessage::Candidate(candidate) => {
-                    ctx.ws_send(outgoing::Message::Candidate(outgoing::Sdp {
-                        payload: candidate,
-                        source: k.0,
-                        media_session_type: k.1,
+                    ctx.ws_send(outgoing::Message::SdpCandidate(outgoing::SdpCandidate {
+                        candidate,
+                        source: outgoing::Source {
+                            source: k.0,
+                            media_session_type: k.1,
+                        },
                     }));
                 }
             },
@@ -267,10 +269,12 @@ impl RoomControl {
 
             match response {
                 Response::SdpAnswer(answer) => {
-                    ctx.ws_send(outgoing::Message::Answer(outgoing::Sdp {
-                        payload: answer.sdp(),
-                        source: target,
-                        media_session_type,
+                    ctx.ws_send(outgoing::Message::SdpAnswer(outgoing::Sdp {
+                        sdp: answer.sdp(),
+                        source: outgoing::Source {
+                            source: target,
+                            media_session_type,
+                        },
                     }));
                 }
                 Response::SdpOffer(_) | Response::None => {
@@ -407,10 +411,12 @@ impl RoomControl {
 
             match response {
                 Response::SdpOffer(offer) => {
-                    ctx.ws_send(outgoing::Message::Offer(outgoing::Sdp {
-                        payload: offer.sdp(),
-                        source: target,
-                        media_session_type,
+                    ctx.ws_send(outgoing::Message::SdpOffer(outgoing::Sdp {
+                        sdp: offer.sdp(),
+                        source: outgoing::Source {
+                            source: target,
+                            media_session_type,
+                        },
                     }));
                 }
                 Response::SdpAnswer(_) | Response::None => {

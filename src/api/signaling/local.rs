@@ -132,7 +132,7 @@ impl Participant {
         Self {
             id,
             display_name: name,
-            publishing: Default::default(),
+            publishing: HashMap::new(),
         }
     }
 }

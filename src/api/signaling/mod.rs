@@ -47,18 +47,13 @@ pub async fn attach(
             .await
             .context("failed to connect to rabbitmq")?;
 
-    log::info!("CONNECT 1");
-
     let mcu_channel = rabbitmq_connection
         .create_channel()
         .await
         .context("Could not create rabbit mq channel for MCU")?;
 
-    log::info!("CONNECT 2");
-
     let mcu = Arc::new(JanusMcu::connect(room_server, mcu_channel).await?);
     mcu.start()?;
-    log::info!("CONNECT 3");
 
     let room = Arc::new(RwLock::new(Room { members: vec![] }));
 

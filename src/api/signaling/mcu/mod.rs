@@ -359,7 +359,7 @@ impl JanusPublisher {
                         .into();
 
                 log::trace!("Publisher Send received: {:?}", &response);
-                Ok(Response::SdpAnswer(response.into()))
+                Ok(Response::SdpAnswer(response))
             }
             Request::Candidate(candidate) => {
                 send_candidate(&self.handle, candidate)
@@ -513,7 +513,7 @@ impl JanusSubscriber {
                 let response: janus_client::Jsep =
                     self.join_room().await.context("Failed to join room")?;
 
-                Ok(Response::SdpOffer(response.into()))
+                Ok(Response::SdpOffer(response))
             }
             Request::SdpAnswer(e) => {
                 send_answer(&self.handle, (JsepType::Answer, e).into())
@@ -523,7 +523,7 @@ impl JanusSubscriber {
                 Ok(Response::None)
             }
             Request::Candidate(candidate) => {
-                send_candidate(&self.handle, candidate.into())
+                send_candidate(&self.handle, candidate)
                     .await
                     .context("Failed to send SDP candidate")?;
 
