@@ -2,12 +2,15 @@ use actix_cors::Cors;
 use actix_web::http::{header, Method};
 use actix_web::web::Data;
 use actix_web::{web, App, HttpServer, Scope};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use db::DbInterface;
 use futures_util::future::{select, Either};
 use modules::http::ws::{Echo, WebSocketHttpModule};
 use oidc::OidcContext;
-use std::net::Ipv4Addr;
+use rustls::internal::pemfile::{certs, rsa_private_keys};
+use std::fs::File;
+use std::io::BufReader;
+use std::net::Ipv6Addr;
 
 mod api;
 mod db;
@@ -57,9 +60,6 @@ async fn main() -> Result<()> {
             .service(api::internal::introspect)
     });
 
-    let internal_http_server =
-        internal_http_server.bind((Ipv4Addr::UNSPECIFIED, settings.http.internal_port))?;
-
     // Start external HTTP Server
     let cors = settings.http.cors;
     let ext_http_server = HttpServer::new(move || {
@@ -74,7 +74,21 @@ async fn main() -> Result<()> {
             .configure(application.configure())
     });
 
-    let ext_http_server = ext_http_server.bind((Ipv4Addr::UNSPECIFIED, settings.http.port))?;
+    let (ext_http_server, internal_http_server) = if let Some(tls) = settings.http.tls {
+        let config = setup_rustls(tls)?;
+
+        (
+            ext_http_server
+                .bind_rustls((Ipv6Addr::UNSPECIFIED, settings.http.port), config.clone())?,
+            internal_http_server
+                .bind_rustls((Ipv6Addr::UNSPECIFIED, settings.http.internal_port), config)?,
+        )
+    } else {
+        (
+            ext_http_server.bind((Ipv6Addr::UNSPECIFIED, settings.http.port))?,
+            internal_http_server.bind((Ipv6Addr::UNSPECIFIED, settings.http.internal_port))?,
+        )
+    };
 
     match select(ext_http_server.run(), internal_http_server.run()).await {
         Either::Left((external_res, _external_server)) => {
@@ -110,7 +124,7 @@ fn v1_scope(db_ctx: Data<DbInterface>, oidc_ctx: Data<OidcContext>) -> Scope {
         )
 }
 
-fn setup_cors(settings: &settings::Cors) -> Cors {
+fn setup_cors(settings: &settings::HttpCors) -> Cors {
     let mut cors = Cors::default();
 
     for origin in &settings.allowed_origin {
@@ -132,8 +146,22 @@ fn setup_logging() -> Result<()> {
                 message
             ))
         })
-        .level(log::LevelFilter::Warn)
+        .level(log::LevelFilter::Debug)
         .chain(std::io::stdout())
         .apply()
         .context("Failed to setup logging utility")
+}
+
+fn setup_rustls(tls: settings::HttpTls) -> Result<rustls::ServerConfig> {
+    let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
+
+    let certs = certs(&mut BufReader::new(File::open(tls.certificate)?))
+        .map_err(|_| anyhow!("Failed to read certificate file"))?;
+
+    let mut key = rsa_private_keys(&mut BufReader::new(File::open(tls.private_key)?))
+        .map_err(|_| anyhow!("Failed to read pkcs8 private key file"))?;
+
+    config.set_single_cert(certs, key.remove(0))?;
+
+    Ok(config)
 }
