@@ -1,5 +1,5 @@
 //! Auth related API structs and Endpoints
-use super::ApiError;
+use super::{ApiError, INVALID_ID_TOKEN};
 use crate::db;
 use crate::db::DbInterface;
 use crate::oidc::OidcContext;
@@ -39,14 +39,17 @@ pub async fn login(
     match oidc_ctx.verify_id_token(&id_token).await {
         Err(e) => {
             log::warn!("Got invalid ID Token {}", e);
-            Err(ApiError::auth_error("invalid id token"))
+            Err(ApiError::Auth(INVALID_ID_TOKEN, e.to_string()))
         }
         Ok(info) => {
             let user_uuid = match uuid::Uuid::from_str(&info.sub) {
                 Ok(uuid) => uuid,
                 Err(_) => {
-                    log::error!("Unable to parse UUID form id token sub '{}'", &info.sub);
-                    return Err(ApiError::auth_error("invalid id token"));
+                    log::error!("Unable to parse UUID from id token sub '{}'", &info.sub);
+                    return Err(ApiError::Auth(
+                        INVALID_ID_TOKEN,
+                        "Unable to parse UUID from id token".to_string(),
+                    ));
                 }
             };
 

@@ -2,7 +2,7 @@
 use super::Result;
 use crate::db::schema::rooms;
 use crate::db::users::User;
-use crate::db::{DatabaseError, DbInterface};
+use crate::db::DbInterface;
 use crate::diesel::RunQueryDsl;
 use diesel::{ExpressionMethods, QueryDsl, QueryResult};
 use diesel::{Identifiable, Queryable};
@@ -50,31 +50,49 @@ impl DbInterface {
     pub fn get_owned_rooms(&self, user: &User) -> Result<Vec<Room>> {
         let con = self.get_con()?;
 
-        let rooms: Vec<Room> = rooms::table
+        let rooms_result: QueryResult<Vec<Room>> = rooms::table
             .filter(rooms::columns::owner.eq(user.id))
-            .get_results(&con)?;
+            .get_results(&con);
 
-        Ok(rooms)
+        match rooms_result {
+            Ok(rooms) => Ok(rooms),
+            Err(e) => {
+                log::error!("Query error getting owned rooms, {}", e);
+                Err(e.into())
+            }
+        }
     }
 
     pub fn new_room(&self, room: NewRoom) -> Result<Room> {
         let con = self.get_con()?;
 
         // a UUID collision will result in an internal server error
-        let room: Room = diesel::insert_into(rooms::table)
+        let room_result: QueryResult<Room> = diesel::insert_into(rooms::table)
             .values(room)
-            .get_result(&con)?;
+            .get_result(&con);
 
-        Ok(room)
+        match room_result {
+            Ok(rooms) => Ok(rooms),
+            Err(e) => {
+                log::error!("Query error creating new room, {}", e);
+                Err(e.into())
+            }
+        }
     }
 
     pub fn modify_room_by_uuid(&self, room_uuid: &Uuid, room: ModifyRoom) -> Result<Room> {
         let con = self.get_con()?;
 
         let target = rooms::table.filter(rooms::columns::uuid.eq(&room_uuid));
-        let room = diesel::update(target).set(&room).get_result(&con)?;
+        let room_result = diesel::update(target).set(&room).get_result(&con);
 
-        Ok(room)
+        match room_result {
+            Ok(rooms) => Ok(rooms),
+            Err(e) => {
+                log::error!("Query error modifying room, {}", e);
+                Err(e.into())
+            }
+        }
     }
 
     pub fn get_room_by_uuid(&self, room_uuid: &Uuid) -> Result<Option<Room>> {
@@ -87,7 +105,10 @@ impl DbInterface {
         match result {
             Ok(user) => Ok(Some(user)),
             Err(diesel::NotFound) => Ok(None),
-            Err(e) => Err(DatabaseError::from(e)),
+            Err(e) => {
+                log::error!("Query error getting room by uuid, {}", e);
+                Err(e.into())
+            }
         }
     }
 }

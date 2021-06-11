@@ -57,19 +57,31 @@ impl DbInterface {
     pub fn create_user(&self, new_user: NewUser) -> Result<User> {
         let con = self.get_con()?;
 
-        let user = diesel::insert_into(users::table)
+        let user_result = diesel::insert_into(users::table)
             .values(new_user)
-            .get_result(&con)?;
+            .get_result(&con);
 
-        Ok(user)
+        match user_result {
+            Ok(user) => Ok(user),
+            Err(e) => {
+                log::error!("Query error creating new user, {}", e);
+                Err(e.into())
+            }
+        }
     }
 
     pub fn get_users(&self) -> Result<Vec<User>> {
         let con = self.get_con()?;
 
-        let users = users::table.get_results(&con)?;
+        let users_result: QueryResult<Vec<User>> = users::table.get_results(&con);
 
-        Ok(users)
+        match users_result {
+            Ok(users) => Ok(users),
+            Err(e) => {
+                log::error!("Query error getting all users, {}", e);
+                Err(e.into())
+            }
+        }
     }
 
     pub fn get_user_by_uuid(&self, uuid: &Uuid) -> Result<Option<User>> {
@@ -82,7 +94,10 @@ impl DbInterface {
         match result {
             Ok(user) => Ok(Some(user)),
             Err(Error::NotFound) => Ok(None),
-            Err(e) => Err(e.into()),
+            Err(e) => {
+                log::error!("Query error getting user by uuid, {}", e);
+                Err(e.into())
+            }
         }
     }
 
@@ -90,9 +105,15 @@ impl DbInterface {
         let con = self.get_con()?;
 
         let target = users::table.filter(users::columns::oidc_uuid.eq(user_uuid));
-        let user = diesel::update(target).set(user).get_result(&con)?;
+        let user_result: QueryResult<User> = diesel::update(target).set(user).get_result(&con);
 
-        Ok(user)
+        match user_result {
+            Ok(user) => Ok(user),
+            Err(e) => {
+                log::error!("Query error modifying user, {}", e);
+                Err(e.into())
+            }
+        }
     }
 
     pub fn get_user_by_id(&self, user_id: i64) -> Result<Option<User>> {
@@ -105,7 +126,11 @@ impl DbInterface {
         match result {
             Ok(user) => Ok(Some(user)),
             Err(Error::NotFound) => Ok(None),
-            Err(e) => Err(e.into()),
+            Err(e) => {
+                log::error!("Query error getting user by id, {}", e);
+
+                Err(e.into())
+            }
         }
     }
 }
