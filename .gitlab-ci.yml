@@ -5,6 +5,7 @@ services:
 
 stages:
   - lint
+  - test
   - build
 
 variables:
@@ -40,23 +41,27 @@ lint:dependency_check:
     - cargo install --locked cargo-deny
   script: cargo deny check
 
-build:check:
-  stage: build
+test:cargo_check:
+  stage: test
   variables:
     RUSTFLAGS: "-D warnings"
   script: cargo check --tests --all-features
 
-build:test:
-  stage: build
+test:cargo_test:
+  stage: test
   variables:
     DATABASE_URL: "postgres://postgres:password123@postgres:5432/migration_test"
-  artifacts:
-    paths:
-      - target/release/k3k_controller
   before_script:
     - rustup component add rustfmt
     - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"
   script:
-    - cargo build --release
     - cargo test
     - ./.cargo/bin/diesel print-schema | /usr/local/cargo/bin/rustfmt | diff src/db/schema.rs -
+
+build:release:
+  stage: build
+  artifacts:
+    paths:
+      - target/release/k3k-controller
+  script:
+    - cargo build --release
