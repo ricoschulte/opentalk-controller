@@ -1,7 +1,5 @@
 use actix_web::web::ServiceConfig;
 
-pub mod ws;
-
 /// Extension to an actix app.
 ///
 /// Middleware can be used by scoping services.

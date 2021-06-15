@@ -3,13 +3,13 @@ use crate::api::signaling::mcu::{
     MediaSessionKey, MediaSessionType, Request, Response, TrickleMessage,
 };
 use crate::api::signaling::media::Media;
+use crate::api::signaling::ws::{Event, SignalingModule, WsCtx};
 use crate::api::signaling::{JanusMcu, ParticipantId};
 use crate::db::users::User;
-use crate::modules::http::ws::{Event, WebSocketModule, WsCtx};
 use anyhow::{bail, Result};
 use futures::stream::{select, StreamExt};
 use janus_client::TrickleCandidate;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
 
@@ -33,10 +33,10 @@ pub enum ExtEvent {
 }
 
 #[async_trait::async_trait(?Send)]
-impl WebSocketModule for RoomControl {
+impl SignalingModule for RoomControl {
     const NAMESPACE: &'static str = "room";
 
-    type Params = (Arc<JanusMcu>, Arc<RwLock<Room>>);
+    type Params = (Weak<JanusMcu>, Arc<RwLock<Room>>);
 
     type Incoming = incoming::Message;
     type Outgoing = outgoing::Message;
@@ -60,7 +60,7 @@ impl WebSocketModule for RoomControl {
 
         Self {
             id: participant_id,
-            mcu: mcu.clone(),
+            mcu: mcu.upgrade().unwrap(),
             media: Media::new(participant_id, media_sender),
             local: room.clone(),
             room_evt_sender,

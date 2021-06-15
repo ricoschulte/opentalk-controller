@@ -1,18 +1,19 @@
 use crate::api::signaling::local::Room;
 use crate::api::signaling::ws_modules::room::RoomControl;
-use crate::modules::http::ws::{Echo, WebSocketHttpModule};
 use crate::modules::ApplicationBuilder;
-use crate::settings;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
+use ws::{Echo, SignalingHttpModule};
 
 mod local;
 mod mcu;
 mod media;
+mod redis_state;
+mod ws;
 mod ws_modules;
 
 pub use mcu::JanusMcu;
@@ -39,28 +40,18 @@ impl fmt::Display for ParticipantId {
 
 pub async fn attach(
     application: &mut ApplicationBuilder,
-    room_server: settings::JanusMcuConfig,
-    rabbit_mq: settings::RabbitMqConfig,
+    shutdown_sig: broadcast::Receiver<()>,
+    redis: &redis::Client,
+    mcu: &Arc<JanusMcu>,
 ) -> Result<()> {
-    let rabbitmq_connection =
-        lapin::Connection::connect(&rabbit_mq.url, lapin::ConnectionProperties::default())
-            .await
-            .context("failed to connect to rabbitmq")?;
-
-    let mcu_channel = rabbitmq_connection
-        .create_channel()
-        .await
-        .context("Could not create rabbit mq channel for MCU")?;
-
-    let mcu = Arc::new(JanusMcu::connect(room_server, mcu_channel).await?);
-    mcu.start()?;
+    let msg_sender = redis_state::start_keyspace_notification_loop(shutdown_sig, redis).await?;
 
     let room = Arc::new(RwLock::new(Room { members: vec![] }));
 
-    let mut signaling = WebSocketHttpModule::new("/signaling", &["k3k-signaling-json-v1"]);
+    let mut signaling = SignalingHttpModule::new();
 
     signaling.add_module::<Echo>(());
-    signaling.add_module::<RoomControl>((mcu, room));
+    signaling.add_module::<RoomControl>((Arc::downgrade(&mcu), room));
 
     application.add_http_module(signaling);
 

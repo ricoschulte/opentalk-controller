@@ -279,8 +279,8 @@ fn default_from_janus_routing_key() -> String {
 }
 
 fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>
-    where
-        D: Deserializer<'de>,
+where
+    D: Deserializer<'de>,
 {
     let duration: u64 = Deserialize::deserialize(deserializer)?;
 

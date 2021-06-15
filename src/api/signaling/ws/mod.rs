@@ -1,6 +1,6 @@
-use super::HttpModule;
 use crate::api::v1::middleware::oidc_auth::check_access_token;
 use crate::db::DbInterface;
+use crate::modules::http::HttpModule;
 use crate::oidc::OidcContext;
 use actix_web::dev::Extensions;
 use actix_web::http::{header, HeaderValue};
@@ -11,6 +11,7 @@ use adapter::ActixTungsteniteAdapter;
 use async_tungstenite::tungstenite::protocol::Role;
 use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
+use futures::stream::SelectAll;
 use modules::{any_stream, AnyStream, ModuleBuilder, ModuleBuilderImpl, Modules};
 use openidconnect::AccessToken;
 use runner::{Namespaced, Runner};
@@ -27,14 +28,13 @@ mod modules;
 mod runner;
 
 pub use echo::Echo;
-use futures::stream::SelectAll;
 
 type WebSocket = WebSocketStream<ActixTungsteniteAdapter>;
 
 /// Event passed to [`WebSocketModule::on_event`].
 pub enum Event<M>
 where
-    M: WebSocketModule,
+    M: SignalingModule,
 {
     /// Received websocket message
     WsMessage(M::Incoming),
@@ -51,7 +51,7 @@ where
 /// Can be used to send websocket messages
 pub struct WsCtx<'ctx, M>
 where
-    M: WebSocketModule,
+    M: SignalingModule,
 {
     ws_messages: &'ctx mut Vec<Message>,
     events: &'ctx mut SelectAll<AnyStream>,
@@ -61,7 +61,7 @@ where
 
 impl<M> WsCtx<'_, M>
 where
-    M: WebSocketModule,
+    M: SignalingModule,
 {
     /// Queue a outgoing message to be sent via the websocket
     /// after exiting the `on_event` function
@@ -92,15 +92,15 @@ where
     }
 }
 
-/// Extension to a websocket
+/// Extension to a the signaling websocket
 #[async_trait::async_trait(?Send)]
-pub trait WebSocketModule: Sized + 'static {
+pub trait SignalingModule: Sized + 'static {
     /// Defines the websocket message namespace
     ///
     /// Must be unique between all registered modules.
     const NAMESPACE: &'static str;
 
-    /// The module options, can be any type that is `Send` + `Sync`
+    /// The module params, can be any type that is `Send` + `Sync`
     ///
     /// Will get passed to `init` as parameter
     type Params: Send + Sync;
@@ -131,33 +131,30 @@ pub trait WebSocketModule: Sized + 'static {
     async fn on_destroy(self);
 }
 
-/// Websocket endpoint which can be registered to a `ApplicationBuilder`.
+/// Signaling endpoint which can be registered to a `ApplicationBuilder`.
 ///
 /// Logic is implemented via modules.
-/// See [`WebSocketModule`] and [`WebSocketHttpModule::add_module`]
-pub struct WebSocketHttpModule {
-    path: &'static str,
+/// See [`SignalingModule`] and [`SignalingHttpModule::add_module`]
+pub struct SignalingHttpModule {
     protocols: &'static [&'static str],
-
     modules: Vec<Box<dyn ModuleBuilder>>,
 }
 
-impl WebSocketHttpModule {
-    pub fn new(path: &'static str, protocols: &'static [&'static str]) -> Self {
+impl SignalingHttpModule {
+    pub fn new() -> Self {
         Self {
-            path,
-            protocols,
+            protocols: &["k3k-signaling-json-v1"],
             modules: Default::default(),
         }
     }
 
-    /// Add a implementation of [`WebSocketModule`] together with some options used to initialize
+    /// Add a implementation of [`SignalingModule`] together with some options used to initialize
     /// the module.
     ///
     /// The module itself will be created on successful websocket connection.
     pub fn add_module<M>(&mut self, params: M::Params)
     where
-        M: WebSocketModule + 'static,
+        M: SignalingModule + 'static,
     {
         self.modules.push(Box::new(ModuleBuilderImpl {
             m: PhantomData::<fn() -> M>,
@@ -166,13 +163,13 @@ impl WebSocketHttpModule {
     }
 }
 
-impl HttpModule for WebSocketHttpModule {
+impl HttpModule for SignalingHttpModule {
     fn register(&self, app: &mut ServiceConfig) {
         let protocols = self.protocols;
         let modules = Rc::from(self.modules.clone().into_boxed_slice());
 
         app.service(web::scope("").route(
-            self.path,
+            "/signaling",
             web::get().to(move |db_ctx, oidc_ctx, req, stream| {
                 ws_service(
                     db_ctx,

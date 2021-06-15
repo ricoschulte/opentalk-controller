@@ -28,8 +28,9 @@ pub struct JanusMcu {
     max_screen_bitrate: u64,
 
     // TODO v2 Handle disconnection and state recovery
-    _gw: janus_client::Client,
     session: janus_client::Session,
+
+    _gw: janus_client::Client,
 
     shutdown: broadcast::Sender<()>,
 
@@ -44,6 +45,7 @@ impl JanusMcu {
     pub async fn connect(
         config: settings::JanusMcuConfig,
         channel: lapin::Channel,
+        shutdown: broadcast::Sender<()>,
     ) -> Result<Self> {
         let rabbit_mq_config = janus_client::RabbitMqConfig::new_from_channel(
             channel,
@@ -53,7 +55,7 @@ impl JanusMcu {
             config.connection.from_janus_routing_key,
             TAG.to_owned(),
         );
-        let (gw, janus_stream) = janus_client::Client::new(rabbit_mq_config)
+        let (gw, janus_stream) = janus_client::Client::new(rabbit_mq_config, shutdown.clone())
             .await
             .context("Failed to create janus_client")?;
 
@@ -62,7 +64,7 @@ impl JanusMcu {
             .await
             .context("Failed to create session")?;
 
-        let (shutdown, mut shutdown_sig) = broadcast::channel(1);
+        let mut shutdown_sig = shutdown.subscribe();
 
         tokio::spawn(async move {
             let mut stream = ReceiverStream::new(janus_stream);
@@ -73,21 +75,26 @@ impl JanusMcu {
                         log::warn!("Unhandled janus message {:?}", msg);
                     }
                     _ = shutdown_sig.recv() => {
+                        log::debug!("receive task got shutdown signal, exiting");
                         return;
                     }
                 };
             }
         });
 
-        Ok(Self {
+        let mcu = Self {
             max_stream_bitrate: config.max_video_bitrate,
             max_screen_bitrate: config.max_screen_bitrate,
-            _gw: gw,
             session,
+            _gw: gw,
             shutdown,
             publisher_room_ids: Mutex::new(HashMap::new()),
             next_client_id: AtomicU64::new(0),
-        })
+        };
+
+        mcu.start()?;
+
+        Ok(mcu)
     }
 
     pub fn start(&self) -> Result<()> {
@@ -104,6 +111,7 @@ impl JanusMcu {
                         session.keep_alive().await;
                     }
                     _ = shutdown_sig.recv() => {
+                        log::debug!("keep-alive task got shutdown signal, exiting");
                         return;
                     }
                 }
@@ -113,12 +121,10 @@ impl JanusMcu {
         Ok(())
     }
 
-    pub fn stop(&self) {
-        self.shutdown
-            .send(())
-            .expect("Failed to shut down mcu tasks");
+    pub async fn destroy(&mut self) -> Result<()> {
+        self.session.destroy().await?;
 
-        todo!("Shut down all media sessions and remove all rooms")
+        Ok(())
     }
 
     pub async fn new_publisher(

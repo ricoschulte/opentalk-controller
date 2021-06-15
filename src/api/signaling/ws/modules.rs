@@ -1,4 +1,4 @@
-use super::WebSocketModule;
+use super::SignalingModule;
 use super::{Event, WsCtx};
 use actix_web::dev::Extensions;
 use async_tungstenite::tungstenite::Message;
@@ -34,7 +34,7 @@ pub struct Modules {
 impl Modules {
     pub async fn add_module<M>(&mut self, module: M)
     where
-        M: WebSocketModule,
+        M: SignalingModule,
     {
         log::debug!("Registering module {}", M::NAMESPACE);
 
@@ -103,7 +103,7 @@ struct ModuleCallerImpl<M> {
 #[async_trait::async_trait(?Send)]
 impl<M> ModuleCaller for ModuleCallerImpl<M>
 where
-    M: WebSocketModule,
+    M: SignalingModule,
 {
     async fn on_event(&mut self, ctx: DynEventCtx<'_>, dyn_event: DynEvent) {
         let ctx = WsCtx {
@@ -140,7 +140,7 @@ pub trait ModuleBuilder: Send + Sync {
 
 pub struct ModuleBuilderImpl<M>
 where
-    M: WebSocketModule,
+    M: SignalingModule,
 {
     pub m: PhantomData<fn() -> M>,
     pub params: Arc<M::Params>,
@@ -149,7 +149,7 @@ where
 #[async_trait::async_trait(?Send)]
 impl<M> ModuleBuilder for ModuleBuilderImpl<M>
 where
-    M: WebSocketModule,
+    M: SignalingModule,
 {
     async fn build(&self, builder: &mut Modules, protocol: &'static str) {
         let ctx = WsCtx {

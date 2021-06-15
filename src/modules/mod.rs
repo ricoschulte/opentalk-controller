@@ -21,19 +21,18 @@ impl ApplicationBuilder {
     }
 
     /// Finalize the builder into a [`Application`]
-    pub fn finish(self) -> Application {
-        Application {
-            http_modules: Arc::from(self.http_modules.into_boxed_slice()),
-        }
+    pub fn finish(self) -> Arc<Application> {
+        Arc::new(Application {
+            http_modules: self.http_modules.into_boxed_slice(),
+        })
     }
 }
 
 /// Contains all modules and app-data collected from [`ApplicationBuilder::finish`].
 ///
 /// Is used to configure actix app
-#[derive(Clone)]
 pub struct Application {
-    http_modules: Arc<[Box<dyn HttpModule>]>,
+    http_modules: Box<[Box<dyn HttpModule>]>,
 }
 
 impl Application {

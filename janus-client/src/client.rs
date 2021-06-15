@@ -53,7 +53,9 @@ pub(crate) struct InnerClient {
     connection: Option<RabbitMqConnection>,
     /// Sink for general messages from Janus that are not part of a request, such as notifications, etc.
     server_notification_sink: mpsc::Sender<Arc<JanusMessage>>,
-    pub(crate) sessions: Arc<Mutex<HashMap<SessionId, Arc<InnerSession>>>>,
+    pub(crate) sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
+    /// shutdown signal
+    shutdown: broadcast::Sender<()>,
 }
 
 impl InnerClient {
@@ -64,6 +66,7 @@ impl InnerClient {
     pub(crate) fn new(
         config: RabbitMqConfig,
         server_notification_sink: mpsc::Sender<Arc<JanusMessage>>,
+        shutdown: broadcast::Sender<()>,
     ) -> Self {
         Self {
             connection_config: config,
@@ -71,6 +74,7 @@ impl InnerClient {
             connection: None,
             server_notification_sink,
             sessions: Default::default(),
+            shutdown,
         }
     }
 
@@ -80,12 +84,13 @@ impl InnerClient {
         let consumer = connection.consumer.clone();
         self.connection = Some(connection);
 
-        start_rabbitmq_event_handling_loop(
+        tokio::spawn(rabbitmq_event_handling_loop(
+            self.shutdown.subscribe(),
             consumer,
             self.transactions.clone(),
             self.sessions.clone(),
             self.server_notification_sink.clone(),
-        );
+        ));
 
         Ok(())
     }
@@ -251,7 +256,9 @@ pub(crate) struct InnerSession {
     pub(crate) client: Weak<InnerClient>,
     pub(crate) id: SessionId,
     pub(crate) handles: Mutex<HashMap<HandleId, Arc<InnerHandle>>>,
+    destroyed: bool,
 }
+
 impl InnerSession {
     /// Creates a new [`Session](Session)
     pub(crate) fn new(client: Weak<InnerClient>, id: SessionId) -> Self {
@@ -259,6 +266,7 @@ impl InnerSession {
             client,
             id,
             handles: Mutex::new(HashMap::new()),
+            destroyed: false,
         }
     }
 
@@ -311,37 +319,28 @@ impl InnerSession {
     pub(crate) fn detach_handle(&self, id: &HandleId) {
         self.handles.lock().remove(id);
     }
+
+    pub(crate) async fn destroy(&mut self, client: Arc<InnerClient>) -> Result<(), error::Error> {
+        let request = JanusRequest::Destroy {
+            session_id: self.id,
+        };
+
+        client
+            .send(&request)
+            .await
+            .expect("Failed to send destroy for session on drop");
+
+        self.destroyed = true;
+
+        Ok(())
+    }
 }
 
 impl Drop for InnerSession {
     fn drop(&mut self) {
-        let rt = if let Ok(rt) = tokio::runtime::Handle::try_current() {
-            rt
-        } else {
-            log::error!(
-                "Could not clean up resources for Session({}) (runtime stopped)",
-                self.id
-            );
-            return;
-        };
-
-        let client = self
-            .client
-            .upgrade()
-            .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
-
-        // Create request outside of task to avoid move
-        let request = JanusRequest::Destroy {
-            session_id: self.id,
-        };
-        let session_id = self.id;
-        rt.spawn(async move {
-            let _response = client
-                .send(&request)
-                .await
-                .expect("Failed to send destroy for session on drop");
-            log::trace!("Dropped InnerSession for session {}", session_id);
-        });
+        if !std::thread::panicking() {
+            debug_assert!(self.destroyed, "call Session::destroy before dropping it");
+        }
     }
 }
 
@@ -495,75 +494,81 @@ impl Drop for InnerHandle {
     }
 }
 
-// Todo Add graceful shutdown signal handling, but this task should stop when the websocket closes anyway.
-fn start_rabbitmq_event_handling_loop(
+async fn rabbitmq_event_handling_loop(
+    mut shutdown_sig: broadcast::Receiver<()>,
     mut stream: Consumer,
     transactions: Arc<Mutex<TransactionMap>>,
-    sessions: Arc<Mutex<HashMap<SessionId, Arc<InnerSession>>>>,
+    sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
     sink: mpsc::Sender<Arc<JanusMessage>>,
 ) {
-    tokio::spawn(async move {
-        while let Some(consumer_result) = stream.next().await {
-            match consumer_result {
-                Err(e) => {
-                    log::error!("Encountered error while receiving from RabbitMQ: {}", e);
-                }
-                Ok((_, delivery)) => {
-                    let msg = String::from_utf8(delivery.data.clone());
-                    match msg {
-                        Ok(msg) => {
-                            log::trace!("Received RabbitMQ message containing: {}", msg);
-                            match event_handling_loop_inner(
-                                msg,
-                                transactions.clone(),
-                                sessions.clone(),
-                                &sink,
-                            )
-                            .await
-                            {
-                                Ok(_) => delivery
-                                    .ack(BasicAckOptions::default())
-                                    .await
-                                    // Todo Handle Reconnects:
-                                    // return error, bubble up and reconnect
-                                    .expect("Could not send ACK. Check connection!"),
-                                Err(e) => {
-                                    log::error!(
-                                        "Error handling the incoming msg from Rabbit MQ: {}",
-                                        e
-                                    );
-                                    delivery
-                                        .nack(BasicNackOptions::default())
+    loop {
+        tokio::select! {
+            _ = shutdown_sig.recv() => {
+                log::debug!("RabbitMQ event handling loop got shutdown signal, exiting task");
+                return;
+            }
+            // TODO handle none (disconnect)
+            Some(consumer_result) = stream.next() => {
+                match consumer_result {
+                    Err(e) => {
+                        log::error!("Encountered error while receiving from RabbitMQ: {}", e);
+                    }
+                    Ok((_, delivery)) => {
+                        let msg = String::from_utf8(delivery.data.clone());
+                        match msg {
+                            Ok(msg) => {
+                                log::trace!("Received RabbitMQ message containing: {}", msg);
+                                match event_handling_loop_inner(
+                                    msg,
+                                    transactions.clone(),
+                                    sessions.clone(),
+                                    &sink,
+                                )
+                                .await
+                                {
+                                    Ok(_) => delivery
+                                        .ack(BasicAckOptions::default())
                                         .await
                                         // Todo Handle Reconnects:
                                         // return error, bubble up and reconnect
-                                        .expect("Could not send NACK. Check connection!")
+                                        .expect("Could not send ACK. Check connection!"),
+                                    Err(e) => {
+                                        log::error!(
+                                            "Error handling the incoming msg from Rabbit MQ: {}",
+                                            e
+                                        );
+                                        delivery
+                                            .nack(BasicNackOptions::default())
+                                            .await
+                                            // Todo Handle Reconnects:
+                                            // return error, bubble up and reconnect
+                                            .expect("Could not send NACK. Check connection!")
+                                    }
                                 }
                             }
-                        }
-                        Err(e) => {
-                            log::error!("Received RabbitMQ message with invalid UTF-8: {}", e);
-                            delivery
-                                .nack(BasicNackOptions::default())
-                                .await
-                                // Todo Handle Reconnects:
-                                // return error, bubble up and reconnect
-                                .expect("Could not send NACK. Check connection!")
+                            Err(e) => {
+                                log::error!("Received RabbitMQ message with invalid UTF-8: {}", e);
+                                delivery
+                                    .nack(BasicNackOptions::default())
+                                    .await
+                                    // Todo Handle Reconnects:
+                                    // return error, bubble up and reconnect
+                                    .expect("Could not send NACK. Check connection!")
+                            }
                         }
                     }
                 }
             }
         }
-        log::trace!("Stopping RabbitMQ handling loop");
-        // Todo reconnect when this connection closed?
-        // Todo clear the transaction table on a disconnect
-    });
+    }
+    // Todo reconnect when this connection closed?
+    // Todo clear the transaction table on a disconnect
 }
 
 async fn event_handling_loop_inner(
     msg: String,
     transactions: Arc<Mutex<TransactionMap>>,
-    sessions: Arc<Mutex<HashMap<SessionId, Arc<InnerSession>>>>,
+    sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
     sink: &mpsc::Sender<Arc<JanusMessage>>,
 ) -> Result<(), error::Error> {
     match serde_json::from_str::<JanusMessage>(&msg) {
@@ -619,7 +624,7 @@ async fn event_handling_loop_inner(
 /// Routes a message that does not have a matching transaction
 // todo can we get this somehow a little bit cleaner?
 async fn route_message(
-    sessions: &Arc<Mutex<HashMap<SessionId, Arc<InnerSession>>>>,
+    sessions: &Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
     global_sink: &mpsc::Sender<Arc<JanusMessage>>,
     janus_result: Arc<JanusMessage>,
 ) {
@@ -633,7 +638,7 @@ async fn route_message(
         })
         | JanusMessage::WebRtcUpdate(incoming::WebRtcUpdate { sender, session_id }) => {
             let session = sessions.lock().get(&session_id).cloned();
-            if let Some(session) = session {
+            if let Some(session) = session.and_then(|x| x.upgrade()) {
                 let handle = session.find_handle(&sender);
                 match handle {
                     Ok(handle) => {
@@ -663,7 +668,7 @@ async fn route_message(
             ..
         }) => {
             let session = sessions.lock().get(&session_id).cloned();
-            if let Some(session) = session {
+            if let Some(session) = session.and_then(|x| x.upgrade()) {
                 let handle = session.find_handle(&sender);
                 match handle {
                     Ok(handle) => {

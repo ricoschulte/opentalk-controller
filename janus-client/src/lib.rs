@@ -95,7 +95,9 @@
 use crate::client::{InnerClient, InnerHandle, InnerSession};
 use crate::outgoing::TrickleMessage;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
+use tokio::time::sleep;
 
 mod async_types;
 mod client;
@@ -119,9 +121,10 @@ impl Client {
     /// Returns the client itself and a broadcast receiver for messages from Janus that are not a response
     pub async fn new(
         config: RabbitMqConfig,
+        shutdown: broadcast::Sender<()>,
     ) -> Result<(Self, mpsc::Receiver<Arc<JanusMessage>>), error::Error> {
         let (sn_sink, sn_recv) = mpsc::channel::<Arc<JanusMessage>>(10);
-        let mut inner_client = InnerClient::new(config, sn_sink.clone());
+        let mut inner_client = InnerClient::new(config, sn_sink.clone(), shutdown);
 
         inner_client.connect().await?;
         let client = Self {
@@ -144,19 +147,8 @@ impl Client {
         self.inner
             .sessions
             .lock()
-            .insert(session_id, session.clone());
+            .insert(session_id, Arc::downgrade(&session));
         Ok(Session { inner: session })
-    }
-
-    /// Returns the [`Session`](Session) with the given `SessionId`
-    pub async fn find_session(&self, id: &SessionId) -> Result<Session, error::Error> {
-        self.inner
-            .sessions
-            .lock()
-            .get(id)
-            .cloned()
-            .map(|x| Session { inner: x })
-            .ok_or(error::Error::InvalidSession)
     }
 }
 
@@ -204,6 +196,36 @@ impl Session {
     /// This function only removes the Arc from the internal tracking map
     pub fn detach_handle(&self, id: &HandleId) {
         self.inner.detach_handle(id);
+    }
+
+    /// Destroys the session. Waits for the strong reference count to reach zero and sends a
+    /// Destroy request
+    pub async fn destroy(&mut self) -> Result<(), error::Error> {
+        let client = self
+            .inner
+            .client
+            .upgrade()
+            .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
+
+        client.sessions.lock().remove(&self.inner.id);
+
+        loop {
+            let strong_count = Arc::strong_count(&self.inner);
+
+            log::debug!(
+                "Destroying Session({}), waiting strong_count to reach 1 (is {})",
+                self.inner.id,
+                strong_count
+            );
+
+            if strong_count == 1 {
+                let inner = Arc::get_mut(&mut self.inner).expect("already checked strong_count");
+
+                return inner.destroy(client).await;
+            } else {
+                sleep(Duration::from_secs(1)).await;
+            }
+        }
     }
 }
 

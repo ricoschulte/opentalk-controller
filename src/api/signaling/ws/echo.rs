@@ -1,11 +1,11 @@
-use crate::modules::http::ws::{Event, WebSocketModule, WsCtx};
+use crate::api::signaling::ws::{Event, SignalingModule, WsCtx};
 use serde_json::Value;
 
 /// A sample echo websocket module
 pub struct Echo;
 
 #[async_trait::async_trait(?Send)]
-impl WebSocketModule for Echo {
+impl SignalingModule for Echo {
     const NAMESPACE: &'static str = "echo";
     type Params = ();
     type Incoming = Value;
