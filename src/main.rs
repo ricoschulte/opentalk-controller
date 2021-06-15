@@ -1,3 +1,4 @@
+use crate::settings::Logging;
 use actix_cors::Cors;
 use actix_web::http::{header, Method};
 use actix_web::web::Data;
@@ -23,9 +24,8 @@ extern crate diesel;
 
 #[actix_web::main]
 async fn main() -> Result<()> {
-    setup_logging()?;
-
-    let settings = settings::Settings::load("config.toml")?;
+    let settings = settings::load_settings()?;
+    setup_logging(&settings.logging)?;
     log::debug!("Starting K3K Controller with settings {:?}", settings);
     // Run database migration
     db::migrations::start_migration(&settings.database).await?;
@@ -136,8 +136,8 @@ fn setup_cors(settings: &settings::HttpCors) -> Cors {
         .allowed_methods(&[Method::POST])
 }
 
-fn setup_logging() -> Result<()> {
-    fern::Dispatch::new()
+fn setup_logging(logging: &Logging) -> Result<()> {
+    let logger = fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
                 "[{}][{}] {}",
@@ -146,10 +146,21 @@ fn setup_logging() -> Result<()> {
                 message
             ))
         })
-        .level(log::LevelFilter::Debug)
-        .chain(std::io::stdout())
-        .apply()
-        .context("Failed to setup logging utility")
+        .level(logging.level.to_level_filter());
+
+    match logging.output {
+        Some(ref path) => {
+            let log_file = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)?;
+
+            logger.chain(log_file)
+        }
+        None => logger.chain(std::io::stdout()),
+    }
+    .apply()
+    .context("Failed to setup logging utility")
 }
 
 fn setup_rustls(tls: settings::HttpTls) -> Result<rustls::ServerConfig> {

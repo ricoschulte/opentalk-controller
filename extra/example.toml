@@ -1,3 +1,8 @@
+# Logging settings
+# [logging]
+# level = "WARN"
+# output = "/your/log_file" # else stdout
+
 [database]
 # Database server address.
 server = "localhost"
