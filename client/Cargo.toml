@@ -1,0 +1,22 @@
+[package]
+name = "k3k-client"
+version = "0.1.0"
+authors = ["Stefan Sydow <s.sydow@heinlein-video.de>"]
+edition = "2018"
+
+[dependencies]
+percent-encoding = "2.1"
+thiserror = "1"
+reqwest = { version = "0.11", features = ["json", "cookies"] }
+#soup = "0.5" # uses outdated html parser
+html-escape = "0.2"
+openidconnect = "2.0"
+anyhow = "1.0"
+tokio = { version = "1.7", features = ["macros", "time", "process"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_urlencoded = "0.7.0"
+log = { version = "0.4", features = ["serde"] }
+fern = "0.6"
+uuid = { version = "0.8.2", features = ["serde", "v4"] }
+regex = "1"

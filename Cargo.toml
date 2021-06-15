@@ -7,6 +7,18 @@ authors = [
 ]
 edition = "2018"
 
+[workspace]
+
+members = [
+    "client",
+]
+
+[dev-dependencies]
+k3k-client = { path = "client"}
+tokio-postgres = "0.7.2"
+serial_test = "0.5.1"
+regex = "1.5.4"
+
 [dependencies]
 ### Logging utilities
 log = { version = "0.4", features = ["serde"] }

@@ -14,7 +14,6 @@ use structopt::StructOpt;
 struct Args {
     #[structopt(
         short,
-        long,
         parse(from_occurrences),
         help = "-v => Info, -vv => Debug, -vvv => Trace"
     )]

@@ -27,16 +27,27 @@ async fn main() -> Result<()> {
     let settings = settings::load_settings().context("Failed to load settings from file")?;
     setup_logging(&settings.logging)?;
     log::debug!("Starting K3K Controller with settings {:?}", settings);
+
     // Run database migration
     if let Err(e) = db::migrations::start_migration(&settings.database).await {
         log::error!(target: "db", "Failed to migrate database: {}", e);
         return Err(e);
     }
 
-    service(settings).await.map_err(|e| {
-        log::error!("Crashed with error: {}", e);
-        e
-    })
+    match service(settings).await {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let msg = e
+                .chain()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("\n\t-> ");
+
+            log::error!("Crashed with error: {}", msg);
+
+            Err(e)
+        }
+    }
 }
 
 async fn service(settings: Settings) -> Result<()> {
