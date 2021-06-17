@@ -20,7 +20,7 @@ static ACCESS_TOKEN_INACTIVE: &str = "access token inactive";
 static SESSION_EXPIRED: &str = "session expired";
 
 /// Error type of all frontend REST-endpoints
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ApiError {
     /// Contains WWW-Authenticate error desc (0) & body (1) for an appropriate 401 response
     #[error("Authentication error: {1}")]

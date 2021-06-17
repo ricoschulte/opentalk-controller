@@ -2,6 +2,7 @@
 use super::ApiError;
 use crate::db::users::User;
 use crate::settings;
+use crate::settings::TurnServer;
 use actix_web::get;
 use actix_web::web::Data;
 use actix_web::web::Json;
@@ -43,68 +44,7 @@ pub async fn get(
     let turn_credentials = {
         let expires = (chrono::Utc::now() + turn_config.lifetime).timestamp();
         let mut rand_rng = ::rand::thread_rng();
-
-        // Create a list of TURN responses for each configured TURN server.
-        match turn_config.servers.len() {
-            0 => {
-                // TODO What should we return in this case?
-                // Not available?
-                Err(ApiError::NotFound)
-            }
-            // When we only have one configured TURN server, return the credentials for this single one.
-            1 => {
-                match create_credentials(
-                    &mut rand_rng,
-                    &turn_config.servers[0].pre_shared_key,
-                    expires,
-                    &turn_config.servers[0].uris,
-                ) {
-                    Ok(turn) => Ok([turn].to_vec()),
-                    Err(e) => {
-                        log::error!("TURN credential error: {}", e);
-                        Err(ApiError::Internal)
-                    }
-                }
-            }
-            // When we have two configured TURN servers, draw a random one and return the credentials for this drawn one.
-            2 => {
-                let between: Uniform<u32> = Uniform::from(0..1);
-                let selected_server = between.sample(&mut rand_rng) as usize;
-                match create_credentials(
-                    &mut rand_rng,
-                    &turn_config.servers[selected_server].pre_shared_key,
-                    expires,
-                    &turn_config.servers[selected_server].uris,
-                ) {
-                    Ok(turn) => Ok([turn].to_vec()),
-                    Err(e) => {
-                        log::error!("TURN credential error: {}", e);
-                        Err(ApiError::Internal)
-                    }
-                }
-            }
-            // When we have more than two configured TURN servers, draw two and return the credentials for the drawn ones.
-            _ => turn_config
-                .servers
-                .as_slice()
-                .choose_multiple(&mut rand_rng, 2)
-                .into_iter()
-                .map(|server| {
-                    match create_credentials(
-                        &mut rand_rng,
-                        &server.pre_shared_key,
-                        expires,
-                        &server.uris,
-                    ) {
-                        Ok(turn) => Ok(turn),
-                        Err(e) => {
-                            log::error!("TURN credential error: {}", e);
-                            Err(ApiError::Internal)
-                        }
-                    }
-                })
-                .collect::<Result<Vec<_>, ApiError>>(),
-        }
+        rr_servers(&mut rand_rng, &turn_config.servers, expires)
     }?;
 
     Ok(Json(turn_credentials))
@@ -132,6 +72,60 @@ fn create_credentials<T: Rng + CryptoRng>(
     })
 }
 
+fn rr_servers<T: Rng + CryptoRng>(
+    rng: &mut T,
+    servers: &[TurnServer],
+    expires: i64,
+) -> Result<Vec<Turn>, ApiError> {
+    // Create a list of TURN responses for each configured TURN server.
+    match servers.len() {
+        0 => {
+            // TODO What should we return in this case?
+            // Not available?
+            Err(ApiError::NotFound)
+        }
+        // When we only have one configured TURN server, return the credentials for this single one.
+        1 => match create_credentials(rng, &servers[0].pre_shared_key, expires, &servers[0].uris) {
+            Ok(turn) => Ok([turn].to_vec()),
+            Err(e) => {
+                log::error!("TURN credential error: {}", e);
+                Err(ApiError::Internal)
+            }
+        },
+        // When we have two configured TURN servers, draw a random one and return the credentials for this drawn one.
+        2 => {
+            let between: Uniform<u32> = Uniform::from(0..1);
+            let selected_server = between.sample(rng) as usize;
+            match create_credentials(
+                rng,
+                &servers[selected_server].pre_shared_key,
+                expires,
+                &servers[selected_server].uris,
+            ) {
+                Ok(turn) => Ok([turn].to_vec()),
+                Err(e) => {
+                    log::error!("TURN credential error: {}", e);
+                    Err(ApiError::Internal)
+                }
+            }
+        }
+        // When we have more than two configured TURN servers, draw two and return the credentials for the drawn ones.
+        _ => servers
+            .choose_multiple(rng, 2)
+            .into_iter()
+            .map(|server| {
+                match create_credentials(rng, &server.pre_shared_key, expires, &server.uris) {
+                    Ok(turn) => Ok(turn),
+                    Err(e) => {
+                        log::error!("TURN credential error: {}", e);
+                        Err(ApiError::Internal)
+                    }
+                }
+            })
+            .collect::<Result<Vec<_>, ApiError>>(),
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -152,5 +146,116 @@ mod test {
                 uris: vec!["turn:turn.turn.turn".to_owned()]
             }
         );
+    }
+
+    #[test]
+    fn test_round_robin() {
+        use rand::prelude::*;
+        use rand::SeedableRng;
+
+        // No configured servers
+        let mut rng = StdRng::seed_from_u64(1234567890);
+        assert_eq!(
+            rr_servers(&mut rng, &[], 1200).err().unwrap(),
+            ApiError::NotFound
+        );
+
+        // One configured server
+        let mut rng = StdRng::seed_from_u64(1234567890);
+        let one_server = vec![TurnServer {
+            uris: vec!["turn:turn1.turn.turn".to_owned()],
+            pre_shared_key: "PSK1".to_owned(),
+        }];
+        assert_eq!(
+            rr_servers(&mut rng, &one_server, 1200).unwrap(),
+            vec![Turn {
+                username: "1200:turn_random_for_privacy_8VbonSpZc9GXSw9gMxaV0A==".to_owned(),
+                password: "G7hjqVZX/dVAOgzzb+GeS8vEpcU=".to_owned(),
+                ttl: 1200.to_string(),
+                uris: vec!["turn:turn1.turn.turn".to_owned()]
+            }]
+        );
+
+        // Two configured servers
+        let mut rng = StdRng::seed_from_u64(1234567890);
+        let two_servers = vec![
+            TurnServer {
+                uris: vec!["turn:turn1.turn.turn".to_owned()],
+                pre_shared_key: "PSK1".to_owned(),
+            },
+            TurnServer {
+                uris: vec!["turn:turn2.turn.turn".to_owned()],
+                pre_shared_key: "PSK2".to_owned(),
+            },
+        ];
+        assert_eq!(
+            rr_servers(&mut rng, &two_servers, 1200).unwrap(),
+            vec![Turn {
+                username: "1200:turn_random_for_privacy_VuidKllz0ZdLD2AzFpXQYA==".to_owned(),
+                password: "Aybo95/GPrJhWN2qqbz6yP2qEvg=".to_owned(),
+                ttl: 1200.to_string(),
+                uris: vec!["turn:turn1.turn.turn".to_owned()]
+            }]
+        );
+
+        // Three configured servers
+        let mut rng = StdRng::seed_from_u64(1234567890);
+        let three_servers = vec![
+            TurnServer {
+                uris: vec!["turn:turn1.turn.turn".to_owned()],
+                pre_shared_key: "PSK1".to_owned(),
+            },
+            TurnServer {
+                uris: vec!["turn:turn2.turn.turn".to_owned()],
+                pre_shared_key: "PSK2".to_owned(),
+            },
+            TurnServer {
+                uris: vec!["turn:turn3.turn.turn".to_owned()],
+                pre_shared_key: "PSK3".to_owned(),
+            },
+        ];
+        assert_eq!(
+            rr_servers(&mut rng, &&three_servers, 1200).unwrap(),
+            vec![
+                Turn {
+                    username: "1200:turn_random_for_privacy_nSpZc9GXSw9gMxaV0GDahQ==".to_owned(),
+                    password: "6zfptEfCPlF3oWFtPKtlAPwjAWs=".to_owned(),
+                    ttl: 1200.to_string(),
+                    uris: vec!["turn:turn1.turn.turn".to_owned()]
+                },
+                Turn {
+                    username: "1200:turn_random_for_privacy_AYzBIYeOCHhhiwR7CQ3X1A==".to_owned(),
+                    password: "fiWX+emwV1thN/dBcZ9melA061g=".to_owned(),
+                    ttl: 1200.to_string(),
+                    uris: vec!["turn:turn3.turn.turn".to_owned()]
+                }
+            ]
+        );
+
+        // Test uniformity
+        let mut first = 0;
+        let mut second = 0;
+        let mut third = 0;
+        for _ in 1..5000 {
+            rr_servers(&mut rng, &&three_servers, 1200)
+                .unwrap()
+                .iter()
+                .for_each(|e| match e.uris[0].as_ref() {
+                    "turn:turn1.turn.turn" => first += 1,
+                    "turn:turn2.turn.turn" => second += 1,
+                    "turn:turn3.turn.turn" => third += 1,
+                    _ => unreachable!(),
+                });
+        }
+
+        // Makeshift test if the samples are uniform, instead of something like a chi-squared test
+        assert!(first as f64 > second as f64 * 0.95);
+        assert!(first as f64 > third as f64 * 0.95);
+
+        assert!(second as f64 > third as f64 * 0.95);
+        assert!(second as f64 > first as f64 * 0.95);
+
+        assert!(third as f64 > first as f64 * 0.95);
+        assert!(third as f64 > second as f64 * 0.95);
     }
 }
