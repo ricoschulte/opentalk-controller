@@ -1,6 +1,6 @@
 use anyhow::{bail, Context, Result};
-use k3k_client::k3k;
-use k3k_client::k3k::K3KSession;
+use k3k_controller_client::{Config, K3KSession};
+use openidconnect::url::Url;
 use regex::Regex;
 use std::process::Stdio;
 use std::rc::Rc;
@@ -8,22 +8,60 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{self, Child};
 use tokio_postgres::NoTls;
 
+/// Setup the API client
+///
+/// Runs the OIDC sso routine and returns a new K3KSession that contains all necessary tokens.
+///
+/// Creates a new client config from the environment variables
+///
+/// # Example config:
+/// ```sh
+/// K3K_CLIENT__K3K_URL=http://localhost:8000
+/// K3K_CLIENT__CLIENT_ID=Frontend
+/// K3K_CLIENT__REDIRECT_URL=http://localhost:8081/auth/keycloak/sso
+/// ```
+///
+/// # Note
+/// When a environment variable is not set, it defaults to their respective value seen in the
+/// example above.
 pub async fn setup_client(user: &str, password: &str) -> Result<K3KSession> {
-    // default client config TODO: set via environment
-    let conf = k3k::default_config();
+    let k3k_url = Url::parse(
+        std::env::var("K3K_CLIENT__K3K_URL")
+            .unwrap_or("http://localhost:8000".to_string())
+            .as_str(),
+    )
+    .context("Unable to parse k3k url")?;
 
-    let oidc = conf.openid_discover().await?;
+    let client_id = std::env::var("K3K_CLIENT__CLIENT_ID").unwrap_or("Frontend".to_string());
+
+    let redirect_url = Url::parse(
+        std::env::var("K3K_CLIENT__REDIRECT_URL")
+            .unwrap_or("http://localhost:8081/auth/keycloak/sso".to_string())
+            .as_str(),
+    )
+    .context("Unable to parse redirect url")?;
+
+    let conf = Config {
+        k3k_url,
+        client_id,
+        redirect_url,
+    };
+
+    let oidc = conf.openid_connect_discover().await?;
 
     let auth_tokens = oidc.authenticate(user, password).await?;
 
-    let session = k3k::K3KSession::new(Rc::new(conf), auth_tokens);
+    let session = K3KSession::new(Rc::new(conf), auth_tokens);
 
     Ok(session)
 }
 
+/// Starts a controller instance as a child process
+///
+/// The controller will be stopped when the process handle is dropped or its `kill` method is called.
+/// Returns the the process handle of the controller.
 pub async fn run_controller() -> Result<Child> {
     let mut controller_proc = process::Command::new("./target/debug/k3k-controller")
-        //.current_dir("../")
         .args(&["-v", "-c", "tests/test-config.toml"])
         .kill_on_drop(true)
         .stdout(Stdio::piped())
@@ -43,8 +81,6 @@ pub async fn run_controller() -> Result<Child> {
         if ctl_start_pattern.is_match(line) {
             break;
         }
-
-        //todo: stuck here if controller errors?
     }
 
     let _log_task = tokio::spawn(async move {
@@ -60,7 +96,10 @@ pub async fn run_controller() -> Result<Child> {
     Ok(controller_proc)
 }
 
-/// Cleanup the
+/// Cleanup the database state
+///
+/// Drops all tables in the specified database but not the database itself.
+/// The database is specified through the `DATABASE_URL` environment variable.
 pub async fn cleanup_database() -> Result<()> {
     let url = std::env::var("DATABASE_URL")
         .unwrap_or("postgres://postgres:password123@localhost:5432/k3k".to_string());
@@ -75,6 +114,7 @@ pub async fn cleanup_database() -> Result<()> {
 
     let transaction = client.transaction().await?;
 
+    // Fetch all tables dynamically because there might be tables added in the future
     let tables = transaction
         .query(
             r#"SELECT tablename FROM pg_tables WHERE schemaname='public';"#,
@@ -118,7 +158,7 @@ pub fn setup_logging() -> Result<()> {
                 message
             ))
         })
-        .level(log::LevelFilter::Info)
+        .level(log::LevelFilter::Warn)
         .chain(std::io::stdout())
         .apply()
         .context("Failed to setup logging utility")

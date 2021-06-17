@@ -1,14 +1,12 @@
-use serde::{Deserialize, Serialize};
-
-use crate::k3k::api::v1::parse_json_response;
-use crate::k3k::K3KSession;
-
 use super::Result;
+use crate::api::v1::parse_json_response;
+use crate::K3KSession;
+use serde::{Deserialize, Serialize};
 
 /// Public user details.
 ///
 /// Contains general "public" information about a user. Is accessible to all other users.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq)]
 pub struct UserDetails {
     pub id: i64,
     pub email: String,

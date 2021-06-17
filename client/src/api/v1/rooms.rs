@@ -1,16 +1,14 @@
+use super::Result;
+use crate::api::v1::parse_json_response;
+use crate::K3KSession;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-use crate::k3k::api::v1::parse_json_response;
-use crate::k3k::K3KSession;
-
-use super::Result;
 
 /// A Room
 ///
 /// Contains all room information. Is only be accessible to the owner and users with
 /// appropriate permissions.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq)]
 pub struct Room {
     pub uuid: Uuid,
     pub owner: i64,

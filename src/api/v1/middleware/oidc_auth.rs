@@ -126,15 +126,12 @@ pub async fn check_access_token(
         },
     };
 
-    let current_user = web::block(move || {
-        match db_ctx.get_user_by_uuid(&uuid)? {
-            None => {
-                // should only happen if a user gets deleted while in an active session
-                log::error!("The requesting user could not be found in the database");
-                Err(ApiError::Internal)
-            }
-            Some(user) => Ok(user),
+    let current_user = web::block(move || match db_ctx.get_user_by_uuid(&uuid)? {
+        None => {
+            log::warn!("The requesting user could not be found in the database");
+            Err(ApiError::Internal)
         }
+        Some(user) => Ok(user),
     })
     .await
     .map_err(|e| {

@@ -8,16 +8,9 @@ authors = [
 edition = "2018"
 
 [workspace]
-
 members = [
     "client",
 ]
-
-[dev-dependencies]
-k3k-client = { path = "client"}
-tokio-postgres = "0.7.2"
-serial_test = "0.5.1"
-regex = "1.5.4"
 
 [dependencies]
 ### Logging utilities
@@ -71,3 +64,9 @@ actix-web-actors = { git = "https://github.com/actix/actix-web.git" }
 # Rust Encryption
 ring = "0.16"
 rustls = "0.19"
+
+[dev-dependencies]
+k3k-controller-client = { path = "client"}
+tokio-postgres = "0.7"
+serial_test = "0.5"
+regex = "1.5"

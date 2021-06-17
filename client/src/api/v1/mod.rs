@@ -1,10 +1,8 @@
-use std::fmt;
-
+use crate::K3KSession;
 use reqwest::{Error, Response, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-
-use crate::k3k::K3KSession;
+use std::fmt;
 
 pub mod auth;
 pub mod rooms;
@@ -14,8 +12,10 @@ pub type Result<T> = std::result::Result<T, ApiError>;
 
 #[derive(Debug)]
 pub struct HttpError {
-    status: StatusCode,
-    reason: String,
+    /// Response status code
+    pub status: StatusCode,
+    /// Response body
+    pub reason: String,
 }
 
 impl fmt::Display for HttpError {
@@ -26,12 +26,16 @@ impl fmt::Display for HttpError {
 
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
+    /// Connection error
     #[error("Connection error: {0}")]
     ConnectionError(String),
+    /// URL parsing error
     #[error("Url error: {0}")]
     InvalidUrl(String),
+    /// Reqwest error
     #[error("Reqwest error: {0}")]
     ReqwestError(String),
+    /// A Non-200 HTTP response
     #[error("Http error: {0}")]
     NonSuccess(HttpError),
 }

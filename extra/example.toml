@@ -1,7 +1,11 @@
-# Logging settings
-# [logging]
+[logging]
+# Available levels (ERROR, WARN, INFO, DEBUG)
 # level = "WARN"
-# output = "/your/log_file" # else stdout
+
+# Specifiy a path to redirect output to a log file.
+# If unset `stdout` is used.
+# On crash an error description will be displayed on `stdout` in any case.
+# file = "/var/log/k3k-controller.log"
 
 [database]
 # Database server address.

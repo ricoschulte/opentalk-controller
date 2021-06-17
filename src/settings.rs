@@ -1,12 +1,11 @@
 //! Handles the application settings via a config file and environment variables.
 
-use std::convert::TryFrom;
-use std::path::{Path, PathBuf};
-
 use config::{Config, ConfigError, Environment, File};
 use log::Level;
 use openidconnect::{ClientId, ClientSecret, IssuerUrl};
 use serde::{Deserialize, Deserializer};
+use std::convert::TryFrom;
+use std::path::{Path, PathBuf};
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -22,14 +21,18 @@ struct Args {
     #[structopt(
         short,
         long,
-        parse(from_os_str),
         default_value = "config.toml",
-        help = "A TOML config file"
+        help = "Specify path to configuration file"
     )]
     config: PathBuf,
 
-    #[structopt(short, long, parse(from_os_str), help = "logfile or \"-\" for stdout")]
-    logfile: Option<PathBuf>,
+    #[structopt(
+        short,
+        long,
+        parse(from_os_str),
+        help = "logoutput or \"-\" for stdout"
+    )]
+    logoutput: Option<PathBuf>,
 }
 
 /// Parses the CLI-Arguments into [`Args`] and [`Settings`]
@@ -40,23 +43,21 @@ pub fn load_settings() -> Result<Settings, ConfigError> {
 
     let mut settings = Settings::load(&args.config)?;
 
-    let log_level = match args.verbose {
-        0 => None,
-        1 => Some(Level::Info),
-        2 => Some(Level::Debug),
-        _ => Some(Level::Trace),
-    };
-    if let Some(level) = log_level {
-        settings.logging.level = level;
+    if args.verbose > 0 {
+        settings.logging.level = match args.verbose {
+            0 => unreachable!(),
+            1 => Level::Info,
+            2 => Level::Debug,
+            _ => Level::Trace,
+        };
     }
 
-    if let Some(log_file) = args.logfile {
-        let log_file = if log_file == PathBuf::from("-") {
+    if let Some(log_output) = args.logoutput {
+        settings.logging.file = if log_output == PathBuf::from("-") {
             None
         } else {
-            Some(log_file)
+            Some(log_output)
         };
-        settings.logging.output = log_file;
     }
 
     Ok(settings)
@@ -66,7 +67,7 @@ pub fn load_settings() -> Result<Settings, ConfigError> {
 ///
 /// The application settings are set with a TOML config file. Settings specified in the config file
 /// can be overwritten by environment variables. To do so, set an environment variable
-/// with the prefix `K3K_CTRL_` followed by the field names you want to set. Fields are separated by two underscores `__`.
+/// with the prefix `K3K_CTRL__` followed by the field names you want to set. Fields are separated by two underscores `__`.
 /// ```sh
 /// K3K_CTRL__<field>__<field-of-field>...
 /// ```
@@ -81,7 +82,7 @@ pub fn load_settings() -> Result<Settings, ConfigError> {
 /// However, the field names in the environment variables are not allowed to have underscores.
 /// So the field 'database.max_connections' would resolve to:
 /// ```sh
-/// K3K_CTRL_DATABASE__MAX_CONNECTIONS=5
+/// K3K_CTRL__DATABASE__MAX_CONNECTIONS=5
 /// ```
 /// # Note
 /// Fields set via environment variables do not affect the underlying config file.
@@ -168,7 +169,7 @@ pub struct Logging {
     #[serde(default = "default_log_level")]
     pub level: log::Level,
     #[serde(default)]
-    pub output: Option<PathBuf>,
+    pub file: Option<PathBuf>,
 }
 
 const fn default_http_port() -> u16 {
@@ -194,7 +195,7 @@ fn default_log_level() -> log::Level {
 fn default_logging() -> Logging {
     Logging {
         level: default_log_level(),
-        output: None,
+        file: None,
     }
 }
 
@@ -226,8 +227,14 @@ pub struct TurnServer {
 }
 
 #[cfg(test)]
-#[test]
-fn test_settigs_from_file() -> Result<(), ConfigError> {
-    let _settings = Settings::load(Path::new("extra/example.toml"))?;
-    Ok(())
+mod test {
+    use super::Settings;
+    use config::ConfigError;
+    use std::path::Path;
+
+    #[test]
+    fn example_toml() -> Result<(), ConfigError> {
+        let _settings = Settings::load(Path::new("extra/example.toml"))?;
+        Ok(())
+    }
 }

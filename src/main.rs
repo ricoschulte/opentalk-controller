@@ -34,23 +34,17 @@ async fn main() -> Result<()> {
         return Err(e);
     }
 
-    match service(settings).await {
+    match run_service(settings).await {
         Ok(()) => Ok(()),
         Err(e) => {
-            let msg = e
-                .chain()
-                .map(|e| e.to_string())
-                .collect::<Vec<_>>()
-                .join("\n\t-> ");
-
-            log::error!("Crashed with error: {}", msg);
-
-            Err(e)
+            log::error!("Crashed with error: {:?}", e);
+            log::logger().flush();
+            std::process::exit(-1);
         }
     }
 }
 
-async fn service(settings: Settings) -> Result<()> {
+async fn run_service(settings: Settings) -> Result<()> {
     let db_ctx = Data::new(
         DbInterface::connect(settings.database).context("Failed to connect to database")?,
     );
@@ -108,11 +102,19 @@ async fn service(settings: Settings) -> Result<()> {
         )
     };
 
-    let ext_http_server = ext_http_server
-        .with_context(|| format!("Failed to bind to external port {}", ext_address.1))?;
+    let ext_http_server = ext_http_server.with_context(|| {
+        format!(
+            "Failed to bind external server to {}:{}",
+            ext_address.0, ext_address.1
+        )
+    })?;
 
-    let internal_http_server = internal_http_server
-        .with_context(|| format!("Failed to bind to internal port {}", internal_address.1))?;
+    let internal_http_server = internal_http_server.with_context(|| {
+        format!(
+            "Failed to bind internal server to {}:{}",
+            internal_address.0, internal_address.1
+        )
+    })?;
 
     log::info!("Startup finished");
 
@@ -174,7 +176,7 @@ fn setup_logging(logging: &Logging) -> Result<()> {
         })
         .level(logging.level.to_level_filter());
 
-    match logging.output {
+    match logging.file {
         Some(ref path) => {
             let log_file = std::fs::OpenOptions::new()
                 .create(true)
@@ -193,22 +195,18 @@ fn setup_logging(logging: &Logging) -> Result<()> {
 fn setup_rustls(tls: settings::HttpTls) -> Result<rustls::ServerConfig> {
     let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
 
-    let cert_file = File::open(&tls.certificate).with_context(|| {
-        format!(
-            "Failed to open certificate file {}",
-            &tls.certificate.to_string_lossy()
-        )
-    })?;
+    let cert_file = File::open(&tls.certificate)
+        .with_context(|| format!("Failed to open certificate file {:?}", &tls.certificate))?;
     let certs =
         certs(&mut BufReader::new(cert_file)).map_err(|_| anyhow!("Invalid certificate"))?;
 
-    let priv_key_file = File::open(&tls.private_key).with_context(|| {
+    let private_key_file = File::open(&tls.private_key).with_context(|| {
         format!(
-            "Failed to open pkcs8 private key file {}",
-            &tls.private_key.to_string_lossy()
+            "Failed to open pkcs8 private key file {:?}",
+            &tls.private_key
         )
     })?;
-    let mut key = rsa_private_keys(&mut BufReader::new(priv_key_file))
+    let mut key = rsa_private_keys(&mut BufReader::new(private_key_file))
         .map_err(|_| anyhow!("Invalid pkcs8 private key"))?;
 
     config.set_single_cert(certs, key.remove(0))?;

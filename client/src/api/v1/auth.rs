@@ -1,10 +1,8 @@
-use std::collections::HashSet;
-
+use crate::api::v1::{parse_json_response, ApiError};
+use crate::K3KSession;
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
-
-use crate::k3k::api::v1::{parse_json_response, ApiError};
-use crate::k3k::K3KSession;
+use std::collections::HashSet;
 
 /// The JSON Body expected when making a *POST* request on `/v1/auth/login`
 #[derive(Debug, Serialize)]
@@ -27,13 +25,14 @@ pub struct LoginResponse {
 
 impl K3KSession {
     /// Calls *POST '/v1/auth/login/*
-    // maybe implement this as non-associated function
     pub async fn login(&self) -> Result<LoginResponse, ApiError> {
+        let url = self
+            .url("/v1/auth/login")
+            .map_err(|e| ApiError::InvalidUrl(e.to_string()))?;
+
         let login = Login::new(self.tokens.id_token.to_string());
 
-        let response = self
-            .post_json_authenticated("/v1/auth/login", &login)
-            .await?;
+        let response = self.http_client.post(url).json(&login).send().await?;
 
         parse_json_response(response).await
     }

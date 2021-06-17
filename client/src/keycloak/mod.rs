@@ -10,8 +10,6 @@ use regex::Regex;
 use reqwest::redirect::Policy;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
-//use soup::{NodeExt, QueryBuilderExt, Soup};
-use html_escape;
 
 type KeycloakMetadata = ProviderMetadata<
     KeyCloakExtraMetadata,
@@ -40,7 +38,7 @@ impl AdditionalProviderMetadata for KeyCloakExtraMetadata {}
 
 /// Contains the OIDC providers metadata
 #[derive(Debug)]
-pub struct OpenIdContext {
+pub struct OpenIdConnectContext {
     oidc_client: CoreClient,
     end_session_endpoint: Url,
 }
@@ -52,7 +50,7 @@ pub async fn discover(
     issuer_url: &Url,
     client_id: &str,
     redirect_url: &Url,
-) -> Result<OpenIdContext> {
+) -> Result<OpenIdConnectContext> {
     let issuer_url = IssuerUrl::from_url(issuer_url.clone());
     let redirect_url = RedirectUrl::from_url(redirect_url.clone());
     let client_id = ClientId::new(client_id.to_string());
@@ -68,7 +66,7 @@ pub async fn discover(
     let oidc_client = CoreClient::from_provider_metadata(provider_metadata, client_id, None)
         .set_redirect_uri(redirect_url);
 
-    Ok(OpenIdContext {
+    Ok(OpenIdConnectContext {
         oidc_client,
         end_session_endpoint,
     })
@@ -109,10 +107,12 @@ pub struct SessionTokens {
 ///
 /// Ensures all field names are as expected. Returns the url for the login action.
 fn parse_keycloak_login(raw_page: &str) -> Result<Url> {
-    let form_action_pattern = Regex::new(r#"(?s).*<form[^>]*action="([^"]*)"[^>]*>.*"#).unwrap(); //panic on bad regex pattern only
+    //panic on bad regex pattern only
+    let form_action_pattern = Regex::new(r#"(?s).*<form[^>]*action="([^"]*)"[^>]*>.*"#).unwrap();
     let action = if let Some(match_res) = form_action_pattern.captures(raw_page) {
-        let action = match_res.get(1).unwrap().as_str(); //if matched there must be a location
-        let action = html_escape::decode_html_entities(action); // location.replace("&amp;", "&");
+        //if matched there must be a location
+        let action = match_res.get(1).unwrap().as_str();
+        let action = html_escape::decode_html_entities(action);
         Url::parse(&action)?
     } else {
         bail!(anyhow::Error::msg(
@@ -120,44 +120,10 @@ fn parse_keycloak_login(raw_page: &str) -> Result<Url> {
         ));
     };
 
-    /* soup uses outdated crates
-    let page = Soup::new(raw_page);
-
-    let login_form = page
-        .tag("form")
-        .attr("id", "kc-form-login")
-        .find()
-        .context("No keycloak login form found on page.")?;
-
-    let attrs = login_form.attrs();
-
-    let method = attrs.get("method").expect("no method in form");
-    anyhow::ensure!(method == "post");
-
-    let inputs = login_form.tag("input").find_all();
-    let (has_username, has_password, has_credential_id) = inputs.fold(
-        (false, false, false),
-        |(has_username, has_password, has_credential_id), input| {
-            let attrs = input.attrs();
-            match attrs.get("name").map(String::as_ref) {
-                Some("username") => (true, has_password, has_credential_id),
-                Some("password") => (has_username, true, has_credential_id),
-                Some("credentialId") => (has_username, has_password, true),
-                Some(_) | None => (has_username, has_password, has_credential_id),
-            }
-        },
-    );
-
-    anyhow::ensure!(has_username && has_password && has_credential_id);
-
-    let action_str = attrs.get("action").expect("no action in form");
-    let action = Url::parse(action_str)?;
-     */
-
     Ok(action)
 }
 
-impl OpenIdContext {
+impl OpenIdConnectContext {
     pub fn logout_url(&self) -> &Url {
         &self.end_session_endpoint
     }
