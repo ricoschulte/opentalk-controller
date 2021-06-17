@@ -1,18 +1,18 @@
-use crate::api::signaling::local::Room;
-use crate::api::signaling::ws_modules::room::RoomControl;
+use crate::api::signaling::ws_modules::media::RoomControl;
 use crate::modules::ApplicationBuilder;
 use anyhow::Result;
+use redis::aio::MultiplexedConnection;
+use redis::{FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::str::{from_utf8, FromStr};
 use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
 use ws::{Echo, SignalingHttpModule};
 
-mod local;
 mod mcu;
 mod media;
-mod redis_state;
+mod storage;
 mod ws;
 mod ws_modules;
 
@@ -38,20 +38,44 @@ impl fmt::Display for ParticipantId {
     }
 }
 
+impl FromRedisValue for ParticipantId {
+    fn from_redis_value(v: &Value) -> RedisResult<Self> {
+        match v {
+            Value::Data(bytes) => Uuid::from_str(from_utf8(bytes)?)
+                .map(ParticipantId)
+                .map_err(|_| {
+                    RedisError::from((
+                        redis::ErrorKind::TypeError,
+                        "invalid data for ParticipantId",
+                    ))
+                }),
+            _ => RedisResult::Err(RedisError::from((
+                redis::ErrorKind::TypeError,
+                "invalid data type for ParticipantId",
+            ))),
+        }
+    }
+}
+
+impl ToRedisArgs for ParticipantId {
+    fn write_redis_args<W>(&self, out: &mut W)
+    where
+        W: ?Sized + RedisWrite,
+    {
+        out.write_arg_fmt(self.0)
+    }
+}
+
 pub async fn attach(
     application: &mut ApplicationBuilder,
-    shutdown_sig: broadcast::Receiver<()>,
-    redis: &redis::Client,
-    mcu: &Arc<JanusMcu>,
+    redis_conn: MultiplexedConnection,
+    rabbit_mq_channel: lapin::Channel,
+    mcu: Arc<JanusMcu>,
 ) -> Result<()> {
-    let msg_sender = redis_state::start_keyspace_notification_loop(shutdown_sig, redis).await?;
-
-    let room = Arc::new(RwLock::new(Room { members: vec![] }));
-
-    let mut signaling = SignalingHttpModule::new();
+    let mut signaling = SignalingHttpModule::new(redis_conn, rabbit_mq_channel);
 
     signaling.add_module::<Echo>(());
-    signaling.add_module::<RoomControl>((Arc::downgrade(&mcu), room));
+    signaling.add_module::<RoomControl>(Arc::downgrade(&mcu));
 
     application.add_http_module(signaling);
 

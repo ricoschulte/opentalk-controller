@@ -1,4 +1,3 @@
-use crate::api::signaling::local::MediaSessionState;
 use crate::api::signaling::mcu::{
     JanusMcu, JanusPublisher, JanusSubscriber, MediaSessionKey, MediaSessionType, TrickleMessage,
 };
@@ -10,18 +9,20 @@ use tokio::sync::mpsc;
 pub struct Media {
     id: ParticipantId,
 
-    /// All publishers that belong to the participant
+    // All publishers that belong to the participant
     publishers: HashMap<MediaSessionType, JanusPublisher>,
 
-    /// All subscribers that belong to the participant
+    // All subscribers that belong to the participant
     subscribers: HashMap<MediaSessionKey, JanusSubscriber>,
 
-    /// The send part of the event channel used when creating new publishers/subscribers
+    // The send part of the event channel used when creating new publishers/subscribers
     sender: mpsc::Sender<(MediaSessionKey, TrickleMessage)>,
 }
 
 impl Media {
     pub fn new(id: ParticipantId, sender: mpsc::Sender<(MediaSessionKey, TrickleMessage)>) -> Self {
+        let (sender, events) = mpsc::channel(4);
+
         Self {
             id,
             publishers: Default::default(),
@@ -105,10 +106,11 @@ impl Media {
     ///
     /// To remove any subscribers that might be subscribed to a room that has no publisher or has
     /// been removed this function must be called with the updated participant's `publishing` field
-    pub fn remove_dangling_subscribers(
+    // TODO FIX THIS FUNCTION
+    pub fn remove_dangling_subscribers<T>(
         &mut self,
         participant: ParticipantId,
-        lookup: &HashMap<MediaSessionType, MediaSessionState>,
+        lookup: &HashMap<MediaSessionType, T>,
     ) {
         self.subscribers.retain(|stream_key, _| {
             if stream_key.0 == participant {

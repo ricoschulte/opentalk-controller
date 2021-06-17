@@ -73,9 +73,12 @@ actix-web-actors = { git = "https://github.com/actix/actix-web.git" }
 ### Janus
 janus-client = { path = "janus-client" }
 
-# Rust Encryption
+### Rust Encryption
 ring = "0.16"
 rustls = "0.19"
+
+### Parsing
+nom = "6"
 
 [dev-dependencies]
 k3k-controller-client = { path = "client"}

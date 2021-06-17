@@ -73,8 +73,7 @@ impl RabbitMqConfig {
             .channel
             .queue_declare("", exclusive_queue_options, FieldTable::default())
             .await?;
-        let _ = self
-            .channel
+        self.channel
             .queue_declare(
                 &self.to_janus_queue,
                 QueueDeclareOptions::default(),
@@ -82,20 +81,24 @@ impl RabbitMqConfig {
             )
             .await?;
 
-        let _ = self.channel.exchange_declare(
-            &self.janus_exchange,
-            lapin::ExchangeKind::Fanout,
-            ExchangeDeclareOptions::default(),
-            FieldTable::default(),
-        );
+        self.channel
+            .exchange_declare(
+                &self.janus_exchange,
+                lapin::ExchangeKind::Fanout,
+                ExchangeDeclareOptions::default(),
+                FieldTable::default(),
+            )
+            .await?;
 
-        let _ = self.channel.queue_bind(
-            from_janus.name().as_str(),
-            &self.janus_exchange,
-            &self.from_janus_routing_key,
-            QueueBindOptions::default(),
-            FieldTable::default(),
-        );
+        self.channel
+            .queue_bind(
+                from_janus.name().as_str(),
+                &self.janus_exchange,
+                &self.from_janus_routing_key,
+                QueueBindOptions::default(),
+                FieldTable::default(),
+            )
+            .await?;
 
         let consumer = self
             .channel

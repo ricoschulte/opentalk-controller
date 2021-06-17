@@ -1,27 +1,30 @@
+use crate::api::signaling::storage::Storage;
+use crate::api::signaling::ParticipantId;
 use crate::api::v1::middleware::oidc_auth::check_access_token;
 use crate::db::DbInterface;
 use crate::modules::http::HttpModule;
 use crate::oidc::OidcContext;
-use actix_web::dev::Extensions;
 use actix_web::http::{header, HeaderValue};
 use actix_web::web::{Data, ServiceConfig};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use adapter::ActixTungsteniteAdapter;
+use anyhow::Result;
 use async_tungstenite::tungstenite::protocol::Role;
 use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
 use futures::stream::SelectAll;
 use modules::{any_stream, AnyStream, ModuleBuilder, ModuleBuilderImpl, Modules};
 use openidconnect::AccessToken;
-use runner::{Namespaced, Runner};
+use redis::aio::MultiplexedConnection;
+use runner::Runner;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use std::rc::Rc;
-use std::sync::Arc;
 use tokio::task;
 use tokio_stream::Stream;
 
+use uuid::Uuid;
 mod adapter;
 mod echo;
 mod modules;
@@ -36,8 +39,20 @@ pub enum Event<M>
 where
     M: SignalingModule,
 {
+    /// Participant with the associated id has joined the room
+    ParticipantJoined(ParticipantId),
+
+    /// Participant with the associated id has left the room
+    ParticipantLeft(ParticipantId),
+
+    /// Participant data has changed
+    ParticipantUpdated(ParticipantId),
+
     /// Received websocket message
     WsMessage(M::Incoming),
+
+    /// RabbitMQ queue received a message for this module
+    RabbitMq(M::RabbitMqMessage),
 
     /// External event provided by [`WebSocketModule::ExtEventStream`]
     ///
@@ -46,23 +61,30 @@ where
     Ext(M::ExtEvent),
 }
 
-/// Context of an Event
+/// Context passed to the module
 ///
 /// Can be used to send websocket messages
-pub struct WsCtx<'ctx, M>
+pub struct ModuleContext<'ctx, M>
 where
     M: SignalingModule,
 {
+    id: ParticipantId,
     ws_messages: &'ctx mut Vec<Message>,
+    rabbitmq_messages: &'ctx mut Vec<(Option<ParticipantId>, String)>,
     events: &'ctx mut SelectAll<AnyStream>,
-    local_state: &'ctx mut Extensions,
+    storage: &'ctx mut Storage,
+    invalidate_data: &'ctx mut bool,
     m: PhantomData<fn() -> M>,
 }
 
-impl<M> WsCtx<'_, M>
+impl<M> ModuleContext<'_, M>
 where
     M: SignalingModule,
 {
+    pub fn participant_id(&self) -> ParticipantId {
+        self.id
+    }
+
     /// Queue a outgoing message to be sent via the websocket
     /// after exiting the `on_event` function
     ///
@@ -79,9 +101,26 @@ where
         ));
     }
 
+    /// Queue a outgoing message to be sent via rabbitmq
+    pub fn rabbitmq_send(&mut self, target: Option<ParticipantId>, message: M::RabbitMqMessage) {
+        self.rabbitmq_messages.push((
+            target,
+            Namespaced {
+                namespace: M::NAMESPACE,
+                payload: message,
+            }
+            .to_json(),
+        ));
+    }
+
     /// Access to local state of the websocket
-    pub fn local_state(&mut self) -> &mut Extensions {
-        self.local_state
+    pub fn storage(&mut self) -> &mut Storage {
+        self.storage
+    }
+
+    /// Signals that the data related to the participant has changed
+    pub fn invalidate_data(&mut self) {
+        *self.invalidate_data = true;
     }
 
     pub fn add_event_stream<S>(&mut self, stream: S)
@@ -103,7 +142,7 @@ pub trait SignalingModule: Sized + 'static {
     /// The module params, can be any type that is `Send` + `Sync`
     ///
     /// Will get passed to `init` as parameter
-    type Params: Send + Sync;
+    type Params: Clone + Send + Sync;
 
     /// The websocket incoming message type
     type Incoming: for<'de> Deserialize<'de>;
@@ -111,24 +150,44 @@ pub trait SignalingModule: Sized + 'static {
     /// The websocket outgoing message type
     type Outgoing: Serialize;
 
+    /// Message type sent over rabbitmq to other participant's modules
+    type RabbitMqMessage: for<'de> Deserialize<'de> + Serialize;
+
     /// Optional event type, yielded by `ExtEventStream`
     ///
     /// If the module does not register external events it should be set to `()`.
     type ExtEvent;
 
-    /// Constructor of the module.
+    /// Data about the owning user of the ws-module which is sent to the frontend on join
+    type FrontendData: Serialize;
+
+    /// Data about a peer which is sent to the frontend
+    type PeerFrontendData: Serialize;
+
+    /// Constructor of the module
     ///
-    /// Provided with the websocket context the modules params and the negotiated protocol.
+    /// Provided with the websocket context the modules params and the negotiated protocol
     ///
     /// Calls to [`WsCtx::ws_send`] are discarded
-    async fn init(ctx: WsCtx<'_, Self>, params: &Self::Params, protocol: &'static str) -> Self;
+    async fn init(
+        ctx: ModuleContext<'_, Self>,
+        params: &Self::Params,
+        protocol: &'static str,
+    ) -> Self;
 
     /// Events related to this module will be passed into this function together with [EventCtx]
     /// which gives access to the websocket and other related information.
-    async fn on_event(&mut self, ctx: WsCtx<'_, Self>, event: Event<Self>);
+    async fn on_event(&mut self, ctx: ModuleContext<'_, Self>, event: Event<Self>);
+
+    async fn get_frontend_data(&self) -> Self::FrontendData;
+    async fn get_frontend_data_for(
+        &self,
+        storage: &mut Storage,
+        participant: ParticipantId,
+    ) -> Result<Self::PeerFrontendData>;
 
     /// Before dropping the module this function will be called
-    async fn on_destroy(self);
+    async fn on_destroy(self, storage: &mut Storage);
 }
 
 /// Signaling endpoint which can be registered to a `ApplicationBuilder`.
@@ -138,13 +197,18 @@ pub trait SignalingModule: Sized + 'static {
 pub struct SignalingHttpModule {
     protocols: &'static [&'static str],
     modules: Vec<Box<dyn ModuleBuilder>>,
+
+    redis_conn: MultiplexedConnection,
+    rabbit_mq_channel: lapin::Channel,
 }
 
 impl SignalingHttpModule {
-    pub fn new() -> Self {
+    pub fn new(redis_conn: MultiplexedConnection, rabbit_mq_channel: lapin::Channel) -> Self {
         Self {
             protocols: &["k3k-signaling-json-v1"],
             modules: Default::default(),
+            redis_conn,
+            rabbit_mq_channel,
         }
     }
 
@@ -158,7 +222,7 @@ impl SignalingHttpModule {
     {
         self.modules.push(Box::new(ModuleBuilderImpl {
             m: PhantomData::<fn() -> M>,
-            params: Arc::new(params),
+            params,
         }));
     }
 }
@@ -167,6 +231,8 @@ impl HttpModule for SignalingHttpModule {
     fn register(&self, app: &mut ServiceConfig) {
         let protocols = self.protocols;
         let modules = Rc::from(self.modules.clone().into_boxed_slice());
+        let redis_conn = self.redis_conn.clone();
+        let rabbit_mq_channel = self.rabbit_mq_channel.clone();
 
         app.service(web::scope("").route(
             "/signaling",
@@ -174,6 +240,8 @@ impl HttpModule for SignalingHttpModule {
                 ws_service(
                     db_ctx,
                     oidc_ctx,
+                    redis_conn.clone(),
+                    rabbit_mq_channel.clone(),
                     protocols,
                     Rc::clone(&modules),
                     req,
@@ -184,9 +252,12 @@ impl HttpModule for SignalingHttpModule {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn ws_service(
     db_ctx: Data<DbInterface>,
     oidc_ctx: Data<OidcContext>,
+    redis_conn: MultiplexedConnection,
+    rabbit_mq_channel: lapin::Channel,
     protocols: &'static [&'static str],
     modules: Rc<[Box<dyn ModuleBuilder>]>,
     req: HttpRequest,
@@ -240,15 +311,39 @@ async fn ws_service(
     let (adapter, actix_stream) = ActixTungsteniteAdapter::from_actix_payload(stream);
     let websocket = WebSocketStream::from_raw_socket(adapter, Role::Server, None).await;
 
+    // TODO: Get these information from somewhere reliable (ticket-system + redis)?
+    let id = ParticipantId::new();
+    let room_id = Uuid::nil();
+
+    // Create redis storage for this ws-task
+    let mut storage = Storage::new(redis_conn, room_id);
+
+    // Build and initialize the modules
     let mut builder = Modules::default();
-
-    builder.local_state().insert(user);
-
     for module in modules.iter() {
-        module.build(&mut builder, protocol).await;
+        module.build(id, &mut builder, &mut storage, protocol).await;
     }
 
-    task::spawn_local(Runner::new(builder, websocket).run());
+    let runner = match Runner::init(
+        id,
+        room_id,
+        user,
+        builder,
+        storage,
+        rabbit_mq_channel,
+        websocket,
+    )
+    .await
+    {
+        Ok(runner) => runner,
+        Err(e) => {
+            log::error!("Failed to initialize runner, {}", e);
+            return HttpResponse::InternalServerError().await;
+        }
+    };
+
+    // Spawn the runner task
+    task::spawn_local(runner.run());
 
     // TODO: maybe change the SEC_WEBSOCKET_PROTOCOL header to access_token=kdpaosd2eja9dj,k3k-signaling-json-v1 to avoid ordering
     response.insert_header((
@@ -257,4 +352,19 @@ async fn ws_service(
     ));
 
     Ok(response.streaming(actix_stream))
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Namespaced<'n, O> {
+    pub namespace: &'n str,
+    pub payload: O,
+}
+
+impl<'n, O> Namespaced<'n, O>
+where
+    O: Serialize,
+{
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).expect("Failed to convert namespaced to json")
+    }
 }

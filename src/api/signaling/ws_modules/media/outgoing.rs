@@ -1,4 +1,3 @@
-use crate::api::signaling::local::Participant;
 use crate::api::signaling::mcu::MediaSessionType;
 use crate::api::signaling::ParticipantId;
 use janus_client::TrickleCandidate;
@@ -7,19 +6,6 @@ use serde::Serialize;
 #[derive(Debug, Serialize)]
 #[serde(tag = "message")]
 pub enum Message {
-    #[serde(rename = "join_success")]
-    JoinSuccess(JoinSuccess),
-
-    /// State change of this participant
-    #[serde(rename = "update")]
-    Update(Participant),
-    /// A participant that joined the room
-    #[serde(rename = "joined")]
-    Joined(Participant),
-    /// This participant left the room
-    #[serde(rename = "left")]
-    Left(AssociatedParticipant),
-
     /// SDP Offer, renegotiate publish
     #[serde(rename = "sdp_offer")]
     SdpOffer(Sdp),
@@ -32,17 +18,6 @@ pub enum Message {
 
     #[serde(rename = "error")]
     Error { text: &'static str },
-}
-
-#[derive(Debug, Serialize)]
-pub struct JoinSuccess {
-    pub id: ParticipantId,
-    pub participants: Vec<Participant>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AssociatedParticipant {
-    pub id: ParticipantId,
 }
 
 #[derive(Debug, Serialize)]
@@ -73,59 +48,8 @@ pub struct Source {
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use super::*;
-
-    #[test]
-    fn join_success() {
-        let expected = r#"{"message":"join_success","id":"00000000-0000-0000-0000-000000000000","participants":[]}"#;
-
-        let produced = serde_json::to_string(&Message::JoinSuccess(JoinSuccess {
-            id: ParticipantId::nil(),
-            participants: vec![],
-        }))
-        .unwrap();
-
-        assert_eq!(expected, produced);
-    }
-
-    #[test]
-    fn update() {
-        let expected = r#"{"message":"update","id":"00000000-0000-0000-0000-000000000000","display_name":"Hans","publishing":{}}"#;
-
-        let produced = serde_json::to_string(&Message::Update(Participant::new(
-            ParticipantId::nil(),
-            "Hans".into(),
-        )))
-        .unwrap();
-
-        assert_eq!(expected, produced);
-    }
-
-    #[test]
-    fn joined() {
-        let expected = r#"{"message":"joined","id":"00000000-0000-0000-0000-000000000000","display_name":"Hans","publishing":{}}"#;
-
-        let produced = serde_json::to_string(&Message::Joined(Participant::new(
-            ParticipantId::nil(),
-            "Hans".into(),
-        )))
-        .unwrap();
-
-        assert_eq!(expected, produced);
-    }
-
-    #[test]
-    fn left() {
-        let expected = r#"{"message":"left","id":"00000000-0000-0000-0000-000000000000"}"#;
-
-        let produced = serde_json::to_string(&Message::Left(AssociatedParticipant {
-            id: ParticipantId::nil(),
-        }))
-        .unwrap();
-
-        assert_eq!(expected, produced);
-    }
 
     #[test]
     fn sdp_offer() {

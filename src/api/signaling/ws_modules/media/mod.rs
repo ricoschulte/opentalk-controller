@@ -1,14 +1,16 @@
-use crate::api::signaling::local::{MemberKind, Room, RoomEvent};
 use crate::api::signaling::mcu::{
     MediaSessionKey, MediaSessionType, Request, Response, TrickleMessage,
 };
 use crate::api::signaling::media::Media;
-use crate::api::signaling::ws::{Event, SignalingModule, WsCtx};
+use crate::api::signaling::storage::Storage;
+use crate::api::signaling::ws::{Event, ModuleContext, SignalingModule};
 use crate::api::signaling::{JanusMcu, ParticipantId};
 use crate::db::users::User;
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use futures::stream::{select, StreamExt};
 use janus_client::TrickleCandidate;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::ReceiverStream;
@@ -22,112 +24,79 @@ pub struct RoomControl {
     mcu: Arc<JanusMcu>,
     media: Media,
 
-    local: Arc<RwLock<Room>>,
-
-    room_evt_sender: mpsc::Sender<RoomEvent>,
-}
-
-pub enum ExtEvent {
-    Room(RoomEvent),
-    Media((MediaSessionKey, TrickleMessage)),
+    state: HashMap<MediaSessionType, MediaSessionState>,
 }
 
 #[async_trait::async_trait(?Send)]
 impl SignalingModule for RoomControl {
-    const NAMESPACE: &'static str = "room";
+    const NAMESPACE: &'static str = "media";
 
-    type Params = (Weak<JanusMcu>, Arc<RwLock<Room>>);
+    type Params = Weak<JanusMcu>;
 
     type Incoming = incoming::Message;
     type Outgoing = outgoing::Message;
+    type RabbitMqMessage = ();
 
-    type ExtEvent = ExtEvent;
+    type ExtEvent = (MediaSessionKey, TrickleMessage);
+
+    type FrontendData = HashMap<MediaSessionType, MediaSessionState>;
+    type PeerFrontendData = Self::FrontendData;
 
     async fn init(
-        mut ctx: WsCtx<'_, Self>,
-        (mcu, room): &Self::Params,
+        mut ctx: ModuleContext<'_, Self>,
+        (mcu): &Self::Params,
         _protocol: &'static str,
     ) -> Self {
-        let participant_id = ParticipantId::new();
-
-        let (room_evt_sender, room_events) = mpsc::channel(12);
         let (media_sender, janus_events) = mpsc::channel(12);
 
-        ctx.add_event_stream(select(
-            ReceiverStream::new(room_events).map(ExtEvent::Room),
-            ReceiverStream::new(janus_events).map(ExtEvent::Media),
-        ));
+        ctx.add_event_stream(ReceiverStream::new(janus_events));
 
         Self {
-            id: participant_id,
+            id: ctx.participant_id(),
             mcu: mcu.upgrade().unwrap(),
-            media: Media::new(participant_id, media_sender),
-            local: room.clone(),
-            room_evt_sender,
+            media: Media::new(ctx.participant_id(), media_sender),
+            state: Default::default(),
         }
     }
 
-    async fn on_event(&mut self, mut ctx: WsCtx<'_, Self>, event: Event<Self>) {
+    async fn on_event(&mut self, mut ctx: ModuleContext<'_, Self>, event: Event<Self>) {
         match event {
-            Event::WsMessage(incoming::Message::Join(join)) => {
-                let user_id = ctx
-                    .local_state()
-                    .get::<User>()
-                    .expect("User must be in local_state")
-                    .id;
-
-                let mut room = self.local.write().await;
-
-                let participants = room
-                    .members
-                    .iter()
-                    .map(|member| member.participant.clone())
-                    .collect();
-
-                room.add_member(
-                    self.id,
-                    join.display_name,
-                    MemberKind::User(user_id),
-                    self.room_evt_sender.clone(),
-                )
-                .await;
-
-                ctx.ws_send(outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
-                    id: self.id,
-                    participants,
-                }));
-            }
             Event::WsMessage(incoming::Message::PublishComplete(info))
             | Event::WsMessage(incoming::Message::UpdateMediaSession(info)) => {
-                let mut room = self.local.write().await;
+                self.state
+                    .insert(info.media_session_type, info.media_session_state);
 
-                for member in &mut room.members {
-                    if member.participant.id == self.id {
-                        member
-                            .participant
-                            .publishing
-                            .entry(info.media_session_type)
-                            .or_insert(info.media_session_state);
-                    } else {
-                        member.send(RoomEvent::Update(self.id)).await;
-                    }
-                }
+                ctx.storage()
+                    .set_attribute(
+                        Self::NAMESPACE,
+                        self.id,
+                        "state",
+                        serde_json::to_string(&self.state)
+                            .expect("Failed to convert state to json"),
+                    )
+                    .await
+                    // TODO error handling
+                    .unwrap();
+
+                ctx.invalidate_data();
             }
             Event::WsMessage(incoming::Message::Unpublish(assoc)) => {
                 self.media.remove_publisher(assoc.media_session_type);
+                self.state.remove(&assoc.media_session_type);
 
-                let mut room = self.local.write().await;
+                ctx.storage()
+                    .set_attribute(
+                        Self::NAMESPACE,
+                        self.id,
+                        "state",
+                        serde_json::to_string(&self.state)
+                            .expect("Failed to convert state to json"),
+                    )
+                    .await
+                    // TODO error handling
+                    .unwrap();
 
-                for member in &mut room.members {
-                    if member.participant.id == self.id {
-                        member
-                            .participant
-                            .publishing
-                            .remove(&assoc.media_session_type);
-                    } else {
-                        member.send(RoomEvent::Update(self.id)).await;
-                    }
-                }
+                ctx.invalidate_data();
             }
             Event::WsMessage(incoming::Message::Publish(targeted)) => {
                 if let Err(e) = self
@@ -197,7 +166,7 @@ impl SignalingModule for RoomControl {
                     });
                 }
             }
-            Event::Ext(ExtEvent::Media((k, m))) => match m {
+            Event::Ext((k, m)) => match m {
                 TrickleMessage::Completed => {
                     log::warn!("Unimplemented TrickleMessage::Completed received");
                 }
@@ -211,45 +180,46 @@ impl SignalingModule for RoomControl {
                     }));
                 }
             },
-            Event::Ext(ExtEvent::Room(RoomEvent::Update(id))) => {
-                let room = self.local.read().await;
-                let member = room.members.iter().find(|m| m.participant.id == id);
-
-                if let Some(member) = member {
-                    self.media
-                        .remove_dangling_subscribers(id, &member.participant.publishing);
-
-                    let participant = member.participant.clone();
-
-                    drop(room);
-
-                    ctx.ws_send(outgoing::Message::Update(participant));
-                } else {
-                    log::error!("No member with id {} in room", id);
-                }
+            Event::RabbitMq(_) => {}
+            Event::ParticipantJoined(_) => {}
+            Event::ParticipantUpdated(id) => {
+                // TODO READ PEER PARTICIPANTS MEDIA SESSION INFO AND REMOVE SUBSCRIBER
             }
-            Event::Ext(ExtEvent::Room(RoomEvent::Joined(participant))) => {
-                ctx.ws_send(outgoing::Message::Joined(participant));
-            }
-            Event::Ext(ExtEvent::Room(RoomEvent::Left(id))) => {
+            Event::ParticipantLeft(id) => {
                 self.media.remove_subscribers(id);
-                ctx.ws_send(outgoing::Message::Left(outgoing::AssociatedParticipant {
-                    id,
-                }));
             }
         }
     }
 
-    async fn on_destroy(self) {
-        let mut room = self.local.write().await;
-        room.remove_member(self.id).await;
+    async fn get_frontend_data(&self) -> Self::FrontendData {
+        todo!()
+    }
+
+    async fn get_frontend_data_for(
+        &self,
+        storage: &mut Storage,
+        participant: ParticipantId,
+    ) -> Result<Self::PeerFrontendData> {
+        let json: String = storage
+            .get_attribute(Self::NAMESPACE, participant, "state")
+            .await?;
+
+        serde_json::from_str(&json).context("Failed to parse module data to json")
+    }
+
+    async fn on_destroy(self, storage: &mut Storage) {
+        // TODO error handling
+        storage
+            .remove_all_attributes(Self::NAMESPACE, self.id)
+            .await
+            .unwrap();
     }
 }
 
 impl RoomControl {
     async fn handle_sdp_offer(
         &mut self,
-        ctx: &mut WsCtx<'_, Self>,
+        ctx: &mut ModuleContext<'_, Self>,
         target: ParticipantId,
         media_session_type: MediaSessionType,
         offer: String,
@@ -390,7 +360,7 @@ impl RoomControl {
 
     async fn handle_sdp_request_offer(
         &mut self,
-        ctx: &mut WsCtx<'_, Self>,
+        ctx: &mut ModuleContext<'_, Self>,
         target: ParticipantId,
         media_session_type: MediaSessionType,
     ) -> Result<()> {
@@ -427,4 +397,10 @@ impl RoomControl {
 
         Ok(())
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MediaSessionState {
+    pub video: bool,
+    pub audio: bool,
 }

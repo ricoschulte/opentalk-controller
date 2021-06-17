@@ -1,4 +1,4 @@
-use crate::api::signaling::local::MediaSessionState;
+use super::MediaSessionState;
 use crate::api::signaling::mcu::MediaSessionType;
 use crate::api::signaling::ParticipantId;
 use janus_client::TrickleCandidate;
@@ -7,9 +7,6 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(tag = "action")]
 pub enum Message {
-    #[serde(rename = "join")]
-    Join(Join),
-
     /// The participant successfully established a stream
     #[serde(rename = "publish_complete")]
     PublishComplete(MediaSessionInfo),
@@ -100,24 +97,6 @@ pub struct Target {
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn hello() {
-        let json = r#"
-        {
-            "action": "join",
-            "display_name": "Test!"
-        }
-        "#;
-
-        let msg: Message = serde_json::from_str(json).unwrap();
-
-        if let Message::Join(Join { display_name }) = msg {
-            assert_eq!(display_name, "Test!");
-        } else {
-            panic!()
-        }
-    }
 
     #[test]
     fn publish() {

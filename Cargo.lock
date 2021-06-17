@@ -1352,6 +1352,7 @@ dependencies = [
  "k3k-controller-client",
  "lapin",
  "log",
+ "nom 6.1.2",
  "openidconnect",
  "parking_lot",
  "redis",

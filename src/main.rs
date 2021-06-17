@@ -95,12 +95,10 @@ async fn run_service(settings: Settings) -> Result<()> {
         // Build redis client. Does not check if redis is reachable.
         let redis = redis::Client::open("redis://127.0.0.1:6379/").context("Invalid redis url")?;
 
-        let redis_mux_conn = Data::new(
-            redis
-                .get_multiplexed_async_connection()
-                .await
-                .context("Failed to get redis connection")?,
-        );
+        let redis_conn = redis
+            .get_multiplexed_async_connection()
+            .await
+            .context("Failed to get redis connection")?;
 
         // Connect to Janus via rabbitmq
         let mut mcu = {
@@ -116,7 +114,16 @@ async fn run_service(settings: Settings) -> Result<()> {
         let turn_servers = Data::new(settings.turn);
 
         let mut application = modules::ApplicationBuilder::default();
-        signaling::attach(&mut application, shutdown.subscribe(), &redis, &mcu).await?;
+
+        {
+            let signaling_channel = rabbitmq
+                .create_channel()
+                .await
+                .context("Could not create rabbit mq channel for signaling")?;
+
+            signaling::attach(&mut application, redis_conn, signaling_channel, mcu.clone()).await?;
+        }
+
         let application = application.finish();
 
         // Start external HTTP Server
@@ -142,7 +149,7 @@ async fn run_service(settings: Settings) -> Result<()> {
                     .app_data(oidc_ctx.clone())
                     .app_data(turn_servers.clone())
                     .app_data(shutdown.subscribe())
-                    .service(v1_scope(db_ctx.clone(), oidc_ctx.clone()))
+                    .service(v1_scope(db_ctx, oidc_ctx))
                     .configure(application.configure())
             })
         };
@@ -227,6 +234,7 @@ async fn run_service(settings: Settings) -> Result<()> {
 
         // Now that all ref-pointers to mcu are dropped use Arc::get_mut to get a mutable
         // reference and call JanusMcu::destroy
+        log::debug!("Destroying JanusMcu");
         if let Err(e) = Arc::get_mut(&mut mcu)
             .expect("Not all ref-pointers to mcu dropped")
             .destroy()

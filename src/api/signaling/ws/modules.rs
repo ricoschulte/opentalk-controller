@@ -1,6 +1,9 @@
 use super::SignalingModule;
-use super::{Event, WsCtx};
-use actix_web::dev::Extensions;
+use super::{Event, ModuleContext};
+use crate::api::signaling::storage::Storage;
+use crate::api::signaling::ws_modules::control::outgoing::Participant;
+use crate::api::signaling::ParticipantId;
+use anyhow::{Context, Result};
 use async_tungstenite::tungstenite::Message;
 use futures::stream::SelectAll;
 use serde_json::Value;
@@ -8,7 +11,6 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::pin::Pin;
-use std::sync::Arc;
 use tokio_stream::{Stream, StreamExt};
 
 pub type AnyStream = Pin<Box<dyn Stream<Item = (&'static str, Box<dyn Any + 'static>)>>>;
@@ -28,7 +30,6 @@ pub struct NoSuchModuleError(pub ());
 pub struct Modules {
     modules: HashMap<&'static str, Box<dyn ModuleCaller>>,
     events: SelectAll<AnyStream>,
-    local_state: Extensions,
 }
 
 impl Modules {
@@ -42,10 +43,6 @@ impl Modules {
             .insert(M::NAMESPACE, Box::new(ModuleCallerImpl { module }));
     }
 
-    pub fn local_state(&mut self) -> &mut Extensions {
-        &mut self.local_state
-    }
-
     pub async fn poll_ext_events(&mut self) -> Option<(&'static str, DynEvent)> {
         let (module, event) = self.events.next().await?;
         Some((module, DynEvent::Ext(event)))
@@ -53,16 +50,23 @@ impl Modules {
 
     pub async fn on_event(
         &mut self,
+        id: ParticipantId,
         ws_messages: &mut Vec<Message>,
+        rabbitmq_messages: &mut Vec<(Option<ParticipantId>, String)>,
+        storage: &mut Storage,
+        invalidate_data: &mut bool,
         module: &str,
         dyn_event: DynEvent,
     ) -> Result<(), NoSuchModuleError> {
         let module = self.modules.get_mut(module).ok_or(NoSuchModuleError(()))?;
 
         let ctx = DynEventCtx {
+            id,
             ws_messages,
+            rabbitmq_messages,
             events: &mut self.events,
-            local_state: &mut self.local_state,
+            storage,
+            invalidate_data,
         };
 
         module.on_event(ctx, dyn_event).await;
@@ -70,30 +74,53 @@ impl Modules {
         Ok(())
     }
 
-    pub async fn destroy(self) {
+    pub async fn collect_participant_data(
+        &self,
+        storage: &mut Storage,
+        participant: &mut Participant,
+    ) -> Result<()> {
+        for (_, module) in &self.modules {
+            module
+                .populate_frontend_data_for(storage, participant)
+                .await?;
+        }
+
+        Ok(())
+    }
+
+    pub async fn destroy(self, storage: &mut Storage) {
         for (namespace, module) in self.modules {
             log::debug!("Destroying module {}", namespace);
 
-            module.destroy().await;
+            module.destroy(storage).await;
         }
     }
 }
 
 pub enum DynEvent {
     WsMessage(Value),
+    RabbitMqMessage(Value),
     Ext(Box<dyn Any + 'static>),
 }
 
 struct DynEventCtx<'ctx> {
+    id: ParticipantId,
     ws_messages: &'ctx mut Vec<Message>,
+    rabbitmq_messages: &'ctx mut Vec<(Option<ParticipantId>, String)>,
     events: &'ctx mut SelectAll<AnyStream>,
-    local_state: &'ctx mut Extensions,
+    storage: &'ctx mut Storage,
+    invalidate_data: &'ctx mut bool,
 }
 
 #[async_trait::async_trait(?Send)]
 trait ModuleCaller {
     async fn on_event(&mut self, ctx: DynEventCtx<'_>, dyn_event: DynEvent);
-    async fn destroy(self: Box<Self>);
+    async fn populate_frontend_data_for(
+        &self,
+        storage: &mut Storage,
+        participant: &mut Participant,
+    ) -> Result<()>;
+    async fn destroy(self: Box<Self>, storage: &mut Storage);
 }
 
 struct ModuleCallerImpl<M> {
@@ -106,17 +133,24 @@ where
     M: SignalingModule,
 {
     async fn on_event(&mut self, ctx: DynEventCtx<'_>, dyn_event: DynEvent) {
-        let ctx = WsCtx {
+        let ctx = ModuleContext {
+            id: ctx.id,
             ws_messages: ctx.ws_messages,
+            rabbitmq_messages: ctx.rabbitmq_messages,
             events: ctx.events,
-            local_state: ctx.local_state,
+            storage: ctx.storage,
+            invalidate_data: ctx.invalidate_data,
             m: PhantomData::<fn() -> M>,
         };
 
         match dyn_event {
             DynEvent::WsMessage(msg) => match serde_json::from_value(msg) {
-                Err(e) => log::error!("Unable to parse message, {}", e),
                 Ok(msg) => self.module.on_event(ctx, Event::WsMessage(msg)).await,
+                Err(e) => log::error!("Unable to parse message, {}", e),
+            },
+            DynEvent::RabbitMqMessage(msg) => match serde_json::from_value(msg) {
+                Ok(msg) => self.module.on_event(ctx, Event::RabbitMq(msg)).await,
+                Err(e) => log::error!("Failed to parse incoming rabbitmq message, {}", e),
             },
             DynEvent::Ext(ext) => {
                 self.module
@@ -126,14 +160,42 @@ where
         }
     }
 
-    async fn destroy(self: Box<Self>) {
-        self.module.on_destroy().await
+    async fn populate_frontend_data_for(
+        &self,
+        storage: &mut Storage,
+        participant: &mut Participant,
+    ) -> Result<()> {
+        let data = self
+            .module
+            .get_frontend_data_for(storage, participant.id)
+            .await?;
+
+        let value =
+            serde_json::to_value(&data).context("Failed to convert FrontendData to json")?;
+
+        if let Value::Null = &value {
+            return Ok(());
+        }
+
+        participant.module_data.insert(M::NAMESPACE.into(), value);
+
+        Ok(())
+    }
+
+    async fn destroy(self: Box<Self>, storage: &mut Storage) {
+        self.module.on_destroy(storage).await
     }
 }
 
 #[async_trait::async_trait(?Send)]
 pub trait ModuleBuilder: Send + Sync {
-    async fn build(&self, builder: &mut Modules, protocol: &'static str);
+    async fn build(
+        &self,
+        id: ParticipantId,
+        builder: &mut Modules,
+        storage: &mut Storage,
+        protocol: &'static str,
+    );
 
     fn clone_boxed(&self) -> Box<dyn ModuleBuilder>;
 }
@@ -143,7 +205,7 @@ where
     M: SignalingModule,
 {
     pub m: PhantomData<fn() -> M>,
-    pub params: Arc<M::Params>,
+    pub params: M::Params,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -151,15 +213,24 @@ impl<M> ModuleBuilder for ModuleBuilderImpl<M>
 where
     M: SignalingModule,
 {
-    async fn build(&self, builder: &mut Modules, protocol: &'static str) {
-        let ctx = WsCtx {
+    async fn build(
+        &self,
+        id: ParticipantId,
+        builder: &mut Modules,
+        storage: &mut Storage,
+        protocol: &'static str,
+    ) {
+        let ctx = ModuleContext {
+            id,
             ws_messages: &mut vec![],
+            rabbitmq_messages: &mut vec![],
             events: &mut builder.events,
-            local_state: &mut builder.local_state,
+            storage,
+            invalidate_data: &mut false,
             m: PhantomData::<fn() -> M>,
         };
 
-        let module = M::init(ctx, &*self.params, protocol).await;
+        let module = M::init(ctx, &self.params, protocol).await;
 
         builder.add_module(module).await
     }

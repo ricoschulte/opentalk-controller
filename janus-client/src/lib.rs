@@ -198,8 +198,12 @@ impl Session {
         self.inner.detach_handle(id);
     }
 
-    /// Destroys the session. Waits for the strong reference count to reach zero and sends a
-    /// Destroy request
+    /// Destroys the session.
+    ///
+    /// # Danger:
+    ///
+    /// Assumes that all other occurrences of the same Session will be dropped.
+    /// Waits for the strong reference count to reach zero and sends a Destroy request.
     pub async fn destroy(&mut self) -> Result<(), error::Error> {
         let client = self
             .inner
@@ -223,7 +227,7 @@ impl Session {
 
                 return inner.destroy(client).await;
             } else {
-                sleep(Duration::from_secs(1)).await;
+                sleep(Duration::from_millis(100)).await;
             }
         }
     }
