@@ -24,7 +24,7 @@ pub async fn setup_client(user: &str, password: &str) -> Result<K3KSession> {
 pub async fn run_controller() -> Result<Child> {
     let mut controller_proc = process::Command::new("./target/debug/k3k-controller")
         //.current_dir("../")
-        .arg("-v")
+        .args(&["-v", "-c", "tests/test-config.toml"])
         .kill_on_drop(true)
         .stdout(Stdio::piped())
         .spawn()
@@ -39,7 +39,7 @@ pub async fn run_controller() -> Result<Child> {
     let ctl_start_pattern = Regex::new(r#".*Startup finished$"#).unwrap(); //panic on bad regex pattern only
 
     while let Some(ref line) = reader.next_line().await? {
-        println!("Line: {}", line);
+        log::info!(target:"controller_log", "{}", line);
         if ctl_start_pattern.is_match(line) {
             break;
         }
@@ -49,7 +49,7 @@ pub async fn run_controller() -> Result<Child> {
 
     let _log_task = tokio::spawn(async move {
         while let Some(line) = reader.next_line().await? {
-            println!("Line: {}", line);
+            log::info!(target:"controller_log", "{}", line);
         }
         Ok::<(), std::io::Error>(())
     });
@@ -118,8 +118,7 @@ pub fn setup_logging() -> Result<()> {
                 message
             ))
         })
-        .level(log::LevelFilter::Debug)
-        .level_for("html5ever", log::LevelFilter::Warn)
+        .level(log::LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()
         .context("Failed to setup logging utility")
