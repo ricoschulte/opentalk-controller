@@ -16,6 +16,7 @@ pub enum Message {
     #[serde(rename = "sdp_candidate")]
     SdpCandidate(SdpCandidate),
 
+    /// Error message, if received assume join failed.
     #[serde(rename = "error")]
     Error { text: &'static str },
 }

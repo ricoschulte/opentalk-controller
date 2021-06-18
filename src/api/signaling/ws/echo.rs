@@ -22,7 +22,11 @@ impl SignalingModule for Echo {
         Self
     }
 
-    async fn on_event(&mut self, mut ctx: ModuleContext<'_, Self>, event: Event<Self>) {
+    async fn on_event(
+        &mut self,
+        mut ctx: ModuleContext<'_, Self>,
+        event: Event<Self>,
+    ) -> Result<()> {
         match event {
             Event::WsMessage(incoming) => {
                 ctx.ws_send(incoming);
@@ -32,15 +36,15 @@ impl SignalingModule for Echo {
             }
             Event::Ext(_) => unreachable!("no registered external events"),
             // Ignore
-            Event::ParticipantJoined(_) => {}
+            Event::ParticipantJoined(..) => {}
             Event::ParticipantLeft(_) => {}
-            Event::ParticipantUpdated(_) => {}
+            Event::ParticipantUpdated(..) => {}
         }
+
+        Ok(())
     }
 
-    async fn get_frontend_data(&self) -> Self::FrontendData {
-        ()
-    }
+    async fn get_frontend_data(&self) -> Self::FrontendData {}
 
     async fn get_frontend_data_for(
         &self,

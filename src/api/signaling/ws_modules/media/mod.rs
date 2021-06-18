@@ -1,34 +1,39 @@
 use crate::api::signaling::mcu::{
     MediaSessionKey, MediaSessionType, Request, Response, TrickleMessage,
 };
-use crate::api::signaling::media::Media;
 use crate::api::signaling::storage::Storage;
 use crate::api::signaling::ws::{Event, ModuleContext, SignalingModule};
 use crate::api::signaling::{JanusMcu, ParticipantId};
-use crate::db::users::User;
 use anyhow::{bail, Context, Result};
-use futures::stream::{select, StreamExt};
 use janus_client::TrickleCandidate;
 use serde::{Deserialize, Serialize};
+use sessions::MediaSessions;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
 mod incoming;
 mod outgoing;
+mod sessions;
 
-pub struct RoomControl {
+pub struct Media {
     id: ParticipantId,
 
     mcu: Arc<JanusMcu>,
-    media: Media,
+    media: MediaSessions,
 
     state: HashMap<MediaSessionType, MediaSessionState>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct MediaSessionState {
+    pub video: bool,
+    pub audio: bool,
+}
+
 #[async_trait::async_trait(?Send)]
-impl SignalingModule for RoomControl {
+impl SignalingModule for Media {
     const NAMESPACE: &'static str = "media";
 
     type Params = Weak<JanusMcu>;
@@ -39,12 +44,12 @@ impl SignalingModule for RoomControl {
 
     type ExtEvent = (MediaSessionKey, TrickleMessage);
 
-    type FrontendData = HashMap<MediaSessionType, MediaSessionState>;
-    type PeerFrontendData = Self::FrontendData;
+    type FrontendData = ();
+    type PeerFrontendData = HashMap<MediaSessionType, MediaSessionState>;
 
     async fn init(
         mut ctx: ModuleContext<'_, Self>,
-        (mcu): &Self::Params,
+        mcu: &Self::Params,
         _protocol: &'static str,
     ) -> Self {
         let (media_sender, janus_events) = mpsc::channel(12);
@@ -54,12 +59,16 @@ impl SignalingModule for RoomControl {
         Self {
             id: ctx.participant_id(),
             mcu: mcu.upgrade().unwrap(),
-            media: Media::new(ctx.participant_id(), media_sender),
+            media: MediaSessions::new(ctx.participant_id(), media_sender),
             state: Default::default(),
         }
     }
 
-    async fn on_event(&mut self, mut ctx: ModuleContext<'_, Self>, event: Event<Self>) {
+    async fn on_event(
+        &mut self,
+        mut ctx: ModuleContext<'_, Self>,
+        event: Event<Self>,
+    ) -> Result<()> {
         match event {
             Event::WsMessage(incoming::Message::PublishComplete(info))
             | Event::WsMessage(incoming::Message::UpdateMediaSession(info)) => {
@@ -75,8 +84,7 @@ impl SignalingModule for RoomControl {
                             .expect("Failed to convert state to json"),
                     )
                     .await
-                    // TODO error handling
-                    .unwrap();
+                    .context("Failed to set state attribute in storage")?;
 
                 ctx.invalidate_data();
             }
@@ -93,8 +101,7 @@ impl SignalingModule for RoomControl {
                             .expect("Failed to convert state to json"),
                     )
                     .await
-                    // TODO error handling
-                    .unwrap();
+                    .context("Failed to set state attribute in storage")?;
 
                 ctx.invalidate_data();
             }
@@ -181,18 +188,20 @@ impl SignalingModule for RoomControl {
                 }
             },
             Event::RabbitMq(_) => {}
-            Event::ParticipantJoined(_) => {}
-            Event::ParticipantUpdated(id) => {
-                // TODO READ PEER PARTICIPANTS MEDIA SESSION INFO AND REMOVE SUBSCRIBER
+            Event::ParticipantJoined(..) => {}
+            Event::ParticipantUpdated(id, state) => {
+                self.media.remove_dangling_subscriber(id, &state);
             }
             Event::ParticipantLeft(id) => {
                 self.media.remove_subscribers(id);
             }
         }
+
+        Ok(())
     }
 
     async fn get_frontend_data(&self) -> Self::FrontendData {
-        todo!()
+        // No frontend data from this module
     }
 
     async fn get_frontend_data_for(
@@ -208,15 +217,20 @@ impl SignalingModule for RoomControl {
     }
 
     async fn on_destroy(self, storage: &mut Storage) {
-        // TODO error handling
-        storage
+        if let Err(e) = storage
             .remove_all_attributes(Self::NAMESPACE, self.id)
             .await
-            .unwrap();
+        {
+            log::warn!(
+                "Media module for {} failed to remove its data from redis, {}",
+                self.id,
+                e
+            );
+        }
     }
 }
 
-impl RoomControl {
+impl Media {
     async fn handle_sdp_offer(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
@@ -254,7 +268,7 @@ impl RoomControl {
 
             Ok(())
         } else {
-            todo!("Create subscriber with offer?")
+            bail!("Invalid target id, cannot send offer to other participants");
         }
     }
 
@@ -275,7 +289,6 @@ impl RoomControl {
             };
 
             // Send to offer and await the result
-            // TODO did we need a response here?
             publisher.send_message(Request::SdpAnswer(answer)).await?;
         } else {
             let subscriber =
@@ -397,10 +410,4 @@ impl RoomControl {
 
         Ok(())
     }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MediaSessionState {
-    pub video: bool,
-    pub audio: bool,
 }

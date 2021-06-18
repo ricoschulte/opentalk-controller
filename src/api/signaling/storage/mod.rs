@@ -127,9 +127,3 @@ impl Storage {
         Ok(())
     }
 }
-
-#[derive(Debug, Clone)]
-pub enum ChangeEvent {
-    ParticipantModified(ParticipantId),
-    ParticipantDeleted(ParticipantId),
-}

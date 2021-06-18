@@ -1,4 +1,4 @@
-use crate::api::signaling::ws_modules::media::RoomControl;
+use crate::api::signaling::ws_modules::media::Media;
 use crate::modules::ApplicationBuilder;
 use anyhow::Result;
 use redis::aio::MultiplexedConnection;
@@ -11,7 +11,6 @@ use uuid::Uuid;
 use ws::{Echo, SignalingHttpModule};
 
 mod mcu;
-mod media;
 mod storage;
 mod ws;
 mod ws_modules;
@@ -23,11 +22,11 @@ pub struct ParticipantId(Uuid);
 
 impl ParticipantId {
     #[cfg(test)]
-    pub(crate) fn nil() -> Self {
+    fn nil() -> Self {
         Self(Uuid::nil())
     }
 
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self(Uuid::new_v4())
     }
 }
@@ -75,7 +74,7 @@ pub async fn attach(
     let mut signaling = SignalingHttpModule::new(redis_conn, rabbit_mq_channel);
 
     signaling.add_module::<Echo>(());
-    signaling.add_module::<RoomControl>(Arc::downgrade(&mcu));
+    signaling.add_module::<Media>(Arc::downgrade(&mcu));
 
     application.add_http_module(signaling);
 

@@ -14,7 +14,7 @@ use async_tungstenite::tungstenite::protocol::Role;
 use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
 use futures::stream::SelectAll;
-use modules::{any_stream, AnyStream, ModuleBuilder, ModuleBuilderImpl, Modules};
+use modules::{any_stream, AnyStream, ModuleBuilder, ModuleBuilderImpl};
 use openidconnect::AccessToken;
 use redis::aio::MultiplexedConnection;
 use runner::Runner;
@@ -23,8 +23,8 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 use tokio::task;
 use tokio_stream::Stream;
-
 use uuid::Uuid;
+
 mod adapter;
 mod echo;
 mod modules;
@@ -34,19 +34,19 @@ pub use echo::Echo;
 
 type WebSocket = WebSocketStream<ActixTungsteniteAdapter>;
 
-/// Event passed to [`WebSocketModule::on_event`].
+/// Event passed to [`WebSocketModule::on_event`]
 pub enum Event<M>
 where
     M: SignalingModule,
 {
     /// Participant with the associated id has joined the room
-    ParticipantJoined(ParticipantId),
+    ParticipantJoined(ParticipantId, M::PeerFrontendData),
 
     /// Participant with the associated id has left the room
     ParticipantLeft(ParticipantId),
 
     /// Participant data has changed
-    ParticipantUpdated(ParticipantId),
+    ParticipantUpdated(ParticipantId, M::PeerFrontendData),
 
     /// Received websocket message
     WsMessage(M::Incoming),
@@ -162,7 +162,16 @@ pub trait SignalingModule: Sized + 'static {
     type FrontendData: Serialize;
 
     /// Data about a peer which is sent to the frontend
-    type PeerFrontendData: Serialize;
+    // TODO Remove this deserialize bound:
+    // When a peer participant joins the runner asks all modules to collect data into a `Participant`.
+    // But since the module doesnt know if the data collected was because of an update or join or something else.
+    //
+    // The runner dispatches a ParticipantJoined event which needs to contain the module data,
+    // which was collected before into `Participant` as serde_json::Value. Therefore the value will
+    // be deserialized back into PeerFrontendData.
+    //
+    // This is a hack and should be removed.
+    type PeerFrontendData: for<'de> Deserialize<'de> + Serialize;
 
     /// Constructor of the module
     ///
@@ -177,7 +186,7 @@ pub trait SignalingModule: Sized + 'static {
 
     /// Events related to this module will be passed into this function together with [EventCtx]
     /// which gives access to the websocket and other related information.
-    async fn on_event(&mut self, ctx: ModuleContext<'_, Self>, event: Event<Self>);
+    async fn on_event(&mut self, ctx: ModuleContext<'_, Self>, event: Event<Self>) -> Result<()>;
 
     async fn get_frontend_data(&self) -> Self::FrontendData;
     async fn get_frontend_data_for(
@@ -313,23 +322,15 @@ async fn ws_service(
 
     // TODO: Get these information from somewhere reliable (ticket-system + redis)?
     let id = ParticipantId::new();
-    let room_id = Uuid::nil();
+    let room = Uuid::nil();
 
-    // Create redis storage for this ws-task
-    let mut storage = Storage::new(redis_conn, room_id);
-
-    // Build and initialize the modules
-    let mut builder = Modules::default();
-    for module in modules.iter() {
-        module.build(id, &mut builder, &mut storage, protocol).await;
-    }
-
-    let runner = match Runner::init(
+    // Build and initialize the runner
+    let mut runner = match Runner::init(
         id,
-        room_id,
+        room,
+        protocol,
         user,
-        builder,
-        storage,
+        Storage::new(redis_conn, room),
         rabbit_mq_channel,
         websocket,
     )
@@ -341,6 +342,11 @@ async fn ws_service(
             return HttpResponse::InternalServerError().await;
         }
     };
+
+    // add all modules
+    for module in modules.iter() {
+        runner.add_module(&**module).await;
+    }
 
     // Spawn the runner task
     task::spawn_local(runner.run());

@@ -29,7 +29,6 @@ pub struct NoSuchModuleError(pub ());
 #[derive(Default)]
 pub struct Modules {
     modules: HashMap<&'static str, Box<dyn ModuleCaller>>,
-    events: SelectAll<AnyStream>,
 }
 
 impl Modules {
@@ -43,35 +42,40 @@ impl Modules {
             .insert(M::NAMESPACE, Box::new(ModuleCallerImpl { module }));
     }
 
-    pub async fn poll_ext_events(&mut self) -> Option<(&'static str, DynEvent)> {
-        let (module, event) = self.events.next().await?;
-        Some((module, DynEvent::Ext(event)))
-    }
-
-    pub async fn on_event(
+    pub async fn on_event_targeted(
         &mut self,
-        id: ParticipantId,
-        ws_messages: &mut Vec<Message>,
-        rabbitmq_messages: &mut Vec<(Option<ParticipantId>, String)>,
-        storage: &mut Storage,
-        invalidate_data: &mut bool,
+        ctx: DynEventCtx<'_>,
         module: &str,
-        dyn_event: DynEvent,
+        dyn_event: DynTargetedEvent,
     ) -> Result<(), NoSuchModuleError> {
         let module = self.modules.get_mut(module).ok_or(NoSuchModuleError(()))?;
 
-        let ctx = DynEventCtx {
-            id,
-            ws_messages,
-            rabbitmq_messages,
-            events: &mut self.events,
-            storage,
-            invalidate_data,
-        };
-
-        module.on_event(ctx, dyn_event).await;
+        if let Err(e) = module.on_event_targeted(ctx, dyn_event).await {
+            log::error!("Failed to handle event {:?}", e);
+        }
 
         Ok(())
+    }
+
+    pub async fn on_event_broadcast(
+        &mut self,
+        ctx: DynEventCtx<'_>,
+        dyn_event: DynBroadcastEvent<'_>,
+    ) {
+        for module in self.modules.values_mut() {
+            let ctx = DynEventCtx {
+                id: ctx.id,
+                ws_messages: ctx.ws_messages,
+                rabbitmq_messages: ctx.rabbitmq_messages,
+                events: ctx.events,
+                storage: ctx.storage,
+                invalidate_data: ctx.invalidate_data,
+            };
+
+            if let Err(e) = module.on_event_broadcast(ctx, dyn_event).await {
+                log::error!("Failed to handle event, {:?}", e);
+            }
+        }
     }
 
     pub async fn collect_participant_data(
@@ -79,7 +83,7 @@ impl Modules {
         storage: &mut Storage,
         participant: &mut Participant,
     ) -> Result<()> {
-        for (_, module) in &self.modules {
+        for module in self.modules.values() {
             module
                 .populate_frontend_data_for(storage, participant)
                 .await?;
@@ -97,24 +101,41 @@ impl Modules {
     }
 }
 
-pub enum DynEvent {
+#[derive(Debug)]
+pub enum DynTargetedEvent {
     WsMessage(Value),
     RabbitMqMessage(Value),
     Ext(Box<dyn Any + 'static>),
 }
 
-struct DynEventCtx<'ctx> {
-    id: ParticipantId,
-    ws_messages: &'ctx mut Vec<Message>,
-    rabbitmq_messages: &'ctx mut Vec<(Option<ParticipantId>, String)>,
-    events: &'ctx mut SelectAll<AnyStream>,
-    storage: &'ctx mut Storage,
-    invalidate_data: &'ctx mut bool,
+#[derive(Debug, Copy, Clone)]
+pub enum DynBroadcastEvent<'evt> {
+    ParticipantJoined(&'evt Participant),
+    ParticipantLeft(ParticipantId),
+    ParticipantUpdated(&'evt Participant),
+}
+
+pub struct DynEventCtx<'ctx> {
+    pub id: ParticipantId,
+    pub ws_messages: &'ctx mut Vec<Message>,
+    pub rabbitmq_messages: &'ctx mut Vec<(Option<ParticipantId>, String)>,
+    pub events: &'ctx mut SelectAll<AnyStream>,
+    pub storage: &'ctx mut Storage,
+    pub invalidate_data: &'ctx mut bool,
 }
 
 #[async_trait::async_trait(?Send)]
 trait ModuleCaller {
-    async fn on_event(&mut self, ctx: DynEventCtx<'_>, dyn_event: DynEvent);
+    async fn on_event_targeted(
+        &mut self,
+        ctx: DynEventCtx<'_>,
+        dyn_event: DynTargetedEvent,
+    ) -> Result<()>;
+    async fn on_event_broadcast(
+        &mut self,
+        ctx: DynEventCtx<'_>,
+        dyn_event: DynBroadcastEvent<'_>,
+    ) -> Result<()>;
     async fn populate_frontend_data_for(
         &self,
         storage: &mut Storage,
@@ -132,7 +153,11 @@ impl<M> ModuleCaller for ModuleCallerImpl<M>
 where
     M: SignalingModule,
 {
-    async fn on_event(&mut self, ctx: DynEventCtx<'_>, dyn_event: DynEvent) {
+    async fn on_event_targeted(
+        &mut self,
+        ctx: DynEventCtx<'_>,
+        dyn_event: DynTargetedEvent,
+    ) -> Result<()> {
         let ctx = ModuleContext {
             id: ctx.id,
             ws_messages: ctx.ws_messages,
@@ -144,20 +169,66 @@ where
         };
 
         match dyn_event {
-            DynEvent::WsMessage(msg) => match serde_json::from_value(msg) {
-                Ok(msg) => self.module.on_event(ctx, Event::WsMessage(msg)).await,
-                Err(e) => log::error!("Unable to parse message, {}", e),
-            },
-            DynEvent::RabbitMqMessage(msg) => match serde_json::from_value(msg) {
-                Ok(msg) => self.module.on_event(ctx, Event::RabbitMq(msg)).await,
-                Err(e) => log::error!("Failed to parse incoming rabbitmq message, {}", e),
-            },
-            DynEvent::Ext(ext) => {
+            DynTargetedEvent::WsMessage(msg) => {
+                let msg = serde_json::from_value(msg).context("Failed to parse message")?;
+                self.module.on_event(ctx, Event::WsMessage(msg)).await
+            }
+            DynTargetedEvent::RabbitMqMessage(msg) => {
+                let msg = serde_json::from_value(msg).context("Failed to parse message")?;
+                self.module.on_event(ctx, Event::RabbitMq(msg)).await
+            }
+            DynTargetedEvent::Ext(ext) => {
                 self.module
                     .on_event(ctx, Event::Ext(*ext.downcast().expect("invalid ext type")))
-                    .await;
+                    .await
             }
         }
+    }
+
+    async fn on_event_broadcast(
+        &mut self,
+        ctx: DynEventCtx<'_>,
+        dyn_event: DynBroadcastEvent<'_>,
+    ) -> Result<()> {
+        let ctx = ModuleContext {
+            id: ctx.id,
+            ws_messages: ctx.ws_messages,
+            rabbitmq_messages: ctx.rabbitmq_messages,
+            events: ctx.events,
+            storage: ctx.storage,
+            invalidate_data: ctx.invalidate_data,
+            m: PhantomData::<fn() -> M>,
+        };
+
+        match dyn_event {
+            DynBroadcastEvent::ParticipantJoined(participant) => {
+                if let Some(module_data) = participant.module_data.get(M::NAMESPACE) {
+                    let module_data = serde_json::from_value(module_data.clone())
+                        .context("Failed to parse module data")?;
+
+                    self.module
+                        .on_event(ctx, Event::ParticipantJoined(participant.id, module_data))
+                        .await?;
+                }
+            }
+            DynBroadcastEvent::ParticipantLeft(participant) => {
+                self.module
+                    .on_event(ctx, Event::ParticipantLeft(participant))
+                    .await?;
+            }
+            DynBroadcastEvent::ParticipantUpdated(participant) => {
+                if let Some(module_data) = participant.module_data.get(M::NAMESPACE) {
+                    let module_data = serde_json::from_value(module_data.clone())
+                        .context("Failed to parse module data")?;
+
+                    self.module
+                        .on_event(ctx, Event::ParticipantUpdated(participant.id, module_data))
+                        .await?;
+                }
+            }
+        }
+
+        Ok(())
     }
 
     async fn populate_frontend_data_for(
@@ -192,8 +263,9 @@ pub trait ModuleBuilder: Send + Sync {
     async fn build(
         &self,
         id: ParticipantId,
-        builder: &mut Modules,
+        modules: &mut Modules,
         storage: &mut Storage,
+        events: &mut SelectAll<AnyStream>,
         protocol: &'static str,
     );
 
@@ -216,15 +288,16 @@ where
     async fn build(
         &self,
         id: ParticipantId,
-        builder: &mut Modules,
+        modules: &mut Modules,
         storage: &mut Storage,
+        events: &mut SelectAll<AnyStream>,
         protocol: &'static str,
     ) {
         let ctx = ModuleContext {
             id,
             ws_messages: &mut vec![],
             rabbitmq_messages: &mut vec![],
-            events: &mut builder.events,
+            events,
             storage,
             invalidate_data: &mut false,
             m: PhantomData::<fn() -> M>,
@@ -232,7 +305,7 @@ where
 
         let module = M::init(ctx, &self.params, protocol).await;
 
-        builder.add_module(module).await
+        modules.add_module(module).await
     }
 
     fn clone_boxed(&self) -> Box<dyn ModuleBuilder> {

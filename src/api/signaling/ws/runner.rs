@@ -1,12 +1,16 @@
-use super::modules::{DynEvent, Modules, NoSuchModuleError};
+use super::modules::{DynTargetedEvent, Modules, NoSuchModuleError};
 use super::{Namespaced, WebSocket};
 use crate::api::signaling::storage::Storage;
+use crate::api::signaling::ws::modules::{
+    AnyStream, DynBroadcastEvent, DynEventCtx, ModuleBuilder,
+};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::{incoming, outgoing, rabbitmq};
 use crate::api::signaling::ParticipantId;
 use crate::db::users::User;
 use anyhow::{bail, Context, Result};
 use async_tungstenite::tungstenite::Message;
+use futures::stream::SelectAll;
 use futures::SinkExt;
 use lapin::options::QueueDeclareOptions;
 use serde::Serialize;
@@ -20,41 +24,16 @@ use uuid::Uuid;
 const PING_INTERVAL: Duration = Duration::from_secs(20);
 const WS_MSG_TIMEOUT: Duration = Duration::from_secs(30);
 
-pub struct Ws {
-    websocket: WebSocket,
-    // Websocket final message timeout, when reached the runner will exit
-    timeout: Pin<Box<Sleep>>,
-}
+const EXCHANGE: &str = "k3k-signaling";
 
-impl Ws {
-    async fn receive(&mut self) -> Result<Message> {
-        loop {
-            tokio::select! {
-                message = timeout(PING_INTERVAL, self.websocket.next()) => {
-                    match message {
-                        Ok(Some(Ok(msg))) => {
-                            // Received a message, reset timeout after handling as to avoid
-                            // triggering the sleep while handling the timeout
-                            self.timeout.set(sleep(WS_MSG_TIMEOUT));
+const NAMESPACE: &str = "control";
 
-                            return Ok(msg);
-                        }
-                        Ok(Some(Err(e))) => bail!(e),
-                        Ok(None) => bail!("WebSocket stream closed unexpectedly"),
-                        Err(_) => {
-                            // No messages for PING_INTERVAL amount of time
-                            self.websocket.send(Message::Ping(vec![])).await?;
-                        }
-                    }
-                }
-                _ = self.timeout.as_mut() => {
-                    bail!("Websocket timed out, peer no longer responds");
-                }
-            }
-        }
-    }
-}
-
+/// The websocket runner
+///
+/// As root of the websocket-task it is responsible to drive the websocket application,
+/// manage setup and teardown of redis storage, RabbitMQ queues and modules.
+///
+/// Also acts as `control` module which handles participant and room states.
 pub struct Runner {
     // participant id that the runner is connected to
     id: ParticipantId,
@@ -62,8 +41,12 @@ pub struct Runner {
     // ID of the room the participant is inside
     room: Uuid,
 
+    // Protocol being spoken
+    protocol: &'static str,
+
     // User behind the participant
-    user: User,
+    // Not used yet
+    _user: User,
 
     // The control data. Initialized when frontend send join
     control_data: Option<ControlData>,
@@ -73,6 +56,7 @@ pub struct Runner {
 
     // All registered and initialized modules
     modules: Modules,
+    events: SelectAll<AnyStream>,
 
     // Redis storage, which contains the state of all participants inside the room
     storage: Storage,
@@ -89,11 +73,12 @@ pub struct Runner {
 }
 
 impl Runner {
+    /// Initialize the runner. Sets up RabbitMQ queue and Redis storage
     pub async fn init(
         id: ParticipantId,
         room: Uuid,
+        protocol: &'static str,
         user: User,
-        modules: Modules,
         mut storage: Storage,
         rabbit_mq_channel: lapin::Channel,
         websocket: WebSocket,
@@ -101,8 +86,6 @@ impl Runner {
         // ==== SETUP RABBITMQ CHANNEL ====
         let participant_key = format!("k3k-signaling.room.{}.participant.{}", Uuid::nil(), id);
         let room_key = format!("k3k-signaling.room.{}", Uuid::nil());
-
-        let exchange_name = "k3k-signaling";
 
         let queue_options = QueueDeclareOptions {
             exclusive: false,
@@ -117,7 +100,7 @@ impl Runner {
 
         rabbit_mq_channel
             .exchange_declare(
-                exchange_name,
+                EXCHANGE,
                 lapin::ExchangeKind::Topic,
                 Default::default(),
                 Default::default(),
@@ -127,7 +110,7 @@ impl Runner {
         rabbit_mq_channel
             .queue_bind(
                 queue.name().as_str(),
-                exchange_name,
+                EXCHANGE,
                 &participant_key,
                 Default::default(),
                 Default::default(),
@@ -137,7 +120,7 @@ impl Runner {
         rabbit_mq_channel
             .queue_bind(
                 queue.name().as_str(),
-                exchange_name,
+                EXCHANGE,
                 &room_key,
                 Default::default(),
                 Default::default(),
@@ -147,7 +130,7 @@ impl Runner {
         let consumer = rabbit_mq_channel
             .basic_consume(
                 queue.name().as_str(),
-                // Visual aid
+                // Visual aid: set participant key as consumer tag
                 &participant_key,
                 Default::default(),
                 Default::default(),
@@ -157,25 +140,39 @@ impl Runner {
         // ==== SETUP BASIC REDIS DATA ====
 
         storage
-            .set_attribute("control", id, "user_id", user.id)
+            .set_attribute(NAMESPACE, id, "user_id", user.id)
             .await
             .context("Failed to set user id")?;
 
         Ok(Self {
             id,
             room,
-            user,
+            protocol,
+            _user: user,
             control_data: None,
             ws: Ws {
                 websocket,
                 timeout: Box::pin(sleep(WS_MSG_TIMEOUT)),
             },
-            modules,
+            modules: Modules::default(),
+            events: SelectAll::new(),
             storage,
             consumer,
             rabbit_mq_channel,
             exit: false,
         })
+    }
+
+    pub async fn add_module(&mut self, builder: &dyn ModuleBuilder) {
+        builder
+            .build(
+                self.id,
+                &mut self.modules,
+                &mut self.storage,
+                &mut self.events,
+                self.protocol,
+            )
+            .await;
     }
 
     pub async fn run(mut self) {
@@ -200,8 +197,8 @@ impl Runner {
                         }
                     }
                 }
-                Some((namespace, event)) = self.modules.poll_ext_events() => {
-                    self.module_event(namespace, event)
+                Some((namespace, any)) = self.events.next() => {
+                    self.module_event_targeted(namespace, DynTargetedEvent::Ext(any))
                         .await
                         .expect("Should not get events from unknown modules");
                 }
@@ -214,11 +211,11 @@ impl Runner {
             log::error!("Failed to remove participant from set, {}", e);
         }
 
-        if let Err(e) = self.storage.remove_all_attributes("control", self.id).await {
+        if let Err(e) = self.storage.remove_all_attributes(NAMESPACE, self.id).await {
             log::error!("Failed to remove all control attributes, {}", e);
         }
 
-        self.rabbitmq_send_typed("control", None, rabbitmq::Message::Left(self.id))
+        self.rabbitmq_send_typed(NAMESPACE, None, rabbitmq::Message::Left(self.id))
             .await;
 
         self.modules.destroy(&mut self.storage).await;
@@ -254,7 +251,7 @@ impl Runner {
             }
         };
 
-        if namespaced.namespace == "control" {
+        if namespaced.namespace == NAMESPACE {
             match serde_json::from_value(namespaced.payload) {
                 Ok(msg) => self.handle_control_msg(msg).await,
                 Err(e) => {
@@ -262,15 +259,14 @@ impl Runner {
 
                     self.ws_send(Message::Text(error("invalid json payload")))
                         .await;
-
-                    return;
                 }
             }
+            // Do not handle any other messages than control-join before joined
         } else if self.control_data.is_some() {
             if let Err(NoSuchModuleError(())) = self
-                .module_event(
+                .module_event_targeted(
                     namespaced.namespace,
-                    DynEvent::WsMessage(namespaced.payload),
+                    DynTargetedEvent::WsMessage(namespaced.payload),
                 )
                 .await
             {
@@ -290,8 +286,21 @@ impl Runner {
     async fn try_handle_control_msg(&mut self, msg: incoming::Message) -> Result<()> {
         match msg {
             incoming::Message::Join(join) => {
+                if join.display_name.is_empty() {
+                    self.ws_send(Message::Text(
+                        Namespaced {
+                            namespace: NAMESPACE,
+                            payload: outgoing::Message::Error {
+                                text: "invalid username",
+                            },
+                        }
+                        .to_json(),
+                    ))
+                    .await;
+                }
+
                 self.storage
-                    .set_attribute("control", self.id, "display_name", &join.display_name)
+                    .set_attribute(NAMESPACE, self.id, "display_name", &join.display_name)
                     .await
                     .context("Failed to set display_name")?;
 
@@ -313,12 +322,15 @@ impl Runner {
                 let mut participants = vec![];
 
                 for id in participant_set {
-                    participants.push(self.build_participant(id).await?);
+                    match self.build_participant(id).await {
+                        Ok(participant) => participants.push(participant),
+                        Err(e) => log::error!("Failed to build participant {}, {}", id, e),
+                    };
                 }
 
                 self.ws_send(Message::Text(
                     Namespaced {
-                        namespace: "control",
+                        namespace: NAMESPACE,
                         payload: outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
                             id: self.id,
                             participants,
@@ -328,7 +340,7 @@ impl Runner {
                 ))
                 .await;
 
-                self.rabbitmq_send_typed("control", None, rabbitmq::Message::Joined(self.id))
+                self.rabbitmq_send_typed(NAMESPACE, None, rabbitmq::Message::Joined(self.id))
                     .await;
             }
         }
@@ -344,11 +356,11 @@ impl Runner {
 
         let display_name: String = self
             .storage
-            .get_attribute("control", id, "display_name")
+            .get_attribute(NAMESPACE, id, "display_name")
             .await?;
 
         participant.module_data.insert(
-            String::from("control"),
+            String::from(NAMESPACE),
             serde_json::to_value(ControlData { display_name })
                 .expect("Failed to convert ControlData to serde_json::Value"),
         );
@@ -362,6 +374,11 @@ impl Runner {
     }
 
     async fn handle_consumer_msg(&mut self, _: lapin::Channel, delivery: lapin::message::Delivery) {
+        // Do not handle any messages before the user joined the room
+        if self.control_data.is_none() {
+            return;
+        }
+
         if let Err(e) = delivery.acker.ack(Default::default()).await {
             log::warn!("Failed to ACK incoming delivery, {}", e);
         }
@@ -374,7 +391,7 @@ impl Runner {
             }
         };
 
-        if namespaced.namespace == "control" {
+        if namespaced.namespace == NAMESPACE {
             let msg = match serde_json::from_value::<rabbitmq::Message>(namespaced.payload) {
                 Ok(msg) => msg,
                 Err(e) => {
@@ -387,8 +404,14 @@ impl Runner {
                 log::error!("Failed to handle incoming rabbitmq control msg, {}", e);
                 return;
             }
-        } else {
-            todo!("RabbitMQ messages for modules")
+        } else if let Err(NoSuchModuleError(())) = self
+            .module_event_targeted(
+                namespaced.namespace,
+                DynTargetedEvent::RabbitMqMessage(namespaced.payload),
+            )
+            .await
+        {
+            log::warn!("Got invalid rabbit-mq message");
         }
     }
 
@@ -403,9 +426,12 @@ impl Runner {
 
                 let participant = self.build_participant(id).await?;
 
+                self.module_event_broadcast(DynBroadcastEvent::ParticipantJoined(&participant))
+                    .await;
+
                 self.ws_send(Message::Text(
                     Namespaced {
-                        namespace: "control",
+                        namespace: NAMESPACE,
                         payload: outgoing::Message::Joined(participant),
                     }
                     .to_json(),
@@ -417,9 +443,12 @@ impl Runner {
                     return Ok(());
                 }
 
+                self.module_event_broadcast(DynBroadcastEvent::ParticipantLeft(id))
+                    .await;
+
                 self.ws_send(Message::Text(
                     Namespaced {
-                        namespace: "control",
+                        namespace: NAMESPACE,
                         payload: outgoing::Message::Left(outgoing::AssociatedParticipant { id }),
                     }
                     .to_json(),
@@ -433,9 +462,12 @@ impl Runner {
 
                 let participant = self.build_participant(id).await?;
 
+                self.module_event_broadcast(DynBroadcastEvent::ParticipantUpdated(&participant))
+                    .await;
+
                 self.ws_send(Message::Text(
                     Namespaced {
-                        namespace: "control",
+                        namespace: NAMESPACE,
                         payload: outgoing::Message::Update(participant),
                     }
                     .to_json(),
@@ -447,6 +479,7 @@ impl Runner {
         Ok(())
     }
 
+    /// Send a typed message with a namespace via rabbitmq, aborts task if failed
     async fn rabbitmq_send_typed<T>(
         &mut self,
         namespace: &str,
@@ -463,6 +496,7 @@ impl Runner {
         self.rabbitmq_send(recipient, message.to_json()).await;
     }
 
+    /// Send raw message via rabbitmq, aborts task if failed
     async fn rabbitmq_send(&mut self, recipient: Option<ParticipantId>, message: String) {
         let routing_key = if let Some(recipient) = recipient {
             format!("k3k-signaling.room.{}.participant.{}", self.room, recipient)
@@ -487,6 +521,7 @@ impl Runner {
         }
     }
 
+    /// Send message via websocket, abort task if failed
     async fn ws_send(&mut self, message: Message) {
         if let Err(e) = self.ws.websocket.send(message).await {
             log::error!("Failed to send websocket message, {}", e);
@@ -494,25 +529,27 @@ impl Runner {
         }
     }
 
-    async fn module_event(
+    /// Dispatch owned event to a single module
+    async fn module_event_targeted(
         &mut self,
         module: &str,
-        dyn_event: DynEvent,
+        dyn_event: DynTargetedEvent,
     ) -> Result<(), NoSuchModuleError> {
         let mut ws_messages = vec![];
         let mut rabbitmq_messages = vec![];
         let mut invalidate_data = false;
 
+        let ctx = DynEventCtx {
+            id: self.id,
+            ws_messages: &mut ws_messages,
+            rabbitmq_messages: &mut rabbitmq_messages,
+            events: &mut self.events,
+            storage: &mut self.storage,
+            invalidate_data: &mut invalidate_data,
+        };
+
         self.modules
-            .on_event(
-                self.id,
-                &mut ws_messages,
-                &mut rabbitmq_messages,
-                &mut self.storage,
-                &mut invalidate_data,
-                module,
-                dyn_event,
-            )
+            .on_event_targeted(ctx, module, dyn_event)
             .await?;
 
         for ws_message in ws_messages {
@@ -524,13 +561,42 @@ impl Runner {
         }
 
         if invalidate_data {
-            self.rabbitmq_send_typed("control", None, rabbitmq::Message::Update(self.id))
+            self.rabbitmq_send_typed(NAMESPACE, None, rabbitmq::Message::Update(self.id))
                 .await;
-
-            // TODO Collect self participant and send update?
         }
 
         Ok(())
+    }
+
+    /// Dispatch copyable event to all modules
+    async fn module_event_broadcast(&mut self, dyn_event: DynBroadcastEvent<'_>) {
+        let mut ws_messages = vec![];
+        let mut rabbitmq_messages = vec![];
+        let mut invalidate_data = false;
+
+        let ctx = DynEventCtx {
+            id: self.id,
+            ws_messages: &mut ws_messages,
+            rabbitmq_messages: &mut rabbitmq_messages,
+            events: &mut self.events,
+            storage: &mut self.storage,
+            invalidate_data: &mut invalidate_data,
+        };
+
+        self.modules.on_event_broadcast(ctx, dyn_event).await;
+
+        for ws_message in ws_messages {
+            self.ws_send(ws_message).await;
+        }
+
+        for (recipient, rabbitmq_message) in rabbitmq_messages {
+            self.rabbitmq_send(recipient, rabbitmq_message).await;
+        }
+
+        if invalidate_data {
+            self.rabbitmq_send_typed(NAMESPACE, None, rabbitmq::Message::Update(self.id))
+                .await;
+        }
     }
 }
 
@@ -545,4 +611,40 @@ fn error(text: &str) -> String {
 #[derive(Serialize)]
 struct ControlData {
     display_name: String,
+}
+
+/// Helper websocket abstraction that pings the participants in regular intervals
+struct Ws {
+    websocket: WebSocket,
+    // Websocket final message timeout, when reached the runner will exit
+    timeout: Pin<Box<Sleep>>,
+}
+
+impl Ws {
+    async fn receive(&mut self) -> Result<Message> {
+        loop {
+            tokio::select! {
+                message = timeout(PING_INTERVAL, self.websocket.next()) => {
+                    match message {
+                        Ok(Some(Ok(msg))) => {
+                            // Received a message, reset timeout after handling as to avoid
+                            // triggering the sleep while handling the timeout
+                            self.timeout.set(sleep(WS_MSG_TIMEOUT));
+
+                            return Ok(msg);
+                        }
+                        Ok(Some(Err(e))) => bail!(e),
+                        Ok(None) => bail!("WebSocket stream closed unexpectedly"),
+                        Err(_) => {
+                            // No messages for PING_INTERVAL amount of time
+                            self.websocket.send(Message::Ping(vec![])).await?;
+                        }
+                    }
+                }
+                _ = self.timeout.as_mut() => {
+                    bail!("Websocket timed out, peer no longer responds");
+                }
+            }
+        }
+    }
 }

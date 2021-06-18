@@ -75,7 +75,7 @@ impl std::fmt::Display for MediaSessionType {
 ///
 /// Used as a key to be able to support multiple media sessions per participant.
 /// Used in the description of a Janus room as fallback.
-#[derive(Hash, Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct MediaSessionKey(pub ParticipantId, pub MediaSessionType);
 
 /// We use this mapping in the description of a Janus room

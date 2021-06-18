@@ -87,7 +87,7 @@ async fn run_service(settings: Settings) -> Result<()> {
                 App::new()
                     .app_data(db_ctx)
                     .app_data(oidc_ctx)
-                    .app_data(shutdown.subscribe())
+                    .data(shutdown.subscribe())
                     .service(api::internal::introspect)
             })
         };
@@ -148,7 +148,7 @@ async fn run_service(settings: Settings) -> Result<()> {
                     .app_data(db_ctx.clone())
                     .app_data(oidc_ctx.clone())
                     .app_data(turn_servers.clone())
-                    .app_data(shutdown.subscribe())
+                    .data(shutdown.subscribe())
                     .service(v1_scope(db_ctx, oidc_ctx))
                     .configure(application.configure())
             })

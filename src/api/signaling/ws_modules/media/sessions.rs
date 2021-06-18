@@ -1,12 +1,13 @@
 use crate::api::signaling::mcu::{
     JanusMcu, JanusPublisher, JanusSubscriber, MediaSessionKey, MediaSessionType, TrickleMessage,
 };
+use crate::api::signaling::ws_modules::media::MediaSessionState;
 use crate::api::signaling::ParticipantId;
 use anyhow::{ensure, Result};
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 
-pub struct Media {
+pub struct MediaSessions {
     id: ParticipantId,
 
     // All publishers that belong to the participant
@@ -19,10 +20,8 @@ pub struct Media {
     sender: mpsc::Sender<(MediaSessionKey, TrickleMessage)>,
 }
 
-impl Media {
+impl MediaSessions {
     pub fn new(id: ParticipantId, sender: mpsc::Sender<(MediaSessionKey, TrickleMessage)>) -> Self {
-        let (sender, events) = mpsc::channel(4);
-
         Self {
             id,
             publishers: Default::default(),
@@ -80,8 +79,7 @@ impl Media {
             .new_subscriber(Some(self.sender.clone()), participant, media_session_type)
             .await?;
 
-        // Todo v4+ Can we make the StreamKey copy? Can we guarantee that this holds in the future?
-        self.subscribers.insert(key.clone(), subscriber);
+        self.subscribers.insert(key, subscriber);
 
         Ok(self.subscribers.get(&key).expect("Insert failed"))
     }
@@ -106,11 +104,10 @@ impl Media {
     ///
     /// To remove any subscribers that might be subscribed to a room that has no publisher or has
     /// been removed this function must be called with the updated participant's `publishing` field
-    // TODO FIX THIS FUNCTION
-    pub fn remove_dangling_subscribers<T>(
+    pub fn remove_dangling_subscriber(
         &mut self,
         participant: ParticipantId,
-        lookup: &HashMap<MediaSessionType, T>,
+        lookup: &HashMap<MediaSessionType, MediaSessionState>,
     ) {
         self.subscribers.retain(|stream_key, _| {
             if stream_key.0 == participant {

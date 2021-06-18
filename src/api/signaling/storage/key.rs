@@ -17,14 +17,6 @@ pub enum RedisKey<'s> {
     RoomParticipant(Uuid, ParticipantId, Cow<'s, str>),
 }
 
-impl RedisKey<'_> {
-    pub fn room(&self) -> &Uuid {
-        match self {
-            RedisKey::RoomParticipants(room) | RedisKey::RoomParticipant(room, ..) => room,
-        }
-    }
-}
-
 impl fmt::Display for RedisKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
