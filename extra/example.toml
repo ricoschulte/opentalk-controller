@@ -1,11 +1,9 @@
 [logging]
-# Available levels (ERROR, WARN, INFO, DEBUG)
-# level = "WARN"
+# Available levels (ERROR, WARN, INFO, DEBUG, TRACE)
+#level = "WARN"
 
-# Specifiy a path to redirect output to a log file.
-# If unset `stdout` is used.
-# On crash an error description will be displayed on `stdout` in any case.
-# file = "/var/log/k3k-controller.log"
+# Specifiy a path for a log file.
+#file = "/var/log/k3k-controller.log"
 
 [database]
 # Database server address.
@@ -19,12 +17,12 @@ name = "migration_test"
 
 # Maximum number of connections allowed to the server.
 # Defaults to 100 which is the default of postgres.
-# max_connections = 100
+#max_connections = 100
 
 # Minimum number of connections that are at least open.
 # If load increases the controller will open new connection, at most max_connections many.
 # Defaults to 10
-# min_idle_connections = 10
+#min_idle_connections = 10
 
 # Database user.
 user = "postgres"

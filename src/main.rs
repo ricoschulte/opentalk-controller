@@ -28,12 +28,6 @@ async fn main() -> Result<()> {
     setup_logging(&settings.logging)?;
     log::debug!("Starting K3K Controller with settings {:?}", settings);
 
-    // Run database migration
-    if let Err(e) = db::migrations::start_migration(&settings.database).await {
-        log::error!(target: "db", "Failed to migrate database: {}", e);
-        return Err(e);
-    }
-
     match run_service(settings).await {
         Ok(()) => Ok(()),
         Err(e) => {
@@ -45,6 +39,11 @@ async fn main() -> Result<()> {
 }
 
 async fn run_service(settings: Settings) -> Result<()> {
+    if let Err(e) = db::migrations::start_migration(&settings.database).await {
+        log::error!(target: "db", "Failed to migrate database: {}", e);
+        return Err(e);
+    }
+
     let db_ctx = Data::new(
         DbInterface::connect(settings.database).context("Failed to connect to database")?,
     );
@@ -168,9 +167,10 @@ fn setup_logging(logging: &Logging) -> Result<()> {
     let logger = fern::Dispatch::new()
         .format(|out, message, record| {
             out.finish(format_args!(
-                "[{}][{}] {}",
-                record.target(),
+                "{}[{}][{}] {}",
+                chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
                 record.level(),
+                record.target(),
                 message
             ))
         })
@@ -186,8 +186,21 @@ fn setup_logging(logging: &Logging) -> Result<()> {
 
             logger.chain(log_file)
         }
-        None => logger.chain(std::io::stdout()),
+        None => logger,
     }
+    .chain(
+        fern::Dispatch::new()
+            .filter(|metadata| {
+                // Reject messages with the `Error` log level.
+                metadata.level() != log::LevelFilter::Error
+            })
+            .chain(std::io::stdout()),
+    )
+    .chain(
+        fern::Dispatch::new()
+            .level(log::LevelFilter::Error)
+            .chain(std::io::stderr()),
+    )
     .apply()
     .context("Failed to setup logging utility")
 }
