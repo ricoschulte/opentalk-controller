@@ -78,6 +78,7 @@ pub struct Runner {
 
 impl Runner {
     /// Initialize the runner. Sets up RabbitMQ queue and Redis storage
+    #[allow(clippy::too_many_arguments)]
     pub async fn init(
         id: ParticipantId,
         room: Uuid,

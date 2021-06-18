@@ -1,11 +1,11 @@
-pub use incoming::{PluginData, Success};
 use serde::{self, Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};
-
 use crate::error;
 
 pub mod incoming;
 pub mod outgoing;
+
+pub use incoming::{PluginData, Success};
 
 pub trait PluginRequest: Into<outgoing::PluginBody> {
     type PluginResponse: TryFrom<incoming::PluginData>;

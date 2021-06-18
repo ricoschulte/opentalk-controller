@@ -60,12 +60,12 @@ mod test {
 
     #[test]
     fn update() {
-        let expected = r#"{"message":"update","id":"00000000-0000-0000-0000-000000000000","display_name":"Hans","publishing":{}}"#;
+        let expected = r#"{"message":"update","id":"00000000-0000-0000-0000-000000000000"}"#;
 
-        let produced = serde_json::to_string(&Message::Update(Participant::new(
-            ParticipantId::nil(),
-            "Hans".into(),
-        )))
+        let produced = serde_json::to_string(&Message::Update(Participant {
+            id: ParticipantId::nil(),
+            module_data: Default::default(),
+        }))
         .unwrap();
 
         assert_eq!(expected, produced);
@@ -73,12 +73,12 @@ mod test {
 
     #[test]
     fn joined() {
-        let expected = r#"{"message":"joined","id":"00000000-0000-0000-0000-000000000000","display_name":"Hans","publishing":{}}"#;
+        let expected = r#"{"message":"joined","id":"00000000-0000-0000-0000-000000000000"}"#;
 
-        let produced = serde_json::to_string(&Message::Joined(Participant::new(
-            ParticipantId::nil(),
-            "Hans".into(),
-        )))
+        let produced = serde_json::to_string(&Message::Joined(Participant {
+            id: ParticipantId::nil(),
+            module_data: Default::default(),
+        }))
         .unwrap();
 
         assert_eq!(expected, produced);

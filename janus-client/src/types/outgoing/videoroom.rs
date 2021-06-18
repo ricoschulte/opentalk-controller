@@ -1,7 +1,6 @@
 //! Outgoing VideoRoom plugin datatypes
 //!
 use std::path::PathBuf;
-
 use crate::{
     incoming,
     outgoing::PluginBody,

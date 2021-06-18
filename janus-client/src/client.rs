@@ -4,7 +4,6 @@ use std::{
     sync::{Arc, Weak},
     time::Duration,
 };
-
 use futures::StreamExt;
 use lapin::{
     options::{BasicAckOptions, BasicNackOptions},
