@@ -87,7 +87,7 @@ async fn run_service(settings: Settings) -> Result<()> {
                 App::new()
                     .app_data(db_ctx)
                     .app_data(oidc_ctx)
-                    .data(shutdown.subscribe())
+                    .data(shutdown.clone())
                     .service(api::internal::introspect)
             })
         };
@@ -148,7 +148,7 @@ async fn run_service(settings: Settings) -> Result<()> {
                     .app_data(db_ctx.clone())
                     .app_data(oidc_ctx.clone())
                     .app_data(turn_servers.clone())
-                    .data(shutdown.subscribe())
+                    .data(shutdown.clone())
                     .service(v1_scope(db_ctx, oidc_ctx))
                     .configure(application.configure())
             })
@@ -206,18 +206,18 @@ async fn run_service(settings: Settings) -> Result<()> {
 
         // ==== Begin shutdown sequence ====
 
-        // First stop HTTP servers
-        ext_server.stop(true).await;
-        int_server.stop(true).await;
-
         // Send shutdown signals to all tasks within our application
         if shutdown.send(()).is_err() {
             return Ok(());
         }
 
+        // then stop HTTP servers
+        ext_server.stop(true).await;
+        int_server.stop(true).await;
+
         // Check in a 1 second interval for 5 seconds if all tasks have exited
         // by inspecting the receiver count of the broadcast-channel
-        for _ in 0..5 {
+        for _ in 0..10 {
             let receiver_count = shutdown.receiver_count();
 
             if receiver_count > 0 {

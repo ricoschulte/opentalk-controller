@@ -31,6 +31,7 @@ mod modules;
 mod runner;
 
 pub use echo::Echo;
+use tokio::sync::broadcast;
 
 type WebSocket = WebSocketStream<ActixTungsteniteAdapter>;
 
@@ -245,8 +246,9 @@ impl HttpModule for SignalingHttpModule {
 
         app.service(web::scope("").route(
             "/signaling",
-            web::get().to(move |db_ctx, oidc_ctx, req, stream| {
+            web::get().to(move |shutdown, db_ctx, oidc_ctx, req, stream| {
                 ws_service(
+                    shutdown,
                     db_ctx,
                     oidc_ctx,
                     redis_conn.clone(),
@@ -263,6 +265,7 @@ impl HttpModule for SignalingHttpModule {
 
 #[allow(clippy::too_many_arguments)]
 async fn ws_service(
+    shutdown: Data<broadcast::Sender<()>>,
     db_ctx: Data<DbInterface>,
     oidc_ctx: Data<OidcContext>,
     redis_conn: MultiplexedConnection,
@@ -333,6 +336,7 @@ async fn ws_service(
         Storage::new(redis_conn, room),
         rabbit_mq_channel,
         websocket,
+        shutdown.subscribe(),
     )
     .await
     {

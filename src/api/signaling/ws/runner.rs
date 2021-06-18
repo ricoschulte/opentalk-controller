@@ -17,6 +17,7 @@ use serde::Serialize;
 use serde_json::Value;
 use std::pin::Pin;
 use std::time::Duration;
+use tokio::sync::broadcast;
 use tokio::time::{sleep, timeout, Sleep};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
@@ -68,6 +69,9 @@ pub struct Runner {
     // RabbitMQ channel to send events
     rabbit_mq_channel: lapin::Channel,
 
+    // global application shutdown signal
+    shutdown_sig: broadcast::Receiver<()>,
+
     // When set to true the runner will gracefully exit on next loop
     exit: bool,
 }
@@ -82,13 +86,13 @@ impl Runner {
         mut storage: Storage,
         rabbit_mq_channel: lapin::Channel,
         websocket: WebSocket,
+        shutdown_sig: broadcast::Receiver<()>,
     ) -> Result<Self> {
         // ==== SETUP RABBITMQ CHANNEL ====
         let participant_key = format!("k3k-signaling.room.{}.participant.{}", Uuid::nil(), id);
         let room_key = format!("k3k-signaling.room.{}", Uuid::nil());
 
         let queue_options = QueueDeclareOptions {
-            exclusive: false,
             auto_delete: true,
             ..Default::default()
         };
@@ -159,6 +163,7 @@ impl Runner {
             storage,
             consumer,
             rabbit_mq_channel,
+            shutdown_sig,
             exit: false,
         })
     }
@@ -201,6 +206,9 @@ impl Runner {
                     self.module_event_targeted(namespace, DynTargetedEvent::Ext(any))
                         .await
                         .expect("Should not get events from unknown modules");
+                }
+                _ = self.shutdown_sig.recv() => {
+                    self.exit = true;
                 }
             }
         }
