@@ -59,6 +59,7 @@ tokio-amqp = "1.0.0"
 
 ### Redis
 redis = { version = "0.20", features = ["tokio-comp"] }
+url = "2"
 
 ### OpenID Connect & JWT
 openidconnect = { version = "2.0", features = ["reqwest"] }

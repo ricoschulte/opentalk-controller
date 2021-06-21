@@ -92,6 +92,7 @@ pub struct Settings {
     pub oidc: Oidc,
     pub http: Http,
     pub turn: Option<Turn>,
+    pub redis: RedisConfig,
     pub rabbit_mq: RabbitMqConfig,
     pub room_server: JanusMcuConfig,
     #[serde(default = "default_logging")]
@@ -199,6 +200,11 @@ pub struct TurnServer {
     // TURN URIs for this TURN server following rfc7065
     pub uris: Vec<String>,
     pub pre_shared_key: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RedisConfig {
+    pub url: url::Url,
 }
 
 #[derive(Debug, Deserialize)]

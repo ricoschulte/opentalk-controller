@@ -18,6 +18,7 @@ use std::time::Duration;
 use tokio::signal::ctrl_c;
 use tokio::sync::broadcast;
 use tokio::time::sleep;
+use tokio_amqp::LapinTokioExt;
 
 mod api;
 mod db;
@@ -54,7 +55,7 @@ async fn run_service(settings: Settings) -> Result<()> {
     // Connect to RabbitMQ
     let rabbitmq = lapin::Connection::connect(
         &settings.rabbit_mq.url,
-        lapin::ConnectionProperties::default(),
+        lapin::ConnectionProperties::default().with_tokio(),
     )
     .await
     .context("failed to connect to rabbitmq")?;
@@ -93,7 +94,7 @@ async fn run_service(settings: Settings) -> Result<()> {
         };
 
         // Build redis client. Does not check if redis is reachable.
-        let redis = redis::Client::open("redis://127.0.0.1:6379/").context("Invalid redis url")?;
+        let redis = redis::Client::open(settings.redis.url).context("Invalid redis url")?;
 
         let redis_conn = redis
             .get_multiplexed_async_connection()

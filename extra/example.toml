@@ -67,3 +67,7 @@ from_janus_routing_key = "from-janus"
 [rabbit_mq]
 # The URL to use to connect to the rabbit mq broker
 # url = "amqp://username:password@host/%2F"
+
+[redis]
+# Redis URL used to connect the redis server
+url = "redis://localhost:6379/"
