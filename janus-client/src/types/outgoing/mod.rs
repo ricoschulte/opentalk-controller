@@ -56,6 +56,7 @@ pub(crate) enum JanusRequest {
     Detach {
         session_id: SessionId,
         handle_id: HandleId,
+        transaction: TransactionId,
     },
     /// Destroys a session
     Destroy { session_id: SessionId },

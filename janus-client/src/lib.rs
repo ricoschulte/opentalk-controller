@@ -94,7 +94,7 @@
 
 use crate::client::{InnerClient, InnerHandle, InnerSession};
 use crate::outgoing::TrickleMessage;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::sleep;
@@ -190,14 +190,6 @@ impl Session {
         }
     }
 
-    /// Removes the handle from this session
-    ///
-    /// The Janus detach command is only sent, when all references to this handle are dropped.
-    /// This function only removes the Arc from the internal tracking map
-    pub fn detach_handle(&self, id: &HandleId) {
-        self.inner.detach_handle(id);
-    }
-
     /// Destroys the session.
     ///
     /// # Danger:
@@ -282,5 +274,43 @@ impl Handle {
     /// Sends the candidate SDP string to Janus
     pub async fn trickle(&self, msg: TrickleMessage) -> Result<(), error::Error> {
         self.inner.trickle(msg).await
+    }
+
+    /// Detaches this handle
+    ///
+    /// # Danger:
+    ///
+    /// Assumes that all other occurrences of the same Handle will be dropped.
+    /// Waits for the strong reference count to reach zero and sends a Detach request.
+    pub async fn detach(mut self) -> Result<(), error::Error> {
+        let client = self.inner.client.upgrade().expect(
+            "Failed Weak::upgrade. Expected the client reference to be still valid",
+        );
+
+        let sessions = client.sessions.lock();
+
+        if let Some(session) = sessions.get(&self.inner.session_id).and_then(Weak::upgrade) {
+            session.handles.lock().remove(&self.inner.id);
+        }
+
+        drop(sessions);
+
+        loop {
+            let strong_count = Arc::strong_count(&self.inner);
+
+            log::debug!(
+                "Detaching Handle({}), waiting strong_count to reach 1 (is {})",
+                self.inner.id,
+                strong_count
+            );
+
+            if strong_count == 1 {
+                let inner = Arc::get_mut(&mut self.inner).expect("already checked strong_count");
+
+                return inner.detach(client).await;
+            } else {
+                sleep(Duration::from_millis(100)).await;
+            }
+        }
     }
 }

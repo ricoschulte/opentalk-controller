@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::{interval, sleep};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
@@ -32,7 +32,9 @@ pub struct JanusMcu {
 
     _gw: janus_client::Client,
 
-    shutdown: broadcast::Sender<()>,
+    /// Shutdown signal issued by the MCU for the janus-client receive task, since that is
+    /// needed for teardown AFTER receiving the app shutdown signal.
+    mcu_shutdown: broadcast::Sender<()>,
 
     /// Stores the room ids?
     publisher_room_ids: Mutex<HashMap<MediaSessionKey, JanusRoomId>>,
@@ -45,8 +47,9 @@ impl JanusMcu {
     pub async fn connect(
         config: settings::JanusMcuConfig,
         channel: lapin::Channel,
-        shutdown: broadcast::Sender<()>,
     ) -> Result<Self> {
+        let (mcu_shutdown, _) = broadcast::channel(1);
+
         let rabbit_mq_config = janus_client::RabbitMqConfig::new_from_channel(
             channel,
             config.connection.to_janus_queue,
@@ -55,7 +58,8 @@ impl JanusMcu {
             config.connection.from_janus_routing_key,
             TAG.to_owned(),
         );
-        let (gw, janus_stream) = janus_client::Client::new(rabbit_mq_config, shutdown.clone())
+
+        let (gw, janus_stream) = janus_client::Client::new(rabbit_mq_config, mcu_shutdown.clone())
             .await
             .context("Failed to create janus_client")?;
 
@@ -64,7 +68,7 @@ impl JanusMcu {
             .await
             .context("Failed to create session")?;
 
-        let mut shutdown_sig = shutdown.subscribe();
+        let mut shutdown_sig = mcu_shutdown.subscribe();
 
         tokio::spawn(async move {
             let mut stream = ReceiverStream::new(janus_stream);
@@ -87,7 +91,7 @@ impl JanusMcu {
             max_screen_bitrate: config.max_screen_bitrate,
             session,
             _gw: gw,
-            shutdown,
+            mcu_shutdown,
             publisher_room_ids: Mutex::new(HashMap::new()),
             next_client_id: AtomicU64::new(0),
         };
@@ -99,7 +103,7 @@ impl JanusMcu {
 
     pub fn start(&self) -> Result<()> {
         let session = self.session.clone();
-        let mut shutdown_sig = self.shutdown.subscribe();
+        let mut shutdown_sig = self.mcu_shutdown.subscribe();
 
         // spawn a task that sends a keep-alive message to keep the session alive
         tokio::spawn(async move {
@@ -122,6 +126,8 @@ impl JanusMcu {
     }
 
     pub async fn destroy(&mut self) -> Result<()> {
+        let _ = self.mcu_shutdown.send(());
+
         self.session.destroy().await?;
 
         Ok(())
@@ -141,28 +147,26 @@ impl JanusMcu {
 
         let client_id = self.next_client_id();
 
+        let (destroy, destroy_sig) = oneshot::channel();
+
         let publisher = JanusPublisher {
-            session: self.session.clone(),
             handle: handle.clone(),
             room_id,
-            media_session_type,
-            participant_id,
+            destroy,
         };
 
         self.publisher_room_ids
             .lock()
             .insert(MediaSessionKey(participant_id, media_session_type), room_id);
 
-        tokio::spawn(async move {
-            JanusPublisher::run(
-                client_id,
-                participant_id,
-                media_session_type,
-                handle,
-                listener,
-            )
-            .await
-        });
+        tokio::spawn(JanusPublisher::run(
+            client_id,
+            participant_id,
+            media_session_type,
+            handle,
+            listener,
+            destroy_sig,
+        ));
 
         Ok(publisher)
     }
@@ -180,17 +184,24 @@ impl JanusMcu {
 
         let client_id = self.next_client_id();
 
+        let (destroy, destroy_sig) = oneshot::channel();
+
         let subscriber = JanusSubscriber {
-            session: self.session.clone(),
             handle: handle.clone(),
             room_id,
             media_session_type,
             publisher,
+            destroy,
         };
 
-        tokio::spawn(async move {
-            JanusSubscriber::run(client_id, publisher, media_session_type, handle, listener).await
-        });
+        tokio::spawn(JanusSubscriber::run(
+            client_id,
+            publisher,
+            media_session_type,
+            handle,
+            listener,
+            destroy_sig,
+        ));
 
         Ok(subscriber)
     }
@@ -346,12 +357,9 @@ impl JanusMcu {
 }
 
 pub struct JanusPublisher {
-    session: janus_client::Session,
     handle: janus_client::Handle,
     room_id: JanusRoomId,
-    media_session_type: MediaSessionType,
-
-    participant_id: ParticipantId,
+    destroy: oneshot::Sender<()>,
 }
 
 impl JanusPublisher {
@@ -385,6 +393,23 @@ impl JanusPublisher {
         }
     }
 
+    pub async fn destroy(self) -> Result<()> {
+        self.handle
+            .send(janus_client::types::outgoing::VideoRoomPluginDestroy {
+                room: self.room_id,
+                secret: None,
+                permanent: None,
+                token: None,
+            })
+            .await?;
+
+        let _ = self.destroy.send(());
+
+        self.handle.detach().await?;
+
+        Ok(())
+    }
+
     /// Event handler for a Publisher
     ///
     /// Stops when all Senders of the handle [Receiver](tokio::sync::broadcast::Receiver) are dropped.
@@ -394,13 +419,26 @@ impl JanusPublisher {
         media_session_type: MediaSessionType,
         handle: janus_client::Handle,
         listener: Option<mpsc::Sender<(MediaSessionKey, TrickleMessage)>>,
+        mut destroy_sig: oneshot::Receiver<()>,
     ) {
         let mut stream = BroadcastStream::new(handle.subscribe());
-        while let Some(data) = stream.next().await {
-            log::debug!("Subscriber got msg:{:?}", data);
-            match data {
-                Ok(e) => {
-                    match e.as_ref() {
+
+        loop {
+            tokio::select! {
+                _ = &mut destroy_sig => {
+                    return;
+                }
+                message = stream.next() => {
+                    let message = match message {
+                        Some(Ok(message)) => message,
+                        Some(Err(BroadcastStreamRecvError::Lagged(n))) => {
+                            log::error!("JanusSubscriber run task dropped {} messages", n);
+                            continue;
+                        }
+                        None => return,
+                    };
+
+                    match &*message {
                         janus_client::JanusMessage::Event(event) => {
                             let janus_client::incoming::Event { plugindata, .. } = event;
                             if let janus_client::PluginData::VideoRoom(plugindata) = plugindata {
@@ -457,59 +495,21 @@ impl JanusPublisher {
                             }
                         }
                         _ => {
-                            log::debug!("Received unwelcomed Event for handle: {}", handle.id());
+                            log::debug!("Received unwelcome Event for handle: {}", handle.id());
                         }
                     }
                 }
-                Err(BroadcastStreamRecvError::Lagged(_)) => {
-                    panic!("Receiver lagged behind. Increase channel size")
-                }
             }
         }
-        log::trace!("Broadcast Stream for this JanusPublisher stopped. Exiting run method");
-    }
-}
-
-impl Drop for JanusPublisher {
-    fn drop(&mut self) {
-        let rt = if let Ok(rt) = tokio::runtime::Handle::try_current() {
-            rt
-        } else {
-            log::error!(
-                "Could not clean up resources for Handle({}|{}) (runtime stopped)",
-                self.participant_id,
-                self.media_session_type
-            );
-
-            return;
-        };
-
-        let handle = self.handle.clone();
-        let room_id = self.room_id;
-        let session = self.session.clone();
-
-        rt.spawn(async move {
-            handle
-                .send(janus_client::types::outgoing::VideoRoomPluginDestroy {
-                    room: room_id,
-                    secret: None,
-                    permanent: None,
-                    token: None,
-                })
-                .await
-                .expect("Failed to send VideoRoomPluginDestroy on drop");
-
-            session.detach_handle(&handle.id())
-        });
     }
 }
 
 pub struct JanusSubscriber {
-    session: janus_client::Session,
     handle: janus_client::Handle,
     room_id: JanusRoomId,
     media_session_type: MediaSessionType,
     publisher: ParticipantId,
+    destroy: oneshot::Sender<()>,
 }
 
 impl JanusSubscriber {
@@ -544,6 +544,14 @@ impl JanusSubscriber {
             }
             _ => panic!("Invalid request passed to JanusSubscriber::send_message"),
         }
+    }
+
+    pub async fn destroy(self) -> Result<()> {
+        let _ = self.destroy.send(());
+
+        self.handle.detach().await?;
+
+        Ok(())
     }
 
     /// Joins the room of the publisher this [JanusSubscriber](JanusSubscriber) is subscriber to
@@ -627,12 +635,26 @@ impl JanusSubscriber {
         media_session_type: MediaSessionType,
         handle: janus_client::Handle,
         listener: Option<mpsc::Sender<(MediaSessionKey, TrickleMessage)>>,
+        mut destroy_sig: oneshot::Receiver<()>,
     ) {
         let mut stream = BroadcastStream::new(handle.subscribe());
-        while let Some(data) = stream.next().await {
-            match data {
-                Ok(e) => {
-                    match e.as_ref() {
+
+        loop {
+            tokio::select! {
+                _ = &mut destroy_sig => {
+                    return;
+                }
+                message = stream.next() => {
+                    let message = match message {
+                        Some(Ok(message)) => message,
+                        Some(Err(BroadcastStreamRecvError::Lagged(n))) => {
+                            log::error!("JanusSubscriber run task dropped {} messages", n);
+                            continue;
+                        }
+                        None => return,
+                    };
+
+                    match &*message {
                         janus_client::JanusMessage::Event(event) => {
                             let janus_client::incoming::Event { plugindata, .. } = event;
                             if let janus_client::PluginData::VideoRoom(plugindata) = plugindata {
@@ -696,18 +718,8 @@ impl JanusSubscriber {
                         }
                     }
                 }
-                Err(BroadcastStreamRecvError::Lagged(_)) => {
-                    panic!("Receiver lagged behind. Increase channel size")
-                }
             }
         }
-        log::trace!("Broadcast Stream for this JanusSubscriber stopped. Exiting run method");
-    }
-}
-
-impl Drop for JanusSubscriber {
-    fn drop(&mut self) {
-        self.session.detach_handle(&self.handle.id())
     }
 }
 

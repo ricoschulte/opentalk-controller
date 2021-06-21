@@ -156,15 +156,17 @@ impl JanusMessage {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum Success {
-    Janus(JanusSuccess),
+    // Order of the enum is important to parsing since
+    // JanusSuccess will always match all PluginSuccess messages
     Plugin(PluginSuccess),
+    Janus(JanusSuccess),
 }
 
 impl Success {
     pub(crate) fn transaction_id(&self) -> &TransactionId {
         match self {
-            Self::Janus(JanusSuccess { transaction, .. }) => transaction,
             Self::Plugin(PluginSuccess { transaction, .. }) => transaction,
+            Self::Janus(JanusSuccess { transaction, .. }) => transaction
         }
     }
 }
@@ -174,7 +176,7 @@ pub struct JanusSuccess {
     pub sender: Option<HandleId>,
     pub session_id: Option<SessionId>,
     pub(crate) transaction: TransactionId,
-    pub data: SuccessJanus,
+    pub data: Option<SuccessJanus>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

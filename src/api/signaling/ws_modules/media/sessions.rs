@@ -95,8 +95,12 @@ impl MediaSessions {
     }
 
     /// Removes the [McuPublisher] for the given StreamType
-    pub fn remove_publisher(&mut self, media_session_type: MediaSessionType) {
-        self.publishers.remove(&media_session_type);
+    pub async fn remove_publisher(&mut self, media_session_type: MediaSessionType) {
+        if let Some(publisher) = self.publishers.remove(&media_session_type) {
+            if let Err(e) = publisher.destroy().await {
+                log::error!("Failed to destroy publisher, {}", e);
+            }
+        }
     }
 
     /// When receiving an update message for a specific participant one must check if the updated
@@ -104,23 +108,63 @@ impl MediaSessions {
     ///
     /// To remove any subscribers that might be subscribed to a room that has no publisher or has
     /// been removed this function must be called with the updated participant's `publishing` field
-    pub fn remove_dangling_subscriber(
+    pub async fn remove_dangling_subscriber(
         &mut self,
         participant: ParticipantId,
         lookup: &HashMap<MediaSessionType, MediaSessionState>,
     ) {
-        self.subscribers.retain(|stream_key, _| {
-            if stream_key.0 == participant {
-                lookup.contains_key(&stream_key.1)
-            } else {
-                true
+        while let Some(key) = self
+            .subscribers
+            .keys()
+            .find(|key| key.0 == participant)
+            .copied()
+        {
+            if lookup.contains_key(&key.1) {
+                continue;
             }
-        });
+
+            // Safe unwrap since key was taken from hashmap
+            let subscriber = self.subscribers.remove(&key).unwrap();
+
+            if let Err(e) = subscriber.destroy().await {
+                log::error!("Failed to destroy subscriber, {}", e);
+            }
+        }
     }
 
     /// Remove all subscribers to all streams published by the given participant
-    pub fn remove_subscribers(&mut self, participant: ParticipantId) {
-        self.subscribers
-            .retain(|stream_key, _| stream_key.0 != participant);
+    pub async fn remove_subscribers(&mut self, participant: ParticipantId) {
+        while let Some(key) = self
+            .subscribers
+            .keys()
+            .find(|key| key.0 == participant)
+            .copied()
+        {
+            // Safe unwrap since key was taken from hashmap
+            let subscriber = self.subscribers.remove(&key).unwrap();
+
+            if let Err(e) = subscriber.destroy().await {
+                log::error!("Failed to destroy subscriber, {}", e);
+            }
+        }
+    }
+
+    /// Destroy all sessions
+    pub async fn destroy(mut self) {
+        for (_, subscriber) in self.subscribers.drain() {
+            log::debug!("Destroy subscriber");
+            if let Err(e) = subscriber.destroy().await {
+                log::error!("Failed to destroy subscriber, {}", e);
+            }
+        }
+
+        for (_, publisher) in self.publishers.drain() {
+            log::debug!("Destroy publisher");
+            if let Err(e) = publisher.destroy().await {
+                log::error!("Failed to destroy publisher, {}", e);
+            }
+        }
+
+        log::debug!("Destroyed all sessions");
     }
 }

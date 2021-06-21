@@ -1,15 +1,15 @@
-use std::{
-    collections::HashMap,
-    convert::TryInto,
-    sync::{Arc, Weak},
-    time::Duration,
-};
 use futures::StreamExt;
 use lapin::{
     options::{BasicAckOptions, BasicNackOptions},
     Consumer,
 };
 use parking_lot::Mutex;
+use std::{
+    collections::HashMap,
+    convert::TryInto,
+    sync::{Arc, Weak},
+    time::Duration,
+};
 use tokio::{
     sync::{broadcast, mpsc, oneshot},
     time::timeout,
@@ -242,11 +242,14 @@ impl InnerClient {
             transaction: tx_id,
         }))
         .await?;
-        // todo figure out if 50ms is good.
-        let _ = timeout(Duration::from_millis(50), rx)
-            .await
-            .map_err(|_| error::Error::Timeout)?;
-        Ok(())
+
+        match timeout(Duration::from_millis(200), rx).await {
+            Ok(Ok(_)) => Ok(()),
+            Ok(Err(_)) => {
+                panic!("Bug: receive task removed transaction without sending a response")
+            }
+            Err(_) => Err(error::Error::Timeout),
+        }
     }
 }
 
@@ -254,7 +257,7 @@ impl InnerClient {
 pub(crate) struct InnerSession {
     pub(crate) client: Weak<InnerClient>,
     pub(crate) id: SessionId,
-    pub(crate) handles: Mutex<HashMap<HandleId, Arc<InnerHandle>>>,
+    pub(crate) handles: Mutex<HashMap<HandleId, Weak<InnerHandle>>>,
     destroyed: bool,
 }
 
@@ -274,7 +277,7 @@ impl InnerSession {
         self.handles
             .lock()
             .get(id)
-            .cloned()
+            .and_then(Weak::upgrade)
             .ok_or(error::Error::InvalidSession)
     }
 
@@ -302,7 +305,10 @@ impl InnerSession {
             handle_id,
             plugin,
         ));
-        self.handles.lock().insert(handle_id, handle.clone());
+
+        self.handles
+            .lock()
+            .insert(handle_id, Arc::downgrade(&handle));
         Ok(handle)
     }
     /// Sends keepalive for this Session
@@ -313,10 +319,6 @@ impl InnerSession {
             .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
 
         client.send_keep_alive(self.id).await
-    }
-
-    pub(crate) fn detach_handle(&self, id: &HandleId) {
-        self.handles.lock().remove(id);
     }
 
     pub(crate) async fn destroy(&mut self, client: Arc<InnerClient>) -> Result<(), error::Error> {
@@ -350,6 +352,7 @@ pub(crate) struct InnerHandle {
     pub(crate) id: HandleId,
     pub(crate) plugin_type: JanusPlugin,
     pub(crate) sink: broadcast::Sender<Arc<JanusMessage>>,
+    detached: bool,
 }
 
 impl InnerHandle {
@@ -366,6 +369,7 @@ impl InnerHandle {
             id,
             plugin_type,
             sink,
+            detached: false,
         }
     }
 
@@ -458,38 +462,30 @@ impl InnerHandle {
 
         Ok(())
     }
-}
 
-impl Drop for InnerHandle {
-    fn drop(&mut self) {
-        let rt = if let Ok(rt) = tokio::runtime::Handle::try_current() {
-            rt
-        } else {
-            log::error!(
-                "Could not clean up resources for Handle({}) (runtime stopped)",
-                self.id
-            );
-            return;
-        };
-
-        let client = self
-            .client
-            .upgrade()
-            .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
-
+    pub(crate) async fn detach(&mut self, client: Arc<InnerClient>) -> Result<(), error::Error> {
         // Create request outside of task to avoid move
         let request = JanusRequest::Detach {
             session_id: self.session_id,
             handle_id: self.id,
+            transaction: InnerClient::get_tx_id(),
         };
-        let handle_id = self.id;
-        rt.spawn(async move {
-            let _response = client
-                .send(&request)
-                .await
-                .expect("Failed to send detach for handle on drop");
-            log::trace!("Dropped InnerHandle for handle {}", handle_id);
-        });
+
+        client.send(&request).await?;
+
+        self.detached = true;
+
+        log::trace!("Detached InnerHandle for handle {}", self.id);
+
+        Ok(())
+    }
+}
+
+impl Drop for InnerHandle {
+    fn drop(&mut self) {
+        if !std::thread::panicking() {
+            debug_assert!(self.detached);
+        }
     }
 }
 

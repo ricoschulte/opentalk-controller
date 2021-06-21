@@ -39,7 +39,7 @@ test-env-log = "0.2.7"
 env_logger = "0.8.3"
 
 # Enabling macros for tests
-tokio = { version = "1.0", features=["sync", "rt", "macros"] }
+tokio = { version = "1", features=["sync", "rt", "macros"] }
 
 
 [features]

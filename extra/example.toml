@@ -70,4 +70,4 @@ from_janus_routing_key = "from-janus"
 
 [redis]
 # Redis URL used to connect the redis server
-url = "redis://localhost:6379/"
+#url = "redis://localhost:6379/"

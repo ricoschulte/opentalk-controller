@@ -89,7 +89,7 @@ impl SignalingModule for Media {
                 ctx.invalidate_data();
             }
             Event::WsMessage(incoming::Message::Unpublish(assoc)) => {
-                self.media.remove_publisher(assoc.media_session_type);
+                self.media.remove_publisher(assoc.media_session_type).await;
                 self.state.remove(&assoc.media_session_type);
 
                 ctx.storage()
@@ -190,10 +190,10 @@ impl SignalingModule for Media {
             Event::RabbitMq(_) => {}
             Event::ParticipantJoined(..) => {}
             Event::ParticipantUpdated(id, state) => {
-                self.media.remove_dangling_subscriber(id, &state);
+                self.media.remove_dangling_subscriber(id, &state).await;
             }
             Event::ParticipantLeft(id) => {
-                self.media.remove_subscribers(id);
+                self.media.remove_subscribers(id).await;
             }
         }
 
@@ -227,6 +227,8 @@ impl SignalingModule for Media {
                 e
             );
         }
+
+        self.media.destroy().await;
     }
 }
 

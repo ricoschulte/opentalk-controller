@@ -204,6 +204,7 @@ pub struct TurnServer {
 
 #[derive(Debug, Deserialize)]
 pub struct RedisConfig {
+    #[serde(default = "redis_default_url")]
     pub url: url::Url,
 }
 
@@ -264,6 +265,21 @@ fn default_min_idle_connections() -> u32 {
     10
 }
 
+fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let duration: u64 = Deserialize::deserialize(deserializer)?;
+
+    Ok(chrono::Duration::seconds(
+        i64::try_from(duration).map_err(serde::de::Error::custom)?,
+    ))
+}
+
+fn redis_default_url() -> url::Url {
+    url::Url::try_from("redis://localhost:6379/").expect("Invalid default redis URL")
+}
+
 fn rabbitmq_default_url() -> String {
     "amqp://guest:guest@localhost:5672".to_owned()
 }
@@ -282,17 +298,6 @@ fn default_janus_exchange() -> String {
 
 fn default_from_janus_routing_key() -> String {
     "from-janus".to_owned()
-}
-
-fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    let duration: u64 = Deserialize::deserialize(deserializer)?;
-
-    Ok(chrono::Duration::seconds(
-        i64::try_from(duration).map_err(serde::de::Error::custom)?,
-    ))
 }
 
 #[cfg(test)]

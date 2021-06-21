@@ -108,7 +108,7 @@ async fn run_service(settings: Settings) -> Result<()> {
                 .await
                 .context("Could not create rabbit mq channel for MCU")?;
 
-            Arc::new(JanusMcu::connect(settings.room_server, mcu_channel, shutdown.clone()).await?)
+            Arc::new(JanusMcu::connect(settings.room_server, mcu_channel).await?)
         };
 
         // Store the turn server configuration for the turn endpoint
@@ -208,15 +208,13 @@ async fn run_service(settings: Settings) -> Result<()> {
         // ==== Begin shutdown sequence ====
 
         // Send shutdown signals to all tasks within our application
-        if shutdown.send(()).is_err() {
-            return Ok(());
-        }
+        let _ = shutdown.send(());
 
         // then stop HTTP servers
         ext_server.stop(true).await;
         int_server.stop(true).await;
 
-        // Check in a 1 second interval for 5 seconds if all tasks have exited
+        // Check in a 1 second interval for 10 seconds if all tasks have exited
         // by inspecting the receiver count of the broadcast-channel
         for _ in 0..10 {
             let receiver_count = shutdown.receiver_count();

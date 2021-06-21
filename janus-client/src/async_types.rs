@@ -24,7 +24,7 @@ impl Future for CreateSessionRequest {
                 log::trace!("CreateSessionRequest got return: {:?}", &result);
                 match result {
                     Ok(JanusMessage::Success(Success::Janus(incoming::JanusSuccess {
-                        data,
+                        data: Some(data),
                         ..
                     }))) => Poll::Ready(Some(data.id.into())),
                     // Should not be passed to here
@@ -60,7 +60,7 @@ impl Future for AttachToPluginRequest {
                 log::trace!("AttachToPluginRequest got return: {:?}", &result);
                 match result {
                     Ok(JanusMessage::Success(Success::Janus(incoming::JanusSuccess {
-                        data,
+                        data: Some(data),
                         ..
                     }))) => Poll::Ready(Some(data.id.into())),
                     // Should not be passed to here
