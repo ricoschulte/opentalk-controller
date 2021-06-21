@@ -7,13 +7,14 @@
 //! # Examples
 //! ```should_panic
 //! # use janus_client::types::outgoing;
-//! # use janus_client::JanusPlugin;
-//! # use janus_client::{Client, RabbitMqConfig};
+//! # use janus_client::{JanusPlugin, Client, RabbitMqConfig};
+//! # use tokio::sync::broadcast;
 //! # tokio_test::block_on(async {
+//! let (shutdown, _) = broadcast::channel(1);
 //! let connection = lapin::Connection::connect("amqp://janus-backend:5672", lapin::ConnectionProperties::default()).await.unwrap();
 //! let channel = connection.create_channel().await.unwrap();
-//! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway", "to-janus", "janus-exchange", "from-janus");
-//! let (client, _) = Client::new(config).await.unwrap();
+//! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway".into(), "to-janus".into(), "janus-exchange".into(), "from-janus".into(), "k3k-signaling".into());
+//! let (client, _) = Client::new(config, shutdown).await.unwrap();
 //! let session = client.create_session().await.unwrap();
 //! let echo_handle = session
 //!     .attach_to_plugin(JanusPlugin::Echotest)
@@ -35,6 +36,7 @@
 //! # use janus_client::{Client, Handle, JanusPlugin, RabbitMqConfig};
 //! # use janus_client::types::{TrickleCandidate, RoomId};
 //! # use janus_client::types::outgoing::{TrickleMessage, PluginBody, VideoRoomPluginJoin, VideoRoomPluginJoinSubscriber};
+//! # use tokio::sync::broadcast;
 //! pub struct SubscriberClient(Handle);
 //! impl SubscriberClient {
 //!     /// Joins a Room
@@ -63,10 +65,12 @@
 //! }
 //! # fn main() {
 //! # tokio_test::block_on(async {
+//! let (shutdown, _) = broadcast::channel(1);
+//!
 //! let connection = lapin::Connection::connect("amqp://janus-backend:5672", lapin::ConnectionProperties::default()).await.unwrap();
 //! let channel = connection.create_channel().await.unwrap();
-//! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway", "to-janus", "janus-exchange", "from-janus");
-//! let (client, _) = janus_client::Client::new(config).await.unwrap();
+//! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway".into(), "to-janus".into(), "janus-exchange".into(), "from-janus".into(), "k3k-signaling".into());
+//! let (client, _) = janus_client::Client::new(config, shutdown).await.unwrap();
 //! let session = client.create_session().await.unwrap();
 //!
 //! let echo_handle = session
@@ -283,9 +287,11 @@ impl Handle {
     /// Assumes that all other occurrences of the same Handle will be dropped.
     /// Waits for the strong reference count to reach zero and sends a Detach request.
     pub async fn detach(mut self) -> Result<(), error::Error> {
-        let client = self.inner.client.upgrade().expect(
-            "Failed Weak::upgrade. Expected the client reference to be still valid",
-        );
+        let client = self
+            .inner
+            .client
+            .upgrade()
+            .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
 
         let sessions = client.sessions.lock();
 

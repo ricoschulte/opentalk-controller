@@ -355,7 +355,7 @@ where
             E: de::Error,
         {
             let iter = s.split(',').map(FromStr::from_str);
-            Result::from_iter(iter).map_err(de::Error::custom)
+            iter.collect::<Result<_, _>>().map_err(de::Error::custom)
         }
     }
 

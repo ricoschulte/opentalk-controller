@@ -166,7 +166,7 @@ impl Success {
     pub(crate) fn transaction_id(&self) -> &TransactionId {
         match self {
             Self::Plugin(PluginSuccess { transaction, .. }) => transaction,
-            Self::Janus(JanusSuccess { transaction, .. }) => transaction
+            Self::Janus(JanusSuccess { transaction, .. }) => transaction,
         }
     }
 }

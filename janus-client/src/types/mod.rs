@@ -1,6 +1,6 @@
+use crate::error;
 use serde::{self, Deserialize, Serialize};
 use std::{convert::TryFrom, str::FromStr};
-use crate::error;
 
 pub mod incoming;
 pub mod outgoing;

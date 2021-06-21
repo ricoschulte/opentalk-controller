@@ -1,8 +1,8 @@
 //! Datatypes for the EchoTest plugin
 
-use serde::{self, Deserialize};
-use crate::{error, PluginData};
 use super::{AudioCodec, JanusInternalError, VideoCodec};
+use crate::{error, PluginData};
+use serde::{self, Deserialize};
 use std::{convert::TryFrom, path::PathBuf};
 
 #[derive(Debug, Clone, Deserialize, Default)]

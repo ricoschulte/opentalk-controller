@@ -1,6 +1,5 @@
 //! Outgoing VideoRoom plugin datatypes
 //!
-use std::path::PathBuf;
 use crate::{
     incoming,
     outgoing::PluginBody,
@@ -8,6 +7,7 @@ use crate::{
     FeedId, PluginRequest,
 };
 use serde::{self, Serialize};
+use std::path::PathBuf;
 
 /// Plugin request body for the videoroom plugin
 #[derive(Debug, Clone, Serialize)]

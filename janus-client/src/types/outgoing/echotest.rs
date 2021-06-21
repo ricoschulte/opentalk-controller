@@ -1,9 +1,9 @@
 //! Outgoing EchoTest plugin datatypes
 //!
-use std::path::PathBuf;
-use crate::{incoming, outgoing::PluginBody, PluginRequest};
 use super::{AudioCodec, VideoCodec};
+use crate::{incoming, outgoing::PluginBody, PluginRequest};
 use serde::{self, Serialize};
+use std::path::PathBuf;
 
 /// Plugin request body for the echotest plugin
 #[derive(Debug, Clone, Serialize)]

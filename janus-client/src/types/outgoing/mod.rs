@@ -2,20 +2,19 @@
 //!
 //! This are the request types sent async via the websocket to Janus.
 
-use serde::{self, Serialize};
 use crate::{
     error,
     types::{AudioCodec, Jsep, TransactionId, TrickleCandidate, VideoCodec},
     HandleId, JanusPlugin, SessionId,
 };
-#[cfg(feature = "videoroom")]
-use videoroom::VideoRoomPluginBody;
 #[cfg(feature = "echotest")]
 use echotest::EchoPluginBody;
+use serde::{self, Serialize};
+#[cfg(feature = "videoroom")]
+use videoroom::VideoRoomPluginBody;
 
 #[cfg(feature = "echotest")]
 pub use echotest::EchoPluginUnnamed;
-
 
 #[cfg(feature = "videoroom")]
 pub use videoroom::{
