@@ -5,9 +5,12 @@ use janus_client::*;
 use lapin::Connection;
 use lapin::ConnectionProperties;
 use test_env_log::test;
+use tokio::sync::broadcast;
 
 #[test(tokio::test)]
 async fn echo_external_channel() {
+    let (shutdown, _) = broadcast::channel(1);
+
     let rabbit_addr =
         std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://localhost:5672".to_owned());
     let connection = Connection::connect(&rabbit_addr, ConnectionProperties::default())
@@ -25,8 +28,8 @@ async fn echo_external_channel() {
         "from-janus".to_owned(),
         "k3k-signaling".to_owned(),
     );
-    let (client, _) = Client::new(config).await.unwrap();
-    let session = client.create_session().await.unwrap();
+    let (client, _) = Client::new(config, shutdown).await.unwrap();
+    let mut session = client.create_session().await.unwrap();
     let echo_handle = session
         .attach_to_plugin(JanusPlugin::Echotest)
         .await
@@ -45,15 +48,15 @@ async fn echo_external_channel() {
         }
         incoming::EchoPluginDataEvent::Err { .. } => panic!(),
     }
-    // We need to drop the handle prior to the session.
-    // This is how this would look like when we gracefully communicate with janus in the real world.
-    // Participants dropping, session stays active.
-    drop(echo_handle);
-    drop(session);
+
+    echo_handle.detach().await.unwrap();
+    session.destroy().await.unwrap();
 }
 
 #[test(tokio::test)]
 async fn create_and_list_rooms() {
+    let (shutdown, _) = broadcast::channel(1);
+
     let rabbit_addr =
         std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://localhost:5672".to_owned());
     let connection = Connection::connect(&rabbit_addr, ConnectionProperties::default())
@@ -71,8 +74,8 @@ async fn create_and_list_rooms() {
         "from-janus".to_owned(),
         "k3k-signaling".to_owned(),
     );
-    let (client, _) = Client::new(config).await.unwrap();
-    let session = client.create_session().await.unwrap();
+    let (client, _) = Client::new(config, shutdown).await.unwrap();
+    let mut session = client.create_session().await.unwrap();
     let handle = session
         .attach_to_plugin(JanusPlugin::VideoRoom)
         .await
@@ -124,15 +127,15 @@ async fn create_and_list_rooms() {
                 .any(|s| *s.description() == "Testroom2".to_owned()));
         }
     }
-    // We need to drop the handle prior to the session.
-    // This is how this would look like when we gracefully communicate with janus in the real world.
-    // Participants dropping, session stays active.
-    drop(handle);
-    drop(session);
+
+    handle.detach().await.unwrap();
+    session.destroy().await.unwrap();
 }
 
 #[test(tokio::test)]
 async fn send_offer() {
+    let (shutdown, _) = broadcast::channel(1);
+
     let rabbit_addr =
         std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://localhost:5672".to_owned());
 
@@ -151,8 +154,8 @@ async fn send_offer() {
         "from-janus".to_owned(),
         "k3k-signaling".to_owned(),
     );
-    let (client, _) = Client::new(config).await.unwrap();
-    let session = client.create_session().await.unwrap();
+    let (client, _) = Client::new(config, shutdown).await.unwrap();
+    let mut session = client.create_session().await.unwrap();
     let publisher_handle = session
         .attach_to_plugin(JanusPlugin::VideoRoom)
         .await
@@ -196,9 +199,6 @@ async fn send_offer() {
         .await
         .is_ok());
 
-    // We need to drop the handle prior to the session.
-    // This is how this would look like when we gracefully communicate with janus in the real world.
-    // Participants dropping, session stays active.
-    drop(publisher_handle);
-    drop(session);
+    publisher_handle.detach().await.unwrap();
+    session.destroy().await.unwrap();
 }

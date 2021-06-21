@@ -1,8 +1,5 @@
 image: "rust:latest"
 
-services:
-  - postgres:13-alpine
-
 stages:
   - lint
   - test
@@ -10,11 +7,8 @@ stages:
 
 variables:
   CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
-
-  POSTGRES_DB: migration_test
-  POSTGRES_USER: postgres
-  POSTGRES_PASSWORD: "password123"
-  POSTGRES_HOST_AUTH_METHOD: trust
+  # Enable one network per build for the test container and services
+  FF_NETWORK_PER_BUILD: "true"
 
 cache:
   key: $CI_JOB_STAGE
@@ -50,12 +44,30 @@ test:cargo_check:
 test:cargo_test:
   stage: test
   variables:
-    DATABASE_URL: "postgres://postgres:password123@postgres:5432/migration_test"
+    DATABASE_URL: "postgres://postgres:password123@postgres:5432/k3k"
+    POSTGRES_DB: k3k
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: "password123"
+    POSTGRES_HOST_AUTH_METHOD: trust
+    # Set ENV vars for services
+    RABBITMQ_DEFAULT_USER: guest
+    RABBITMQ_DEFAULT_PASS: guest
+    RABBITMQ_HOST: 'rabbitmq'
+    RABBITMQ_PORT: '5672'
+    # Used for integration tests
+    AMQP_ADDR: 'amqp://guest:guest@rabbitmq:5672'
+  services:
+    - name: postgres:13-alpine
+      alias: postgres
+    - name: rabbitmq:3
+      alias: rabbitmq
+    - name: quay.io/freswa/janus-gateway-rmq:latest
+      alias: janus-gateway
   before_script:
     - rustup component add rustfmt
     - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"
   script:
-    - cargo test
+    - cargo test --workspace
     - ./.cargo/bin/diesel print-schema | /usr/local/cargo/bin/rustfmt | diff src/db/schema.rs -
 
 build:release:
