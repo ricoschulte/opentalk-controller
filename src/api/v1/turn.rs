@@ -1,5 +1,6 @@
 //! TURN related API structs and Endpoints
 use super::ApiError;
+use super::NoContent;
 use crate::db::users::User;
 use crate::settings;
 use crate::settings::TurnServer;
@@ -7,6 +8,7 @@ use actix_web::get;
 use actix_web::web::Data;
 use actix_web::web::Json;
 use actix_web::web::ReqData;
+use actix_web::Either;
 use rand::distributions::{Distribution, Uniform};
 use rand::prelude::SliceRandom;
 use rand::CryptoRng;
@@ -30,7 +32,7 @@ pub struct Turn {
 pub async fn get(
     turn_servers: Data<Option<settings::Turn>>,
     current_user: ReqData<User>,
-) -> Result<Json<Vec<Turn>>, ApiError> {
+) -> Result<Either<Json<Vec<Turn>>, NoContent>, ApiError> {
     log::trace!(
         "Generating new turn credentials for user {} and servers {:?}",
         current_user.oidc_uuid,
@@ -39,7 +41,10 @@ pub async fn get(
 
     let turn_servers: &Option<settings::Turn> = turn_servers.as_ref();
 
-    let turn_config = turn_servers.as_ref().ok_or(ApiError::Internal)?;
+    let turn_config = match turn_servers.as_ref() {
+        Some(turn_config) => turn_config,
+        None => return Ok(Either::Right(NoContent {})),
+    };
 
     let turn_credentials = {
         let expires = (chrono::Utc::now() + turn_config.lifetime).timestamp();
@@ -47,7 +52,11 @@ pub async fn get(
         rr_servers(&mut rand_rng, &turn_config.servers, expires)
     }?;
 
-    Ok(Json(turn_credentials))
+    if turn_credentials.is_empty() {
+        return Ok(Either::Right(NoContent {}));
+    }
+
+    Ok(Either::Left(Json(turn_credentials)))
 }
 
 fn create_credentials<T: Rng + CryptoRng>(
@@ -79,14 +88,10 @@ fn rr_servers<T: Rng + CryptoRng>(
 ) -> Result<Vec<Turn>, ApiError> {
     // Create a list of TURN responses for each configured TURN server.
     match servers.len() {
-        0 => {
-            // TODO What should we return in this case?
-            // Not available?
-            Err(ApiError::NotFound)
-        }
+        0 => Ok(vec![]),
         // When we only have one configured TURN server, return the credentials for this single one.
         1 => match create_credentials(rng, &servers[0].pre_shared_key, expires, &servers[0].uris) {
-            Ok(turn) => Ok([turn].to_vec()),
+            Ok(turn) => Ok(vec![turn]),
             Err(e) => {
                 log::error!("TURN credential error: {}", e);
                 Err(ApiError::Internal)
@@ -102,7 +107,7 @@ fn rr_servers<T: Rng + CryptoRng>(
                 expires,
                 &servers[selected_server].uris,
             ) {
-                Ok(turn) => Ok([turn].to_vec()),
+                Ok(turn) => Ok(vec![turn]),
                 Err(e) => {
                     log::error!("TURN credential error: {}", e);
                     Err(ApiError::Internal)
@@ -155,10 +160,7 @@ mod test {
 
         // No configured servers
         let mut rng = StdRng::seed_from_u64(1234567890);
-        assert_eq!(
-            rr_servers(&mut rng, &[], 1200).err().unwrap(),
-            ApiError::NotFound
-        );
+        assert_eq!(rr_servers(&mut rng, &[], 1200).unwrap(), vec![]);
 
         // One configured server
         let mut rng = StdRng::seed_from_u64(1234567890);

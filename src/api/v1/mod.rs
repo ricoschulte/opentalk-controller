@@ -3,7 +3,7 @@ use crate::db::DatabaseError;
 use actix_web::body::Body;
 use actix_web::http::{header, StatusCode};
 use actix_web::web::BytesMut;
-use actix_web::{BaseHttpResponse, ResponseError};
+use actix_web::{BaseHttpResponse, HttpResponse, Responder, ResponseError};
 use std::convert::TryFrom;
 use std::fmt::Write;
 
@@ -105,5 +105,14 @@ impl From<crate::db::DatabaseError> for ApiError {
             DatabaseError::NotFound => Self::NotFound,
             _ => Self::Internal,
         }
+    }
+}
+
+// Represents a 204 No Content HTTP Response
+pub struct NoContent;
+
+impl Responder for NoContent {
+    fn respond_to(self, _: &actix_web::HttpRequest) -> HttpResponse {
+        HttpResponse::NoContent().finish()
     }
 }
