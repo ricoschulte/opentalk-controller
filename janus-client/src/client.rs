@@ -465,19 +465,41 @@ impl InnerHandle {
 
     pub(crate) async fn detach(&mut self, client: Arc<InnerClient>) -> Result<(), error::Error> {
         // Create request outside of task to avoid move
+        let tsx_id = InnerClient::get_tx_id();
+        let (tsx_send, tsx_receive) = oneshot::channel();
+
+        client.transactions.lock().insert(
+            tsx_id.clone(),
+            Transaction {
+                ignore_ack: true,
+                channel: tsx_send,
+            },
+        );
+
         let request = JanusRequest::Detach {
             session_id: self.session_id,
             handle_id: self.id,
-            transaction: InnerClient::get_tx_id(),
+            transaction: tsx_id,
         };
+
+        // Set detached to true before checking sending request to avoid panicking on well
+        // behaving code even when janus or rabbitmq fail
+        self.detached = true;
 
         client.send(&request).await?;
 
-        self.detached = true;
+        let response = tsx_receive
+            .await
+            .expect("Backend dropped sender without sending a message");
 
-        log::trace!("Detached InnerHandle for handle {}", self.id);
+        match response {
+            JanusMessage::Success(_) => {
+                log::trace!("Detached InnerHandle for handle {}", self.id);
 
-        Ok(())
+                Ok(())
+            }
+            _ => Err(error::Error::InvalidResponse),
+        }
     }
 }
 

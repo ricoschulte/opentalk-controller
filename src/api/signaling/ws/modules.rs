@@ -1,3 +1,4 @@
+use super::runner::Runner;
 use super::SignalingModule;
 use super::{Event, ModuleContext};
 use crate::api::signaling::storage::Storage;
@@ -260,14 +261,7 @@ where
 
 #[async_trait::async_trait(?Send)]
 pub trait ModuleBuilder: Send + Sync {
-    async fn build(
-        &self,
-        id: ParticipantId,
-        modules: &mut Modules,
-        storage: &mut Storage,
-        events: &mut SelectAll<AnyStream>,
-        protocol: &'static str,
-    );
+    async fn build(&self, runner: &mut Runner) -> Result<()>;
 
     fn clone_boxed(&self) -> Box<dyn ModuleBuilder>;
 }
@@ -285,27 +279,22 @@ impl<M> ModuleBuilder for ModuleBuilderImpl<M>
 where
     M: SignalingModule,
 {
-    async fn build(
-        &self,
-        id: ParticipantId,
-        modules: &mut Modules,
-        storage: &mut Storage,
-        events: &mut SelectAll<AnyStream>,
-        protocol: &'static str,
-    ) {
+    async fn build(&self, runner: &mut Runner) -> Result<()> {
         let ctx = ModuleContext {
-            id,
+            id: runner.id,
             ws_messages: &mut vec![],
             rabbitmq_messages: &mut vec![],
-            events,
-            storage,
+            events: &mut runner.events,
+            storage: &mut runner.storage,
             invalidate_data: &mut false,
             m: PhantomData::<fn() -> M>,
         };
 
-        let module = M::init(ctx, &self.params, protocol).await;
+        let module = M::init(ctx, &self.params, runner.protocol).await?;
 
-        modules.add_module(module).await
+        runner.modules.add_module(module).await;
+
+        Ok(())
     }
 
     fn clone_boxed(&self) -> Box<dyn ModuleBuilder> {

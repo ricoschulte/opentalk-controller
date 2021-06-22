@@ -15,7 +15,6 @@ use videoroom::VideoRoomPluginBody;
 
 #[cfg(feature = "echotest")]
 pub use echotest::EchoPluginUnnamed;
-
 #[cfg(feature = "videoroom")]
 pub use videoroom::{
     VideoRoomPluginConfigure, VideoRoomPluginConfigurePublisher,

@@ -2,7 +2,6 @@ use super::ParticipantId;
 use crate::settings;
 use anyhow::{bail, Context, Result};
 use futures::StreamExt;
-use janus_client::error::JanusInternalError;
 use janus_client::types::{SdpAnswer, SdpOffer};
 use janus_client::{JsepType, RoomId as JanusRoomId, TrickleCandidate};
 use parking_lot::Mutex;
@@ -11,7 +10,7 @@ use std::convert::TryInto;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio::time::{interval, sleep};
+use tokio::time::interval;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
 
@@ -70,23 +69,32 @@ impl JanusMcu {
 
         let mut shutdown_sig = mcu_shutdown.subscribe();
 
+        let keep_alive_session = session.clone();
+
         tokio::spawn(async move {
             let mut stream = ReceiverStream::new(janus_stream);
+            let mut interval = interval(Duration::from_secs(30));
 
             loop {
                 tokio::select! {
                     Some(msg) = stream.next() => {
                         log::warn!("Unhandled janus message {:?}", msg);
+                        // TODO Find out what we want to with these messages
+                        // most of them are events which are not interesting to us
+                        // and others expose where we ignore responses from janus
+                    }
+                    _ = interval.tick() => {
+                        keep_alive_session.keep_alive().await;
                     }
                     _ = shutdown_sig.recv() => {
-                        log::debug!("receive task got shutdown signal, exiting");
+                        log::debug!("receive/keepalive task got shutdown signal, exiting");
                         return;
                     }
                 };
             }
         });
 
-        let mcu = Self {
+        Ok(Self {
             max_stream_bitrate: config.max_video_bitrate,
             max_screen_bitrate: config.max_screen_bitrate,
             session,
@@ -94,35 +102,7 @@ impl JanusMcu {
             mcu_shutdown,
             publisher_room_ids: Mutex::new(HashMap::new()),
             next_client_id: AtomicU64::new(0),
-        };
-
-        mcu.start()?;
-
-        Ok(mcu)
-    }
-
-    pub fn start(&self) -> Result<()> {
-        let session = self.session.clone();
-        let mut shutdown_sig = self.mcu_shutdown.subscribe();
-
-        // spawn a task that sends a keep-alive message to keep the session alive
-        tokio::spawn(async move {
-            let mut interval = interval(Duration::from_secs(30));
-
-            loop {
-                tokio::select! {
-                    _ = interval.tick() => {
-                        session.keep_alive().await;
-                    }
-                    _ = shutdown_sig.recv() => {
-                        log::debug!("keep-alive task got shutdown signal, exiting");
-                        return;
-                    }
-                }
-            }
-        });
-
-        Ok(())
+        })
     }
 
     pub async fn destroy(&mut self) -> Result<()> {
@@ -190,7 +170,6 @@ impl JanusMcu {
             handle: handle.clone(),
             room_id,
             media_session_type,
-            publisher,
             destroy,
         };
 
@@ -508,7 +487,6 @@ pub struct JanusSubscriber {
     handle: janus_client::Handle,
     room_id: JanusRoomId,
     media_session_type: MediaSessionType,
-    publisher: ParticipantId,
     destroy: oneshot::Sender<()>,
 }
 
@@ -556,77 +534,33 @@ impl JanusSubscriber {
 
     /// Joins the room of the publisher this [JanusSubscriber](JanusSubscriber) is subscriber to
     async fn join_room(&self) -> Result<janus_client::Jsep> {
-        let mut retry_counter = 0;
-        loop {
-            // Todo do we want to do this?
-            if retry_counter >= 5 {
-                log::warn!(
-                    "Giving up on joining publisher {} to room {}.",
-                    self.publisher,
-                    self.room_id
-                );
-                break;
+        let join_response = self
+            .handle
+            .send(janus_client::outgoing::VideoRoomPluginJoinSubscriber {
+                room: self.room_id,
+                feed: janus_client::FeedId::new(self.media_session_type.into()),
+                private_id: None,
+                close_pc: None,
+                audio: None,
+                video: None,
+                data: None,
+                offer_audio: None,
+                offer_video: None,
+                offer_data: None,
+                substream: None,
+                temporal_layer: None,
+                spatial_layer: None,
+                temporal: None,
+            })
+            .await;
+
+        match join_response {
+            Ok((janus_client::incoming::VideoRoomPluginDataAttached { .. }, Some(jsep))) => {
+                Ok(jsep)
             }
-            retry_counter += 1;
-
-            let join_response = self
-                .handle
-                .send(janus_client::outgoing::VideoRoomPluginJoinSubscriber {
-                    room: self.room_id,
-                    feed: janus_client::FeedId::new(self.media_session_type.into()),
-                    private_id: None,
-                    close_pc: None,
-                    audio: None,
-                    video: None,
-                    data: None,
-                    offer_audio: None,
-                    offer_video: None,
-                    offer_data: None,
-                    substream: None,
-                    temporal_layer: None,
-                    spatial_layer: None,
-                    temporal: None,
-                })
-                .await;
-
-            match join_response {
-                Ok((janus_client::incoming::VideoRoomPluginDataAttached { .. }, Some(jsep))) => {
-                    return Ok(jsep);
-                }
-                Ok((_, None)) => bail!("Got invalid response on join_room, missing jsep"),
-                Err(janus_client::error::Error::JanusPluginError(e)) => {
-                    match e.error_code() {
-                        JanusInternalError::VideoroomErrorAlreadyJoined => {
-                            // todo handle this case
-                            // We need to generate a new handle. Can we use std::mem::replace? We would need to get self.handle mutually.
-                            log::error!(
-                                "Subscriber {} already subscribed to this room",
-                                self.publisher
-                            );
-
-                            todo!()
-                        }
-                        JanusInternalError::VideoroomErrorNoSuchRoom
-                        | JanusInternalError::VideoroomErrorNoSuchFeed => {
-                            log::warn!(
-                                "Publisher {} not ready for room {}. Waiting 200ms before retrying",
-                                self.publisher,
-                                self.room_id
-                            );
-
-                            sleep(Duration::from_millis(200)).await;
-                        }
-                        _ => {}
-                    }
-                }
-                _ => {}
-            }
+            Ok((_, None)) => bail!("Got invalid response on join_room, missing jsep"),
+            Err(e) => bail!("Failed to join room, {}", e),
         }
-
-        bail!(
-            "Failed to join room: {}, see logs for info",
-            MediaSessionKey(self.publisher, self.media_session_type)
-        )
     }
 
     async fn run(

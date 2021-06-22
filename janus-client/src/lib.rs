@@ -101,7 +101,7 @@ use crate::outgoing::TrickleMessage;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
-use tokio::time::sleep;
+use tokio::time::{sleep, timeout};
 
 mod async_types;
 mod client;
@@ -141,12 +141,14 @@ impl Client {
     ///
     /// Returns a [`Session`](Session) or [`Error`](error::Error) if something went wrong
     pub async fn create_session(&self) -> Result<Session, error::Error> {
-        let session_id = self
-            .inner
-            .request_create_session()
-            .await?
-            .await
-            .ok_or(error::Error::FailedToCreateSession)?;
+        let session_future = self.inner.request_create_session().await?;
+
+        let session_id = match timeout(Duration::from_secs(10), session_future).await {
+            Ok(Some(session_id)) => session_id,
+            Ok(None) => return Err(error::Error::FailedToCreateSession),
+            Err(_) => return Err(error::Error::Timeout),
+        };
+
         let session = Arc::new(InnerSession::new(Arc::downgrade(&self.inner), session_id));
         self.inner
             .sessions

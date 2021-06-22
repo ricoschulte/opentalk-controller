@@ -1,3 +1,4 @@
+use crate::api::signaling::SignalingHttpModule;
 use actix_cors::Cors;
 use actix_web::http::{header, Method};
 use actix_web::web::Data;
@@ -32,8 +33,10 @@ extern crate diesel;
 #[actix_web::main]
 async fn main() -> Result<()> {
     let settings = settings::load_settings().context("Failed to load settings from file")?;
+
     setup_logging(&settings.logging)?;
-    log::debug!("Starting K3K Controller with settings {:?}", settings);
+
+    log::info!("Starting K3K Controller");
 
     match run_service(settings).await {
         Ok(()) => Ok(()),
@@ -108,11 +111,12 @@ async fn run_service(settings: Settings) -> Result<()> {
                 .await
                 .context("Could not create rabbit mq channel for MCU")?;
 
-            Arc::new(JanusMcu::connect(settings.room_server, mcu_channel).await?)
-        };
+            let mcu = JanusMcu::connect(settings.room_server, mcu_channel)
+                .await
+                .context("Failed to connect to Janus WebRTC server")?;
 
-        // Store the turn server configuration for the turn endpoint
-        let turn_servers = Data::new(settings.turn);
+            Arc::new(mcu)
+        };
 
         let mut application = modules::ApplicationBuilder::default();
 
@@ -122,10 +126,17 @@ async fn run_service(settings: Settings) -> Result<()> {
                 .await
                 .context("Could not create rabbit mq channel for signaling")?;
 
-            signaling::attach(&mut application, redis_conn, signaling_channel, mcu.clone()).await?;
+            application.add_http_module(
+                SignalingHttpModule::new(redis_conn, signaling_channel)
+                    .with_module::<signaling::Echo>(())
+                    .with_module::<signaling::Media>(Arc::downgrade(&mcu)),
+            );
         }
 
         let application = application.finish();
+
+        // Store the turn server configuration for the turn endpoint
+        let turn_servers = Data::new(settings.turn);
 
         // Start external HTTP Server
         let ext_http_server = {
@@ -195,10 +206,10 @@ async fn run_service(settings: Settings) -> Result<()> {
         // will try to gracefully shut down.
         tokio::select! {
             _ = &mut ext_server => {
-                log::info!("Http server returned, exiting");
+                log::error!("Http server returned, exiting, exiting");
             }
             _ = &mut int_server => {
-                log::info!("Internal http server returned, exiting");
+                log::error!("Internal http server returned, exiting");
             }
             _ = ctrl_c() => {
                 log::info!("Got termination signal, exiting");

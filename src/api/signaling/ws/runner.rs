@@ -1,9 +1,7 @@
 use super::modules::{DynTargetedEvent, Modules, NoSuchModuleError};
 use super::{Namespaced, WebSocket};
 use crate::api::signaling::storage::Storage;
-use crate::api::signaling::ws::modules::{
-    AnyStream, DynBroadcastEvent, DynEventCtx, ModuleBuilder,
-};
+use crate::api::signaling::ws::modules::{AnyStream, DynBroadcastEvent, DynEventCtx};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::{incoming, outgoing, rabbitmq};
 use crate::api::signaling::ParticipantId;
@@ -37,13 +35,13 @@ const NAMESPACE: &str = "control";
 /// Also acts as `control` module which handles participant and room states.
 pub struct Runner {
     // participant id that the runner is connected to
-    id: ParticipantId,
+    pub(super) id: ParticipantId,
 
     // ID of the room the participant is inside
     room: Uuid,
 
     // Protocol being spoken
-    protocol: &'static str,
+    pub(super) protocol: &'static str,
 
     // User behind the participant
     // Not used yet
@@ -56,11 +54,11 @@ pub struct Runner {
     ws: Ws,
 
     // All registered and initialized modules
-    modules: Modules,
-    events: SelectAll<AnyStream>,
+    pub(super) modules: Modules,
+    pub(super) events: SelectAll<AnyStream>,
 
     // Redis storage, which contains the state of all participants inside the room
-    storage: Storage,
+    pub(super) storage: Storage,
 
     // RabbitMQ queue consumer for this participant, will contain any events about room and
     // participant changes
@@ -169,18 +167,25 @@ impl Runner {
         })
     }
 
-    pub async fn add_module(&mut self, builder: &dyn ModuleBuilder) {
-        builder
-            .build(
-                self.id,
-                &mut self.modules,
-                &mut self.storage,
-                &mut self.events,
-                self.protocol,
-            )
-            .await;
+    /// Destroys the runner and all associated resources
+    pub async fn destroy(mut self) {
+        if let Err(e) = self.storage.remove_participant_from_set(self.id).await {
+            log::error!("Failed to remove participant from set, {}", e);
+        }
+
+        if let Err(e) = self.storage.remove_all_attributes(NAMESPACE, self.id).await {
+            log::error!("Failed to remove all control attributes, {}", e);
+        }
+
+        if self.control_data.is_some() {
+            self.rabbitmq_send_typed(NAMESPACE, None, rabbitmq::Message::Left(self.id))
+                .await;
+        }
+
+        self.modules.destroy(&mut self.storage).await;
     }
 
+    /// Runs the runner until the peer closes its websocket connection or a fatal error occurres.
     pub async fn run(mut self) {
         while !self.exit {
             tokio::select! {
@@ -195,7 +200,7 @@ impl Runner {
                 }
                 res = self.consumer.next() => {
                     match res {
-                        Some(Ok((channel, delivery))) => self.handle_consumer_msg(channel, delivery).await,
+                        Some(Ok((channel, delivery))) => self.handle_rabbitmq_msg(channel, delivery).await,
                         _ => {
                             // None or Some(Err(_)), either way its an error to us
                             log::error!("Failed to receive RabbitMQ message, exiting");
@@ -214,20 +219,9 @@ impl Runner {
             }
         }
 
-        log::debug!("Stopping ws-runner task");
+        log::debug!("Stopping ws-runner task for participant {}", self.id);
 
-        if let Err(e) = self.storage.remove_participant_from_set(self.id).await {
-            log::error!("Failed to remove participant from set, {}", e);
-        }
-
-        if let Err(e) = self.storage.remove_all_attributes(NAMESPACE, self.id).await {
-            log::error!("Failed to remove all control attributes, {}", e);
-        }
-
-        self.rabbitmq_send_typed(NAMESPACE, None, rabbitmq::Message::Left(self.id))
-            .await;
-
-        self.modules.destroy(&mut self.storage).await;
+        self.destroy().await
     }
 
     async fn handle_ws_message(&mut self, message: Message) {
@@ -262,7 +256,12 @@ impl Runner {
 
         if namespaced.namespace == NAMESPACE {
             match serde_json::from_value(namespaced.payload) {
-                Ok(msg) => self.handle_control_msg(msg).await,
+                Ok(msg) => {
+                    if let Err(e) = self.handle_control_msg(msg).await {
+                        log::error!("Failed to handle control msg, {}", e);
+                        self.exit = true;
+                    }
+                }
                 Err(e) => {
                     log::error!("Failed to parse control payload, {}", e);
 
@@ -285,14 +284,7 @@ impl Runner {
         }
     }
 
-    async fn handle_control_msg(&mut self, msg: incoming::Message) {
-        if let Err(e) = self.try_handle_control_msg(msg).await {
-            log::error!("Failed to handle control msg, {}", e);
-            self.exit = true;
-        }
-    }
-
-    async fn try_handle_control_msg(&mut self, msg: incoming::Message) -> Result<()> {
+    async fn handle_control_msg(&mut self, msg: incoming::Message) -> Result<()> {
         match msg {
             incoming::Message::Join(join) => {
                 if join.display_name.is_empty() {
@@ -306,6 +298,8 @@ impl Runner {
                         .to_json(),
                     ))
                     .await;
+
+                    return Ok(());
                 }
 
                 self.storage
@@ -382,14 +376,14 @@ impl Runner {
         Ok(participant)
     }
 
-    async fn handle_consumer_msg(&mut self, _: lapin::Channel, delivery: lapin::message::Delivery) {
+    async fn handle_rabbitmq_msg(&mut self, _: lapin::Channel, delivery: lapin::message::Delivery) {
+        if let Err(e) = delivery.acker.ack(Default::default()).await {
+            log::warn!("Failed to ACK incoming delivery, {}", e);
+        }
+
         // Do not handle any messages before the user joined the room
         if self.control_data.is_none() {
             return;
-        }
-
-        if let Err(e) = delivery.acker.ack(Default::default()).await {
-            log::warn!("Failed to ACK incoming delivery, {}", e);
         }
 
         let namespaced = match serde_json::from_slice::<Namespaced<Value>>(&delivery.data) {

@@ -30,9 +30,9 @@ impl MediaSessions {
         }
     }
 
-    /// Creates a new [McuPublisher] for this stream
+    /// Creates a new [JanusPublisher] for this stream
     ///
-    /// The created [McuPublisher] is stored and a reference is returned.
+    /// The created [JanusPublisher] is stored and a reference is returned.
     pub async fn create_publisher(
         &mut self,
         mcu_client: &JanusMcu,
@@ -55,14 +55,14 @@ impl MediaSessions {
             .expect("Insert failed"))
     }
 
-    /// Returns [McuPublisher](McuPublisher) for the given stream if present, else None
+    /// Returns [JanusSubscriber] for the given stream if present, else None
     pub fn get_publisher(&self, media_session_type: MediaSessionType) -> Option<&JanusPublisher> {
         self.publishers.get(&media_session_type)
     }
 
-    /// Creates a new [McuSubscriber] for this stream
+    /// Creates a new [JanusSubscriber] for this stream
     ///
-    /// The created [McuPublisher] is stored in this [ClientSessions] map, and a reference is returned.
+    /// The created [JanusPublisher] is stored in this [MediaSessions] map, and a reference is returned.
     pub async fn create_subscriber(
         &mut self,
         mcu_client: &JanusMcu,
@@ -84,7 +84,7 @@ impl MediaSessions {
         Ok(self.subscribers.get(&key).expect("Insert failed"))
     }
 
-    /// Returns [McuSubscriber] for the given stream if present, else None
+    /// Returns [JanusSubscriber] for the given stream if present, else None
     pub fn get_subscriber(
         &mut self,
         participant: ParticipantId,
@@ -94,7 +94,7 @@ impl MediaSessions {
             .get(&MediaSessionKey(participant, media_session_type))
     }
 
-    /// Removes the [McuPublisher] for the given StreamType
+    /// Removes the [JanusPublisher] for the given StreamType
     pub async fn remove_publisher(&mut self, media_session_type: MediaSessionType) {
         if let Some(publisher) = self.publishers.remove(&media_session_type) {
             if let Err(e) = publisher.destroy().await {

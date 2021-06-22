@@ -51,17 +51,30 @@ impl SignalingModule for Media {
         mut ctx: ModuleContext<'_, Self>,
         mcu: &Self::Params,
         _protocol: &'static str,
-    ) -> Self {
+    ) -> Result<Self> {
         let (media_sender, janus_events) = mpsc::channel(12);
+
+        let state = HashMap::new();
+
+        let id = ctx.participant_id();
+
+        ctx.storage()
+            .set_attribute(
+                Self::NAMESPACE,
+                id,
+                "state",
+                serde_json::to_string(&state).context("Failed to serialize state")?,
+            )
+            .await?;
 
         ctx.add_event_stream(ReceiverStream::new(janus_events));
 
-        Self {
-            id: ctx.participant_id(),
+        Ok(Self {
+            id,
             mcu: mcu.upgrade().unwrap(),
             media: MediaSessions::new(ctx.participant_id(), media_sender),
-            state: Default::default(),
-        }
+            state,
+        })
     }
 
     async fn on_event(
@@ -81,7 +94,7 @@ impl SignalingModule for Media {
                         self.id,
                         "state",
                         serde_json::to_string(&self.state)
-                            .expect("Failed to convert state to json"),
+                            .context("Failed to convert state to json")?,
                     )
                     .await
                     .context("Failed to set state attribute in storage")?;
@@ -98,7 +111,7 @@ impl SignalingModule for Media {
                         self.id,
                         "state",
                         serde_json::to_string(&self.state)
-                            .expect("Failed to convert state to json"),
+                            .context("Failed to convert state to json")?,
                     )
                     .await
                     .context("Failed to set state attribute in storage")?;
@@ -176,6 +189,7 @@ impl SignalingModule for Media {
             Event::Ext((k, m)) => match m {
                 TrickleMessage::Completed => {
                     log::warn!("Unimplemented TrickleMessage::Completed received");
+                    // TODO find out when janus sends this, never actually got this message yet
                 }
                 TrickleMessage::Candidate(candidate) => {
                     ctx.ws_send(outgoing::Message::SdpCandidate(outgoing::SdpCandidate {
@@ -379,34 +393,36 @@ impl Media {
         target: ParticipantId,
         media_session_type: MediaSessionType,
     ) -> Result<()> {
-        if target == self.id {
-            log::error!("Got requestOffer for own participant-id");
-            // TODO SEND ERROR RESPONSE VIA NEW RETURN ERROR TYPE
-        } else {
-            let subscriber =
-                if let Some(subscriber) = self.media.get_subscriber(target, media_session_type) {
-                    subscriber
-                } else {
-                    self.media
-                        .create_subscriber(self.mcu.as_ref(), target, media_session_type)
-                        .await?
-                };
+        if self.id == target {
+            // Usually subscribing to self should be possible but cannot be realized with the
+            // current messaging model. The frontend wouldn't know if a sdp-offer is an update
+            // to the publish or a response to the requestOffer (subscribe)
+            bail!("Cannot request offer for self");
+        }
 
-            let response = subscriber.send_message(Request::RequestOffer).await?;
+        let subscriber =
+            if let Some(subscriber) = self.media.get_subscriber(target, media_session_type) {
+                subscriber
+            } else {
+                self.media
+                    .create_subscriber(self.mcu.as_ref(), target, media_session_type)
+                    .await?
+            };
 
-            match response {
-                Response::SdpOffer(offer) => {
-                    ctx.ws_send(outgoing::Message::SdpOffer(outgoing::Sdp {
-                        sdp: offer.sdp(),
-                        source: outgoing::Source {
-                            source: target,
-                            media_session_type,
-                        },
-                    }));
-                }
-                Response::SdpAnswer(_) | Response::None => {
-                    bail!("Expected McuResponse::SdpOffer(..) got {:?}", response)
-                }
+        let response = subscriber.send_message(Request::RequestOffer).await?;
+
+        match response {
+            Response::SdpOffer(offer) => {
+                ctx.ws_send(outgoing::Message::SdpOffer(outgoing::Sdp {
+                    sdp: offer.sdp(),
+                    source: outgoing::Source {
+                        source: target,
+                        media_session_type,
+                    },
+                }));
+            }
+            Response::SdpAnswer(_) | Response::None => {
+                bail!("Expected McuResponse::SdpOffer(..) got {:?}", response)
             }
         }
 

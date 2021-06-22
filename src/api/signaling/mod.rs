@@ -1,14 +1,8 @@
-use crate::api::signaling::ws_modules::media::Media;
-use crate::modules::ApplicationBuilder;
-use anyhow::Result;
-use redis::aio::MultiplexedConnection;
 use redis::{FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::{from_utf8, FromStr};
-use std::sync::Arc;
 use uuid::Uuid;
-use ws::{Echo, SignalingHttpModule};
 
 mod mcu;
 mod storage;
@@ -16,6 +10,9 @@ mod ws;
 mod ws_modules;
 
 pub use mcu::JanusMcu;
+pub use ws::Echo;
+pub use ws::SignalingHttpModule;
+pub use ws_modules::media::Media;
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ParticipantId(Uuid);
@@ -63,20 +60,4 @@ impl ToRedisArgs for ParticipantId {
     {
         out.write_arg_fmt(self.0)
     }
-}
-
-pub async fn attach(
-    application: &mut ApplicationBuilder,
-    redis_conn: MultiplexedConnection,
-    rabbit_mq_channel: lapin::Channel,
-    mcu: Arc<JanusMcu>,
-) -> Result<()> {
-    let mut signaling = SignalingHttpModule::new(redis_conn, rabbit_mq_channel);
-
-    signaling.add_module::<Echo>(());
-    signaling.add_module::<Media>(Arc::downgrade(&mcu));
-
-    application.add_http_module(signaling);
-
-    Ok(())
 }
