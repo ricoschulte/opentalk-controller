@@ -71,3 +71,17 @@ from_janus_routing_key = "from-janus"
 [redis]
 # Redis URL used to connect the redis server
 #url = "redis://localhost:6379/"
+
+#[turn]
+# Lifetime of the generated credentials (in seconds)
+#lifetime = 86400
+
+#[[turn.servers]]
+# URIS of this Turn Server following rfc7065
+#uris = [
+#    "turn:127.0.0.1:3478?transport=udp",
+#    "turn:127.0.0.1:3478?transport=tcp",
+#    "turns:127.0.0.1:5349?transport=tcp"
+#]
+# The Pre Shared Key set with --static-auth-secret=...
+#pre_shared_key = "k3k2"
