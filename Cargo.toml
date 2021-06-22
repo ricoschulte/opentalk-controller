@@ -7,6 +7,11 @@ authors = [
 ]
 edition = "2018"
 
+[workspace]
+members = [
+    "client",
+]
+
 [dependencies]
 ### Logging utilities
 log = { version = "0.4", features = ["serde"] }
@@ -15,6 +20,7 @@ fern = "0.6"
 ### Config
 config = { version = "0.11", default-features = false, features = ["toml"] }
 serde = { version = "1", features = ["derive"] }
+structopt = "0.3"
 
 ### Error handling
 anyhow = "1.0"
@@ -58,3 +64,9 @@ actix-web-actors = { git = "https://github.com/actix/actix-web.git" }
 # Rust Encryption
 ring = "0.16"
 rustls = "0.19"
+
+[dev-dependencies]
+k3k-controller-client = { path = "client"}
+tokio-postgres = "0.7"
+serial_test = "0.5"
+regex = "1.5"

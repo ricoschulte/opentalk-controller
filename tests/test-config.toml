@@ -1,0 +1,39 @@
+[logging]
+level = "WARN"
+
+[database]
+# Database server address
+server = "localhost"
+
+# Database server port
+port = 5432
+
+# Database name
+name = "k3k"
+
+# Maximum number of connections allowed to the server
+# The servers default maximum is 100. Do not use all of it for one client.
+max_connections = 100
+
+# Database user
+user = "postgres"
+
+# Database user password
+password = "password123"
+
+
+[http]
+# The port to bind the HTTP Server to (defaults to 80)
+port = 8000
+# URLs that requests are allowed from. Leave empty to allow all.
+cors.allowed_origin = ["https://localhost:8080"]
+
+[oidc.provider]
+# OIDC Issuer URL according to RFC8414
+issuer = "http://localhost:8080/auth/realms/K3K"
+
+# OIDC Client ID
+client_id = "Controller"
+
+# OIDC Client secret (application requires confidential client)
+client_secret = "180a89c9-a802-4799-ab54-652777d88160"
