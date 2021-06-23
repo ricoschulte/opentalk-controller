@@ -55,6 +55,7 @@ impl JanusMcu {
             config.connection.to_janus_routing_key,
             config.connection.janus_exchange,
             config.connection.from_janus_routing_key,
+            // TODO dynamically create this TAG from controller- and janus-id
             TAG.to_owned(),
         );
 

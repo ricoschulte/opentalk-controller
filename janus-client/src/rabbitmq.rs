@@ -104,7 +104,7 @@ impl RabbitMqConfig {
             .channel
             .basic_consume(
                 from_janus.name().as_str(),
-                "",
+                &self.tag,
                 BasicConsumeOptions::default(),
                 FieldTable::default(),
             )

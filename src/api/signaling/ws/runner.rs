@@ -209,7 +209,7 @@ impl Runner {
                     }
                 }
                 Some((namespace, any)) = self.events.next() => {
-                    self.module_event_targeted(namespace, DynTargetedEvent::Ext(any))
+                    self.handle_module_targeted_event(namespace, DynTargetedEvent::Ext(any))
                         .await
                         .expect("Should not get events from unknown modules");
                 }
@@ -272,7 +272,7 @@ impl Runner {
             // Do not handle any other messages than control-join before joined
         } else if self.control_data.is_some() {
             if let Err(NoSuchModuleError(())) = self
-                .module_event_targeted(
+                .handle_module_targeted_event(
                     namespaced.namespace,
                     DynTargetedEvent::WsMessage(namespaced.payload),
                 )
@@ -408,7 +408,7 @@ impl Runner {
                 return;
             }
         } else if let Err(NoSuchModuleError(())) = self
-            .module_event_targeted(
+            .handle_module_targeted_event(
                 namespaced.namespace,
                 DynTargetedEvent::RabbitMqMessage(namespaced.payload),
             )
@@ -429,8 +429,10 @@ impl Runner {
 
                 let participant = self.build_participant(id).await?;
 
-                self.module_event_broadcast(DynBroadcastEvent::ParticipantJoined(&participant))
-                    .await;
+                self.handle_module_broadcast_event(DynBroadcastEvent::ParticipantJoined(
+                    &participant,
+                ))
+                .await;
 
                 self.ws_send(Message::Text(
                     Namespaced {
@@ -446,7 +448,7 @@ impl Runner {
                     return Ok(());
                 }
 
-                self.module_event_broadcast(DynBroadcastEvent::ParticipantLeft(id))
+                self.handle_module_broadcast_event(DynBroadcastEvent::ParticipantLeft(id))
                     .await;
 
                 self.ws_send(Message::Text(
@@ -465,8 +467,10 @@ impl Runner {
 
                 let participant = self.build_participant(id).await?;
 
-                self.module_event_broadcast(DynBroadcastEvent::ParticipantUpdated(&participant))
-                    .await;
+                self.handle_module_broadcast_event(DynBroadcastEvent::ParticipantUpdated(
+                    &participant,
+                ))
+                .await;
 
                 self.ws_send(Message::Text(
                     Namespaced {
@@ -533,7 +537,7 @@ impl Runner {
     }
 
     /// Dispatch owned event to a single module
-    async fn module_event_targeted(
+    async fn handle_module_targeted_event(
         &mut self,
         module: &str,
         dyn_event: DynTargetedEvent,
@@ -572,7 +576,7 @@ impl Runner {
     }
 
     /// Dispatch copyable event to all modules
-    async fn module_event_broadcast(&mut self, dyn_event: DynBroadcastEvent<'_>) {
+    async fn handle_module_broadcast_event(&mut self, dyn_event: DynBroadcastEvent<'_>) {
         let mut ws_messages = vec![];
         let mut rabbitmq_messages = vec![];
         let mut invalidate_data = false;
