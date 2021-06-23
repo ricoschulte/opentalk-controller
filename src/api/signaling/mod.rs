@@ -12,6 +12,7 @@ mod ws_modules;
 pub use mcu::JanusMcu;
 pub use ws::Echo;
 pub use ws::SignalingHttpModule;
+pub use ws_modules::chat::Chat;
 pub use ws_modules::media::Media;
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
