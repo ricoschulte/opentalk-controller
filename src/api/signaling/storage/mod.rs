@@ -21,6 +21,48 @@ impl Storage {
         Self { room, redis_conn }
     }
 
+    pub async fn get_items<V>(&mut self, namespace: &str) -> Result<Vec<V>>
+    where
+        V: FromRedisValue,
+    {
+        let items: Vec<V> = self
+            .redis_conn
+            .lrange(RedisKey::Room(self.room, Cow::Borrowed(namespace)), 0, -1)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to get items: room={}, namespace={}",
+                    self.room, namespace
+                )
+            })?;
+
+        Ok(items)
+    }
+
+    pub async fn add_item<'a, V>(&mut self, namespace: &str, item: &'a V) -> Result<()>
+    where
+        &'a V: ToRedisArgs + Send + Sync,
+    {
+        self.redis_conn
+            .lpush(RedisKey::Room(self.room, Cow::Borrowed(namespace)), item)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to push item: room={}, namespace={}",
+                    self.room, namespace
+                )
+            })?;
+
+        Ok(())
+    }
+
+    pub async fn remove_namespace(&mut self, namespace: &str) -> Result<()> {
+        self.redis_conn
+            .del(RedisKey::Room(self.room, Cow::Borrowed(namespace)))
+            .await
+            .context("Failed to remove participant field")
+    }
+
     pub async fn get_participants(&mut self) -> Result<HashSet<ParticipantId>> {
         let participants: HashSet<ParticipantId> = self
             .redis_conn
