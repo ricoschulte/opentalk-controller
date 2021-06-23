@@ -44,7 +44,9 @@ impl SignalingModule for Echo {
         Ok(())
     }
 
-    async fn get_frontend_data(&self) -> Self::FrontendData {}
+    async fn get_frontend_data(&self, _: &mut Storage) -> Result<Self::FrontendData> {
+        Ok(())
+    }
 
     async fn get_frontend_data_for(
         &self,

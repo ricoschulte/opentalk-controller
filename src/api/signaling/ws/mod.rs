@@ -175,7 +175,8 @@ pub trait SignalingModule: Sized + 'static {
     /// which gives access to the websocket and other related information.
     async fn on_event(&mut self, ctx: ModuleContext<'_, Self>, event: Event<Self>) -> Result<()>;
 
-    async fn get_frontend_data(&self) -> Self::FrontendData;
+    async fn get_frontend_data(&self, storage: &mut Storage) -> Result<Self::FrontendData>;
+
     async fn get_frontend_data_for(
         &self,
         storage: &mut Storage,
