@@ -142,7 +142,11 @@ async fn ws_service(
         // Access endpoint with ?ticket=... query
         // This avoids having the access_token inside server logs and keeps it outside headers
         // it doesnt belong into
-        _ => return Ok(HttpResponse::Forbidden().finish()),
+        _ => {
+            log::debug!("Rejecting request, missing access_token or invalid protocol");
+
+            return Ok(HttpResponse::Forbidden().finish());
+        }
     };
 
     let user = check_access_token(db_ctx, oidc_ctx, AccessToken::new(access_token.into())).await?;

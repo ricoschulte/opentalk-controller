@@ -13,8 +13,8 @@ variables:
 cache:
   key: $CI_JOB_STAGE
   paths:
-  - .cargo/
-  - target/
+    - .cargo/
+    - target/
 
 lint:fmt:
   stage: lint
@@ -44,17 +44,17 @@ test:cargo_check:
 test:cargo_test:
   stage: test
   variables:
-    DATABASE_URL: "postgres://postgres:password123@postgres:5432/k3k"
+    # Set ENV vars for services
     POSTGRES_DB: k3k
     POSTGRES_USER: postgres
     POSTGRES_PASSWORD: "password123"
     POSTGRES_HOST_AUTH_METHOD: trust
-    # Set ENV vars for services
     RABBITMQ_DEFAULT_USER: guest
     RABBITMQ_DEFAULT_PASS: guest
     RABBITMQ_HOST: 'rabbitmq'
     RABBITMQ_PORT: '5672'
     # Used for integration tests
+    DATABASE_URL: "postgres://postgres:password123@postgres:5432/k3k"
     AMQP_ADDR: 'amqp://guest:guest@rabbitmq:5672'
   services:
     - name: postgres:13-alpine
