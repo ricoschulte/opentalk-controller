@@ -56,6 +56,7 @@ test:cargo_test:
     # Used for integration tests
     DATABASE_URL: "postgres://postgres:password123@postgres:5432/k3k"
     AMQP_ADDR: 'amqp://guest:guest@rabbitmq:5672'
+    REDIS_ADDR: 'redis://redis:6379/'
   services:
     - name: postgres:13-alpine
       alias: postgres
@@ -63,6 +64,8 @@ test:cargo_test:
       alias: rabbitmq
     - name: quay.io/freswa/janus-gateway-rmq:latest
       alias: janus-gateway
+    - name: redis:6-alpine
+      alias: redis
   before_script:
     - rustup component add rustfmt
     - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"

@@ -2004,6 +2004,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "r3dlock"
+version = "0.1.0"
+dependencies = [
+ "displaydoc",
+ "rand 0.8.4",
+ "redis",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "radium"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

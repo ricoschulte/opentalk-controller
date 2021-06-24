@@ -1,0 +1,20 @@
+[package]
+name = "r3dlock"
+version = "0.1.0"
+authors = [
+    "Rudi Floren <r.floren@heinlein-video.de>", 
+    "Konstanin Baltruschat <k.baltruschat@heinlein-video.de>"
+]
+edition = "2018"
+
+
+[dependencies]
+redis = { version = "0.20.2", features = ["tokio-comp"] }
+tokio = { version = "1", features=["time"] }
+
+rand = "0.8"
+thiserror = "1.0.25"
+displaydoc = "0.2.1"
+
+[dev-dependencies]
+tokio = { version = "1", features=["macros", "test-util"] }
