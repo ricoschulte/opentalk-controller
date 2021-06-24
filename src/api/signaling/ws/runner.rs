@@ -13,6 +13,7 @@ use futures::SinkExt;
 use lapin::options::QueueDeclareOptions;
 use serde::Serialize;
 use serde_json::Value;
+use std::collections::HashMap;
 use std::pin::Pin;
 use std::time::Duration;
 use tokio::sync::broadcast;
@@ -331,11 +332,19 @@ impl Runner {
                     };
                 }
 
+                let mut module_data = HashMap::new();
+
+                self.modules
+                    .collect_frontend_data(&mut self.storage, &mut module_data)
+                    .await
+                    .context("Failed to collect frontend data from modules")?;
+
                 self.ws_send(Message::Text(
                     Namespaced {
                         namespace: NAMESPACE,
                         payload: outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
                             id: self.id,
+                            module_data,
                             participants,
                         }),
                     }

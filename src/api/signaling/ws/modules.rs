@@ -79,6 +79,18 @@ impl Modules {
         }
     }
 
+    pub async fn collect_frontend_data(
+        &self,
+        storage: &mut Storage,
+        module_data: &mut HashMap<String, Value>,
+    ) -> Result<()> {
+        for module in self.modules.values() {
+            module.populate_frontend_data(storage, module_data).await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn collect_participant_data(
         &self,
         storage: &mut Storage,
@@ -136,6 +148,11 @@ trait ModuleCaller {
         &mut self,
         ctx: DynEventCtx<'_>,
         dyn_event: DynBroadcastEvent<'_>,
+    ) -> Result<()>;
+    async fn populate_frontend_data(
+        &self,
+        storage: &mut Storage,
+        module_data: &mut HashMap<String, Value>,
     ) -> Result<()>;
     async fn populate_frontend_data_for(
         &self,
@@ -228,6 +245,25 @@ where
                 }
             }
         }
+
+        Ok(())
+    }
+
+    async fn populate_frontend_data(
+        &self,
+        storage: &mut Storage,
+        module_data: &mut HashMap<String, Value>,
+    ) -> Result<()> {
+        let data = self.module.get_frontend_data(storage).await?;
+
+        let value =
+            serde_json::to_value(&data).context("Failed to convert FrontendData to json")?;
+
+        if let Value::Null = &value {
+            return Ok(());
+        }
+
+        module_data.insert(M::NAMESPACE.into(), value);
 
         Ok(())
     }

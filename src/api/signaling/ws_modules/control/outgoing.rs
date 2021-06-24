@@ -25,6 +25,10 @@ pub enum Message {
 #[derive(Debug, Serialize)]
 pub struct JoinSuccess {
     pub id: ParticipantId,
+
+    #[serde(flatten)]
+    pub module_data: HashMap<String, serde_json::Value>,
+
     pub participants: Vec<Participant>,
 }
 
@@ -51,6 +55,7 @@ mod test {
 
         let produced = serde_json::to_string(&Message::JoinSuccess(JoinSuccess {
             id: ParticipantId::nil(),
+            module_data: Default::default(),
             participants: vec![],
         }))
         .unwrap();
