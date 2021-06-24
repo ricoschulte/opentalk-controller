@@ -9,13 +9,14 @@ edition = "2018"
 
 [workspace]
 members = [
+    "janus-client",
     "client",
 ]
 
 [dependencies]
 ### Logging utilities
 log = { version = "0.4", features = ["serde"] }
-fern = "0.6"
+fern = { version = "0.6", features = ["colored"] }
 
 ### Config
 config = { version = "0.11", default-features = false, features = ["toml"] }
@@ -39,8 +40,8 @@ barrel = { version = "0.6", features = ["pg"] }
 
 ### Web Framework & Runtime
 tokio = "1"
-tokio-stream = "0.1"
-actix-web = { version = "4.0.0-beta.6", features = ["rustls"] }
+tokio-stream = { version = "0.1.5", features = ["sync"] }
+actix-web = { version = "= 4.0.0-beta.6", features = ["rustls"] }
 actix-rt = "2.2"
 # Until https://github.com/actix/actix-extras/pull/181 gets merged into the main branch use the forked version of actix-extras
 actix-web-httpauth = { git = "https://github.com/nhruo123/actix-extras.git", rev = "b4e8db446843a99b06c7ec40f18ef7b59ee7e955" }
@@ -50,6 +51,15 @@ async-trait = "0.1"
 futures = "0.3"
 bytes = "1"
 serde_json = "1"
+parking_lot = "0.11"
+
+### RabbitMQ
+lapin = "1.7.1"
+tokio-amqp = "1.0.0"
+
+### Redis
+redis = { version = "0.20", features = ["tokio-comp"] }
+url = "2"
 
 ### OpenID Connect & JWT
 openidconnect = { version = "2.0", features = ["reqwest"] }
@@ -61,7 +71,10 @@ chrono = "0.4"
 async-tungstenite = "0.13"
 actix-web-actors = { git = "https://github.com/actix/actix-web.git" }
 
-# Rust Encryption
+### Janus
+janus-client = { path = "janus-client" }
+
+### Rust Encryption
 ring = "0.16"
 rustls = "0.19"
 

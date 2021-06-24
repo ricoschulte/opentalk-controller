@@ -46,3 +46,28 @@ client_id = "Controller"
 
 # OIDC Client secret (application requires confidential client).
 client_secret = "c64c5854-3f02-4728-a617-bbe98ec42b8f"
+
+[room_server]
+# Maximum bitrate allowed for media sessions that will be used to transmit webcam video/audio
+# Example: 64kB/s
+max_video_bitrate = "64000"
+
+# Maximum bitrate allowed for media sessions used for screen share
+# Example: 1MB/s
+max_screen_bitrate = "8000000"
+
+[room_server.connection]
+# Connection settings for the channel used to talk to the room server.
+# Currently these should be equal to the settings in janus.transport.rabbitmq.jcfg
+to_janus_queue = "janus-gateway"
+to_janus_routing_key = "to-janus"
+janus_exchange = "janus-exchange"
+from_janus_routing_key = "from-janus"
+
+[rabbit_mq]
+# The URL to use to connect to the rabbit mq broker
+#url = "amqp://username:password@host/%2F"
+
+[redis]
+# Redis URL used to connect the redis server
+#url = "redis://localhost:6379/"
