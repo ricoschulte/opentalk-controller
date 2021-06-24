@@ -1,14 +1,18 @@
-use crate::api::signaling::storage::Storage;
 use crate::api::signaling::ParticipantId;
 use adapter::ActixTungsteniteAdapter;
 use anyhow::Result;
 use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
 use futures::stream::SelectAll;
+use lapin::options::{ExchangeDeclareOptions, QueueBindOptions};
+use lapin::ExchangeKind;
 use modules::{any_stream, AnyStream};
+use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::marker::PhantomData;
 use tokio_stream::Stream;
+use uuid::Uuid;
 
 mod adapter;
 mod echo;
@@ -22,18 +26,31 @@ pub use http::SignalingHttpModule;
 type WebSocket = WebSocketStream<ActixTungsteniteAdapter>;
 
 /// Event passed to [`WebSocketModule::on_event`]
-pub enum Event<M>
+pub enum Event<'evt, M>
 where
     M: SignalingModule,
 {
+    /// The participant joined the room
+    Joined {
+        /// The module can set this option to Some(M::FrontendData) to populate
+        /// the `join_success` message with additional information to the frontend module counterpart
+        frontend_data: &'evt mut Option<M::FrontendData>,
+
+        /// List of participants already inside the room.
+        ///
+        /// The module can populate participant specific frontend-data, which is sent inside
+        /// the participant inside the `join_success` message
+        participants: &'evt mut HashMap<ParticipantId, Option<M::PeerFrontendData>>,
+    },
+
     /// Participant with the associated id has joined the room
-    ParticipantJoined(ParticipantId, M::PeerFrontendData),
+    ParticipantJoined(ParticipantId, &'evt mut Option<M::PeerFrontendData>),
 
     /// Participant with the associated id has left the room
     ParticipantLeft(ParticipantId),
 
-    /// Participant data has changed
-    ParticipantUpdated(ParticipantId, M::PeerFrontendData),
+    /// Participant data has changed, an options to `M::PeerFrontendData`
+    ParticipantUpdated(ParticipantId, &'evt mut Option<M::PeerFrontendData>),
 
     /// Received websocket message
     WsMessage(M::Incoming),
@@ -48,6 +65,92 @@ where
     Ext(M::ExtEvent),
 }
 
+/// Context passed to the `init` function
+pub struct InitContext<'ctx, M>
+where
+    M: SignalingModule,
+{
+    id: ParticipantId,
+    room: Uuid,
+    rabbitmq_exchanges: &'ctx mut Vec<RabbitMqExchange>,
+    rabbitmq_bindings: &'ctx mut Vec<RabbitMqBinding>,
+    events: &'ctx mut SelectAll<AnyStream>,
+    redis_conn: &'ctx mut ConnectionManager,
+    m: PhantomData<fn() -> M>,
+}
+
+struct RabbitMqExchange {
+    name: String,
+    kind: ExchangeKind,
+    options: ExchangeDeclareOptions,
+}
+
+struct RabbitMqBinding {
+    routing_key: String,
+    exchange: String,
+    options: QueueBindOptions,
+}
+
+impl<M> InitContext<'_, M>
+where
+    M: SignalingModule,
+{
+    /// ID of the participant the module instance belongs to
+    pub fn participant_id(&self) -> ParticipantId {
+        self.id
+    }
+
+    /// ID of the room the participant is inside
+    pub fn room_id(&self) -> Uuid {
+        self.room
+    }
+
+    /// Access to a redis connection
+    pub fn redis_conn(&mut self) -> &mut ConnectionManager {
+        &mut self.redis_conn
+    }
+
+    /// Add a rabbitmq exchange to be created
+    // TODO Not used yet anywhere
+    #[allow(dead_code)]
+    pub fn add_rabbitmq_exchange(
+        &mut self,
+        name: String,
+        kind: ExchangeKind,
+        options: ExchangeDeclareOptions,
+    ) {
+        self.rabbitmq_exchanges.push(RabbitMqExchange {
+            name,
+            kind,
+            options,
+        });
+    }
+
+    /// Add a rabbitmq binding to bind the queue to
+    // TODO Used in ee-chat, remove `allow` then
+    #[allow(dead_code)]
+    pub fn add_rabbitmq_binding(
+        &mut self,
+        routing_key: String,
+        exchange: String,
+        options: QueueBindOptions,
+    ) {
+        self.rabbitmq_bindings.push(RabbitMqBinding {
+            routing_key,
+            exchange,
+            options,
+        });
+    }
+
+    /// Add a custom event stream which return `M::ExtEvent`
+    pub fn add_event_stream<S>(&mut self, stream: S)
+    where
+        S: Stream<Item = M::ExtEvent> + 'static,
+    {
+        self.events.push(any_stream(M::NAMESPACE, stream));
+    }
+}
+
 /// Context passed to the module
 ///
 /// Can be used to send websocket messages
@@ -55,23 +158,23 @@ pub struct ModuleContext<'ctx, M>
 where
     M: SignalingModule,
 {
-    id: ParticipantId,
     ws_messages: &'ctx mut Vec<Message>,
-    rabbitmq_messages: &'ctx mut Vec<(Option<ParticipantId>, String)>,
-    events: &'ctx mut SelectAll<AnyStream>,
-    storage: &'ctx mut Storage,
+    rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
+    redis_conn: &'ctx mut ConnectionManager,
     invalidate_data: &'ctx mut bool,
     m: PhantomData<fn() -> M>,
+}
+
+struct RabbitMqPublish {
+    exchange: String,
+    routing_key: String,
+    message: String,
 }
 
 impl<M> ModuleContext<'_, M>
 where
     M: SignalingModule,
 {
-    pub fn participant_id(&self) -> ParticipantId {
-        self.id
-    }
-
     /// Queue a outgoing message to be sent via the websocket
     /// after exiting the `on_event` function
     ///
@@ -89,32 +192,49 @@ where
     }
 
     /// Queue a outgoing message to be sent via rabbitmq
-    pub fn rabbitmq_send(&mut self, target: Option<ParticipantId>, message: M::RabbitMqMessage) {
-        self.rabbitmq_messages.push((
-            target,
-            Namespaced {
+    pub fn rabbitmq_publish(
+        &mut self,
+        exchange: String,
+        routing_key: String,
+        message: M::RabbitMqMessage,
+    ) {
+        self.rabbitmq_publish.push(RabbitMqPublish {
+            exchange,
+            routing_key,
+            message: Namespaced {
                 namespace: M::NAMESPACE,
                 payload: message,
             }
             .to_json(),
-        ));
+        });
     }
 
-    /// Access to local state of the websocket
-    pub fn storage(&mut self) -> &mut Storage {
-        self.storage
+    /// Access to the storage of the room
+    pub fn redis_conn(&mut self) -> &mut ConnectionManager {
+        &mut self.redis_conn
     }
 
     /// Signals that the data related to the participant has changed
     pub fn invalidate_data(&mut self) {
         *self.invalidate_data = true;
     }
+}
 
-    pub fn add_event_stream<S>(&mut self, stream: S)
-    where
-        S: Stream<Item = M::ExtEvent> + 'static,
-    {
-        self.events.push(any_stream(M::NAMESPACE, stream));
+/// Context passed to the `destroy` function
+pub struct DestroyContext<'ctx> {
+    redis_conn: &'ctx mut ConnectionManager,
+    destroy_room: bool,
+}
+
+impl DestroyContext<'_> {
+    /// Access to a redis connection
+    pub fn redis_conn(&mut self) -> &mut ConnectionManager {
+        &mut self.redis_conn
+    }
+
+    /// Returns true if the module belongs to the last participant inside a room
+    pub fn destroy_room(&self) -> bool {
+        self.destroy_room
     }
 }
 
@@ -149,16 +269,7 @@ pub trait SignalingModule: Sized + 'static {
     type FrontendData: Serialize;
 
     /// Data about a peer which is sent to the frontend
-    // TODO Remove this deserialize bound:
-    // When a peer participant joins the runner asks all modules to collect data into a `Participant`.
-    // But since the module doesnt know if the data collected was because of an update or join or something else.
-    //
-    // The runner dispatches a ParticipantJoined event which needs to contain the module data,
-    // which was collected before into `Participant` as serde_json::Value. Therefore the value will
-    // be deserialized back into PeerFrontendData.
-    //
-    // This is a hack and should be removed.
-    type PeerFrontendData: for<'de> Deserialize<'de> + Serialize;
+    type PeerFrontendData: Serialize;
 
     /// Constructor of the module
     ///
@@ -166,25 +277,21 @@ pub trait SignalingModule: Sized + 'static {
     ///
     /// Calls to [`WsCtx::ws_send`] are discarded
     async fn init(
-        ctx: ModuleContext<'_, Self>,
+        ctx: InitContext<'_, Self>,
         params: &Self::Params,
         protocol: &'static str,
     ) -> Result<Self>;
 
     /// Events related to this module will be passed into this function together with [EventCtx]
     /// which gives access to the websocket and other related information.
-    async fn on_event(&mut self, ctx: ModuleContext<'_, Self>, event: Event<Self>) -> Result<()>;
-
-    async fn get_frontend_data(&self, storage: &mut Storage) -> Result<Self::FrontendData>;
-
-    async fn get_frontend_data_for(
-        &self,
-        storage: &mut Storage,
-        participant: ParticipantId,
-    ) -> Result<Self::PeerFrontendData>;
+    async fn on_event(
+        &mut self,
+        ctx: ModuleContext<'_, Self>,
+        event: Event<'_, Self>,
+    ) -> Result<()>;
 
     /// Before dropping the module this function will be called
-    async fn on_destroy(self, storage: &mut Storage);
+    async fn on_destroy(self, ctx: DestroyContext<'_>);
 }
 
 /// The root of all websocket messages

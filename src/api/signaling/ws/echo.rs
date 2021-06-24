@@ -1,6 +1,6 @@
-use crate::api::signaling::storage::Storage;
-use crate::api::signaling::ws::{Event, ModuleContext, SignalingModule};
-use crate::api::signaling::ParticipantId;
+use crate::api::signaling::ws::{
+    DestroyContext, Event, InitContext, ModuleContext, SignalingModule,
+};
 use anyhow::Result;
 use serde_json::Value;
 
@@ -18,24 +18,23 @@ impl SignalingModule for Echo {
     type FrontendData = ();
     type PeerFrontendData = ();
 
-    async fn init(_: ModuleContext<'_, Self>, _: &Self::Params, _: &'static str) -> Result<Self> {
+    async fn init(_: InitContext<'_, Self>, _: &Self::Params, _: &'static str) -> Result<Self> {
         Ok(Self)
     }
 
     async fn on_event(
         &mut self,
         mut ctx: ModuleContext<'_, Self>,
-        event: Event<Self>,
+        event: Event<'_, Self>,
     ) -> Result<()> {
         match event {
             Event::WsMessage(incoming) => {
                 ctx.ws_send(incoming);
             }
-            Event::RabbitMq(msg) => {
-                ctx.rabbitmq_send(None, msg);
-            }
+            Event::RabbitMq(_) => {}
             Event::Ext(_) => unreachable!("no registered external events"),
             // Ignore
+            Event::Joined { .. } => {}
             Event::ParticipantJoined(..) => {}
             Event::ParticipantLeft(_) => {}
             Event::ParticipantUpdated(..) => {}
@@ -44,17 +43,5 @@ impl SignalingModule for Echo {
         Ok(())
     }
 
-    async fn get_frontend_data(&self, _: &mut Storage) -> Result<Self::FrontendData> {
-        Ok(())
-    }
-
-    async fn get_frontend_data_for(
-        &self,
-        _: &mut Storage,
-        _: ParticipantId,
-    ) -> Result<Self::FrontendData> {
-        Ok(())
-    }
-
-    async fn on_destroy(self, _: &mut Storage) {}
+    async fn on_destroy(self, _: DestroyContext<'_>) {}
 }

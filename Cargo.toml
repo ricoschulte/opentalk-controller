@@ -58,8 +58,9 @@ lapin = "1.7.1"
 tokio-amqp = "1.0.0"
 
 ### Redis
-redis = { version = "0.20", features = ["tokio-comp"] }
+redis = { version = "0.20", features = ["tokio-comp", "connection-manager"] }
 url = "2"
+r3dlock = { path = "r3dlock" }
 
 ### OpenID Connect & JWT
 openidconnect = { version = "2.0", features = ["reqwest"] }
@@ -77,6 +78,9 @@ janus-client = { path = "janus-client" }
 ### Rust Encryption
 ring = "0.16"
 rustls = "0.19"
+
+### QoL
+displaydoc = "0.2"
 
 # Random Distributions etc. Used for RR
 rand = "0.8.3"

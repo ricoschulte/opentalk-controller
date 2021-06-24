@@ -27,7 +27,7 @@ pub struct JoinSuccess {
     pub id: ParticipantId,
 
     #[serde(flatten)]
-    pub module_data: HashMap<String, serde_json::Value>,
+    pub module_data: HashMap<&'static str, serde_json::Value>,
 
     pub participants: Vec<Participant>,
 }
@@ -42,7 +42,7 @@ pub struct Participant {
     pub id: ParticipantId,
 
     #[serde(flatten)]
-    pub module_data: HashMap<String, serde_json::Value>,
+    pub module_data: HashMap<&'static str, serde_json::Value>,
 }
 
 #[cfg(test)]

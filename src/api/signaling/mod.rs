@@ -1,11 +1,24 @@
-use redis::{FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
+use redis::{FromRedisValue, RedisError, RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::{from_utf8, FromStr};
 use uuid::Uuid;
 
+/// Implement [`redis::ToRedisArgs`] for a type that implements display
+macro_rules! impl_to_redis_args {
+    ($ty:ty) => {
+        impl ::redis::ToRedisArgs for $ty {
+            fn write_redis_args<W>(&self, out: &mut W)
+            where
+                W: ?Sized + ::redis::RedisWrite,
+            {
+                out.write_arg_fmt(self)
+            }
+        }
+    };
+}
+
 mod mcu;
-mod storage;
 mod ws;
 mod ws_modules;
 
@@ -54,11 +67,4 @@ impl FromRedisValue for ParticipantId {
     }
 }
 
-impl ToRedisArgs for ParticipantId {
-    fn write_redis_args<W>(&self, out: &mut W)
-    where
-        W: ?Sized + RedisWrite,
-    {
-        out.write_arg_fmt(self.0)
-    }
-}
+impl_to_redis_args!(ParticipantId);

@@ -1,12 +1,12 @@
-use super::runner::Runner;
 use super::SignalingModule;
 use super::{Event, ModuleContext};
-use crate::api::signaling::storage::Storage;
+use crate::api::signaling::ws::runner::Builder;
+use crate::api::signaling::ws::{DestroyContext, InitContext, RabbitMqPublish};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ParticipantId;
 use anyhow::{Context, Result};
 use async_tungstenite::tungstenite::Message;
-use futures::stream::SelectAll;
+use redis::aio::ConnectionManager;
 use serde_json::Value;
 use std::any::Any;
 use std::collections::HashMap;
@@ -28,7 +28,7 @@ where
 pub struct NoSuchModuleError(pub ());
 
 #[derive(Default)]
-pub struct Modules {
+pub(super) struct Modules {
     modules: HashMap<&'static str, Box<dyn ModuleCaller>>,
 }
 
@@ -61,59 +61,38 @@ impl Modules {
     pub async fn on_event_broadcast(
         &mut self,
         ctx: DynEventCtx<'_>,
-        dyn_event: DynBroadcastEvent<'_>,
+        mut dyn_event: DynBroadcastEvent<'_>,
     ) {
         for module in self.modules.values_mut() {
             let ctx = DynEventCtx {
                 id: ctx.id,
                 ws_messages: ctx.ws_messages,
-                rabbitmq_messages: ctx.rabbitmq_messages,
-                events: ctx.events,
-                storage: ctx.storage,
+                rabbitmq_publish: ctx.rabbitmq_publish,
+                redis_conn: ctx.redis_conn,
                 invalidate_data: ctx.invalidate_data,
             };
 
-            if let Err(e) = module.on_event_broadcast(ctx, dyn_event).await {
+            if let Err(e) = module.on_event_broadcast(ctx, &mut dyn_event).await {
                 log::error!("Failed to handle event, {:?}", e);
             }
         }
     }
 
-    pub async fn collect_frontend_data(
-        &self,
-        storage: &mut Storage,
-        module_data: &mut HashMap<String, Value>,
-    ) -> Result<()> {
-        for module in self.modules.values() {
-            module.populate_frontend_data(storage, module_data).await?;
-        }
-
-        Ok(())
-    }
-
-    pub async fn collect_participant_data(
-        &self,
-        storage: &mut Storage,
-        participant: &mut Participant,
-    ) -> Result<()> {
-        for module in self.modules.values() {
-            module
-                .populate_frontend_data_for(storage, participant)
-                .await?;
-        }
-
-        Ok(())
-    }
-
-    pub async fn destroy(self, storage: &mut Storage) {
-        for (namespace, module) in self.modules {
+    pub async fn destroy(&mut self, ctx: DestroyContext<'_>) {
+        for (namespace, module) in self.modules.drain() {
             log::debug!("Destroying module {}", namespace);
 
-            module.destroy(storage).await;
+            module
+                .destroy(DestroyContext {
+                    redis_conn: ctx.redis_conn,
+                    destroy_room: ctx.destroy_room,
+                })
+                .await;
         }
     }
 }
 
+/// Events that are specific to a module
 #[derive(Debug)]
 pub enum DynTargetedEvent {
     WsMessage(Value),
@@ -121,19 +100,24 @@ pub enum DynTargetedEvent {
     Ext(Box<dyn Any + 'static>),
 }
 
-#[derive(Debug, Copy, Clone)]
+/// Events that can dispatched to all modules
+#[derive(Debug)]
 pub enum DynBroadcastEvent<'evt> {
-    ParticipantJoined(&'evt Participant),
+    Joined(
+        &'evt mut HashMap<&'static str, Value>,
+        &'evt mut Vec<Participant>,
+    ),
+    ParticipantJoined(&'evt mut Participant),
     ParticipantLeft(ParticipantId),
-    ParticipantUpdated(&'evt Participant),
+    ParticipantUpdated(&'evt mut Participant),
 }
 
-pub struct DynEventCtx<'ctx> {
+/// Untyped version of a ModuleContext which is used in `on_event`
+pub(super) struct DynEventCtx<'ctx> {
     pub id: ParticipantId,
     pub ws_messages: &'ctx mut Vec<Message>,
-    pub rabbitmq_messages: &'ctx mut Vec<(Option<ParticipantId>, String)>,
-    pub events: &'ctx mut SelectAll<AnyStream>,
-    pub storage: &'ctx mut Storage,
+    pub rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
+    pub redis_conn: &'ctx mut ConnectionManager,
     pub invalidate_data: &'ctx mut bool,
 }
 
@@ -147,19 +131,9 @@ trait ModuleCaller {
     async fn on_event_broadcast(
         &mut self,
         ctx: DynEventCtx<'_>,
-        dyn_event: DynBroadcastEvent<'_>,
+        dyn_event: &mut DynBroadcastEvent<'_>,
     ) -> Result<()>;
-    async fn populate_frontend_data(
-        &self,
-        storage: &mut Storage,
-        module_data: &mut HashMap<String, Value>,
-    ) -> Result<()>;
-    async fn populate_frontend_data_for(
-        &self,
-        storage: &mut Storage,
-        participant: &mut Participant,
-    ) -> Result<()>;
-    async fn destroy(self: Box<Self>, storage: &mut Storage);
+    async fn destroy(self: Box<Self>, ctx: DestroyContext<'_>);
 }
 
 struct ModuleCallerImpl<M> {
@@ -177,11 +151,9 @@ where
         dyn_event: DynTargetedEvent,
     ) -> Result<()> {
         let ctx = ModuleContext {
-            id: ctx.id,
             ws_messages: ctx.ws_messages,
-            rabbitmq_messages: ctx.rabbitmq_messages,
-            events: ctx.events,
-            storage: ctx.storage,
+            rabbitmq_publish: ctx.rabbitmq_publish,
+            redis_conn: ctx.redis_conn,
             invalidate_data: ctx.invalidate_data,
             m: PhantomData::<fn() -> M>,
         };
@@ -207,42 +179,79 @@ where
     async fn on_event_broadcast(
         &mut self,
         ctx: DynEventCtx<'_>,
-        dyn_event: DynBroadcastEvent<'_>,
+        dyn_event: &mut DynBroadcastEvent<'_>,
     ) -> Result<()> {
         let ctx = ModuleContext {
-            id: ctx.id,
             ws_messages: ctx.ws_messages,
-            rabbitmq_messages: ctx.rabbitmq_messages,
-            events: ctx.events,
-            storage: ctx.storage,
+            rabbitmq_publish: ctx.rabbitmq_publish,
+            redis_conn: ctx.redis_conn,
             invalidate_data: ctx.invalidate_data,
             m: PhantomData::<fn() -> M>,
         };
 
         match dyn_event {
-            DynBroadcastEvent::ParticipantJoined(participant) => {
-                if let Some(module_data) = participant.module_data.get(M::NAMESPACE) {
-                    let module_data = serde_json::from_value(module_data.clone())
-                        .context("Failed to parse module data")?;
+            DynBroadcastEvent::Joined(module_data, participants) => {
+                let mut frontend_data = None;
+                let mut participants_data = participants.iter().map(|p| (p.id, None)).collect();
 
-                    self.module
-                        .on_event(ctx, Event::ParticipantJoined(participant.id, module_data))
-                        .await?;
+                self.module
+                    .on_event(
+                        ctx,
+                        Event::Joined {
+                            frontend_data: &mut frontend_data,
+                            participants: &mut participants_data,
+                        },
+                    )
+                    .await?;
+
+                if let Some(frontend_data) = frontend_data {
+                    module_data.insert(
+                        M::NAMESPACE,
+                        serde_json::to_value(frontend_data)
+                            .context("Failed to convert frontend-data to value")?,
+                    );
+                }
+
+                for participant in participants.iter_mut() {
+                    if let Some(data) = participants_data.remove(&participant.id).flatten() {
+                        let value = serde_json::to_value(data)
+                            .context("Failed to convert module peer frontend data to value")?;
+
+                        participant.module_data.insert(M::NAMESPACE, value);
+                    }
+                }
+            }
+            DynBroadcastEvent::ParticipantJoined(participant) => {
+                let mut data = None;
+
+                self.module
+                    .on_event(ctx, Event::ParticipantJoined(participant.id, &mut data))
+                    .await?;
+
+                if let Some(data) = data {
+                    let value = serde_json::to_value(data)
+                        .context("Failed to convert module peer frontend data to value")?;
+
+                    participant.module_data.insert(M::NAMESPACE, value);
                 }
             }
             DynBroadcastEvent::ParticipantLeft(participant) => {
                 self.module
-                    .on_event(ctx, Event::ParticipantLeft(participant))
+                    .on_event(ctx, Event::ParticipantLeft(*participant))
                     .await?;
             }
             DynBroadcastEvent::ParticipantUpdated(participant) => {
-                if let Some(module_data) = participant.module_data.get(M::NAMESPACE) {
-                    let module_data = serde_json::from_value(module_data.clone())
-                        .context("Failed to parse module data")?;
+                let mut data = None;
 
-                    self.module
-                        .on_event(ctx, Event::ParticipantUpdated(participant.id, module_data))
-                        .await?;
+                self.module
+                    .on_event(ctx, Event::ParticipantUpdated(participant.id, &mut data))
+                    .await?;
+
+                if let Some(data) = data {
+                    let value = serde_json::to_value(data)
+                        .context("Failed to convert module peer frontend data to value")?;
+
+                    participant.module_data.insert(M::NAMESPACE, value);
                 }
             }
         }
@@ -250,55 +259,14 @@ where
         Ok(())
     }
 
-    async fn populate_frontend_data(
-        &self,
-        storage: &mut Storage,
-        module_data: &mut HashMap<String, Value>,
-    ) -> Result<()> {
-        let data = self.module.get_frontend_data(storage).await?;
-
-        let value =
-            serde_json::to_value(&data).context("Failed to convert FrontendData to json")?;
-
-        if let Value::Null = &value {
-            return Ok(());
-        }
-
-        module_data.insert(M::NAMESPACE.into(), value);
-
-        Ok(())
-    }
-
-    async fn populate_frontend_data_for(
-        &self,
-        storage: &mut Storage,
-        participant: &mut Participant,
-    ) -> Result<()> {
-        let data = self
-            .module
-            .get_frontend_data_for(storage, participant.id)
-            .await?;
-
-        let value =
-            serde_json::to_value(&data).context("Failed to convert FrontendData to json")?;
-
-        if let Value::Null = &value {
-            return Ok(());
-        }
-
-        participant.module_data.insert(M::NAMESPACE.into(), value);
-
-        Ok(())
-    }
-
-    async fn destroy(self: Box<Self>, storage: &mut Storage) {
-        self.module.on_destroy(storage).await
+    async fn destroy(self: Box<Self>, ctx: DestroyContext<'_>) {
+        self.module.on_destroy(ctx).await
     }
 }
 
 #[async_trait::async_trait(?Send)]
 pub trait ModuleBuilder: Send + Sync {
-    async fn build(&self, runner: &mut Runner) -> Result<()>;
+    async fn build(&self, builder: &mut Builder) -> Result<()>;
 
     fn clone_boxed(&self) -> Box<dyn ModuleBuilder>;
 }
@@ -316,26 +284,26 @@ impl<M> ModuleBuilder for ModuleBuilderImpl<M>
 where
     M: SignalingModule,
 {
-    async fn build(&self, runner: &mut Runner) -> Result<()> {
-        let ctx = ModuleContext {
-            id: runner.id,
-            ws_messages: &mut vec![],
-            rabbitmq_messages: &mut vec![],
-            events: &mut runner.events,
-            storage: &mut runner.storage,
-            invalidate_data: &mut false,
+    async fn build(&self, builder: &mut Builder) -> Result<()> {
+        let ctx = InitContext {
+            id: builder.id,
+            room: builder.room,
+            rabbitmq_exchanges: &mut builder.rabbitmq_exchanges,
+            rabbitmq_bindings: &mut builder.rabbitmq_bindings,
+            events: &mut builder.events,
+            redis_conn: &mut builder.redis_conn,
             m: PhantomData::<fn() -> M>,
         };
 
-        let module = M::init(ctx, &self.params, runner.protocol).await?;
+        let module = M::init(ctx, &self.params, builder.protocol).await?;
 
-        runner.modules.add_module(module).await;
+        builder.modules.add_module(module).await;
 
         Ok(())
     }
 
     fn clone_boxed(&self) -> Box<dyn ModuleBuilder> {
-        Box::new(ModuleBuilderImpl {
+        Box::new(Self {
             m: self.m,
             params: self.params.clone(),
         })
