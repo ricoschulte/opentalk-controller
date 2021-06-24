@@ -172,7 +172,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_lock_unlock_and_relock() {
-        let redis = redis::Client::open("redis://localhost:6379/").expect("Invalid redis url");
+        let redis_url =
+            std::env::var("REDIS_ADDR").unwrap_or_else(|_| "redis://localhost:6379/".to_owned());
+        let redis = redis::Client::open(redis_url).expect("Invalid redis url");
 
         let redis_conn = redis
             .get_multiplexed_async_connection()
@@ -189,7 +191,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_double_locking() {
-        let redis = redis::Client::open("redis://localhost:6379/").expect("Invalid redis url");
+        let redis_url =
+            std::env::var("REDIS_ADDR").unwrap_or_else(|_| "redis://localhost:6379/".to_owned());
+        let redis = redis::Client::open(redis_url).expect("Invalid redis url");
 
         let redis_conn = redis
             .get_multiplexed_async_connection()
