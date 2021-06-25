@@ -188,11 +188,12 @@ where
 
         match dyn_event {
             DynTargetedEvent::WsMessage(msg) => {
-                let msg = serde_json::from_value(msg).context("Failed to parse message")?;
+                let msg = serde_json::from_value(msg).context("Failed to parse WS message")?;
                 self.module.on_event(ctx, Event::WsMessage(msg)).await
             }
             DynTargetedEvent::RabbitMqMessage(msg) => {
-                let msg = serde_json::from_value(msg).context("Failed to parse message")?;
+                let msg =
+                    serde_json::from_value(msg).context("Failed to parse RabbitMq message")?;
                 self.module.on_event(ctx, Event::RabbitMq(msg)).await
             }
             DynTargetedEvent::Ext(ext) => {
