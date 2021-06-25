@@ -165,3 +165,52 @@ impl SignalingModule for Chat {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn user_private_message() {
+        let json = r#"
+        {
+            "target": "00000000-0000-0000-0000-000000000000",
+            "content": "Hello Bob!"
+        }
+        "#;
+
+        let msg: IncomingWsMessage = serde_json::from_str(json).unwrap();
+
+        assert_eq!(msg.target, Some(ParticipantId::nil()));
+        assert_eq!(msg.content, "Hello Bob!");
+    }
+
+    #[test]
+    fn user_room_message() {
+        let json = r#"
+        {
+            "content": "Hello all!"
+        }
+        "#;
+
+        let msg: IncomingWsMessage = serde_json::from_str(json).unwrap();
+
+        assert_eq!(msg.target, None);
+        assert_eq!(msg.content, "Hello all!");
+    }
+
+    #[test]
+    fn server_message() {
+        let expected = r#"{"source":"00000000-0000-0000-0000-000000000000","timestamp":"2021-06-24T14:00:11.873753715Z","content":"Hello All!","scope":"Global"}"#;
+        let produced = serde_json::to_string(&Message {
+            source: ParticipantId::nil(),
+            timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z").unwrap(),
+            content: "Hello All!".to_string(),
+            scope: Scope::Global,
+        })
+        .unwrap();
+
+        assert_eq!(expected, produced);
+    }
+}
