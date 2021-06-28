@@ -129,7 +129,8 @@ async fn run_service(settings: Settings) -> Result<()> {
             application.add_http_module(
                 SignalingHttpModule::new(redis_conn, signaling_channel)
                     .with_module::<signaling::Echo>(())
-                    .with_module::<signaling::Media>(Arc::downgrade(&mcu)),
+                    .with_module::<signaling::Media>(Arc::downgrade(&mcu))
+                    .with_module::<signaling::Chat>(()),
             );
         }
 

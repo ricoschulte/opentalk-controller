@@ -214,8 +214,8 @@ impl SignalingModule for Media {
         Ok(())
     }
 
-    async fn get_frontend_data(&self) -> Self::FrontendData {
-        // No frontend data from this module
+    async fn get_frontend_data(&self, _: &mut Storage) -> Result<Self::FrontendData> {
+        Ok(())
     }
 
     async fn get_frontend_data_for(

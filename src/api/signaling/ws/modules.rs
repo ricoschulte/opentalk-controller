@@ -79,6 +79,18 @@ impl Modules {
         }
     }
 
+    pub async fn collect_frontend_data(
+        &self,
+        storage: &mut Storage,
+        module_data: &mut HashMap<String, Value>,
+    ) -> Result<()> {
+        for module in self.modules.values() {
+            module.populate_frontend_data(storage, module_data).await?;
+        }
+
+        Ok(())
+    }
+
     pub async fn collect_participant_data(
         &self,
         storage: &mut Storage,
@@ -137,6 +149,11 @@ trait ModuleCaller {
         ctx: DynEventCtx<'_>,
         dyn_event: DynBroadcastEvent<'_>,
     ) -> Result<()>;
+    async fn populate_frontend_data(
+        &self,
+        storage: &mut Storage,
+        module_data: &mut HashMap<String, Value>,
+    ) -> Result<()>;
     async fn populate_frontend_data_for(
         &self,
         storage: &mut Storage,
@@ -171,11 +188,12 @@ where
 
         match dyn_event {
             DynTargetedEvent::WsMessage(msg) => {
-                let msg = serde_json::from_value(msg).context("Failed to parse message")?;
+                let msg = serde_json::from_value(msg).context("Failed to parse WS message")?;
                 self.module.on_event(ctx, Event::WsMessage(msg)).await
             }
             DynTargetedEvent::RabbitMqMessage(msg) => {
-                let msg = serde_json::from_value(msg).context("Failed to parse message")?;
+                let msg =
+                    serde_json::from_value(msg).context("Failed to parse RabbitMq message")?;
                 self.module.on_event(ctx, Event::RabbitMq(msg)).await
             }
             DynTargetedEvent::Ext(ext) => {
@@ -228,6 +246,25 @@ where
                 }
             }
         }
+
+        Ok(())
+    }
+
+    async fn populate_frontend_data(
+        &self,
+        storage: &mut Storage,
+        module_data: &mut HashMap<String, Value>,
+    ) -> Result<()> {
+        let data = self.module.get_frontend_data(storage).await?;
+
+        let value =
+            serde_json::to_value(&data).context("Failed to convert FrontendData to json")?;
+
+        if let Value::Null = &value {
+            return Ok(());
+        }
+
+        module_data.insert(M::NAMESPACE.into(), value);
 
         Ok(())
     }

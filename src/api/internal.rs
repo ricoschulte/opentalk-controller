@@ -7,12 +7,6 @@ use openidconnect::{AccessToken, RefreshToken};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// JSON Body of the error response coming from the *POST* request on `/introspect`
-#[derive(Debug, Serialize)]
-pub struct IntrospectionError {
-    reason: String,
-}
-
 /// The JSON Body expected when making a *POST* request on `/introspect`
 #[derive(Debug, Deserialize)]
 pub struct IntrospectRequest {

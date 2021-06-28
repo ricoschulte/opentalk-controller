@@ -6,6 +6,11 @@ use uuid::Uuid;
 
 /// This enum represents all kinds of redis keys possible.
 pub enum RedisKey<'s> {
+    /// k3k-signaling:room={room-id}:namespace={namespace}
+    ///
+    /// A hashmap public insensitive data related to the room
+    Room(Uuid, Cow<'s, str>),
+
     /// k3k-signaling:room={room-id}:participants
     ///
     /// A set of participant ids inside the room
@@ -20,6 +25,9 @@ pub enum RedisKey<'s> {
 impl fmt::Display for RedisKey<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            RedisKey::Room(room, namespace) => {
+                write!(f, "k3k-signaling:room={}:namespace={}", room, namespace)
+            }
             RedisKey::RoomParticipants(room) => {
                 write!(f, "k3k-signaling:room={}:participants", room)
             }
@@ -51,6 +59,8 @@ mod test {
         "k3k-signaling:room=00000000-0000-0000-0000-000000000000:participants";
     const NIL_PUBLIC_PARTICIPANT: &str =
         "k3k-signaling:room=00000000-0000-0000-0000-000000000000:participant=00000000-0000-0000-0000-000000000000:namespace=control";
+    const NIL_PUBLIC_ROOM: &str =
+        "k3k-signaling:room=00000000-0000-0000-0000-000000000000:namespace=control";
 
     #[test]
     fn room_participants_display() {
@@ -66,6 +76,14 @@ mod test {
             RedisKey::RoomParticipant(Uuid::nil(), ParticipantId::nil(), Cow::Borrowed("control"))
                 .to_string(),
             NIL_PUBLIC_PARTICIPANT
+        )
+    }
+
+    #[test]
+    fn room_public_display() {
+        assert_eq!(
+            RedisKey::Room(Uuid::nil(), Cow::Borrowed("control")).to_string(),
+            NIL_PUBLIC_ROOM
         )
     }
 }
