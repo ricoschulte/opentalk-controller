@@ -43,12 +43,6 @@ pub enum Message {
 }
 
 #[derive(Debug, Deserialize)]
-pub struct Join {
-    /// The users display name
-    pub display_name: String,
-}
-
-#[derive(Debug, Deserialize)]
 pub struct AssociatedMediaSession {
     /// The stream type that has been published
     pub media_session_type: MediaSessionType,
