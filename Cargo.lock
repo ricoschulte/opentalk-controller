@@ -1354,6 +1354,7 @@ dependencies = [
  "log",
  "openidconnect",
  "parking_lot",
+ "rand 0.8.4",
  "redis",
  "refinery",
  "refinery-core",

@@ -79,6 +79,9 @@ janus-client = { path = "janus-client" }
 ring = "0.16"
 rustls = "0.19"
 
+# Random Distributions etc. Used for RR
+rand = "0.8.3"
+
 [dev-dependencies]
 k3k-controller-client = { path = "client"}
 tokio-postgres = "0.7"

@@ -3,7 +3,7 @@ use crate::db::DatabaseError;
 use actix_web::body::Body;
 use actix_web::http::{header, StatusCode};
 use actix_web::web::BytesMut;
-use actix_web::{BaseHttpResponse, ResponseError};
+use actix_web::{BaseHttpResponse, HttpResponse, Responder, ResponseError};
 use std::convert::TryFrom;
 use std::fmt::Write;
 
@@ -20,7 +20,7 @@ static ACCESS_TOKEN_INACTIVE: &str = "access token inactive";
 static SESSION_EXPIRED: &str = "session expired";
 
 /// Error type of all frontend REST-endpoints
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, thiserror::Error, PartialEq)]
 pub enum ApiError {
     /// Contains WWW-Authenticate error desc (0) & body (1) for an appropriate 401 response
     #[error("Authentication error: {1}")]
@@ -105,5 +105,14 @@ impl From<crate::db::DatabaseError> for ApiError {
             DatabaseError::NotFound => Self::NotFound,
             _ => Self::Internal,
         }
+    }
+}
+
+// Represents a 204 No Content HTTP Response
+pub struct NoContent;
+
+impl Responder for NoContent {
+    fn respond_to(self, _: &actix_web::HttpRequest) -> HttpResponse {
+        HttpResponse::NoContent().finish()
     }
 }
