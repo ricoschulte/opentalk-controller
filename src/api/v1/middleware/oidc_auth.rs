@@ -26,13 +26,12 @@ pub struct OidcAuth {
     pub oidc_ctx: Data<OidcContext>,
 }
 
-impl<S, B> Transform<S, ServiceRequest> for OidcAuth
+impl<S> Transform<S, ServiceRequest> for OidcAuth
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S: Service<ServiceRequest, Response = ServiceResponse, Error = Error> + 'static,
     S::Future: 'static,
-    B: 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse;
     type Error = Error;
     type Transform = OidcAuthMiddleware<S>;
     type InitError = ();
@@ -59,13 +58,12 @@ pub struct OidcAuthMiddleware<S> {
 
 type ResultFuture<O, E> = Pin<Box<dyn Future<Output = Result<O, E>>>>;
 
-impl<S, B> Service<ServiceRequest> for OidcAuthMiddleware<S>
+impl<S> Service<ServiceRequest> for OidcAuthMiddleware<S>
 where
-    S: Service<ServiceRequest, Response = ServiceResponse<B>, Error = Error> + 'static,
+    S: Service<ServiceRequest, Response = ServiceResponse, Error = Error> + 'static,
     S::Future: 'static,
-    B: 'static,
 {
-    type Response = ServiceResponse<B>;
+    type Response = ServiceResponse;
     type Error = Error;
     type Future = ResultFuture<Self::Response, Self::Error>;
 
@@ -82,14 +80,12 @@ where
             Ok(a) => a,
             Err(e) => {
                 log::warn!("Unable to parse access token, {}", e);
-                return Box::pin(ready(Ok(req.into_response(
-                    ApiError::Auth(
-                        INVALID_ACCESS_TOKEN,
-                        "Unable to parse access token".to_string(),
-                    )
-                    .error_response()
-                    .into_body(),
-                ))));
+                let error = ApiError::Auth(
+                    INVALID_ACCESS_TOKEN,
+                    "Unable to parse access token".to_string(),
+                );
+                let response = req.into_response(error.error_response());
+                return Box::pin(ready(Ok(response)));
             }
         };
 

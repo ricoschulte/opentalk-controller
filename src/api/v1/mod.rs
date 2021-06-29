@@ -3,7 +3,7 @@ use crate::db::DatabaseError;
 use actix_web::body::Body;
 use actix_web::http::{header, StatusCode};
 use actix_web::web::BytesMut;
-use actix_web::{BaseHttpResponse, HttpResponse, Responder, ResponseError};
+use actix_web::{HttpResponse, Responder, ResponseError};
 use std::convert::TryFrom;
 use std::fmt::Write;
 
@@ -50,8 +50,8 @@ impl ResponseError for ApiError {
         }
     }
 
-    fn error_response(&self) -> BaseHttpResponse<Body> {
-        let mut resp = BaseHttpResponse::new(self.status_code());
+    fn error_response(&self) -> HttpResponse<Body> {
+        let mut resp = HttpResponse::new(self.status_code());
 
         if let Self::Auth(header_desc, _) = self {
             let header_result = header::HeaderValue::try_from(format!(
