@@ -1,4 +1,5 @@
 use crate::api::signaling::ParticipantId;
+use crate::db::users::User;
 use adapter::ActixTungsteniteAdapter;
 use anyhow::Result;
 use async_tungstenite::tungstenite::Message;
@@ -72,6 +73,7 @@ where
 {
     id: ParticipantId,
     room: Uuid,
+    user: &'ctx User,
     rabbitmq_exchanges: &'ctx mut Vec<RabbitMqExchange>,
     rabbitmq_bindings: &'ctx mut Vec<RabbitMqBinding>,
     events: &'ctx mut SelectAll<AnyStream>,
@@ -105,6 +107,11 @@ where
         self.room
     }
 
+    /// Returns the user associated with the participant
+    pub fn user(&self) -> &User {
+        self.user
+    }
+
     /// Access to a redis connection
     pub fn redis_conn(&mut self) -> &mut ConnectionManager {
         &mut self.redis_conn
@@ -127,8 +134,6 @@ where
     }
 
     /// Add a rabbitmq binding to bind the queue to
-    // TODO Used in ee-chat, remove `allow` then
-    #[allow(dead_code)]
     pub fn add_rabbitmq_binding(
         &mut self,
         routing_key: String,

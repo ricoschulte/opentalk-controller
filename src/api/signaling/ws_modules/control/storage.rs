@@ -26,7 +26,7 @@ pub struct RoomParticipantsLock {
 }
 
 #[derive(Display)]
-/// k3k-signaling:room={room}:participants={participant}:attributes
+/// k3k-signaling:room={room}:participant={participant}:attributes
 #[ignore_extra_doc_attributes]
 /// Key used for the lock over the room participants set
 struct RoomParticipantAttributes {

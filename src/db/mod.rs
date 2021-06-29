@@ -5,6 +5,7 @@ use diesel::result::Error;
 use diesel::{r2d2, PgConnection};
 use std::time::Duration;
 
+pub mod groups;
 pub mod migrations;
 pub mod rooms;
 mod schema;

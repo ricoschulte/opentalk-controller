@@ -288,6 +288,7 @@ where
         let ctx = InitContext {
             id: builder.id,
             room: builder.room,
+            user: &builder.user,
             rabbitmq_exchanges: &mut builder.rabbitmq_exchanges,
             rabbitmq_bindings: &mut builder.rabbitmq_bindings,
             events: &mut builder.events,

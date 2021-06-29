@@ -65,7 +65,7 @@ pub async fn login(
                             id_token_exp: Some(info.expiration.timestamp()),
                         };
 
-                        db_ctx.modify_user(user.oidc_uuid, modify_user)?;
+                        db_ctx.modify_user(user.oidc_uuid, modify_user, Some(info.x_grp))?;
 
                         Ok(())
                     }
@@ -73,12 +73,17 @@ pub async fn login(
                         let new_user = db::users::NewUser {
                             oidc_uuid: user_uuid,
                             email: info.email,
-                            title: "".to_string(),
+                            title: String::new(),
                             firstname: info.firstname,
                             lastname: info.lastname,
                             id_token_exp: info.expiration.timestamp(),
                             theme: "default".to_string(),
                             language: "en-US".to_string(), // TODO: set language based on browser
+                        };
+
+                        let new_user = db::users::NewUserWithGroups {
+                            new_user,
+                            groups: info.x_grp,
                         };
 
                         db_ctx.create_user(new_user)?;
