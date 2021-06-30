@@ -1,8 +1,9 @@
 use crate::api::signaling::mcu::{
     MediaSessionKey, MediaSessionType, Request, Response, TrickleMessage,
 };
-use crate::api::signaling::storage::Storage;
-use crate::api::signaling::ws::{Event, ModuleContext, SignalingModule};
+use crate::api::signaling::ws::{
+    DestroyContext, Event, InitContext, ModuleContext, SignalingModule,
+};
 use crate::api::signaling::{JanusMcu, ParticipantId};
 use anyhow::{bail, Context, Result};
 use janus_client::TrickleCandidate;
@@ -12,19 +13,24 @@ use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use uuid::Uuid;
 
 mod incoming;
 mod outgoing;
 mod sessions;
+mod storage;
 
 pub struct Media {
     id: ParticipantId,
+    room: Uuid,
 
     mcu: Arc<JanusMcu>,
     media: MediaSessions,
 
-    state: HashMap<MediaSessionType, MediaSessionState>,
+    state: State,
 }
+
+type State = HashMap<MediaSessionType, MediaSessionState>;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct MediaSessionState {
@@ -45,10 +51,10 @@ impl SignalingModule for Media {
     type ExtEvent = (MediaSessionKey, TrickleMessage);
 
     type FrontendData = ();
-    type PeerFrontendData = HashMap<MediaSessionType, MediaSessionState>;
+    type PeerFrontendData = State;
 
     async fn init(
-        mut ctx: ModuleContext<'_, Self>,
+        mut ctx: InitContext<'_, Self>,
         mcu: &Self::Params,
         _protocol: &'static str,
     ) -> Result<Self> {
@@ -57,20 +63,15 @@ impl SignalingModule for Media {
         let state = HashMap::new();
 
         let id = ctx.participant_id();
+        let room = ctx.room_id();
 
-        ctx.storage()
-            .set_attribute(
-                Self::NAMESPACE,
-                id,
-                "state",
-                serde_json::to_string(&state).context("Failed to serialize state")?,
-            )
-            .await?;
+        storage::set_state(ctx.redis_conn(), room, id, &state).await?;
 
         ctx.add_event_stream(ReceiverStream::new(janus_events));
 
         Ok(Self {
             id,
+            room,
             mcu: mcu.upgrade().unwrap(),
             media: MediaSessions::new(ctx.participant_id(), media_sender),
             state,
@@ -80,7 +81,7 @@ impl SignalingModule for Media {
     async fn on_event(
         &mut self,
         mut ctx: ModuleContext<'_, Self>,
-        event: Event<Self>,
+        event: Event<'_, Self>,
     ) -> Result<()> {
         match event {
             Event::WsMessage(incoming::Message::PublishComplete(info))
@@ -88,14 +89,7 @@ impl SignalingModule for Media {
                 self.state
                     .insert(info.media_session_type, info.media_session_state);
 
-                ctx.storage()
-                    .set_attribute(
-                        Self::NAMESPACE,
-                        self.id,
-                        "state",
-                        serde_json::to_string(&self.state)
-                            .context("Failed to convert state to json")?,
-                    )
+                storage::set_state(ctx.redis_conn(), self.room, self.id, &self.state)
                     .await
                     .context("Failed to set state attribute in storage")?;
 
@@ -105,14 +99,7 @@ impl SignalingModule for Media {
                 self.media.remove_publisher(assoc.media_session_type).await;
                 self.state.remove(&assoc.media_session_type);
 
-                ctx.storage()
-                    .set_attribute(
-                        Self::NAMESPACE,
-                        self.id,
-                        "state",
-                        serde_json::to_string(&self.state)
-                            .context("Failed to convert state to json")?,
-                    )
+                storage::set_state(ctx.redis_conn(), self.room, self.id, &self.state)
                     .await
                     .context("Failed to set state attribute in storage")?;
 
@@ -202,39 +189,44 @@ impl SignalingModule for Media {
                 }
             },
             Event::RabbitMq(_) => {}
-            Event::ParticipantJoined(..) => {}
-            Event::ParticipantUpdated(id, state) => {
+            Event::ParticipantJoined(id, evt_state) => {
+                *evt_state = Some(
+                    storage::get_state(ctx.redis_conn(), self.room, id)
+                        .await
+                        .context("Failed to get peer participants state")?,
+                );
+            }
+            Event::ParticipantUpdated(id, evt_state) => {
+                let state = storage::get_state(ctx.redis_conn(), self.room, id)
+                    .await
+                    .context("Failed to get peer participants state")?;
+
                 self.media.remove_dangling_subscriber(id, &state).await;
+
+                *evt_state = Some(state);
             }
             Event::ParticipantLeft(id) => {
                 self.media.remove_subscribers(id).await;
+            }
+            Event::Joined {
+                frontend_data: _,
+                participants,
+            } => {
+                for (id, evt_state) in participants {
+                    let state = storage::get_state(ctx.redis_conn(), self.room, *id)
+                        .await
+                        .context("Failed to get peer participants state")?;
+
+                    *evt_state = Some(state);
+                }
             }
         }
 
         Ok(())
     }
 
-    async fn get_frontend_data(&self, _: &mut Storage) -> Result<Self::FrontendData> {
-        Ok(())
-    }
-
-    async fn get_frontend_data_for(
-        &self,
-        storage: &mut Storage,
-        participant: ParticipantId,
-    ) -> Result<Self::PeerFrontendData> {
-        let json: String = storage
-            .get_attribute(Self::NAMESPACE, participant, "state")
-            .await?;
-
-        serde_json::from_str(&json).context("Failed to parse module data to json")
-    }
-
-    async fn on_destroy(self, storage: &mut Storage) {
-        if let Err(e) = storage
-            .remove_all_attributes(Self::NAMESPACE, self.id)
-            .await
-        {
+    async fn on_destroy(self, mut ctx: DestroyContext<'_>) {
+        if let Err(e) = storage::del_state(ctx.redis_conn(), self.room, self.id).await {
             log::warn!(
                 "Media module for {} failed to remove its data from redis, {}",
                 self.id,

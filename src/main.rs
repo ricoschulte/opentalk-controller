@@ -98,11 +98,9 @@ async fn run_service(settings: Settings) -> Result<()> {
 
         // Build redis client. Does not check if redis is reachable.
         let redis = redis::Client::open(settings.redis.url).context("Invalid redis url")?;
-
-        let redis_conn = redis
-            .get_multiplexed_async_connection()
+        let redis_conn = redis::aio::ConnectionManager::new(redis)
             .await
-            .context("Failed to get redis connection")?;
+            .context("Failed to create redis connection manager")?;
 
         // Connect to Janus via rabbitmq
         let mut mcu = {

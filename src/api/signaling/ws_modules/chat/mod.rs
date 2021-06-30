@@ -1,11 +1,17 @@
-use crate::api::signaling::storage::Storage;
-use crate::api::signaling::ws::{Event, ModuleContext, SignalingModule};
+use super::control::rabbitmq;
+use crate::api::signaling::ws::{
+    DestroyContext, Event, InitContext, ModuleContext, SignalingModule,
+};
 use crate::api::signaling::ParticipantId;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
+use redis::aio::ConnectionManager;
 use redis::{FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use serde_json;
+use uuid::Uuid;
+
+mod storage;
 
 #[derive(Debug, Deserialize)]
 pub struct IncomingWsMessage {
@@ -53,6 +59,7 @@ impl ToRedisArgs for &Message {
 
 pub struct Chat {
     id: ParticipantId,
+    room: Uuid,
 }
 
 #[derive(Debug, Serialize)]
@@ -61,13 +68,11 @@ pub struct ChatHistory {
 }
 
 impl ChatHistory {
-    pub async fn for_current_room(storage: &mut Storage) -> Result<Self> {
-        let room_history: Vec<Message> = storage.get_items(NAMESPACE_HISTORY).await?;
+    pub async fn for_current_room(redis_conn: &mut ConnectionManager, room: Uuid) -> Result<Self> {
+        let room_history = storage::get_room_chat_history(redis_conn, room).await?;
         Ok(Self { room_history })
     }
 }
-
-const NAMESPACE_HISTORY: &str = "chat.history";
 
 #[async_trait::async_trait(? Send)]
 impl SignalingModule for Chat {
@@ -85,23 +90,31 @@ impl SignalingModule for Chat {
     type PeerFrontendData = ();
 
     async fn init(
-        ctx: ModuleContext<'_, Self>,
+        ctx: InitContext<'_, Self>,
         _params: &Self::Params,
         _protocol: &'static str,
     ) -> Result<Self> {
         let id = ctx.participant_id();
-        Ok(Self { id })
+        let room = ctx.room_id();
+        Ok(Self { id, room })
     }
 
     async fn on_event(
         &mut self,
         mut ctx: ModuleContext<'_, Self>,
-        event: Event<Self>,
+        event: Event<'_, Self>,
     ) -> Result<()> {
         match event {
+            Event::Joined {
+                frontend_data,
+                participants: _,
+            } => {
+                *frontend_data =
+                    Some(ChatHistory::for_current_room(ctx.redis_conn(), self.room).await?);
+            }
             Event::ParticipantJoined(_, _) => {}
             Event::WsMessage(msg) => {
-                let source = ctx.participant_id();
+                let source = self.id;
                 let timestamp = Utc::now();
 
                 //TODO: moderation check - mute, bad words etc., rate limit
@@ -113,7 +126,11 @@ impl SignalingModule for Chat {
                         scope: Scope::Private,
                     };
 
-                    ctx.rabbitmq_send(Some(target), out_message);
+                    ctx.rabbitmq_publish(
+                        rabbitmq::room_exchange_name(self.room),
+                        rabbitmq::room_participant_routing_key(target),
+                        out_message,
+                    );
                 } else {
                     let out_message = Message {
                         source,
@@ -121,11 +138,20 @@ impl SignalingModule for Chat {
                         content: msg.content,
                         scope: Scope::Global,
                     };
+
                     // add message to room history
-                    ctx.storage()
-                        .add_item(NAMESPACE_HISTORY, &out_message)
-                        .await?;
-                    ctx.rabbitmq_send(None, out_message);
+                    storage::add_message_to_room_chat_history(
+                        ctx.redis_conn(),
+                        self.room,
+                        &out_message,
+                    )
+                    .await?;
+
+                    ctx.rabbitmq_publish(
+                        rabbitmq::room_exchange_name(self.room),
+                        rabbitmq::room_participant_routing_key(self.id),
+                        out_message,
+                    );
                 }
             }
             Event::RabbitMq(msg) => {
@@ -137,31 +163,11 @@ impl SignalingModule for Chat {
         Ok(())
     }
 
-    async fn get_frontend_data(&self, storage: &mut Storage) -> Result<Self::FrontendData> {
-        ChatHistory::for_current_room(storage).await
-    }
-
-    async fn get_frontend_data_for(
-        &self,
-        _storage: &mut Storage,
-        _participant: ParticipantId,
-    ) -> Result<Self::PeerFrontendData> {
-        Ok(())
-    }
-
-    async fn on_destroy(self, storage: &mut Storage) {
-        // TODO: race condition possile here. Use r3dlock to ensure mutual exclusion
-        let remaining_users = storage
-            .get_participants()
-            .await
-            .expect("Can not fetch remaining room users from redis");
-
-        if remaining_users.is_empty() {
-            storage
-                .remove_namespace(NAMESPACE_HISTORY)
-                .await
-                .expect("failed to clean room chat history on close.");
-            log::debug!("Clean up room after last user ({:#?})", self.id);
+    async fn on_destroy(self, mut ctx: DestroyContext<'_>) {
+        if ctx.destroy_room() {
+            if let Err(e) = storage::delete_room_chat_history(ctx.redis_conn(), self.room).await {
+                log::error!("Failed to remove room chat history on room destroy, {}", e);
+            }
         }
     }
 }

@@ -3,10 +3,12 @@
 use rand::{thread_rng, Rng};
 use redis::aio::ConnectionLike;
 use redis::{Script, ToRedisArgs, Value};
+use std::ops::Range;
 use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
 mod error;
+
 pub use error::{Error, Result};
 
 const LOCK_TIME: Duration = Duration::from_secs(30);
@@ -20,10 +22,13 @@ end";
 
 /// Represents a redlock mutex over a resource inside a single redis instance
 ///
-/// The lock can be aquired using [`lock()`](Mutex::lock()).
+/// The lock can be acquired using [`lock()`](Mutex::lock()).
 pub struct Mutex<C, K> {
     redis: C,
     key: K,
+
+    wait_time: Range<Duration>,
+    retries: usize,
 }
 
 /// Represents a locked redlock mutex
@@ -104,7 +109,24 @@ where
     where
         K: ToRedisArgs,
     {
-        Self { redis, key }
+        Self {
+            redis,
+            key,
+            wait_time: Duration::from_millis(10)..Duration::from_millis(50),
+            retries: 10,
+        }
+    }
+
+    /// Set a duration range to randomly wait between retries
+    pub fn with_wait_time(mut self, range: Range<Duration>) -> Self {
+        self.wait_time = range;
+        self
+    }
+
+    /// Set the amount of locking retries
+    pub fn with_retries(mut self, retries: usize) -> Self {
+        self.retries = retries;
+        self
     }
 
     /// Locks the [`Mutex`] and returns a [`MutexGuard`] / redlock mutex
@@ -116,7 +138,7 @@ where
             .take(20)
             .collect::<Vec<u8>>();
 
-        for _ in 0..10 {
+        for _ in 0..self.retries {
             let created = Instant::now();
 
             // Send the SET command to create a lock with the following args:
@@ -143,7 +165,7 @@ where
                 };
                 return Ok(guard);
             } else {
-                sleep(Duration::from_millis(thread_rng().gen_range(10..50))).await;
+                sleep(thread_rng().gen_range(self.wait_time.clone())).await;
             }
         }
 

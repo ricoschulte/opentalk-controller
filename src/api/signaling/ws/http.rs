@@ -3,7 +3,6 @@ use super::modules::{ModuleBuilder, ModuleBuilderImpl};
 use super::runner::Runner;
 use super::ParticipantId;
 use super::SignalingModule;
-use crate::api::signaling::storage::Storage;
 use crate::api::v1::middleware::oidc_auth::check_access_token;
 use crate::db::DbInterface;
 use crate::modules::http::HttpModule;
@@ -15,7 +14,7 @@ use actix_web_actors::ws;
 use async_tungstenite::tungstenite::protocol::Role;
 use async_tungstenite::WebSocketStream;
 use openidconnect::AccessToken;
-use redis::aio::MultiplexedConnection;
+use redis::aio::ConnectionManager;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use tokio::sync::broadcast;
@@ -30,12 +29,12 @@ pub struct SignalingHttpModule {
     protocols: &'static [&'static str],
     modules: Vec<Box<dyn ModuleBuilder>>,
 
-    redis_conn: MultiplexedConnection,
+    redis_conn: ConnectionManager,
     rabbit_mq_channel: lapin::Channel,
 }
 
 impl SignalingHttpModule {
-    pub fn new(redis_conn: MultiplexedConnection, rabbit_mq_channel: lapin::Channel) -> Self {
+    pub fn new(redis_conn: ConnectionManager, rabbit_mq_channel: lapin::Channel) -> Self {
         Self {
             protocols: &["k3k-signaling-json-v1.0"],
             modules: Default::default(),
@@ -97,7 +96,7 @@ async fn ws_service(
     shutdown: Data<broadcast::Sender<()>>,
     db_ctx: Data<DbInterface>,
     oidc_ctx: Data<OidcContext>,
-    redis_conn: MultiplexedConnection,
+    redis_conn: ConnectionManager,
     rabbit_mq_channel: lapin::Channel,
     protocols: &'static [&'static str],
     modules: Rc<[Box<dyn ModuleBuilder>]>,
@@ -160,34 +159,25 @@ async fn ws_service(
     let id = ParticipantId::new();
     let room = Uuid::nil();
 
+    let mut builder = Runner::builder(id, room, user, protocol, redis_conn, rabbit_mq_channel);
+
+    // add all modules
+    for module in modules.iter() {
+        if let Err(e) = module.build(&mut builder).await {
+            log::error!("Failed to initialize module, {:?}", e);
+            builder.abort().await;
+            return HttpResponse::InternalServerError().await;
+        }
+    }
+
     // Build and initialize the runner
-    let mut runner = match Runner::init(
-        id,
-        room,
-        protocol,
-        user,
-        Storage::new(redis_conn, room),
-        rabbit_mq_channel,
-        websocket,
-        shutdown.subscribe(),
-    )
-    .await
-    {
+    let runner = match builder.build(websocket, shutdown.subscribe()).await {
         Ok(runner) => runner,
         Err(e) => {
             log::error!("Failed to initialize runner, {}", e);
             return HttpResponse::InternalServerError().await;
         }
     };
-
-    // add all modules
-    for module in modules.iter() {
-        if let Err(e) = module.build(&mut runner).await {
-            log::error!("Failed to initialize module, {}", e);
-            runner.destroy().await;
-            return HttpResponse::InternalServerError().await;
-        }
-    }
 
     // Spawn the runner task
     task::spawn_local(runner.run());
