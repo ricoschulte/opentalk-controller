@@ -18,6 +18,7 @@ pub struct IncomingWsMessage {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Scope {
     Global,
     Private,
@@ -185,7 +186,7 @@ mod test {
 
     #[test]
     fn server_message() {
-        let expected = r#"{"source":"00000000-0000-0000-0000-000000000000","timestamp":"2021-06-24T14:00:11.873753715Z","content":"Hello All!","scope":"Global"}"#;
+        let expected = r#"{"source":"00000000-0000-0000-0000-000000000000","timestamp":"2021-06-24T14:00:11.873753715Z","content":"Hello All!","scope":"global"}"#;
         let produced = serde_json::to_string(&Message {
             source: ParticipantId::nil(),
             timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z").unwrap(),
