@@ -7,6 +7,9 @@ yaml-files:
   - '*.yml'
   - .yamllint
 
+ignore: |
+  .cargo
+
 rules:
   braces: enable
   brackets: enable
