@@ -1,4 +1,5 @@
-image: "rust:latest"
+---
+image: rust:latest
 
 stages:
   - lint
@@ -6,9 +7,9 @@ stages:
   - build
 
 variables:
-  CARGO_HOME: "${CI_PROJECT_DIR}/.cargo"
+  CARGO_HOME: ${CI_PROJECT_DIR}/.cargo
   # Enable one network per build for the test container and services
-  FF_NETWORK_PER_BUILD: "true"
+  FF_NETWORK_PER_BUILD: 'true'
 
 cache:
   key: $CI_JOB_STAGE
@@ -35,10 +36,17 @@ lint:dependency_check:
     - cargo install --locked cargo-deny
   script: cargo deny check
 
+lint:yaml:
+  stage: lint
+  image: archlinux:latest
+  before_script:
+    - pacman -Syy --noconfirm yamllint
+  script: yamllint .
+
 test:cargo_check:
   stage: test
   variables:
-    RUSTFLAGS: "-D warnings"
+    RUSTFLAGS: -D warnings
   script: cargo check --tests --all-features
 
 test:cargo_test:
@@ -47,16 +55,16 @@ test:cargo_test:
     # Set ENV vars for services
     POSTGRES_DB: k3k
     POSTGRES_USER: postgres
-    POSTGRES_PASSWORD: "password123"
+    POSTGRES_PASSWORD: password123
     POSTGRES_HOST_AUTH_METHOD: trust
     RABBITMQ_DEFAULT_USER: guest
     RABBITMQ_DEFAULT_PASS: guest
-    RABBITMQ_HOST: 'rabbitmq'
+    RABBITMQ_HOST: rabbitmq
     RABBITMQ_PORT: '5672'
     # Used for integration tests
-    DATABASE_URL: "postgres://postgres:password123@postgres:5432/k3k"
-    AMQP_ADDR: 'amqp://guest:guest@rabbitmq:5672'
-    REDIS_ADDR: 'redis://redis:6379/'
+    DATABASE_URL: postgres://postgres:password123@postgres:5432/k3k
+    AMQP_ADDR: amqp://guest:guest@rabbitmq:5672
+    REDIS_ADDR: redis://redis:6379/
   services:
     - name: postgres:13-alpine
       alias: postgres
