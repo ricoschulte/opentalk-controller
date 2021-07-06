@@ -21,6 +21,12 @@ user = "postgres"
 # Database user password
 password = "password123"
 
+[[room_server.connections]]
+# Connection settings for the channel used to talk to the room server.
+# Currently these should be equal to the settings in janus.transport.rabbitmq.jcfg
+to_janus_routing_key = "to-janus"
+janus_exchange = "janus-exchange"
+from_janus_routing_key = "from-janus"
 
 [http]
 # The port to bind the HTTP Server to (defaults to 80)

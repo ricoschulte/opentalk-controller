@@ -5,7 +5,6 @@ use actix_web::web::Data;
 use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{anyhow, Context, Result};
 use api::signaling;
-use api::signaling::JanusMcu;
 use db::DbInterface;
 use fern::colors::{Color, ColoredLevelConfig};
 use oidc::OidcContext;
@@ -17,6 +16,7 @@ use std::net::Ipv6Addr;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal::ctrl_c;
+use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::broadcast;
 use tokio::time::sleep;
 use tokio_amqp::LapinTokioExt;
@@ -128,9 +128,10 @@ async fn run_service(settings: Settings) -> Result<()> {
                 .await
                 .context("Could not create rabbit mq channel for MCU")?;
 
-            let mcu = JanusMcu::connect(settings.room_server, mcu_channel)
-                .await
-                .context("Failed to connect to Janus WebRTC server")?;
+            let mcu =
+                signaling::McuPool::build(settings.room_server, mcu_channel, redis_conn.clone())
+                    .await
+                    .context("Failed to connect to Janus WebRTC server")?;
 
             Arc::new(mcu)
         };
@@ -224,20 +225,32 @@ async fn run_service(settings: Settings) -> Result<()> {
         let mut ext_server = ext_http_server.disable_signals().run();
         let mut int_server = int_http_server.disable_signals().run();
 
+        let mut reload_signal =
+            signal(SignalKind::hangup()).context("Failed to register SIGHUP signal handler")?;
+
         // Select over both http servers and the SIGTERM event. If any of them return the application
         // will try to gracefully shut down.
-        tokio::select! {
-            _ = &mut ext_server => {
-                log::error!("Http server returned, exiting, exiting");
-            }
-            _ = &mut int_server => {
-                log::error!("Internal http server returned, exiting");
-            }
-            _ = ctrl_c() => {
-                log::info!("Got termination signal, exiting");
+        loop {
+            tokio::select! {
+                _ = &mut ext_server => {
+                    log::error!("Http server returned, exiting, exiting");
+                    break;
+                }
+                _ = &mut int_server => {
+                    log::error!("Internal http server returned, exiting");
+                    break;
+                }
+                _ = ctrl_c() => {
+                    log::info!("Got termination signal, exiting");
+                    break;
+                }
+                _ = reload_signal.recv() => {
+                    log::info!("Got reload signal, reloading");
+
+                    mcu.try_reconnect().await;
+                }
             }
         }
-
         // ==== Begin shutdown sequence ====
 
         // Send shutdown signals to all tasks within our application
@@ -267,13 +280,10 @@ async fn run_service(settings: Settings) -> Result<()> {
         // Now that all ref-pointers to mcu are dropped use Arc::get_mut to get a mutable
         // reference and call JanusMcu::destroy
         log::debug!("Destroying JanusMcu");
-        if let Err(e) = Arc::get_mut(&mut mcu)
+        Arc::get_mut(&mut mcu)
             .expect("Not all ref-pointers to mcu dropped")
             .destroy()
-            .await
-        {
-            log::error!("Failed to destroy JanusMcu, {}", e);
-        }
+            .await;
     }
 
     // Close all rabbitmq connections

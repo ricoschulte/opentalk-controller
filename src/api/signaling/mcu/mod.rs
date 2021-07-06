@@ -1,272 +1,276 @@
-use crate::api::signaling::ParticipantId;
 use crate::settings;
 use anyhow::{bail, Context, Result};
-use futures::StreamExt;
 use janus_client::types::{SdpAnswer, SdpOffer};
-use janus_client::{JanusMessage, JsepType, RoomId as JanusRoomId, TrickleCandidate};
-use parking_lot::Mutex;
-use std::collections::HashMap;
+use janus_client::{ClientId, JanusMessage, JsepType, RoomId as JanusRoomId, TrickleCandidate};
+use redis::aio::ConnectionManager;
+use redis::AsyncCommands;
+use serde::{Deserialize, Serialize};
+use std::borrow::{Borrow, Cow};
+use std::collections::HashSet;
 use std::convert::TryInto;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{broadcast, mpsc, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot, RwLock, RwLockReadGuard};
 use tokio::time::interval;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
-use tokio_stream::wrappers::{BroadcastStream, ReceiverStream};
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 
 mod types;
 
 pub use types::*;
 
-// Todo use ID of this controller.
-static TAG: &str = "k3k-signaling";
+/// Redis key of the publisher => McuId/JanusRoomId mapping
+///
+/// This information is used when creating a subscriber
+const PUBLISHER_INFO: &str = "k3k-signaling:mcu:publishers";
 
-/// This is a per Room/per Janus manager of Subscribers and Publishers
-pub struct JanusMcu {
-    max_stream_bitrate: u64,
-    max_screen_bitrate: u64,
+/// Redis key for a sorted set of mcu-clients.
+///
+/// The score represents the amounts of subscribers on that mcu and is used to choose the least
+/// busy mcu for a new publisher.
+const MCU_STATE: &str = "k3k-signaling:mcu:load";
 
-    // TODO v2 Handle disconnection and state recovery
-    session: janus_client::Session,
-
-    _gw: janus_client::Client,
-
-    /// Shutdown signal issued by the MCU for the janus-client receive task, since that is
-    /// needed for teardown AFTER receiving the app shutdown signal.
-    mcu_shutdown: broadcast::Sender<()>,
-
-    /// Stores the room ids?
-    publisher_room_ids: Mutex<HashMap<MediaSessionKey, JanusRoomId>>,
+#[derive(Debug, Serialize, Deserialize)]
+struct PublisherInfo<'i> {
+    room_id: JanusRoomId,
+    mcu_id: Cow<'i, str>,
 }
 
-impl JanusMcu {
-    /// Connects to a Janus MediaServer
-    pub async fn connect(
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct McuID(Arc<String>);
+
+impl Borrow<String> for McuID {
+    fn borrow(&self) -> &String {
+        self.0.borrow()
+    }
+}
+
+/// Pool of one or more configured `McuClient`s
+///
+/// Distributes new publishers to a available Mcu with the least amount of subscribers
+pub struct McuPool {
+    config: settings::JanusMcuConfig,
+
+    // Clients shared with the global receive task which sends keep-alive messages
+    // and removes clients of vanished  janus instances
+    clients: Arc<RwLock<HashSet<McuClient>>>,
+
+    // Sender passed to created janus clients. Needed here to pass them to janus-clients
+    // which are being reconnected
+    events_sender: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
+
+    rabbitmq_channel: lapin::Channel,
+    redis: ConnectionManager,
+
+    // Mcu shutdown signal to all janus-client tasks.
+    // This is separate from the global application shutdown signal since
+    // janus-client tasks are needed to gracefully detach/destroy all resources
+    shutdown: broadcast::Sender<()>,
+}
+
+impl McuPool {
+    pub async fn build(
         config: settings::JanusMcuConfig,
-        channel: lapin::Channel,
+        rabbitmq_channel: lapin::Channel,
+        mut redis: ConnectionManager,
     ) -> Result<Self> {
-        let (mcu_shutdown, _) = broadcast::channel(1);
+        let (shutdown, shutdown_sig) = broadcast::channel(1);
 
-        let rabbit_mq_config = janus_client::RabbitMqConfig::new_from_channel(
-            channel,
-            config.connection.to_janus_queue,
-            config.connection.to_janus_routing_key,
-            config.connection.janus_exchange,
-            config.connection.from_janus_routing_key,
-            // TODO dynamically create this TAG from controller- and janus-id
-            TAG.to_owned(),
-        );
+        let mut clients = HashSet::with_capacity(config.connections.len());
+        let (events_sender, events) = mpsc::channel(12);
 
-        let (gw, janus_stream) = janus_client::Client::new(rabbit_mq_config, mcu_shutdown.clone())
-            .await
-            .context("Failed to create janus_client")?;
+        for connection in config.connections.clone() {
+            let client =
+                McuClient::connect(rabbitmq_channel.clone(), connection, events_sender.clone())
+                    .await
+                    .context("Failed to create mcu client")?;
 
-        let session = gw
-            .create_session()
-            .await
-            .context("Failed to create session")?;
+            redis
+                .zincr(MCU_STATE, client.id.0.as_str(), 0)
+                .await
+                .context("Failed to initialize subscriber count")?;
 
-        let mut shutdown_sig = mcu_shutdown.subscribe();
+            clients.insert(client);
+        }
 
-        let keep_alive_session = session.clone();
+        let clients = Arc::new(RwLock::new(clients));
 
-        tokio::spawn(async move {
-            let mut stream = ReceiverStream::new(janus_stream);
-            let mut interval = interval(Duration::from_secs(30));
-
-            loop {
-                tokio::select! {
-                    Some(msg) = stream.next() => {
-                        log::warn!("Unhandled janus message {:?}", msg);
-                        // TODO Find out what we want to with these messages
-                        // most of them are events which are not interesting to us
-                        // and others expose where we ignore responses from janus
-                    }
-                    _ = interval.tick() => {
-                        keep_alive_session.keep_alive().await;
-                    }
-                    _ = shutdown_sig.recv() => {
-                        log::debug!("receive/keepalive task got shutdown signal, exiting");
-                        return;
-                    }
-                };
-            }
-        });
+        tokio::spawn(global_receive_task(clients.clone(), events, shutdown_sig));
 
         Ok(Self {
-            max_stream_bitrate: config.max_video_bitrate,
-            max_screen_bitrate: config.max_screen_bitrate,
-            session,
-            _gw: gw,
-            mcu_shutdown,
-            publisher_room_ids: Mutex::new(HashMap::new()),
+            config,
+            clients,
+            events_sender,
+            rabbitmq_channel,
+            redis,
+            shutdown,
         })
     }
 
-    pub async fn destroy(&mut self) -> Result<()> {
-        let _ = self.mcu_shutdown.send(());
+    pub async fn destroy(&mut self) {
+        let _ = self.shutdown.send(());
 
-        self.session.destroy().await?;
+        let mut clients = self.clients.write().await;
 
-        Ok(())
+        for client in clients.drain() {
+            client.destroy().await;
+        }
+    }
+
+    pub async fn try_reconnect(&self) {
+        let mut clients = self.clients.write().await;
+
+        if clients.len() == self.config.connections.len() {
+            log::info!("Nothing to do");
+            return;
+        }
+
+        for config in &self.config.connections {
+            if clients.contains(config.to_janus_routing_key.as_str()) {
+                continue;
+            }
+
+            match McuClient::connect(
+                self.rabbitmq_channel.clone(),
+                config.clone(),
+                self.events_sender.clone(),
+            )
+            .await
+            {
+                Ok(client) => {
+                    log::info!("Reconnected mcu {:?}", config.to_janus_routing_key);
+
+                    clients.insert(client);
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to reconnect to {:?}, {}",
+                        config.to_janus_routing_key,
+                        e
+                    )
+                }
+            }
+        }
+    }
+
+    async fn choose_client<'guard>(
+        &self,
+        redis: &mut ConnectionManager,
+        clients: &'guard RwLockReadGuard<'guard, HashSet<McuClient>>,
+    ) -> Result<&'guard McuClient> {
+        // Get all mcu's in order lowest to highest
+        let ids: Vec<String> = redis.zrangebyscore(MCU_STATE, "-inf", "+inf").await?;
+
+        // choose the first available mcu
+        for id in ids {
+            if let Some(client) = clients.get(id.as_str()) {
+                return Ok(client);
+            }
+        }
+
+        bail!("Failed to choose client")
     }
 
     pub async fn new_publisher(
         &self,
         event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
-        participant_id: ParticipantId,
-        media_session_type: MediaSessionType,
-        bitrate: u64,
+        media_session_key: MediaSessionKey,
     ) -> Result<JanusPublisher> {
+        let mut redis = self.redis.clone();
+
+        let clients = self.clients.read().await;
+        let client = self
+            .choose_client(&mut redis, &clients)
+            .await
+            .context("Failed to choose McuClient")?;
+
         let (handle, room_id) = self
-            .get_or_create_publisher_handle(participant_id, media_session_type, bitrate)
+            .create_publisher_handle(client, media_session_key)
             .await
             .context("Failed to get or create publisher handle")?;
 
         let (destroy, destroy_sig) = oneshot::channel();
 
+        let info = serde_json::to_string(&PublisherInfo {
+            room_id,
+            mcu_id: Cow::Borrowed(&client.id.0.as_str()),
+        })
+        .context("Failed to serialize publisher info")?;
+
+        redis
+            .hset(PUBLISHER_INFO, media_session_key.to_string(), info)
+            .await
+            .context("Failed to set publisher info")?;
+
         let publisher = JanusPublisher {
             handle: handle.clone(),
             room_id,
+            media_session_key,
+            redis,
             destroy,
         };
 
-        self.publisher_room_ids
-            .lock()
-            .insert(MediaSessionKey(participant_id, media_session_type), room_id);
-
         tokio::spawn(JanusPublisher::run(
-            participant_id,
-            media_session_type,
+            media_session_key,
             handle,
             event_sink,
+            client.shutdown.subscribe(),
             destroy_sig,
         ));
 
         Ok(publisher)
     }
 
-    pub async fn new_subscriber(
+    async fn create_publisher_handle(
         &self,
-        event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
-        publisher: ParticipantId,
-        media_session_type: MediaSessionType,
-    ) -> Result<JanusSubscriber> {
-        let (handle, room_id) = self
-            .get_or_create_subscriber_handle(publisher, media_session_type)
-            .await
-            .context("Failed to get or create subscriber handle")?;
-
-        let (destroy, destroy_sig) = oneshot::channel();
-
-        let subscriber = JanusSubscriber {
-            handle: handle.clone(),
-            room_id,
-            media_session_type,
-            destroy,
-        };
-
-        tokio::spawn(JanusSubscriber::run(
-            publisher,
-            media_session_type,
-            handle,
-            event_sink,
-            destroy_sig,
-        ));
-
-        Ok(subscriber)
-    }
-
-    /// Checks if we already track a room for the publisher media_session_type combination
-    ///
-    /// As we publish each stream in its own Janus room, we need to keep track of the janus room id from our publisher + stream
-    /// Returns the RoomId or None
-    fn search_publisher_room(
-        &self,
-        publisher: ParticipantId,
-        media_session_type: MediaSessionType,
-    ) -> Option<JanusRoomId> {
-        let room_ids = &mut *self.publisher_room_ids.lock();
-        room_ids
-            .get(&MediaSessionKey(publisher, media_session_type))
-            .copied()
-    }
-
-    /// Gets or creates a publisher handle
-    ///
-    /// If no (ParticipantID, StreamType) key is found in our local publisherRoomIds map,
-    /// we create a new Janus room (we use one room per publisher per stream type).
-    /// Returns a new Janus videoroom handle, ~~the returned Sessionid~~ and the room id.
-    async fn get_or_create_publisher_handle(
-        &self,
-        publisher: ParticipantId,
-        media_session_type: MediaSessionType,
-        bitrate: u64,
+        client: &McuClient,
+        media_session_key: MediaSessionKey,
     ) -> Result<(janus_client::Handle, JanusRoomId)> {
-        let handle = self
+        let handle = client
             .session
             .attach_to_plugin(janus_client::JanusPlugin::VideoRoom)
             .await
             .context("Failed to attach session to videoroom plugin")?;
 
-        let room_id = self.search_publisher_room(publisher, media_session_type);
+        // TODO in the original code there was a check if a room for this publisher exists, check if necessary
 
-        let room_id = if let Some(room_id) = room_id {
-            log::trace!(
-                "Found room for publisher `{:?}` with media_session_type `{:?}`",
-                &publisher,
-                &media_session_type
-            );
+        let bitrate = match media_session_key.1 {
+            MediaSessionType::Video => self.config.max_video_bitrate,
+            MediaSessionType::Screen => self.config.max_screen_bitrate,
+        };
 
-            room_id
-        } else {
-            log::trace!(
-                "No room for publisher `{:?}` with media_session_type `{:?}`, creating new room",
-                &publisher,
-                &media_session_type
-            );
+        let request = janus_client::outgoing::VideoRoomPluginCreate {
+            description: media_session_key.to_string(),
+            // We publish every stream in its own Janus room.
+            publishers: Some(1),
+            // Do not use the video-orientation RTP extension as it breaks video
+            // orientation changes in Firefox.
+            videoorient_ext: Some(false),
+            bitrate: Some(bitrate),
+            bitrate_cap: Some(true),
+            ..Default::default()
+        };
 
-            let max_bitrate = match media_session_type {
-                MediaSessionType::Video => self.max_stream_bitrate,
-                MediaSessionType::Screen => self.max_screen_bitrate,
-            };
-
-            let bitrate = if bitrate == 0 {
-                max_bitrate
-            } else {
-                bitrate.min(max_bitrate)
-            };
-
-            let request = janus_client::outgoing::VideoRoomPluginCreate {
-                description: MediaSessionKey(publisher, media_session_type).to_string(),
-                // We publish every stream in its own Janus room.
-                publishers: Some(1),
-                // Do not use the video-orientation RTP extension as it breaks video
-                // orientation changes in Firefox.
-                videoorient_ext: Some(false),
-                bitrate: Some(bitrate),
-                bitrate_cap: Some(true),
-                ..Default::default()
-            };
-
-            let (response, _) = handle.send(request).await?;
-            match response {
-                janus_client::incoming::VideoRoomPluginDataCreated::Ok { room, .. } => room,
-                janus_client::incoming::VideoRoomPluginDataCreated::Err(e) => {
-                    bail!("Failed to create videoroom, got error response: {}", e);
-                }
+        let (response, _) = handle.send(request).await?;
+        let room_id = match response {
+            janus_client::incoming::VideoRoomPluginDataCreated::Ok { room, .. } => room,
+            janus_client::incoming::VideoRoomPluginDataCreated::Err(e) => {
+                bail!("Failed to create videoroom, got error response: {}", e);
             }
         };
 
         log::trace!(
             "Using Janus Room {} for publisher {} with media_session_type {}",
             room_id,
-            publisher,
-            media_session_type
+            media_session_key.0,
+            media_session_key.1,
         );
 
         let join_request = janus_client::outgoing::VideoRoomPluginJoinPublisher {
             room: room_id,
-            id: Some(media_session_type.into()),
+            id: Some(media_session_key.1.into()),
             display: None,
             token: None,
         };
@@ -276,8 +280,8 @@ impl JanusMcu {
         match response {
             janus_client::incoming::VideoRoomPluginDataJoined::Ok { .. } => {
                 log::trace!(
-                    "Publisher {} joined room {} sucessfully",
-                    publisher,
+                    "Publisher {} joined room {} successfully",
+                    media_session_key.0,
                     room_id
                 );
 
@@ -289,42 +293,209 @@ impl JanusMcu {
         }
     }
 
-    /// Gets or creates a subscriber handle
-    ///
-    /// Gets the room_id from the passed publisher and stream and returns a new janus videoroom handle
-    async fn get_or_create_subscriber_handle(
+    pub async fn new_subscriber(
         &self,
-        publisher: ParticipantId,
-        media_session_type: MediaSessionType,
-    ) -> Result<(janus_client::Handle, JanusRoomId)> {
-        log::trace!(
-            "Looking for janus room_id for {}",
-            MediaSessionKey(publisher, media_session_type)
-        );
+        event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
+        media_session_key: MediaSessionKey,
+    ) -> Result<JanusSubscriber> {
+        let mut redis = self.redis.clone();
 
-        let room_id = self
-            .search_publisher_room(publisher, media_session_type)
-            .context("Failed to subscribe to room, it does not exist")?;
+        let publisher_info_json: String = redis
+            .hget(PUBLISHER_INFO, media_session_key.to_string())
+            .await
+            .context("Failed to get mcu id for media session key")?;
 
-        log::trace!(
-            "Got room_id {} for {}",
-            room_id,
-            MediaSessionKey(publisher, media_session_type)
-        );
+        let info: PublisherInfo = serde_json::from_str(&publisher_info_json)
+            .context("Failed to deserialize publisher info")?;
 
-        let handle = self
+        let clients = self.clients.read().await;
+        let client = clients
+            .get(info.mcu_id.as_ref())
+            .context("Publisher stored unknown mcu id")?;
+
+        let handle = client
             .session
             .attach_to_plugin(janus_client::JanusPlugin::VideoRoom)
             .await
             .context("Failed to attach to videoroom plugin")?;
 
-        Ok((handle, room_id))
+        redis
+            .zincr(MCU_STATE, info.mcu_id.as_ref(), 1)
+            .await
+            .context("Failed to increment subscriber count")?;
+
+        let (destroy, destroy_sig) = oneshot::channel();
+
+        let subscriber = JanusSubscriber {
+            handle: handle.clone(),
+            room_id: info.room_id,
+            mcu_id: client.id.clone(),
+            media_session_key,
+            redis,
+            destroy,
+        };
+
+        tokio::spawn(JanusSubscriber::run(
+            media_session_key,
+            handle,
+            event_sink,
+            client.shutdown.subscribe(),
+            destroy_sig,
+        ));
+
+        Ok(subscriber)
+    }
+}
+
+async fn global_receive_task(
+    clients: Arc<RwLock<HashSet<McuClient>>>,
+    mut events: mpsc::Receiver<(ClientId, Arc<JanusMessage>)>,
+    mut shutdown_sig: broadcast::Receiver<()>,
+) {
+    let mut keep_alive_interval = interval(Duration::from_secs(10));
+
+    loop {
+        tokio::select! {
+            _ = keep_alive_interval.tick() => {
+                keep_alive(clients.as_ref()).await
+            }
+            _ = shutdown_sig.recv() => {
+                log::debug!("receive/keepalive task got shutdown signal, exiting");
+                return;
+            }
+            Some((id, msg)) = events.recv() => {
+                log::warn!("Unhandled janus message mcu={:?} msg={:?}",id, msg);
+                // TODO Find out what we want to with these messages
+                // most of them are events which are not interesting to us
+                // and others expose where we ignore responses from janus
+            }
+        }
+    }
+}
+
+async fn keep_alive(mcu_clients: &RwLock<HashSet<McuClient>>) {
+    let clients = mcu_clients.read().await;
+
+    let mut dead = vec![];
+
+    for client in clients.iter() {
+        if let Err(e) = client.session.keep_alive().await {
+            log::error!(
+                "Failed to keep alive session for mcu {:?}, {}",
+                client.id,
+                e
+            );
+
+            dead.push(client.id.clone());
+        }
+    }
+
+    if dead.is_empty() {
+        return;
+    }
+
+    drop(clients);
+
+    let mut clients = mcu_clients.write().await;
+
+    // Destroy all dead McuClients
+    for dead_client in dead {
+        if let Some(client) = clients.take(dead_client.0.as_str()) {
+            client.destroy().await;
+        }
+    }
+}
+
+struct McuClient {
+    id: McuID,
+
+    session: janus_client::Session,
+    client: janus_client::Client,
+
+    // shutdown signal specific to this client
+    shutdown: broadcast::Sender<()>,
+}
+
+impl PartialEq for McuClient {
+    fn eq(&self, other: &Self) -> bool {
+        self.id.eq(&other.id)
+    }
+}
+
+impl Eq for McuClient {}
+
+impl Hash for McuClient {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state)
+    }
+}
+
+impl Borrow<str> for McuClient {
+    fn borrow(&self) -> &str {
+        self.id.0.as_str()
+    }
+}
+
+impl McuClient {
+    pub async fn connect(
+        rabbitmq_channel: lapin::Channel,
+        config: settings::JanusRabbitMqConnection,
+        events_sender: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
+    ) -> Result<Self> {
+        let (shutdown, _) = broadcast::channel(1);
+
+        let id = McuID(Arc::new(config.to_janus_routing_key.clone()));
+
+        let rabbit_mq_config = janus_client::RabbitMqConfig::new_from_channel(
+            rabbitmq_channel.clone(),
+            config.to_janus_routing_key,
+            config.janus_exchange,
+            config.from_janus_routing_key,
+            format!("k3k-signaling-janus-{}", id.0),
+        );
+
+        let mut client = janus_client::Client::new(
+            rabbit_mq_config,
+            ClientId(id.0.clone()),
+            events_sender.clone(),
+            shutdown.clone(),
+        )
+        .await
+        .context("Failed to create janus client")?;
+
+        let session = match client.create_session().await {
+            Ok(session) => session,
+            Err(e) => {
+                // destroy client to clean up rabbitmq consumer
+                client.destroy().await;
+                bail!("Failed to create session, {}", e);
+            }
+        };
+
+        Ok(Self {
+            id,
+            session,
+            client,
+            shutdown,
+        })
+    }
+
+    async fn destroy(mut self) {
+        if let Err(e) = self.session.destroy(true).await {
+            log::error!("Failed to destroy broken session, {}", e);
+        }
+
+        let _ = self.shutdown.send(());
+
+        self.client.destroy().await;
     }
 }
 
 pub struct JanusPublisher {
     handle: janus_client::Handle,
     room_id: JanusRoomId,
+    media_session_key: MediaSessionKey,
+    redis: ConnectionManager,
     destroy: oneshot::Sender<()>,
 }
 
@@ -359,7 +530,7 @@ impl JanusPublisher {
         }
     }
 
-    pub async fn destroy(self) -> Result<()> {
+    pub async fn destroy(mut self) -> Result<()> {
         self.handle
             .send(janus_client::types::outgoing::VideoRoomPluginDestroy {
                 room: self.room_id,
@@ -373,6 +544,14 @@ impl JanusPublisher {
 
         self.handle.detach().await?;
 
+        if let Err(e) = self
+            .redis
+            .hdel::<_, _, ()>(PUBLISHER_INFO, self.media_session_key.to_string())
+            .await
+        {
+            log::error!("Failed to remove publisher info, {}", e);
+        }
+
         Ok(())
     }
 
@@ -380,20 +559,21 @@ impl JanusPublisher {
     ///
     /// Stops when all Senders of the handle [Receiver](tokio::sync::broadcast::Receiver) are dropped.
     async fn run(
-        participant_id: ParticipantId,
-        media_session_type: MediaSessionType,
+        media_session_key: MediaSessionKey,
         handle: janus_client::Handle,
         event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
+        mut client_shutdown: broadcast::Receiver<()>,
         mut destroy_sig: oneshot::Receiver<()>,
     ) {
         let mut stream = BroadcastStream::new(handle.subscribe());
-
-        let media_session_key = MediaSessionKey(participant_id, media_session_type);
 
         loop {
             tokio::select! {
                 _ = &mut destroy_sig => {
                     return;
+                }
+                _ = client_shutdown.recv() => {
+                    // TODO notify over evt_sink that this publisher is broken
                 }
                 message = stream.next() => {
                     let message = match message {
@@ -422,7 +602,9 @@ impl JanusPublisher {
 pub struct JanusSubscriber {
     handle: janus_client::Handle,
     room_id: JanusRoomId,
-    media_session_type: MediaSessionType,
+    mcu_id: McuID,
+    media_session_key: MediaSessionKey,
+    redis: ConnectionManager,
     destroy: oneshot::Sender<()>,
 }
 
@@ -460,10 +642,15 @@ impl JanusSubscriber {
         }
     }
 
-    pub async fn destroy(self) -> Result<()> {
+    pub async fn destroy(mut self) -> Result<()> {
         let _ = self.destroy.send(());
 
         self.handle.detach().await?;
+
+        self.redis
+            .zincr(MCU_STATE, self.mcu_id.0.as_str(), -1)
+            .await
+            .context("Failed to decrease subscriber count")?;
 
         Ok(())
     }
@@ -474,7 +661,7 @@ impl JanusSubscriber {
             .handle
             .send(janus_client::outgoing::VideoRoomPluginJoinSubscriber {
                 room: self.room_id,
-                feed: janus_client::FeedId::new(self.media_session_type.into()),
+                feed: janus_client::FeedId::new(self.media_session_key.1.into()),
                 private_id: None,
                 close_pc: None,
                 audio: None,
@@ -500,20 +687,21 @@ impl JanusSubscriber {
     }
 
     async fn run(
-        publisher: ParticipantId,
-        media_session_type: MediaSessionType,
+        media_session_key: MediaSessionKey,
         handle: janus_client::Handle,
         event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
+        mut client_shutdown: broadcast::Receiver<()>,
         mut destroy_sig: oneshot::Receiver<()>,
     ) {
         let mut stream = BroadcastStream::new(handle.subscribe());
-
-        let media_session_key = MediaSessionKey(publisher, media_session_type);
 
         loop {
             tokio::select! {
                 _ = &mut destroy_sig => {
                     return;
+                }
+                _ = client_shutdown.recv() => {
+                    // TODO notify over evt_sink that this subscriber is broken
                 }
                 message = stream.next() => {
                     let message = match message {

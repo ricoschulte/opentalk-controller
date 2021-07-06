@@ -40,7 +40,7 @@ diesel_migrations = "1.4"
 barrel = { version = "0.6", features = ["pg"] }
 
 ### Web Framework & Runtime
-tokio = "1"
+tokio = { version = " 1", features = ["signal"] }
 tokio-stream = { version = "0.1.5", features = ["sync"] }
 actix-web = { version = "= 4.0.0-beta.8", features = ["rustls"] }
 actix-rt = "2.2"
@@ -70,7 +70,7 @@ chrono = "0.4"
 
 ### Websockets
 async-tungstenite = "0.13"
-actix-web-actors = { git = "https://github.com/actix/actix-web.git", tag="web-v4.0.0-beta.8"}
+actix-web-actors = { git = "https://github.com/actix/actix-web.git", tag = "web-v4.0.0-beta.8" }
 
 ### Janus
 janus-client = { path = "janus-client" }
@@ -90,7 +90,7 @@ sysinfo = { version = "0.19.0", default-features = false }
 nix = "0.21.0"
 
 [dev-dependencies]
-k3k-controller-client = { path = "client"}
+k3k-controller-client = { path = "client" }
 tokio-postgres = "0.7"
 serial_test = "0.5"
 regex = "1.5"

@@ -4,8 +4,9 @@ use janus_client::types::outgoing;
 use janus_client::*;
 use lapin::Connection;
 use lapin::ConnectionProperties;
+use std::sync::Arc;
 use test_env_log::test;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 
 #[test(tokio::test)]
 async fn echo_external_channel() {
@@ -22,13 +23,16 @@ async fn echo_external_channel() {
         .expect("Could not create channel");
     let config = RabbitMqConfig::new_from_channel(
         channel,
-        "janus-gateway".to_owned(),
         "to-janus".to_owned(),
         "janus-exchange".to_owned(),
         "from-janus".to_owned(),
         "k3k-signaling".to_owned(),
     );
-    let (client, _) = Client::new(config, shutdown).await.unwrap();
+
+    let id = ClientId(Arc::new("janus-client".into()));
+
+    let (sink, _) = mpsc::channel(1);
+    let client = Client::new(config, id, sink, shutdown).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let echo_handle = session
         .attach_to_plugin(JanusPlugin::Echotest)
@@ -50,7 +54,7 @@ async fn echo_external_channel() {
     }
 
     echo_handle.detach().await.unwrap();
-    session.destroy().await.unwrap();
+    session.destroy(false).await.unwrap();
 }
 
 #[test(tokio::test)]
@@ -68,13 +72,15 @@ async fn create_and_list_rooms() {
         .expect("Could not create channel");
     let config = RabbitMqConfig::new_from_channel(
         channel,
-        "janus-gateway".to_owned(),
         "to-janus".to_owned(),
         "janus-exchange".to_owned(),
         "from-janus".to_owned(),
         "k3k-signaling".to_owned(),
     );
-    let (client, _) = Client::new(config, shutdown).await.unwrap();
+    let id = ClientId(Arc::new("janus-client".into()));
+
+    let (sink, _) = mpsc::channel(1);
+    let client = Client::new(config, id, sink, shutdown).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let handle = session
         .attach_to_plugin(JanusPlugin::VideoRoom)
@@ -129,7 +135,7 @@ async fn create_and_list_rooms() {
     }
 
     handle.detach().await.unwrap();
-    session.destroy().await.unwrap();
+    session.destroy(false).await.unwrap();
 }
 
 #[test(tokio::test)]
@@ -146,15 +152,19 @@ async fn send_offer() {
         .create_channel()
         .await
         .expect("Could not create channel");
+
     let config = RabbitMqConfig::new_from_channel(
         channel,
-        "janus-gateway".to_owned(),
         "to-janus".to_owned(),
         "janus-exchange".to_owned(),
         "from-janus".to_owned(),
         "k3k-signaling".to_owned(),
     );
-    let (client, _) = Client::new(config, shutdown).await.unwrap();
+
+    let id = ClientId(Arc::new("janus-client".into()));
+
+    let (sink, _) = mpsc::channel(1);
+    let client = Client::new(config, id, sink, shutdown).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let publisher_handle = session
         .attach_to_plugin(JanusPlugin::VideoRoom)
@@ -200,5 +210,5 @@ async fn send_offer() {
         .is_ok());
 
     publisher_handle.detach().await.unwrap();
-    session.destroy().await.unwrap();
+    session.destroy(false).await.unwrap();
 }

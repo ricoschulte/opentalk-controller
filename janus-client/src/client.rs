@@ -1,3 +1,18 @@
+use crate::{
+    async_types::{
+        AttachToPluginRequest, CreateSessionRequest, SendToPluginRequest, SendTrickleRequest,
+    },
+    error, incoming,
+    outgoing::{AttachToPlugin, CreateSession, KeepAlive, PluginMessage},
+    rabbitmq::{RabbitMqConfig, RabbitMqConnection},
+    types::{
+        incoming::JanusMessage,
+        outgoing::PluginBody,
+        outgoing::{JanusRequest, TrickleMessage},
+        JanusPlugin, Jsep, TransactionId,
+    },
+    ClientId, HandleId, PluginRequest, SessionId,
+};
 use futures::StreamExt;
 use lapin::{
     options::{BasicAckOptions, BasicNackOptions},
@@ -15,23 +30,6 @@ use tokio::{
     time::timeout,
 };
 
-use crate::error::Error;
-use crate::{
-    async_types::{
-        AttachToPluginRequest, CreateSessionRequest, SendToPluginRequest, SendTrickleRequest,
-    },
-    error, incoming,
-    outgoing::{AttachToPlugin, CreateSession, KeepAlive, PluginMessage},
-    rabbitmq::{RabbitMqConfig, RabbitMqConnection},
-    types::{
-        incoming::JanusMessage,
-        outgoing::PluginBody,
-        outgoing::{JanusRequest, TrickleMessage},
-        JanusPlugin, Jsep, TransactionId,
-    },
-    HandleId, PluginRequest, SessionId,
-};
-
 /// Stores all ongoing transactions by ID.
 ///
 /// To send messages to the recipient it uses a oneshot sender and a flag which tells it if ACK
@@ -46,13 +44,15 @@ struct Transaction {
 
 #[derive(Debug)]
 pub(crate) struct InnerClient {
+    id: ClientId,
+
     connection_config: RabbitMqConfig,
     /// Used to map Outgoing request to incoming messages from Janus
     // todo make the ignore_ack flag typed
     transactions: Arc<Mutex<TransactionMap>>,
     connection: Option<RabbitMqConnection>,
     /// Sink for general messages from Janus that are not part of a request, such as notifications, etc.
-    server_notification_sink: mpsc::Sender<Arc<JanusMessage>>,
+    server_notification_sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
     pub(crate) sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
     /// shutdown signal
     shutdown: broadcast::Sender<()>,
@@ -65,14 +65,16 @@ impl InnerClient {
     /// To connect call [connect](InnerClient::Connect)
     pub(crate) fn new(
         config: RabbitMqConfig,
-        server_notification_sink: mpsc::Sender<Arc<JanusMessage>>,
+        id: ClientId,
+        sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
         shutdown: broadcast::Sender<()>,
     ) -> Self {
         Self {
+            id,
             connection_config: config,
             transactions: Default::default(),
             connection: None,
-            server_notification_sink,
+            server_notification_sink: sink,
             sessions: Default::default(),
             shutdown,
         }
@@ -85,6 +87,7 @@ impl InnerClient {
         self.connection = Some(connection);
 
         tokio::spawn(rabbitmq_event_handling_loop(
+            self.id.clone(),
             self.shutdown.subscribe(),
             consumer,
             self.transactions.clone(),
@@ -93,6 +96,10 @@ impl InnerClient {
         ));
 
         Ok(())
+    }
+
+    pub(crate) async fn destroy(&self) {
+        self.connection_config.destroy().await;
     }
 
     fn get_tx_id() -> TransactionId {
@@ -322,6 +329,10 @@ impl InnerSession {
         client.send_keep_alive(self.id).await
     }
 
+    pub(crate) fn assume_destroyed(&mut self) {
+        self.destroyed = true;
+    }
+
     pub(crate) async fn destroy(&mut self, client: Arc<InnerClient>) -> Result<(), error::Error> {
         let request = JanusRequest::Destroy {
             session_id: self.id,
@@ -332,7 +343,7 @@ impl InnerSession {
             .await
             .expect("Failed to send destroy for session on drop");
 
-        self.destroyed = true;
+        self.assume_destroyed();
 
         Ok(())
     }
@@ -513,11 +524,12 @@ impl Drop for InnerHandle {
 }
 
 async fn rabbitmq_event_handling_loop(
+    id: ClientId,
     mut shutdown_sig: broadcast::Receiver<()>,
     mut stream: Consumer,
     transactions: Arc<Mutex<TransactionMap>>,
     sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
-    sink: mpsc::Sender<Arc<JanusMessage>>,
+    sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
 ) {
     loop {
         tokio::select! {
@@ -537,6 +549,7 @@ async fn rabbitmq_event_handling_loop(
                             Ok(msg) => {
                                 log::trace!("Received RabbitMQ message containing: {}", msg);
                                 match event_handling_loop_inner(
+                                    &id,
                                     msg,
                                     transactions.clone(),
                                     sessions.clone(),
@@ -584,10 +597,11 @@ async fn rabbitmq_event_handling_loop(
 }
 
 async fn event_handling_loop_inner(
+    id: &ClientId,
     msg: String,
     transactions: Arc<Mutex<TransactionMap>>,
     sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
-    sink: &mpsc::Sender<Arc<JanusMessage>>,
+    sink: &mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
 ) -> Result<(), error::Error> {
     match serde_json::from_str::<JanusMessage>(&msg) {
         Ok(janus_result) => {
@@ -621,13 +635,13 @@ async fn event_handling_loop_inner(
                         }
                         None => {
                             // We could not find a transaction_id in our hashmap, try to route it based on the sessionId
-                            route_message(&sessions, &sink, Arc::new(janus_result)).await;
+                            route_message(id, &sessions, &sink, Arc::new(janus_result)).await;
                         }
                     };
                 }
                 None => {
                     // This is a transactionless msg. Try route it based on the sessionId
-                    route_message(&sessions, &sink, Arc::new(janus_result)).await;
+                    route_message(id, &sessions, &sink, Arc::new(janus_result)).await;
                 }
             }
             Ok(())
@@ -642,8 +656,9 @@ async fn event_handling_loop_inner(
 /// Routes a message that does not have a matching transaction
 // todo can we get this somehow a little bit cleaner?
 async fn route_message(
+    id: &ClientId,
     sessions: &Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
-    global_sink: &mpsc::Sender<Arc<JanusMessage>>,
+    global_sink: &mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
     janus_result: Arc<JanusMessage>,
 ) {
     // Route event messages
@@ -744,7 +759,7 @@ async fn route_message(
         }
         _ => {
             // Everything that is not handled before is forwarded to the general channel
-            if let Err(e) = global_sink.send(janus_result.clone()).await {
+            if let Err(e) = global_sink.send((id.clone(), janus_result.clone())).await {
                 log::error!(
                     "Failed to send JanusResult to general channel: {} - {:?}",
                     e,
@@ -762,7 +777,7 @@ fn get_handle_from_sender(
     sessions: &Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
     session_id: &SessionId,
     sender: &HandleId,
-) -> Option<Result<Arc<InnerHandle>, Error>> {
+) -> Option<Result<Arc<InnerHandle>, error::Error>> {
     let session = sessions.lock().get(&session_id).cloned();
     session
         .and_then(|weak| weak.upgrade())

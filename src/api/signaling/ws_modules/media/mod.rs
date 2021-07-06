@@ -6,7 +6,7 @@ use crate::api::signaling::ws::{
     DestroyContext, Event, InitContext, ModuleContext, SignalingModule,
 };
 use crate::api::signaling::ws_modules::media::outgoing::Link;
-use crate::api::signaling::{JanusMcu, ParticipantId};
+use crate::api::signaling::{McuPool, ParticipantId};
 use anyhow::{bail, Context, Result};
 use janus_client::TrickleCandidate;
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,7 @@ pub struct Media {
     id: ParticipantId,
     room: Uuid,
 
-    mcu: Arc<JanusMcu>,
+    mcu: Arc<McuPool>,
     media: MediaSessions,
 
     state: State,
@@ -44,7 +44,7 @@ pub struct MediaSessionState {
 impl SignalingModule for Media {
     const NAMESPACE: &'static str = "media";
 
-    type Params = Weak<JanusMcu>;
+    type Params = Weak<McuPool>;
 
     type Incoming = incoming::Message;
     type Outgoing = outgoing::Message;
@@ -88,7 +88,6 @@ impl SignalingModule for Media {
         match event {
             Event::WsMessage(incoming::Message::PublishComplete(info))
             | Event::WsMessage(incoming::Message::UpdateMediaSession(info)) => {
-                log::debug!("Received publish complete for {}", self.id);
                 self.state
                     .insert(info.media_session_type, info.media_session_state);
 
@@ -118,7 +117,7 @@ impl SignalingModule for Media {
                     )
                     .await
                 {
-                    log::error!("Failed to handle sdp offer, {}", e);
+                    log::error!("Failed to handle sdp offer, {:?}", e);
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process offer",
                     });
@@ -133,7 +132,7 @@ impl SignalingModule for Media {
                     )
                     .await
                 {
-                    log::error!("Failed to handle sdp answer, {}", e);
+                    log::error!("Failed to handle sdp answer, {:?}", e);
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process answer",
                     });
@@ -148,7 +147,7 @@ impl SignalingModule for Media {
                     )
                     .await
                 {
-                    log::error!("Failed to handle sdp candidate, {}", e);
+                    log::error!("Failed to handle sdp candidate, {:?}", e);
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process candidate",
                     });
@@ -159,7 +158,7 @@ impl SignalingModule for Media {
                     .handle_sdp_end_of_candidates(target.target, target.media_session_type)
                     .await
                 {
-                    log::error!("Failed to handle sdp end-of-candidates, {}", e);
+                    log::error!("Failed to handle sdp end-of-candidates, {:?}", e);
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process endOfCandidates",
                     });
@@ -170,7 +169,7 @@ impl SignalingModule for Media {
                     .handle_sdp_request_offer(&mut ctx, target.target, target.media_session_type)
                     .await
                 {
-                    log::error!("Failed to handle sdp request-offer, {}", e);
+                    log::error!("Failed to handle sdp request-offer, {:?}", e);
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process requestOffer",
                     });
