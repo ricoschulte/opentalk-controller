@@ -1,4 +1,4 @@
-use crate::api::signaling::mcu::MediaSessionType;
+use crate::api::signaling::mcu::{MediaSessionKey, MediaSessionType};
 use crate::api::signaling::ParticipantId;
 use janus_client::TrickleCandidate;
 use serde::Serialize;
@@ -15,6 +15,20 @@ pub enum Message {
     /// SDP Candidate, used for ICE negotiation
     #[serde(rename = "sdp_candidate")]
     SdpCandidate(SdpCandidate),
+
+    /// Signals that a webrtc connection has been established
+    #[serde(rename = "webrtc_up")]
+    WebRtcUp(Source),
+
+    /// Signals that a webrtc connection has been disconnected/destryoed by janus
+    ///
+    /// This message can, but wont always be received when a participant disconnects
+    #[serde(rename = "webrtc_down")]
+    WebRtcDown(Source),
+
+    /// A webrtc connection experienced package loss
+    #[serde(rename = "webrtc_slow")]
+    WebRtcSlow(Link),
 
     /// Error message, if received assume join failed.
     #[serde(rename = "error")]
@@ -46,6 +60,29 @@ pub struct Source {
 
     /// The type of stream
     pub media_session_type: MediaSessionType,
+}
+
+impl From<MediaSessionKey> for Source {
+    fn from(media_session_key: MediaSessionKey) -> Self {
+        Self {
+            source: media_session_key.0,
+            media_session_type: media_session_key.1,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LinkDirection {
+    Upstream,
+    Downstream,
+}
+
+#[derive(Debug, Serialize)]
+pub struct Link {
+    pub direction: LinkDirection,
+    #[serde(flatten)]
+    pub source: Source,
 }
 
 #[cfg(test)]
@@ -94,6 +131,48 @@ mod test {
                 sdp_m_line_index: 1,
                 candidate: "candidate:4 1 UDP 123456 192.168.178.1 123456 typ host".into(),
             },
+            source: Source {
+                source: ParticipantId::nil(),
+                media_session_type: MediaSessionType::Video,
+            },
+        }))
+        .unwrap();
+
+        assert_eq!(expected, produced);
+    }
+
+    #[test]
+    fn test_webrtc_up() {
+        let expected = r#"{"message":"webrtc_up","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
+
+        let produced = serde_json::to_string(&Message::WebRtcUp(Source {
+            source: ParticipantId::nil(),
+            media_session_type: MediaSessionType::Video,
+        }))
+        .unwrap();
+
+        assert_eq!(expected, produced);
+    }
+
+    #[test]
+    fn test_webrtc_down() {
+        let expected = r#"{"message":"webrtc_down","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
+
+        let produced = serde_json::to_string(&Message::WebRtcDown(Source {
+            source: ParticipantId::nil(),
+            media_session_type: MediaSessionType::Video,
+        }))
+        .unwrap();
+
+        assert_eq!(expected, produced);
+    }
+
+    #[test]
+    fn test_webrtc_slow() {
+        let expected = r#"{"message":"webrtc_slow","direction":"upstream","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
+
+        let produced = serde_json::to_string(&Message::WebRtcSlow(Link {
+            direction: LinkDirection::Upstream,
             source: Source {
                 source: ParticipantId::nil(),
                 media_session_type: MediaSessionType::Video,

@@ -1,5 +1,5 @@
 use crate::api::signaling::mcu::{
-    JanusMcu, JanusPublisher, JanusSubscriber, MediaSessionKey, MediaSessionType, TrickleMessage,
+    JanusMcu, JanusPublisher, JanusSubscriber, MediaSessionKey, MediaSessionType, WebRtcEvent,
 };
 use crate::api::signaling::ws_modules::media::MediaSessionState;
 use crate::api::signaling::ParticipantId;
@@ -17,11 +17,11 @@ pub struct MediaSessions {
     subscribers: HashMap<MediaSessionKey, JanusSubscriber>,
 
     // The send part of the event channel used when creating new publishers/subscribers
-    sender: mpsc::Sender<(MediaSessionKey, TrickleMessage)>,
+    sender: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
 }
 
 impl MediaSessions {
-    pub fn new(id: ParticipantId, sender: mpsc::Sender<(MediaSessionKey, TrickleMessage)>) -> Self {
+    pub fn new(id: ParticipantId, sender: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>) -> Self {
         Self {
             id,
             publishers: Default::default(),
@@ -44,7 +44,7 @@ impl MediaSessions {
         );
 
         let publisher = mcu_client
-            .new_publisher(Some(self.sender.clone()), self.id, media_session_type, 0)
+            .new_publisher(self.sender.clone(), self.id, media_session_type, 0)
             .await?;
 
         self.publishers.insert(media_session_type, publisher);
@@ -76,7 +76,7 @@ impl MediaSessions {
         );
 
         let subscriber = mcu_client
-            .new_subscriber(Some(self.sender.clone()), participant, media_session_type)
+            .new_subscriber(self.sender.clone(), participant, media_session_type)
             .await?;
 
         self.subscribers.insert(key, subscriber);
@@ -132,6 +132,20 @@ impl MediaSessions {
         }
     }
 
+    /// Remove a specific subscriber
+    pub async fn remove_subscriber(&mut self, media_session_key: &MediaSessionKey) {
+        if let Some(subscriber) = self.subscribers.remove(&media_session_key) {
+            if let Err(e) = subscriber.destroy().await {
+                log::error!("Failed to destroy subscriber, {}", e);
+            }
+        } else {
+            log::error!(
+                "Failed to destroy subscriber, unable to find subscriber by media_session_key {}",
+                media_session_key
+            )
+        }
+    }
+
     /// Remove all subscribers to all streams published by the given participant
     pub async fn remove_subscribers(&mut self, participant: ParticipantId) {
         while let Some(key) = self
@@ -141,25 +155,21 @@ impl MediaSessions {
             .copied()
         {
             // Safe unwrap since key was taken from hashmap
-            let subscriber = self.subscribers.remove(&key).unwrap();
-
-            if let Err(e) = subscriber.destroy().await {
-                log::error!("Failed to destroy subscriber, {}", e);
-            }
+            self.remove_subscriber(&key).await;
         }
     }
 
     /// Destroy all sessions
     pub async fn destroy(mut self) {
         for (_, subscriber) in self.subscribers.drain() {
-            log::debug!("Destroy subscriber");
+            log::debug!("Destroy subscriber {}", self.id);
             if let Err(e) = subscriber.destroy().await {
                 log::error!("Failed to destroy subscriber, {}", e);
             }
         }
 
         for (_, publisher) in self.publishers.drain() {
-            log::debug!("Destroy publisher");
+            log::debug!("Destroy publisher {}", self.id);
             if let Err(e) = publisher.destroy().await {
                 log::error!("Failed to destroy publisher, {}", e);
             }

@@ -368,7 +368,7 @@ impl Runner {
                     match res {
                         Ok(msg) => self.handle_ws_message(msg).await,
                         Err(e) => {
-                            log::error!("Failed to receive ws message, {}", e);
+                            log::error!("Failed to receive ws message for participant {}, {}", self.id ,e);
                             self.exit = true;
                         }
                     }

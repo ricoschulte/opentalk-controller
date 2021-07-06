@@ -15,6 +15,7 @@ use tokio::{
     time::timeout,
 };
 
+use crate::error::Error;
 use crate::{
     async_types::{
         AttachToPluginRequest, CreateSessionRequest, SendToPluginRequest, SendTrickleRequest,
@@ -653,15 +654,17 @@ async fn route_message(
         | JanusMessage::Trickle(incoming::TrickleMessage {
             sender, session_id, ..
         })
-        | JanusMessage::WebRtcUpdate(incoming::WebRtcUpdate { sender, session_id }) => {
-            let session = sessions.lock().get(&session_id).cloned();
-            if let Some(session) = session.and_then(|x| x.upgrade()) {
-                let handle = session.find_handle(&sender);
+        | JanusMessage::Media(incoming::Media {
+            sender, session_id, ..
+        })
+        | JanusMessage::WebRtcUp(incoming::WebRtcUp { sender, session_id }) => {
+            if let Some(handle) = get_handle_from_sender(sessions, session_id, sender) {
                 match handle {
                     Ok(handle) => {
                         if let Err(e) = handle.sink.send(janus_result.clone()) {
                             log::error!(
-                                "Encountered error while sending Janus Event to handle channel: {}",
+                                "Encountered error while sending Janus Event {:?} to handle channel: {}",
+                                &janus_result,
                                 e
                             );
                         }
@@ -678,20 +681,43 @@ async fn route_message(
                 }
             }
         }
+        JanusMessage::Detached(incoming::Detached { sender, session_id }) => {
+            if let Some(handle) = get_handle_from_sender(sessions, session_id, sender) {
+                match handle {
+                    Ok(handle) => {
+                        if let Err(e) = handle.sink.send(janus_result.clone()) {
+                            log::error!(
+                                "Encountered error while sending Janus Event {:?} to handle channel: {}",
+                                &janus_result,
+                                e
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        // it's very likely that this operation will result in this error as we probably initiated the detach and therefore
+                        // already removed the handle.
+                        log::trace!(
+                            "Received detach on closed handle, {:?}, caused by: {}",
+                            &janus_result,
+                            e
+                        );
+                    }
+                }
+            }
+        }
         JanusMessage::Hangup(incoming::Hangup {
             sender,
             session_id,
             reason,
             ..
         }) => {
-            let session = sessions.lock().get(&session_id).cloned();
-            if let Some(session) = session.and_then(|x| x.upgrade()) {
-                let handle = session.find_handle(&sender);
+            if let Some(handle) = get_handle_from_sender(sessions, session_id, sender) {
                 match handle {
                     Ok(handle) => {
                         if let Err(e) = handle.sink.send(janus_result.clone()) {
                             log::error!(
-                                "Encountered error while sending Janus Event to handle channel: {}",
+                                "Encountered error while sending Janus Event {:?} to handle channel: {}",
+                                &janus_result,
                                 e
                             );
                         }
@@ -699,15 +725,15 @@ async fn route_message(
                         return;
                     }
                     Err(e) => {
-                        if reason == "Close PC" {
+                        if reason == "Close PC" || reason == "DTLS alert" {
                             log::trace!(
-                                "Received hangup for PC after we : {:?} caused by {}",
+                                "Received hangup on closed handle: {:?} caused by: {}",
                                 &janus_result,
                                 e
                             );
                         } else {
                             log::error!(
-                                "Could not get handle for incoming message: {:?} caused by {}",
+                                "Could not get handle for incoming message: {:?} caused by: {}",
                                 &janus_result,
                                 e
                             );
@@ -727,4 +753,18 @@ async fn route_message(
             }
         }
     }
+}
+
+/// Get the associated InnerHandle from a janus requests sender field
+///
+/// Returns the InnerHandle or None if the provided session could not be found
+fn get_handle_from_sender(
+    sessions: &Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
+    session_id: &SessionId,
+    sender: &HandleId,
+) -> Option<Result<Arc<InnerHandle>, Error>> {
+    let session = sessions.lock().get(&session_id).cloned();
+    session
+        .and_then(|weak| weak.upgrade())
+        .map(|session| session.find_handle(&sender))
 }

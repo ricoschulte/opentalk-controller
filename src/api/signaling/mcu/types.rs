@@ -30,6 +30,21 @@ impl std::fmt::Display for ClientId {
 }
 
 /// Used to relay messages to the WebSocket
+#[derive(Debug)]
+pub enum WebRtcEvent {
+    WebRtcUp,
+    WebRtcDown,
+    SlowLink(LinkDirection),
+    Trickle(TrickleMessage),
+}
+
+#[derive(Debug)]
+pub enum LinkDirection {
+    Upstream,
+    Downstream,
+}
+
+#[derive(Debug)]
 pub enum TrickleMessage {
     Completed,
     Candidate(TrickleCandidate),
