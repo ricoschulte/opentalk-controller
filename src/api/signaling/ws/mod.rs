@@ -1,5 +1,6 @@
 use crate::api::signaling::ParticipantId;
 use crate::db::users::User;
+use crate::db::DbInterface;
 use adapter::ActixTungsteniteAdapter;
 use anyhow::Result;
 use async_tungstenite::tungstenite::Message;
@@ -12,6 +13,7 @@ use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::marker::PhantomData;
+use std::sync::Arc;
 use tokio_stream::Stream;
 use uuid::Uuid;
 
@@ -74,6 +76,7 @@ where
     id: ParticipantId,
     room: Uuid,
     user: &'ctx User,
+    db: &'ctx Arc<DbInterface>,
     rabbitmq_exchanges: &'ctx mut Vec<RabbitMqExchange>,
     rabbitmq_bindings: &'ctx mut Vec<RabbitMqBinding>,
     events: &'ctx mut SelectAll<AnyStream>,
@@ -110,6 +113,11 @@ where
     /// Returns the user associated with the participant
     pub fn user(&self) -> &User {
         self.user
+    }
+
+    /// Returns a reference to the controllers database interface
+    pub fn db(&self) -> &Arc<DbInterface> {
+        self.db
     }
 
     /// Access to a redis connection

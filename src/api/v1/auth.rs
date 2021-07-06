@@ -1,7 +1,9 @@
 //! Auth related API structs and Endpoints
 use super::{ApiError, INVALID_ID_TOKEN};
 use crate::db;
+use crate::db::users::ModifiedUser;
 use crate::db::DbInterface;
+use crate::ha_sync::user_update;
 use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post, web};
@@ -32,6 +34,7 @@ pub struct LoginResponse {
 pub async fn login(
     db_ctx: Data<DbInterface>,
     oidc_ctx: Data<OidcContext>,
+    rabbitmq_channel: Data<lapin::Channel>,
     body: Json<Login>,
 ) -> Result<Json<LoginResponse>, ApiError> {
     let id_token = body.into_inner().id_token;
@@ -53,7 +56,7 @@ pub async fn login(
                 }
             };
 
-            web::block(move || -> Result<(), ApiError> {
+            let modified_user = web::block(move || -> Result<Option<ModifiedUser>, ApiError> {
                 let user = db_ctx.get_user_by_uuid(&user_uuid)?;
 
                 match user {
@@ -65,9 +68,10 @@ pub async fn login(
                             id_token_exp: Some(info.expiration.timestamp()),
                         };
 
-                        db_ctx.modify_user(user.oidc_uuid, modify_user, Some(info.x_grp))?;
+                        let modified_user =
+                            db_ctx.modify_user(user.oidc_uuid, modify_user, Some(info.x_grp))?;
 
-                        Ok(())
+                        Ok(Some(modified_user))
                     }
                     None => {
                         let new_user = db::users::NewUser {
@@ -88,7 +92,7 @@ pub async fn login(
 
                         db_ctx.create_user(new_user)?;
 
-                        Ok(())
+                        Ok(None)
                     }
                 }
             })
@@ -97,6 +101,19 @@ pub async fn login(
                 log::error!("BlockingError on POST /auth/login - {}", e);
                 ApiError::Internal
             })??;
+
+            if let Some(modified_user) = modified_user {
+                let message = user_update::Message {
+                    groups: modified_user.groups_changed,
+                };
+
+                if let Err(e) = message
+                    .send_via(&*rabbitmq_channel, modified_user.user.id)
+                    .await
+                {
+                    log::error!("Failed to send user-update message {:?}", e);
+                }
+            }
 
             Ok(Json(LoginResponse {
                 // TODO calculate permissions

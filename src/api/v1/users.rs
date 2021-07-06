@@ -117,7 +117,9 @@ pub async fn set_current_user_profile(
             id_token_exp: None,
         };
 
-        Ok(db_ctx.modify_user(current_user.oidc_uuid, modify_user, None)?)
+        let modified_user = db_ctx.modify_user(current_user.oidc_uuid, modify_user, None)?;
+
+        Ok(modified_user.user)
     })
     .await
     .map_err(|e| {

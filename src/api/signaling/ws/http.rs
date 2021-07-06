@@ -148,7 +148,12 @@ async fn ws_service(
         }
     };
 
-    let user = check_access_token(db_ctx, oidc_ctx, AccessToken::new(access_token.into())).await?;
+    let user = check_access_token(
+        db_ctx.clone(),
+        oidc_ctx,
+        AccessToken::new(access_token.into()),
+    )
+    .await?;
 
     let mut response = ws::handshake(&req)?;
 
@@ -159,7 +164,15 @@ async fn ws_service(
     let id = ParticipantId::new();
     let room = Uuid::nil();
 
-    let mut builder = Runner::builder(id, room, user, protocol, redis_conn, rabbit_mq_channel);
+    let mut builder = Runner::builder(
+        id,
+        room,
+        user,
+        protocol,
+        db_ctx.into_inner(),
+        redis_conn,
+        rabbit_mq_channel,
+    );
 
     // add all modules
     for module in modules.iter() {

@@ -5,13 +5,11 @@ use crate::api::signaling::ws_modules::control::rabbitmq;
 use crate::api::signaling::ws_modules::ee::chat::storage::StoredMessage;
 use crate::api::signaling::ParticipantId;
 use crate::db::groups::Group;
-use crate::db::DbInterface;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use r3dlock::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 use uuid::Uuid;
 
 mod storage;
@@ -52,7 +50,7 @@ impl Chat {
 #[async_trait::async_trait(?Send)]
 impl SignalingModule for Chat {
     const NAMESPACE: &'static str = "ee-chat";
-    type Params = Arc<DbInterface>;
+    type Params = ();
     type Incoming = IncomingWsMessage;
     type Outgoing = Message;
     type RabbitMqMessage = Message;
@@ -62,11 +60,11 @@ impl SignalingModule for Chat {
 
     async fn init(
         mut ctx: InitContext<'_, Self>,
-        db: &Self::Params,
+        _params: &Self::Params,
         _protocol: &'static str,
     ) -> Result<Self> {
         let user_id = ctx.user().id;
-        let db = db.clone();
+        let db = ctx.db().clone();
 
         let groups = actix_web::web::block(move || db.get_groups_for_user(user_id))
             .await

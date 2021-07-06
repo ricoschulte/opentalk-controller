@@ -59,6 +59,16 @@ pub struct ModifyUser {
     pub id_token_exp: Option<i64>,
 }
 
+/// Ok type of [`DbInterface::modify_user`]
+pub struct ModifiedUser {
+    /// The user after the modification
+    pub user: User,
+
+    /// True the user's groups changed.
+    /// Relevant for permission related state
+    pub groups_changed: bool,
+}
+
 impl DbInterface {
     pub fn create_user(&self, new_user: NewUserWithGroups) -> Result<()> {
         let con = self.get_con()?;
@@ -114,10 +124,10 @@ impl DbInterface {
         user_uuid: Uuid,
         modify: ModifyUser,
         groups: Option<Vec<String>>,
-    ) -> Result<User> {
+    ) -> Result<ModifiedUser> {
         let con = self.get_con()?;
 
-        con.transaction::<User, super::DatabaseError, _>(|| {
+        con.transaction::<ModifiedUser, super::DatabaseError, _>(|| {
             let target = users::table.filter(users::columns::oidc_uuid.eq(user_uuid));
             let user: User = diesel::update(target).set(modify).get_result(&con)?;
 
@@ -143,9 +153,17 @@ impl DbInterface {
 
                     insert_user_into_user_groups(&con, &user, groups)?;
                 }
-            }
 
-            Ok(user)
+                Ok(ModifiedUser {
+                    user,
+                    groups_changed: !groups_unchanged,
+                })
+            } else {
+                Ok(ModifiedUser {
+                    user,
+                    groups_changed: false,
+                })
+            }
         })
     }
 
