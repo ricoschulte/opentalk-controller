@@ -123,32 +123,28 @@ pub async fn login(
     }
 }
 
-/// Represents an OIDC Provider
+/// Wrapper struct for the oidc provider
+#[derive(Debug, Serialize, Eq, PartialEq, Hash)]
+pub struct Provider {
+    oidc: OidcProvider,
+}
+
+/// Represents an OIDC provider
 #[derive(Debug, Serialize, Eq, PartialEq, Hash)]
 pub struct OidcProvider {
     name: String,
     url: String,
 }
 
-/// A set of OIDC Providers
-///
-/// JSON Body of the response for *GET '/auth/login/*
-#[derive(Debug, Serialize)]
-pub struct OidcProviders {
-    providers: HashSet<OidcProvider>,
-}
-
 /// API Endpoint *GET /auth/login*
 ///
-/// Returns a list of available OIDC providers
+/// Returns information about the OIDC provider
 #[get("/auth/login")]
-pub async fn oidc_providers(oidc_ctx: Data<OidcContext>) -> Result<Json<OidcProviders>, ApiError> {
-    let mut providers = HashSet::new();
-
-    providers.insert(OidcProvider {
+pub async fn oidc_provider(oidc_ctx: Data<OidcContext>) -> Json<Provider> {
+    let provider = OidcProvider {
         name: "default".to_string(),
         url: oidc_ctx.provider_url(),
-    });
+    };
 
-    Ok(Json(OidcProviders { providers }))
+    Json(Provider { oidc: provider })
 }
