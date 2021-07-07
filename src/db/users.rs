@@ -1,12 +1,12 @@
 //! Contains the user specific database structs amd queries
-use super::Result;
-use crate::db::schema::users;
-use crate::db::DbInterface;
-use crate::diesel::ExpressionMethods;
-use crate::diesel::QueryDsl;
+use super::groups::{Group, UserGroup};
+use super::schema::{groups, user_groups, users};
+use super::{DatabaseError, DbConnection, DbInterface, Result};
 use diesel::result::Error;
-use diesel::{Identifiable, Queryable};
-use diesel::{QueryResult, RunQueryDsl};
+use diesel::{
+    Connection, ExpressionMethods, Identifiable, Insertable, QueryDsl, QueryResult, Queryable,
+    RunQueryDsl,
+};
 use uuid::Uuid;
 
 /// Diesel user struct
@@ -41,6 +41,12 @@ pub struct NewUser {
     pub language: String,
 }
 
+#[derive(Debug)]
+pub struct NewUserWithGroups {
+    pub new_user: NewUser,
+    pub groups: Vec<String>,
+}
+
 /// Diesel user struct for updates
 ///
 /// Is used in update queries. None fields will be ignored on update queries
@@ -53,21 +59,33 @@ pub struct ModifyUser {
     pub id_token_exp: Option<i64>,
 }
 
+/// Ok type of [`DbInterface::modify_user`]
+pub struct ModifiedUser {
+    /// The user after the modification
+    pub user: User,
+
+    /// True the user's groups changed.
+    /// Relevant for permission related state
+    pub groups_changed: bool,
+}
+
 impl DbInterface {
-    pub fn create_user(&self, new_user: NewUser) -> Result<User> {
+    pub fn create_user(&self, new_user: NewUserWithGroups) -> Result<()> {
         let con = self.get_con()?;
 
-        let user_result = diesel::insert_into(users::table)
-            .values(new_user)
-            .get_result(&con);
+        con.transaction::<(), super::DatabaseError, _>(|| {
+            let user: User = diesel::insert_into(users::table)
+                .values(new_user.new_user)
+                .get_result(&con)
+                .map_err(|e| {
+                    log::error!("Failed to create user, {}", e);
+                    DatabaseError::from(e)
+                })?;
 
-        match user_result {
-            Ok(user) => Ok(user),
-            Err(e) => {
-                log::error!("Query error creating new user, {}", e);
-                Err(e.into())
-            }
-        }
+            insert_user_into_user_groups(&con, &user, new_user.groups)?;
+
+            Ok(())
+        })
     }
 
     pub fn get_users(&self) -> Result<Vec<User>> {
@@ -101,19 +119,52 @@ impl DbInterface {
         }
     }
 
-    pub fn modify_user(&self, user_uuid: Uuid, user: ModifyUser) -> Result<User> {
+    pub fn modify_user(
+        &self,
+        user_uuid: Uuid,
+        modify: ModifyUser,
+        groups: Option<Vec<String>>,
+    ) -> Result<ModifiedUser> {
         let con = self.get_con()?;
 
-        let target = users::table.filter(users::columns::oidc_uuid.eq(user_uuid));
-        let user_result: QueryResult<User> = diesel::update(target).set(user).get_result(&con);
+        con.transaction::<ModifiedUser, super::DatabaseError, _>(|| {
+            let target = users::table.filter(users::columns::oidc_uuid.eq(user_uuid));
+            let user: User = diesel::update(target).set(modify).get_result(&con)?;
 
-        match user_result {
-            Ok(user) => Ok(user),
-            Err(e) => {
-                log::error!("Query error modifying user, {}", e);
-                Err(e.into())
+            // modify groups if parameter exists
+            if let Some(groups) = groups {
+                let curr_groups = self.get_groups_for_user(user.id)?;
+
+                // check current groups and if reinsert of groups into user_groups is needed
+                let groups_unchanged = if groups.len() == curr_groups.len() {
+                    groups.iter().all(|old| curr_groups.contains(old))
+                } else {
+                    false
+                };
+
+                if !groups_unchanged {
+                    // Remove user from user_groups table
+                    let target =
+                        user_groups::table.filter(user_groups::columns::user_id.eq(user.id));
+                    diesel::delete(target).execute(&con).map_err(|e| {
+                        log::error!("Failed to remove user's groups from user_groups, {}", e);
+                        DatabaseError::from(e)
+                    })?;
+
+                    insert_user_into_user_groups(&con, &user, groups)?;
+                }
+
+                Ok(ModifiedUser {
+                    user,
+                    groups_changed: !groups_unchanged,
+                })
+            } else {
+                Ok(ModifiedUser {
+                    user,
+                    groups_changed: false,
+                })
             }
-        }
+        })
     }
 
     pub fn get_user_by_id(&self, user_id: i64) -> Result<Option<User>> {
@@ -133,4 +184,44 @@ impl DbInterface {
             }
         }
     }
+}
+
+fn insert_user_into_user_groups(
+    con: &DbConnection,
+    user: &User,
+    groups: Vec<String>,
+) -> Result<()> {
+    let possibly_new_groups = groups
+        .iter()
+        .cloned()
+        .map(|id| Group { id })
+        .collect::<Vec<Group>>();
+
+    diesel::insert_into(groups::table)
+        .values(possibly_new_groups)
+        .on_conflict(groups::id)
+        .do_nothing()
+        .execute(con)
+        .map_err(|e| {
+            log::error!("Failed to insert possibly new groups, {}", e);
+            DatabaseError::from(e)
+        })?;
+
+    let user_groups_ = groups
+        .into_iter()
+        .map(|group_id| UserGroup {
+            user_id: user.id,
+            group_id,
+        })
+        .collect::<Vec<UserGroup>>();
+
+    diesel::insert_into(user_groups::table)
+        .values(&user_groups_)
+        .execute(con)
+        .map_err(|e| {
+            log::error!("Failed to insert user_groups, {}", e);
+            DatabaseError::from(e)
+        })?;
+
+    Ok(())
 }

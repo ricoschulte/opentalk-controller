@@ -1,5 +1,5 @@
 use barrel::backend::Pg;
-use barrel::{Migration, types};
+use barrel::{types, Migration};
 
 pub fn migration() -> String {
     let mut migr = Migration::new();
@@ -14,6 +14,19 @@ pub fn migration() -> String {
         table.add_column("id_token_exp", types::custom("BIGINT").nullable(false));
         table.add_column("theme", types::varchar(255));
         table.add_column("language", types::varchar(35).nullable(false));
+    });
+
+    migr.create_table("groups", |table| {
+        table.add_column("id", types::varchar(255).primary(true));
+    });
+
+    migr.create_table("user_groups", |table| {
+        table.add_column("user_id", types::custom("BIGINT REFERENCES users(id)"));
+        table.add_column(
+            "group_id",
+            types::custom("VARCHAR(255) REFERENCES groups(id)"),
+        );
+        table.inject_custom("PRIMARY KEY (user_id, group_id)");
     });
 
     migr.create_table("rooms", |table| {

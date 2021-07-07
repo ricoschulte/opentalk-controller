@@ -6,6 +6,8 @@ use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::{incoming, outgoing, rabbitmq, storage};
 use crate::api::signaling::ParticipantId;
 use crate::db::users::User;
+use crate::db::DbInterface;
+use crate::ha_sync::user_update;
 use anyhow::{bail, Context, Result};
 use async_tungstenite::tungstenite::Message;
 use futures::stream::SelectAll;
@@ -19,6 +21,7 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time::{sleep, timeout, Sleep};
@@ -41,6 +44,7 @@ pub struct Builder {
     pub(super) rabbitmq_exchanges: Vec<RabbitMqExchange>,
     pub(super) rabbitmq_bindings: Vec<RabbitMqBinding>,
     pub(super) events: SelectAll<AnyStream>,
+    pub(super) db: Arc<DbInterface>,
     pub(super) redis_conn: ConnectionManager,
     pub(super) rabbitmq_channel: lapin::Channel,
 }
@@ -162,6 +166,18 @@ impl Builder {
                 .await?;
         }
 
+        // Binding outside the loop since the routing key contains the user-id
+        // and thus should not appear in the logs
+        self.rabbitmq_channel
+            .queue_bind(
+                queue.name().as_str(),
+                user_update::EXCHANGE,
+                &user_update::routing_key(self.user.id),
+                Default::default(),
+                Default::default(),
+            )
+            .await?;
+
         let consumer = self
             .rabbitmq_channel
             .basic_consume(
@@ -176,7 +192,7 @@ impl Builder {
         Ok(Runner {
             id: self.id,
             room: self.room,
-            _user: self.user,
+            user: self.user,
             control_data: None,
             ws: Ws {
                 websocket,
@@ -209,7 +225,7 @@ pub struct Runner {
 
     // User behind the participant
     // Not used yet
-    _user: User,
+    user: User,
 
     // The control data. Initialized when frontend send join
     control_data: Option<ControlData>,
@@ -247,6 +263,7 @@ impl Runner {
         room: Uuid,
         user: User,
         protocol: &'static str,
+        db: Arc<DbInterface>,
         redis_conn: ConnectionManager,
         rabbitmq_channel: lapin::Channel,
     ) -> Builder {
@@ -259,6 +276,7 @@ impl Runner {
             rabbitmq_exchanges: vec![],
             rabbitmq_bindings: vec![],
             events: SelectAll::new(),
+            db,
             redis_conn,
             rabbitmq_channel,
         }
@@ -543,40 +561,65 @@ impl Runner {
             log::warn!("Failed to ACK incoming delivery, {}", e);
         }
 
-        // Do not handle any messages before the user joined the room
-        if self.control_data.is_none() {
-            return;
-        }
-
-        let namespaced = match serde_json::from_slice::<Namespaced<Value>>(&delivery.data) {
-            Ok(namespaced) => namespaced,
-            Err(e) => {
-                log::error!("Failed to read incoming rabbit-mq message, {}", e);
+        // RabbitMQ messages can come from a variety of places
+        // First check if it is a signaling message,
+        // then if it is a ha_sync::user_update message
+        if delivery.routing_key.as_str().starts_with("k3k-signaling") {
+            // Do not handle any messages before the user joined the room
+            if self.control_data.is_none() {
                 return;
             }
-        };
 
-        if namespaced.namespace == NAMESPACE {
-            let msg = match serde_json::from_value::<rabbitmq::Message>(namespaced.payload) {
-                Ok(msg) => msg,
+            let namespaced = match serde_json::from_slice::<Namespaced<Value>>(&delivery.data) {
+                Ok(namespaced) => namespaced,
                 Err(e) => {
-                    log::error!("Failed to read incoming control rabbit-mq message, {}", e);
+                    log::error!("Failed to read incoming rabbit-mq message, {}", e);
                     return;
                 }
             };
 
-            if let Err(e) = self.handle_rabbitmq_control_msg(msg).await {
-                log::error!("Failed to handle incoming rabbitmq control msg, {}", e);
-                return;
+            if namespaced.namespace == NAMESPACE {
+                let msg = match serde_json::from_value::<rabbitmq::Message>(namespaced.payload) {
+                    Ok(msg) => msg,
+                    Err(e) => {
+                        log::error!("Failed to read incoming control rabbit-mq message, {}", e);
+                        return;
+                    }
+                };
+
+                if let Err(e) = self.handle_rabbitmq_control_msg(msg).await {
+                    log::error!("Failed to handle incoming rabbitmq control msg, {}", e);
+                    return;
+                }
+            } else if let Err(NoSuchModuleError(())) = self
+                .handle_module_targeted_event(
+                    namespaced.namespace,
+                    DynTargetedEvent::RabbitMqMessage(namespaced.payload),
+                )
+                .await
+            {
+                log::warn!("Got invalid rabbit-mq message");
             }
-        } else if let Err(NoSuchModuleError(())) = self
-            .handle_module_targeted_event(
-                namespaced.namespace,
-                DynTargetedEvent::RabbitMqMessage(namespaced.payload),
-            )
-            .await
-        {
-            log::warn!("Got invalid rabbit-mq message");
+        } else if delivery.routing_key.as_str() == user_update::routing_key(self.user.id) {
+            let user_update::Message { groups } = match serde_json::from_slice(&delivery.data) {
+                Ok(message) => message,
+                Err(e) => {
+                    log::error!("Failed to parse user_update message, {}", e);
+                    return;
+                }
+            };
+
+            if groups {
+                // TODO groups have changed, inspect permissions
+                // Workaround since this is an edge-case: kill runner
+                log::debug!("User groups changed, exiting");
+                self.exit = true;
+            }
+        } else {
+            log::error!(
+                "Unknown message received, routing_key={:?}",
+                delivery.routing_key
+            );
         }
     }
 

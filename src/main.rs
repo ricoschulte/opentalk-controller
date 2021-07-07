@@ -1,6 +1,6 @@
 use crate::api::signaling::SignalingHttpModule;
 use actix_cors::Cors;
-use actix_web::http::{header, Method};
+use actix_web::http::header;
 use actix_web::web::Data;
 use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{anyhow, Context, Result};
@@ -23,6 +23,7 @@ use tokio_amqp::LapinTokioExt;
 
 mod api;
 mod db;
+mod ha_sync;
 mod modules;
 mod oidc;
 mod settings;
@@ -62,6 +63,15 @@ async fn run_service(settings: Settings) -> Result<()> {
     )
     .await
     .context("failed to connect to rabbitmq")?;
+
+    let rabbitmq_channel = rabbitmq
+        .create_channel()
+        .await
+        .context("Could not create rabbitmq channel for ext_http_server")?;
+
+    ha_sync::init(&rabbitmq_channel)
+        .await
+        .context("Failed to init ha_sync")?;
 
     // Begin application scope
     {
@@ -126,9 +136,10 @@ async fn run_service(settings: Settings) -> Result<()> {
 
             application.add_http_module(
                 SignalingHttpModule::new(redis_conn, signaling_channel)
-                    .with_module::<signaling::Echo>(())
-                    .with_module::<signaling::Media>(Arc::downgrade(&mcu))
-                    .with_module::<signaling::Chat>(()),
+                    .with_module::<signaling::ce::Echo>(())
+                    .with_module::<signaling::ce::Media>(Arc::downgrade(&mcu))
+                    .with_module::<signaling::ce::Chat>(())
+                    .with_module::<signaling::ee::Chat>(()),
             );
         }
 
@@ -140,6 +151,8 @@ async fn run_service(settings: Settings) -> Result<()> {
         // Start external HTTP Server
         let ext_http_server = {
             let cors = settings.http.cors;
+
+            let rabbitmq_channel = Data::new(rabbitmq_channel);
 
             let db_ctx = Arc::downgrade(&db_ctx);
             let oidc_ctx = Arc::downgrade(&oidc_ctx);
@@ -160,6 +173,7 @@ async fn run_service(settings: Settings) -> Result<()> {
                     .app_data(oidc_ctx.clone())
                     .app_data(turn_servers.clone())
                     .app_data(Data::new(shutdown.clone()))
+                    .app_data(rabbitmq_channel.clone())
                     .service(v1_scope(db_ctx, oidc_ctx))
                     .configure(application.configure())
             })
@@ -301,7 +315,7 @@ fn setup_cors(settings: &settings::HttpCors) -> Cors {
 
     cors.allowed_header(header::CONTENT_TYPE)
         .allowed_header(header::AUTHORIZATION)
-        .allowed_methods(&[Method::POST])
+        .allow_any_method()
 }
 
 fn setup_logging(logging: &Logging) -> Result<()> {

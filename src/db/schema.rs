@@ -1,4 +1,10 @@
 table! {
+    groups (id) {
+        id -> Varchar,
+    }
+}
+
+table! {
     refinery_schema_history (version) {
         version -> Int4,
         name -> Nullable<Varchar>,
@@ -19,6 +25,13 @@ table! {
 }
 
 table! {
+    user_groups (user_id, group_id) {
+        user_id -> Int8,
+        group_id -> Varchar,
+    }
+}
+
+table! {
     users (id) {
         id -> Int8,
         oidc_uuid -> Uuid,
@@ -33,5 +46,7 @@ table! {
 }
 
 joinable!(rooms -> users (owner));
+joinable!(user_groups -> groups (group_id));
+joinable!(user_groups -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(refinery_schema_history, rooms, users,);
+allow_tables_to_appear_in_same_query!(groups, refinery_schema_history, rooms, user_groups, users,);

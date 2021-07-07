@@ -6,9 +6,7 @@ use crate::api::signaling::ParticipantId;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use redis::aio::ConnectionManager;
-use redis::{FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs};
 use serde::{Deserialize, Serialize};
-use serde_json;
 use uuid::Uuid;
 
 mod storage;
@@ -33,29 +31,8 @@ pub struct Message {
     pub scope: Scope,
 }
 
-impl FromRedisValue for Message {
-    fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Message> {
-        match *v {
-            redis::Value::Data(ref bytes) => serde_json::from_slice(bytes).map_err(|_| {
-                RedisError::from((redis::ErrorKind::TypeError, "invalid data for Message"))
-            }),
-            _ => RedisResult::Err(RedisError::from((
-                redis::ErrorKind::TypeError,
-                "invalid data type for Message",
-            ))),
-        }
-    }
-}
-
-impl ToRedisArgs for &Message {
-    fn write_redis_args<W>(&self, out: &mut W)
-    where
-        W: ?Sized + RedisWrite,
-    {
-        let json_val = serde_json::to_vec(self).expect("Can not serialize message");
-        out.write_arg(&json_val);
-    }
-}
+impl_from_redis_value_de!(Message);
+impl_to_redis_args_se!(&Message);
 
 pub struct Chat {
     id: ParticipantId,
