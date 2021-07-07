@@ -137,7 +137,7 @@ impl DbInterface {
 
                 // check current groups and if reinsert of groups into user_groups is needed
                 let groups_unchanged = if groups.len() == curr_groups.len() {
-                    curr_groups.iter().all(|curr| groups.contains(&curr.id))
+                    groups.iter().all(|old| curr_groups.contains(old))
                 } else {
                     false
                 };

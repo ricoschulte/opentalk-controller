@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use r3dlock::Mutex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 mod storage;
@@ -38,12 +38,12 @@ pub struct Chat {
     id: ParticipantId,
     room: Uuid,
 
-    groups: Vec<Group>,
+    groups: HashSet<Group>,
 }
 
 impl Chat {
     fn is_in_group(&self, id: &str) -> bool {
-        self.groups.iter().any(|group| group.id == id)
+        self.groups.contains(id)
     }
 }
 
