@@ -1,13 +1,12 @@
-use super::ParticipantId;
+use crate::api::signaling::ParticipantId;
 use crate::settings;
 use anyhow::{bail, Context, Result};
 use futures::StreamExt;
 use janus_client::types::{SdpAnswer, SdpOffer};
-use janus_client::{JsepType, RoomId as JanusRoomId, TrickleCandidate};
+use janus_client::{JanusMessage, JsepType, RoomId as JanusRoomId, TrickleCandidate};
 use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::convert::TryInto;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, oneshot};
 use tokio::time::interval;
@@ -37,8 +36,6 @@ pub struct JanusMcu {
 
     /// Stores the room ids?
     publisher_room_ids: Mutex<HashMap<MediaSessionKey, JanusRoomId>>,
-
-    next_client_id: AtomicU64,
 }
 
 impl JanusMcu {
@@ -102,7 +99,6 @@ impl JanusMcu {
             _gw: gw,
             mcu_shutdown,
             publisher_room_ids: Mutex::new(HashMap::new()),
-            next_client_id: AtomicU64::new(0),
         })
     }
 
@@ -116,7 +112,7 @@ impl JanusMcu {
 
     pub async fn new_publisher(
         &self,
-        listener: Option<mpsc::Sender<(MediaSessionKey, TrickleMessage)>>,
+        event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
         participant_id: ParticipantId,
         media_session_type: MediaSessionType,
         bitrate: u64,
@@ -125,8 +121,6 @@ impl JanusMcu {
             .get_or_create_publisher_handle(participant_id, media_session_type, bitrate)
             .await
             .context("Failed to get or create publisher handle")?;
-
-        let client_id = self.next_client_id();
 
         let (destroy, destroy_sig) = oneshot::channel();
 
@@ -141,11 +135,10 @@ impl JanusMcu {
             .insert(MediaSessionKey(participant_id, media_session_type), room_id);
 
         tokio::spawn(JanusPublisher::run(
-            client_id,
             participant_id,
             media_session_type,
             handle,
-            listener,
+            event_sink,
             destroy_sig,
         ));
 
@@ -154,7 +147,7 @@ impl JanusMcu {
 
     pub async fn new_subscriber(
         &self,
-        listener: Option<mpsc::Sender<(MediaSessionKey, TrickleMessage)>>,
+        event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
         publisher: ParticipantId,
         media_session_type: MediaSessionType,
     ) -> Result<JanusSubscriber> {
@@ -162,8 +155,6 @@ impl JanusMcu {
             .get_or_create_subscriber_handle(publisher, media_session_type)
             .await
             .context("Failed to get or create subscriber handle")?;
-
-        let client_id = self.next_client_id();
 
         let (destroy, destroy_sig) = oneshot::channel();
 
@@ -175,19 +166,14 @@ impl JanusMcu {
         };
 
         tokio::spawn(JanusSubscriber::run(
-            client_id,
             publisher,
             media_session_type,
             handle,
-            listener,
+            event_sink,
             destroy_sig,
         ));
 
         Ok(subscriber)
-    }
-
-    fn next_client_id(&self) -> ClientId {
-        ClientId(self.next_client_id.fetch_add(1, Ordering::Relaxed))
     }
 
     /// Checks if we already track a room for the publisher media_session_type combination
@@ -394,14 +380,15 @@ impl JanusPublisher {
     ///
     /// Stops when all Senders of the handle [Receiver](tokio::sync::broadcast::Receiver) are dropped.
     async fn run(
-        id: ClientId,
         participant_id: ParticipantId,
         media_session_type: MediaSessionType,
         handle: janus_client::Handle,
-        listener: Option<mpsc::Sender<(MediaSessionKey, TrickleMessage)>>,
+        event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
         mut destroy_sig: oneshot::Receiver<()>,
     ) {
         let mut stream = BroadcastStream::new(handle.subscribe());
+
+        let media_session_key = MediaSessionKey(participant_id, media_session_type);
 
         loop {
             tokio::select! {
@@ -412,71 +399,19 @@ impl JanusPublisher {
                     let message = match message {
                         Some(Ok(message)) => message,
                         Some(Err(BroadcastStreamRecvError::Lagged(n))) => {
-                            log::error!("JanusSubscriber run task dropped {} messages", n);
+                            log::error!("Publisher {} run task dropped {} messages", media_session_key, n);
                             continue;
                         }
                         None => return,
                     };
 
-                    match &*message {
-                        janus_client::JanusMessage::Event(event) => {
-                            let janus_client::incoming::Event { plugindata, .. } = event;
-                            if let janus_client::PluginData::VideoRoom(plugindata) = plugindata {
-                                match plugindata {
-                                    janus_client::incoming::VideoRoomPluginData::Destroyed(_) => {
-                                        log::info!("Publisher {}: The room of this publisher got destroyed. Closing this publisher", id)
-                                        // todo send close over shutdown channel
-                                    }
-                                    _ => log::warn!(
-                                        "Invalid handle event for publisher {}: {:?}",
-                                        id,
-                                        event
-                                    ),
-                                }
-                            }
-                        }
-                        janus_client::JanusMessage::Hangup(event) => {
-                            log::info!(
-                                "Publisher {}: Received HangUp: {}. Shutting down.",
-                                id,
-                                event.reason
-                            );
-                            // todo send close over shutdown channel
-                        }
-                        janus_client::JanusMessage::Detached => {
-                            log::info!("Publisher {}: Received Detached", id);
-                            // todo send close over shutdown channel
-                        }
-                        janus_client::JanusMessage::Media(_) => {
-                            log::debug!("Received Media Event. This is unsupported.")
-                        }
-                        janus_client::JanusMessage::WebRtcUpdate(_) => {
-                            log::debug!("Publisher {}: Received connected", id)
-                        }
-                        janus_client::JanusMessage::SlowLink(event) => {
-                            if event.uplink {
-                                log::info!("Publisher {}: Received SlowLink (Janus -> Client)", id);
-                            } else {
-                                log::info!("Publisher {}: Received SlowLink (Client -> Janus)", id);
-                            }
-                        }
-                        janus_client::JanusMessage::Trickle(event) => {
-                            let msg: TrickleMessage = event.clone().into();
-                            if let Some(listener) = &listener {
-                                if let Err(e) = listener
-                                    .send((
-                                        MediaSessionKey(participant_id, media_session_type),
-                                        msg,
-                                    ))
-                                    .await
-                                {
-                                    log::error!("Failed to send ICE msg to ICE listener {}", e);
-                                }
-                            }
-                        }
-                        _ => {
-                            log::debug!("Received unwelcome Event for handle: {}", handle.id());
-                        }
+                    log::debug!("Publisher {} received JanusMessage: {:?}", media_session_key, &*message);
+
+                    if let Err(e) = forward_janus_message(&*message, media_session_key, &event_sink).await {
+                        log::error!("Publisher {} failed to forward JanusMessage to the Media module,- killing this publisher, {}",
+                            media_session_key,
+                            e);
+                        return;
                     }
                 }
             }
@@ -565,14 +500,15 @@ impl JanusSubscriber {
     }
 
     async fn run(
-        id: ClientId,
         publisher: ParticipantId,
         media_session_type: MediaSessionType,
         handle: janus_client::Handle,
-        listener: Option<mpsc::Sender<(MediaSessionKey, TrickleMessage)>>,
+        event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
         mut destroy_sig: oneshot::Receiver<()>,
     ) {
         let mut stream = BroadcastStream::new(handle.subscribe());
+
+        let media_session_key = MediaSessionKey(publisher, media_session_type);
 
         loop {
             tokio::select! {
@@ -583,74 +519,19 @@ impl JanusSubscriber {
                     let message = match message {
                         Some(Ok(message)) => message,
                         Some(Err(BroadcastStreamRecvError::Lagged(n))) => {
-                            log::error!("JanusSubscriber run task dropped {} messages", n);
+                            log::error!("Subscriber {} run task dropped {} messages", media_session_key, n);
                             continue;
                         }
                         None => return,
                     };
 
-                    match &*message {
-                        janus_client::JanusMessage::Event(event) => {
-                            let janus_client::incoming::Event { plugindata, .. } = event;
-                            if let janus_client::PluginData::VideoRoom(plugindata) = plugindata {
-                                match plugindata {
-                                    janus_client::incoming::VideoRoomPluginData::Destroyed(_) => {
-                                        log::info!("Subscriber {}: The room of this Subscriber got destroyed. Closing this Subscriber", id)
-                                        // todo send close over shutdown channel
-                                    }
-                                    _ => log::warn!(
-                                        "Invalid handle event for Subscriber {}: {:?}",
-                                        id,
-                                        event
-                                    ),
-                                }
-                            }
-                        }
-                        janus_client::JanusMessage::Hangup(event) => {
-                            log::info!(
-                                "Subscriber {}: Received HangUp: {}. Shutting down.",
-                                id,
-                                event.reason
-                            );
-                            // todo send close over shutdown channel
-                        }
-                        janus_client::JanusMessage::Detached => {
-                            log::info!("Subscriber {}: Received Detached", id);
-                            // todo send close over shutdown channel
-                        }
-                        janus_client::JanusMessage::Media(_) => {
-                            log::debug!("Received Media Event. This is unsupported.")
-                        }
-                        janus_client::JanusMessage::WebRtcUpdate(_) => {
-                            log::debug!("Subscriber {}: Received connected", id)
-                        }
-                        janus_client::JanusMessage::SlowLink(event) => {
-                            if event.uplink {
-                                log::info!(
-                                    "Subscriber {}: Received SlowLink (Janus -> Client)",
-                                    id
-                                );
-                            } else {
-                                log::info!(
-                                    "Subscriber {}: Received SlowLink (Client -> Janus)",
-                                    id
-                                );
-                            }
-                        }
-                        janus_client::JanusMessage::Trickle(event) => {
-                            let msg: TrickleMessage = event.clone().into();
-                            if let Some(listener) = &listener {
-                                if let Err(e) = listener
-                                    .send((MediaSessionKey(publisher, media_session_type), msg))
-                                    .await
-                                {
-                                    log::error!("Failed to send ICE msg to ICE listener {}", e);
-                                }
-                            }
-                        }
-                        _ => {
-                            log::debug!("Received unwelcomed Event for handle: {}", handle.id());
-                        }
+                    log::debug!("Subscriber {} received JanusMessage: {:?}", media_session_key, &*message);
+
+                    if let Err(e) = forward_janus_message(&*message, media_session_key, &event_sink).await {
+                        log::error!("Subscriber {} failed to forward JanusMessage to the Media module, shutting down this subscriber, {}",
+                            media_session_key,
+                            e);
+                        return;
                     }
                 }
             }
@@ -673,6 +554,90 @@ impl From<janus_client::incoming::TrickleMessage> for TrickleMessage {
 }
 
 // ==== HELPER FUNCTIONS ====
+
+/// Forwards a janus message to the media module
+///
+/// Uses the provided `event_sink` to forward the janus messages to the media module.
+///
+/// # Errors
+///
+/// Returns an error if the receiving part of the `event_sink` is closed.
+async fn forward_janus_message(
+    message: &JanusMessage,
+    media_session_key: MediaSessionKey,
+    event_sink: &mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
+) -> Result<()> {
+    match message {
+        janus_client::JanusMessage::Event(event) => {
+            let janus_client::incoming::Event { plugindata, .. } = event;
+            if let janus_client::PluginData::VideoRoom(plugindata) = plugindata {
+                match plugindata {
+                    janus_client::incoming::VideoRoomPluginData::Destroyed(_) => {
+                        log::trace!(
+                            "Participant {}: The room of this participant got destroyed",
+                            media_session_key
+                        );
+                    }
+                    _ => log::warn!(
+                        "Invalid handle event for participant {}: {:?}",
+                        media_session_key,
+                        event
+                    ),
+                }
+            }
+        }
+        janus_client::JanusMessage::Hangup(_) => {
+            event_sink
+                .send((media_session_key, WebRtcEvent::WebRtcDown))
+                .await?;
+            return Ok(());
+        }
+        janus_client::JanusMessage::Detached(_) => {
+            event_sink
+                .send((media_session_key, WebRtcEvent::WebRtcDown))
+                .await?;
+            return Ok(());
+        }
+        janus_client::JanusMessage::Media(event) => {
+            log::debug!(
+                "Participant {}: Received Media Event: {:?}",
+                media_session_key,
+                event
+            );
+        }
+        janus_client::JanusMessage::WebRtcUp(_) => {
+            event_sink
+                .send((media_session_key, WebRtcEvent::WebRtcUp))
+                .await?;
+        }
+        janus_client::JanusMessage::SlowLink(event) => {
+            let slow_link = if event.uplink {
+                WebRtcEvent::SlowLink(LinkDirection::Upstream)
+            } else {
+                WebRtcEvent::SlowLink(LinkDirection::Downstream)
+            };
+
+            event_sink.send((media_session_key, slow_link)).await?;
+        }
+        janus_client::JanusMessage::Trickle(event) => {
+            event_sink
+                .send((
+                    media_session_key,
+                    WebRtcEvent::Trickle(event.clone().into()),
+                ))
+                .await?;
+        }
+        event => {
+            log::debug!(
+                "Participant {} received unwelcome Event {:?}",
+                media_session_key,
+                event
+            );
+        }
+    }
+
+    Ok(())
+}
 
 async fn send_offer(handle: &janus_client::Handle, offer: SdpOffer) -> Result<SdpAnswer> {
     match handle

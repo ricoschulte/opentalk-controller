@@ -1,9 +1,11 @@
 use crate::api::signaling::mcu::{
-    MediaSessionKey, MediaSessionType, Request, Response, TrickleMessage,
+    LinkDirection, MediaSessionKey, MediaSessionType, Request, Response, TrickleMessage,
+    WebRtcEvent,
 };
 use crate::api::signaling::ws::{
     DestroyContext, Event, InitContext, ModuleContext, SignalingModule,
 };
+use crate::api::signaling::ws_modules::media::outgoing::Link;
 use crate::api::signaling::{JanusMcu, ParticipantId};
 use anyhow::{bail, Context, Result};
 use janus_client::TrickleCandidate;
@@ -48,7 +50,7 @@ impl SignalingModule for Media {
     type Outgoing = outgoing::Message;
     type RabbitMqMessage = ();
 
-    type ExtEvent = (MediaSessionKey, TrickleMessage);
+    type ExtEvent = (MediaSessionKey, WebRtcEvent);
 
     type FrontendData = ();
     type PeerFrontendData = State;
@@ -86,6 +88,7 @@ impl SignalingModule for Media {
         match event {
             Event::WsMessage(incoming::Message::PublishComplete(info))
             | Event::WsMessage(incoming::Message::UpdateMediaSession(info)) => {
+                log::debug!("Received publish complete for {}", self.id);
                 self.state
                     .insert(info.media_session_type, info.media_session_state);
 
@@ -173,19 +176,41 @@ impl SignalingModule for Media {
                     });
                 }
             }
-            Event::Ext((k, m)) => match m {
-                TrickleMessage::Completed => {
-                    log::warn!("Unimplemented TrickleMessage::Completed received");
-                    // TODO find out when janus sends this, never actually got this message yet
+            Event::Ext((media_session_key, message)) => match message {
+                WebRtcEvent::WebRtcUp => {
+                    ctx.ws_send(outgoing::Message::WebRtcUp(media_session_key.into()))
                 }
-                TrickleMessage::Candidate(candidate) => {
-                    ctx.ws_send(outgoing::Message::SdpCandidate(outgoing::SdpCandidate {
-                        candidate,
-                        source: outgoing::Source {
-                            source: k.0,
-                            media_session_type: k.1,
-                        },
-                    }));
+                WebRtcEvent::WebRtcDown => {
+                    ctx.ws_send(outgoing::Message::WebRtcDown(media_session_key.into()));
+
+                    self.remove_media_session(&mut ctx, media_session_key)
+                        .await?;
+                }
+                WebRtcEvent::SlowLink(link_direction) => {
+                    let direction = match link_direction {
+                        LinkDirection::Upstream => outgoing::LinkDirection::Upstream,
+                        LinkDirection::Downstream => outgoing::LinkDirection::Downstream,
+                    };
+
+                    ctx.ws_send(outgoing::Message::WebRtcSlow(Link {
+                        direction,
+                        source: media_session_key.into(),
+                    }))
+                }
+
+                WebRtcEvent::Trickle(trickle_msg) => {
+                    match trickle_msg {
+                        TrickleMessage::Completed => {
+                            log::warn!("Unimplemented TrickleMessage::Completed received");
+                            // TODO find out when janus sends this, never actually got this message yet
+                        }
+                        TrickleMessage::Candidate(candidate) => {
+                            ctx.ws_send(outgoing::Message::SdpCandidate(outgoing::SdpCandidate {
+                                candidate,
+                                source: media_session_key.into(),
+                            }));
+                        }
+                    }
                 }
             },
             Event::RabbitMq(_) => {}
@@ -239,6 +264,27 @@ impl SignalingModule for Media {
 }
 
 impl Media {
+    /// Removes the media session that is associated with the provided MediaSessionKey
+    async fn remove_media_session(
+        &mut self,
+        ctx: &mut ModuleContext<'_, Self>,
+        media_session_key: MediaSessionKey,
+    ) -> Result<()> {
+        if media_session_key.0 == self.id {
+            self.media.remove_publisher(media_session_key.1).await;
+            self.state.remove(&media_session_key.1);
+
+            storage::set_state(ctx.redis_conn(), self.room, self.id, &self.state)
+                .await
+                .context("Failed to set state attribute in storage")?;
+
+            ctx.invalidate_data();
+        } else {
+            self.media.remove_subscriber(&media_session_key).await;
+        }
+        Ok(())
+    }
+
     async fn handle_sdp_offer(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,

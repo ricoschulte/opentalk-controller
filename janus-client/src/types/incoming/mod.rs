@@ -45,11 +45,11 @@ pub enum JanusMessage {
     #[serde(rename = "trickle")]
     Trickle(TrickleMessage),
     #[serde(rename = "webrtcup")]
-    WebRtcUpdate(WebRtcUpdate),
+    WebRtcUp(WebRtcUp),
     #[serde(rename = "media")]
     Media(Media),
     #[serde(rename = "detached")]
-    Detached,
+    Detached(Detached),
     #[serde(rename = "slowlink")]
     SlowLink(SlowLink),
 }
@@ -117,16 +117,25 @@ pub struct TrickleMessage {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-pub struct WebRtcUpdate {
+pub struct WebRtcUp {
     pub session_id: SessionId,
     pub sender: HandleId,
 }
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct Media {
+    pub session_id: SessionId,
+    pub sender: HandleId,
     #[serde(rename = "type")]
     pub kind: String,
     pub receiving: bool,
 }
+#[derive(Debug, Clone, Deserialize)]
+pub struct Detached {
+    pub session_id: SessionId,
+    pub sender: HandleId,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct SlowLink {
     pub uplink: bool,
@@ -144,9 +153,9 @@ impl JanusMessage {
             JanusMessage::Timeout(_) => None,
             JanusMessage::Hangup(_) => None,
             JanusMessage::Trickle(_) => None,
-            JanusMessage::WebRtcUpdate(_) => None,
+            JanusMessage::WebRtcUp(_) => None,
             JanusMessage::Media(_) => None,
-            JanusMessage::Detached => None,
+            JanusMessage::Detached(_) => None,
             JanusMessage::SlowLink(_) => None,
         }
     }
