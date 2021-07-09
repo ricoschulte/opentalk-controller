@@ -162,15 +162,12 @@ impl SignalingModule for Chat {
 
     async fn on_destroy(self, mut ctx: DestroyContext<'_>) {
         for group in self.groups {
-            let mut mutex = Mutex::new(
-                ctx.redis_conn().clone(),
-                storage::RoomGroupParticipantsLock {
-                    room: self.room,
-                    group: &group.id,
-                },
-            );
+            let mut mutex = Mutex::new(storage::RoomGroupParticipantsLock {
+                room: self.room,
+                group: &group.id,
+            });
 
-            let guard = match mutex.lock().await {
+            let guard = match mutex.lock(ctx.redis_conn()).await {
                 Ok(guard) => guard,
                 Err(e) => {
                     log::error!(
@@ -206,7 +203,7 @@ impl SignalingModule for Chat {
                 }
             }
 
-            if let Err(e) = guard.unlock().await {
+            if let Err(e) = guard.unlock(ctx.redis_conn()).await {
                 log::error!("Failed to unlock r3dlock, {}", e);
             }
         }

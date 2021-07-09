@@ -14,7 +14,6 @@ use futures::stream::SelectAll;
 use futures::SinkExt;
 use lapin::options::QueueDeclareOptions;
 use lapin::ExchangeKind;
-use r3dlock::Mutex;
 use redis::aio::ConnectionManager;
 use serde::Serialize;
 use serde_json::Value;
@@ -295,14 +294,9 @@ impl Runner {
 
         // The retry/wait_time values are set extra high
         // since a lot of operations are being done while holding the lock
-        let mut set_lock = Mutex::new(
-            self.redis_conn.clone(),
-            storage::RoomParticipantsLock { room: self.room },
-        )
-        .with_wait_time(Duration::from_millis(20)..Duration::from_millis(60))
-        .with_retries(20);
+        let mut set_lock = storage::participant_set_mutex(self.room);
 
-        let set_guard = match set_lock.lock().await {
+        let set_guard = match set_lock.lock(&mut self.redis_conn).await {
             Ok(guard) => guard,
             Err(r3dlock::Error::Redis(e)) => {
                 log::error!("Failed to acquire r3dlock, {}", e);
@@ -350,7 +344,7 @@ impl Runner {
 
         self.modules.destroy(ctx).await;
 
-        if let Err(e) = set_guard.unlock().await {
+        if let Err(e) = set_guard.unlock(&mut self.redis_conn).await {
             log::error!("Failed to unlock set_guard r3dlock, {}", e);
         }
 

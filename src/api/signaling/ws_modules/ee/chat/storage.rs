@@ -45,13 +45,10 @@ pub async fn add_participant_to_set(
     group: &str,
     participant: ParticipantId,
 ) -> Result<()> {
-    let mut mutex = Mutex::new(
-        redis_conn.clone(),
-        RoomGroupParticipantsLock { room, group },
-    );
+    let mut mutex = Mutex::new(RoomGroupParticipantsLock { room, group });
 
     let guard = mutex
-        .lock()
+        .lock(redis_conn)
         .await
         .context("Failed to lock participant list")?;
 
@@ -61,7 +58,7 @@ pub async fn add_participant_to_set(
         .context("Failed to add own participant id to set")?;
 
     guard
-        .unlock()
+        .unlock(redis_conn)
         .await
         .context("Failed to unlock participant list")?;
 
@@ -69,7 +66,7 @@ pub async fn add_participant_to_set(
 }
 
 pub async fn remove_participant_from_set(
-    _set_guard: &MutexGuard<'_, ConnectionManager, RoomGroupParticipantsLock<'_>>,
+    _set_guard: &MutexGuard<'_, RoomGroupParticipantsLock<'_>>,
     redis_conn: &mut ConnectionManager,
     room: Uuid,
     group: &str,

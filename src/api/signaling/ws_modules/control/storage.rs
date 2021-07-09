@@ -6,6 +6,7 @@ use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::time::Duration;
 use uuid::Uuid;
 
 #[derive(Display)]
@@ -38,14 +39,21 @@ impl_to_redis_args!(RoomParticipants);
 impl_to_redis_args!(RoomParticipantsLock);
 impl_to_redis_args!(RoomParticipantAttributes);
 
+/// The participant set mutex parameters are set very high since it is being held while destroying all modules which can take while
+pub fn participant_set_mutex(room: Uuid) -> Mutex<RoomParticipantsLock> {
+    Mutex::new(RoomParticipantsLock { room })
+        .with_wait_time(Duration::from_millis(20)..Duration::from_millis(60))
+        .with_retries(20)
+}
+
 pub async fn get_all_participants(
     redis_conn: &mut ConnectionManager,
     room: Uuid,
 ) -> Result<HashSet<ParticipantId>> {
-    let mut mutex = Mutex::new(redis_conn.clone(), RoomParticipantsLock { room });
+    let mut mutex = participant_set_mutex(room);
 
     let guard = mutex
-        .lock()
+        .lock(redis_conn)
         .await
         .context("Failed to lock participant list")?;
 
@@ -55,7 +63,7 @@ pub async fn get_all_participants(
         .context("Failed to get participants")?;
 
     guard
-        .unlock()
+        .unlock(redis_conn)
         .await
         .context("Failed to unlock participant list")?;
 
@@ -67,10 +75,10 @@ pub async fn add_participant_to_set(
     room: Uuid,
     participant: ParticipantId,
 ) -> Result<()> {
-    let mut mutex = Mutex::new(redis_conn.clone(), RoomParticipantsLock { room });
+    let mut mutex = participant_set_mutex(room);
 
     let guard = mutex
-        .lock()
+        .lock(redis_conn)
         .await
         .context("Failed to lock participant list")?;
 
@@ -80,7 +88,7 @@ pub async fn add_participant_to_set(
         .context("Failed to add own participant id to set")?;
 
     guard
-        .unlock()
+        .unlock(redis_conn)
         .await
         .context("Failed to unlock participant list")?;
 
@@ -90,7 +98,7 @@ pub async fn add_participant_to_set(
 /// Removes the given participant from the room's participant set and returns the number of
 /// remaining participants
 pub async fn remove_participant_from_set(
-    _set_guard: &MutexGuard<'_, ConnectionManager, RoomParticipantsLock>,
+    _set_guard: &MutexGuard<'_, RoomParticipantsLock>,
     redis_conn: &mut ConnectionManager,
     room: Uuid,
     participant: ParticipantId,
