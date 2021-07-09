@@ -564,7 +564,7 @@ impl Runner {
         // RabbitMQ messages can come from a variety of places
         // First check if it is a signaling message,
         // then if it is a ha_sync::user_update message
-        if delivery.routing_key.as_str().starts_with("k3k-signaling") {
+        if delivery.exchange.as_str().starts_with("k3k-signaling") {
             // Do not handle any messages before the user joined the room
             if self.control_data.is_none() {
                 return;

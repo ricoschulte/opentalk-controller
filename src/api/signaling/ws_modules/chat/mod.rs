@@ -127,7 +127,7 @@ impl SignalingModule for Chat {
 
                     ctx.rabbitmq_publish(
                         rabbitmq::room_exchange_name(self.room),
-                        rabbitmq::room_participant_routing_key(self.id),
+                        rabbitmq::room_all_routing_key().into(),
                         out_message,
                     );
                 }
