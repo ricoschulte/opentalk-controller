@@ -24,12 +24,11 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast;
-use tokio::time::{sleep, timeout, Sleep};
+use tokio::time::{sleep, Sleep};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-const PING_INTERVAL: Duration = Duration::from_secs(20);
-const WS_MSG_TIMEOUT: Duration = Duration::from_secs(30);
+const WS_TIMEOUT: Duration = Duration::from_secs(20);
 
 const NAMESPACE: &str = "control";
 
@@ -196,7 +195,8 @@ impl Builder {
             control_data: None,
             ws: Ws {
                 websocket,
-                timeout: Box::pin(sleep(WS_MSG_TIMEOUT)),
+                timeout: Box::pin(sleep(WS_TIMEOUT)),
+                awaiting_pong: false,
             },
             modules: self.modules,
             events: self.events,
@@ -409,6 +409,7 @@ impl Runner {
             }
             Message::Pong(_) => {
                 // Response to keep alive
+                self.ws.awaiting_pong = false;
                 return;
             }
             Message::Close(_) => {
@@ -852,33 +853,36 @@ struct ControlData {
 /// Helper websocket abstraction that pings the participants in regular intervals
 struct Ws {
     websocket: WebSocket,
-    // Websocket final message timeout, when reached the runner will exit
+    // Timeout trigger
     timeout: Pin<Box<Sleep>>,
+    awaiting_pong: bool,
 }
 
 impl Ws {
     async fn receive(&mut self) -> Result<Message> {
         loop {
             tokio::select! {
-                message = timeout(PING_INTERVAL, self.websocket.next()) => {
+                message = self.websocket.next() => {
                     match message {
-                        Ok(Some(Ok(msg))) => {
-                            // Received a message, reset timeout after handling as to avoid
-                            // triggering the sleep while handling the timeout
-                            self.timeout.set(sleep(WS_MSG_TIMEOUT));
+                        Some(Ok(msg)) => {
+                            // Received a message, reset timeout.
+                            self.timeout.set(sleep(WS_TIMEOUT));
 
                             return Ok(msg);
                         }
-                        Ok(Some(Err(e))) => bail!(e),
-                        Ok(None) => bail!("WebSocket stream closed unexpectedly"),
-                        Err(_) => {
-                            // No messages for PING_INTERVAL amount of time
-                            self.websocket.send(Message::Ping(vec![])).await?;
-                        }
+                        Some(Err(e)) => bail!(e),
+                        None => bail!("WebSocket stream closed unexpectedly"),
                     }
                 }
                 _ = self.timeout.as_mut() => {
-                    bail!("Websocket timed out, peer no longer responds");
+                    if self.awaiting_pong {
+                        bail!("Websocket timed out, peer no longer responds");
+                    } else {
+                        self.timeout.set(sleep(WS_TIMEOUT));
+                        self.awaiting_pong = true;
+
+                        self.websocket.send(Message::Ping(vec![])).await?;
+                    }
                 }
             }
         }
