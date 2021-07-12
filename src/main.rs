@@ -123,15 +123,13 @@ async fn run_service(settings: Settings) -> Result<()> {
 
         // Connect to Janus via rabbitmq
         let mut mcu = {
-            let mcu_channel = rabbitmq
-                .create_channel()
-                .await
-                .context("Could not create rabbit mq channel for MCU")?;
-
-            let mcu =
-                signaling::McuPool::build(settings.room_server, mcu_channel, redis_conn.clone())
-                    .await
-                    .context("Failed to connect to Janus WebRTC server")?;
+            let mcu = signaling::McuPool::build(
+                settings.room_server,
+                rabbitmq_channel.clone(),
+                redis_conn.clone(),
+            )
+            .await
+            .context("Failed to connect to Janus WebRTC server")?;
 
             Arc::new(mcu)
         };
@@ -233,7 +231,7 @@ async fn run_service(settings: Settings) -> Result<()> {
         loop {
             tokio::select! {
                 _ = &mut ext_server => {
-                    log::error!("Http server returned, exiting, exiting");
+                    log::error!("Http server returned, exiting");
                     break;
                 }
                 _ = &mut int_server => {

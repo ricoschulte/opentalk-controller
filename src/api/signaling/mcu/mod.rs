@@ -41,12 +41,6 @@ struct PublisherInfo<'i> {
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct McuID(Arc<String>);
 
-impl Borrow<String> for McuID {
-    fn borrow(&self) -> &String {
-        self.0.borrow()
-    }
-}
-
 /// Pool of one or more configured `McuClient`s
 ///
 /// Distributes new publishers to a available Mcu with the least amount of subscribers
@@ -115,7 +109,7 @@ impl McuPool {
         let mut clients = self.clients.write().await;
 
         for client in clients.drain() {
-            client.destroy().await;
+            client.destroy(false).await;
         }
     }
 
@@ -123,7 +117,7 @@ impl McuPool {
         let mut clients = self.clients.write().await;
 
         if clients.len() == self.config.connections.len() {
-            log::info!("Nothing to do");
+            log::info!("All connections are up, nothing to do");
             return;
         }
 
@@ -401,7 +395,7 @@ async fn keep_alive(mcu_clients: &RwLock<HashSet<McuClient>>) {
     // Destroy all dead McuClients
     for dead_client in dead {
         if let Some(client) = clients.take(dead_client.0.as_str()) {
-            client.destroy().await;
+            client.destroy(true).await;
         }
     }
 }
@@ -480,8 +474,8 @@ impl McuClient {
         })
     }
 
-    async fn destroy(mut self) {
-        if let Err(e) = self.session.destroy(true).await {
+    async fn destroy(mut self, broken: bool) {
+        if let Err(e) = self.session.destroy(broken).await {
             log::error!("Failed to destroy broken session, {}", e);
         }
 
@@ -570,10 +564,15 @@ impl JanusPublisher {
         loop {
             tokio::select! {
                 _ = &mut destroy_sig => {
+                    log::debug!("Publisher {} got destroy signal", media_session_key);
                     return;
                 }
                 _ = client_shutdown.recv() => {
-                    // TODO notify over evt_sink that this publisher is broken
+                    log::debug!("Publisher {} got client shutdown signal", media_session_key);
+
+                    // ignore result since receiver might have been already dropped
+                    let _ = event_sink.send((media_session_key, WebRtcEvent::WebRtcDown)).await;
+                    return;
                 }
                 message = stream.next() => {
                     let message = match message {
@@ -698,10 +697,15 @@ impl JanusSubscriber {
         loop {
             tokio::select! {
                 _ = &mut destroy_sig => {
+                    log::debug!("Subscriber {} got destroy signal", media_session_key);
                     return;
                 }
                 _ = client_shutdown.recv() => {
-                    // TODO notify over evt_sink that this subscriber is broken
+                    log::debug!("Subscriber {} got client shutdown signal", media_session_key);
+
+                    // ignore result since receiver might have been already dropped
+                    let _ = event_sink.send((media_session_key, WebRtcEvent::WebRtcDown)).await;
+                    return;
                 }
                 message = stream.next() => {
                     let message = match message {

@@ -3,7 +3,7 @@
 //! This are the response types sent async from Janus via the websocket.
 
 use super::{AudioCodec, TrickleCandidate, VideoCodec};
-use crate::error::{JanusError, JanusInternalError};
+use crate::error::JanusError;
 use crate::{error, types::Jsep, types::TransactionId, HandleId, SessionId};
 use serde::{self, Deserialize};
 use std::convert::TryFrom;
@@ -157,6 +157,26 @@ impl JanusMessage {
             JanusMessage::Media(_) => None,
             JanusMessage::Detached(_) => None,
             JanusMessage::SlowLink(_) => None,
+        }
+    }
+
+    /// Convert the message into a error if the message is an error
+    pub(crate) fn into_result(self) -> Result<Self, error::Error> {
+        match self {
+            JanusMessage::Error(e) => Err(error::Error::JanusError(e.error)),
+            JanusMessage::Event(Event {
+                plugindata:
+                    PluginData::EchoTest(EchoPluginData::Event(EchoPluginDataEvent::Error(error))),
+                ..
+            })
+            | JanusMessage::Event(Event {
+                plugindata:
+                    PluginData::VideoRoom(VideoRoomPluginData::Event(VideoRoomPluginEvent::Error(
+                        error,
+                    ))),
+                ..
+            }) => Err(error::Error::JanusPluginError(error)),
+            msg => Ok(msg),
         }
     }
 }

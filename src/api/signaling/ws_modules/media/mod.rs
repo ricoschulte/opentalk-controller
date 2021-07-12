@@ -258,7 +258,11 @@ impl SignalingModule for Media {
             );
         }
 
-        self.media.destroy().await;
+        // Spawn the destroy task since it doesn't need to be synchronized and errors cannot
+        // be handled in this context anyway.
+        // Not spawning it would make the runner take a lot of time to shutdown increasing
+        // contention on the participants redlock where it is not needed.
+        tokio::task::spawn_local(self.media.destroy());
     }
 }
 

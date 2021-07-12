@@ -1,7 +1,4 @@
 use crate::{
-    async_types::{
-        AttachToPluginRequest, CreateSessionRequest, SendToPluginRequest, SendTrickleRequest,
-    },
     error, incoming,
     outgoing::{AttachToPlugin, CreateSession, KeepAlive, PluginMessage},
     rabbitmq::{RabbitMqConfig, RabbitMqConnection},
@@ -11,7 +8,7 @@ use crate::{
         outgoing::{JanusRequest, TrickleMessage},
         JanusPlugin, Jsep, TransactionId,
     },
-    ClientId, HandleId, PluginRequest, SessionId,
+    ClientId, HandleId, PluginRequest, SessionId, Success,
 };
 use futures::StreamExt;
 use lapin::{
@@ -25,32 +22,79 @@ use std::{
     sync::{Arc, Weak},
     time::Duration,
 };
-use tokio::{
-    sync::{broadcast, mpsc, oneshot},
-    time::timeout,
-};
+use tokio::sync::{broadcast, mpsc};
+use tokio::time::timeout;
 
-/// Stores all ongoing transactions by ID.
-///
-/// To send messages to the recipient it uses a oneshot sender and a flag which tells it if ACK
-/// messages should be sent or ignored (true = ignored)
-type TransactionMap = HashMap<TransactionId, Transaction>;
+enum TaskCmd {
+    Transaction {
+        id: TransactionId,
+        sender: mpsc::Sender<JanusMessage>,
+    },
+    TransactionEnd(TransactionId),
+}
 
-#[derive(Debug)]
-struct Transaction {
-    ignore_ack: bool,
-    channel: oneshot::Sender<JanusMessage>,
+pub(crate) struct Transaction {
+    id: TransactionId,
+    messages: mpsc::Receiver<JanusMessage>,
+    task_sender: mpsc::UnboundedSender<TaskCmd>,
+    is_async: bool,
+}
+
+impl Transaction {
+    pub fn id(&self) -> TransactionId {
+        self.id.clone()
+    }
+
+    async fn do_receive_ack(&mut self) -> Result<(), error::Error> {
+        match timeout(Duration::from_secs(2), self.messages.recv()).await {
+            Ok(Some(msg)) => match msg.into_result()? {
+                JanusMessage::Ack(_) => Ok(()),
+                _ => Err(error::Error::InvalidResponse),
+            },
+            Ok(None) => Err(error::Error::NotConnected),
+            Err(_) => Err(error::Error::Timeout),
+        }
+    }
+
+    pub async fn receive_ack(mut self) -> Result<(), error::Error> {
+        assert!(
+            !self.is_async,
+            "Transaction type for receive_ack must be a sync request"
+        );
+
+        self.do_receive_ack().await
+    }
+
+    pub async fn receive(mut self) -> Result<JanusMessage, error::Error> {
+        let msg_timeout = if self.is_async {
+            self.do_receive_ack().await?;
+            Duration::from_secs(10)
+        } else {
+            Duration::from_secs(2)
+        };
+
+        match timeout(msg_timeout, self.messages.recv()).await {
+            Ok(Some(msg)) => msg.into_result(),
+            Ok(None) => Err(error::Error::NotConnected),
+            Err(_) => Err(error::Error::Timeout),
+        }
+    }
+}
+
+impl Drop for Transaction {
+    fn drop(&mut self) {
+        let _ = self
+            .task_sender
+            .send(TaskCmd::TransactionEnd(self.id.clone()));
+    }
 }
 
 #[derive(Debug)]
 pub(crate) struct InnerClient {
     id: ClientId,
 
-    connection_config: RabbitMqConfig,
-    /// Used to map Outgoing request to incoming messages from Janus
-    // todo make the ignore_ack flag typed
-    transactions: Arc<Mutex<TransactionMap>>,
-    connection: Option<RabbitMqConnection>,
+    task_sender: mpsc::UnboundedSender<TaskCmd>,
+    connection: RabbitMqConnection,
     /// Sink for general messages from Janus that are not part of a request, such as notifications, etc.
     server_notification_sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
     pub(crate) sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
@@ -63,140 +107,143 @@ impl InnerClient {
     ///
     /// At this time the InnerClient is not connected to the janus api websocket
     /// To connect call [connect](InnerClient::Connect)
-    pub(crate) fn new(
+    pub(crate) async fn new(
         config: RabbitMqConfig,
         id: ClientId,
         sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
         shutdown: broadcast::Sender<()>,
-    ) -> Self {
-        Self {
-            id,
-            connection_config: config,
-            transactions: Default::default(),
-            connection: None,
-            server_notification_sink: sink,
-            sessions: Default::default(),
-            shutdown,
-        }
-    }
+    ) -> Result<Self, error::Error> {
+        let (connection, consumer) = config.setup().await?;
 
-    // todo Might be needed to reconnect, thus this is split out from [`new()`](Self::new())
-    pub(crate) async fn connect(&mut self) -> Result<(), error::Error> {
-        let connection = self.connection_config.clone().setup().await?;
-        let consumer = connection.consumer.clone();
-        self.connection = Some(connection);
+        let (task_sender, cmd_receiver) = mpsc::unbounded_channel();
+
+        let sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>> = Default::default();
 
         tokio::spawn(rabbitmq_event_handling_loop(
-            self.id.clone(),
-            self.shutdown.subscribe(),
+            id.clone(),
+            shutdown.subscribe(),
             consumer,
-            self.transactions.clone(),
-            self.sessions.clone(),
-            self.server_notification_sink.clone(),
+            cmd_receiver,
+            sessions.clone(),
+            sink.clone(),
         ));
+
+        Ok(Self {
+            id,
+            task_sender,
+            connection,
+            server_notification_sink: sink,
+            sessions,
+            shutdown,
+        })
+    }
+
+    pub(crate) async fn destroy(&self) {
+        self.connection.destroy().await;
+    }
+
+    pub(crate) async fn create_transaction(
+        &self,
+        is_async: bool,
+    ) -> Result<Transaction, error::Error> {
+        let id = TransactionId::new(format!("{}-{}", self.id.0, rand::random::<u64>()));
+
+        let (sender, messages) = mpsc::channel(3);
+
+        if self
+            .task_sender
+            .send(TaskCmd::Transaction {
+                id: id.clone(),
+                sender,
+            })
+            .is_err()
+        {
+            return Err(error::Error::NotConnected);
+        };
+
+        Ok(Transaction {
+            id,
+            messages,
+            task_sender: self.task_sender.clone(),
+            is_async,
+        })
+    }
+
+    async fn send(&self, msg: &JanusRequest) -> Result<(), error::Error> {
+        let json = serde_json::to_string_pretty(msg).unwrap();
+
+        log::trace!("Sending message containing: {}", json);
+
+        self.connection.send(json).await?;
 
         Ok(())
     }
 
-    pub(crate) async fn destroy(&self) {
-        self.connection_config.destroy().await;
-    }
+    /// Sends the request to create a session
+    ///
+    /// Returns an error when the request could not be sent.
+    /// Otherwise it will return a `CreateSessionRequest` future that will
+    /// resolve once Janus sent the response to this request
+    pub(crate) async fn create_session(&self) -> Result<SessionId, error::Error> {
+        let transaction = self.create_transaction(false).await?;
 
-    fn get_tx_id() -> TransactionId {
-        let random: u64 = rand::random();
-        TransactionId::new(random.to_string())
-    }
+        self.send(&JanusRequest::CreateSession(CreateSession {
+            transaction: transaction.id(),
+        }))
+        .await?;
 
-    async fn send(&self, msg: &JanusRequest) -> Result<(), error::Error> {
-        log::trace!(
-            "Sending message containing: {}",
-            serde_json::to_string(msg).unwrap()
-        );
-        if let Some(connection) = &self.connection {
-            connection.send(serde_json::to_string(msg).unwrap()).await?;
-            Ok(())
-        } else {
-            Err(error::Error::NotConnected)
+        match transaction.receive().await? {
+            JanusMessage::Success(Success::Janus(incoming::JanusSuccess {
+                data: Some(data),
+                ..
+            })) => {
+                // Ok we got session!
+                Ok(SessionId::from(data.id))
+            }
+            _ => Err(error::Error::InvalidResponse),
         }
     }
 
-    /// Sends the request to create a session
-    ///
-    /// Returns an error when the request could not be sent.
-    /// Otherwise it will return a `CreateSessionRequest` future that will
-    /// resolve once Janus sent the response to this request
-    pub(crate) async fn request_create_session(
-        &self,
-    ) -> Result<CreateSessionRequest, error::Error> {
-        let tx_id = Self::get_tx_id();
-        let (tx, rx) = oneshot::channel();
-        self.transactions.lock().insert(
-            tx_id.clone(),
-            Transaction {
-                ignore_ack: true,
-                channel: tx,
-            },
-        );
-        self.send(&JanusRequest::CreateSession(CreateSession {
-            transaction: tx_id,
-        }))
-        .await?;
-        Ok(CreateSessionRequest { rx })
-    }
-
-    /// Sends the request to create a session
-    ///
-    /// Returns an error when the request could not be sent.
-    /// Otherwise it will return a `CreateSessionRequest` future that will
-    /// resolve once Janus sent the response to this request
-    pub(crate) async fn request_attach_to_plugin(
+    /// Attaches a session to plugin, returning a `HandleId`
+    pub(crate) async fn attach_to_plugin(
         &self,
         session: SessionId,
         plugin: JanusPlugin,
-    ) -> Result<AttachToPluginRequest, error::Error> {
-        let tx_id = Self::get_tx_id();
-        let (tx, rx) = oneshot::channel();
-        self.transactions.lock().insert(
-            tx_id.clone(),
-            Transaction {
-                ignore_ack: true,
-                channel: tx,
-            },
-        );
+    ) -> Result<HandleId, error::Error> {
+        let transaction = self.create_transaction(false).await?;
+
         self.send(&JanusRequest::AttachToPlugin(AttachToPlugin {
-            transaction: tx_id,
+            transaction: transaction.id(),
             plugin,
             session_id: session,
         }))
         .await?;
 
-        Ok(AttachToPluginRequest { rx })
+        match transaction.receive().await? {
+            JanusMessage::Success(Success::Janus(incoming::JanusSuccess {
+                data: Some(data),
+                ..
+            })) => {
+                // Ok we got handle!
+                Ok(HandleId::from(data.id))
+            }
+            _ => Err(error::Error::InvalidResponse),
+        }
     }
 
-    /// Sends the request to talk to a plugin
-    ///
-    /// Returns an error when the request could not be sent.
-    /// Otherwise it will return a `SendToPluginRequest` future that will
-    /// resolve once Janus sent the response to this request
+    /// Sends a plugin request, retuning the response
     pub(crate) async fn send_to_plugin(
         &self,
         session: SessionId,
         handle: HandleId,
         data: PluginBody,
-        ignore_ack: bool,
+        is_async: bool,
         jsep: Option<Jsep>,
-    ) -> Result<SendToPluginRequest, error::Error> {
-        let tx_id = Self::get_tx_id();
-        let (tx, rx) = oneshot::channel();
-        self.transactions.lock().insert(
-            tx_id.clone(),
-            Transaction {
-                ignore_ack,
-                channel: tx,
-            },
-        );
+    ) -> Result<JanusMessage, error::Error> {
+        let transaction = self.create_transaction(is_async).await?;
+
         self.send(&JanusRequest::PluginMessage(PluginMessage {
-            transaction: tx_id,
+            transaction: transaction.id(),
             session_id: session,
             handle_id: handle,
             body: data,
@@ -204,7 +251,7 @@ impl InnerClient {
         }))
         .await?;
 
-        Ok(SendToPluginRequest { rx })
+        transaction.receive().await
     }
 
     /// Sends a trickle request to Janus
@@ -213,51 +260,31 @@ impl InnerClient {
         session: SessionId,
         handle: HandleId,
         trickle: TrickleMessage,
-    ) -> Result<SendTrickleRequest, error::Error> {
-        let tx_id = Self::get_tx_id();
-        let (tx, rx) = oneshot::channel();
-        self.transactions.lock().insert(
-            tx_id.clone(),
-            Transaction {
-                ignore_ack: false,
-                channel: tx,
-            },
-        );
+    ) -> Result<(), error::Error> {
+        let transaction = self.create_transaction(false).await?;
+
         self.send(&JanusRequest::TrickleMessage {
-            transaction: tx_id,
+            transaction: transaction.id(),
             session_id: session,
             handle_id: handle,
             trickle,
         })
         .await?;
 
-        Ok(SendTrickleRequest { rx })
+        transaction.receive_ack().await
     }
 
     /// Sends a keepalive packet for the given session
     pub(crate) async fn send_keep_alive(&self, session_id: SessionId) -> Result<(), error::Error> {
-        let tx_id = Self::get_tx_id();
-        let (tx, rx) = oneshot::channel();
-        self.transactions.lock().insert(
-            tx_id.clone(),
-            Transaction {
-                ignore_ack: false,
-                channel: tx,
-            },
-        );
+        let transaction = self.create_transaction(false).await?;
+
         self.send(&JanusRequest::KeepAlive(KeepAlive {
             session_id,
-            transaction: tx_id,
+            transaction: transaction.id(),
         }))
         .await?;
 
-        match timeout(Duration::from_millis(200), rx).await {
-            Ok(Ok(_)) => Ok(()),
-            Ok(Err(_)) => {
-                panic!("Bug: receive task removed transaction without sending a response")
-            }
-            Err(_) => Err(error::Error::Timeout),
-        }
+        transaction.receive_ack().await
     }
 }
 
@@ -302,10 +329,9 @@ impl InnerSession {
             .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
 
         let handle_id = client
-            .request_attach_to_plugin(self.id, plugin)
-            .await?
+            .attach_to_plugin(self.id, plugin)
             .await
-            .ok_or(error::Error::FailedToAttachToPlugin)?;
+            .map_err(|_| error::Error::FailedToAttachToPlugin)?;
 
         let handle = Arc::new(InnerHandle::new(
             self.client.clone(),
@@ -317,6 +343,7 @@ impl InnerSession {
         self.handles
             .lock()
             .insert(handle_id, Arc::downgrade(&handle));
+
         Ok(handle)
     }
     /// Sends keepalive for this Session
@@ -351,8 +378,11 @@ impl InnerSession {
 
 impl Drop for InnerSession {
     fn drop(&mut self) {
-        if !std::thread::panicking() {
-            debug_assert!(self.destroyed, "call Session::destroy before dropping it");
+        if !self.destroyed {
+            log::error!(
+                "Session({:?}) has not been destroyed before dropping",
+                self.id
+            );
         }
     }
 }
@@ -403,14 +433,7 @@ impl InnerHandle {
             .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
 
         let (plugin_data, jsep) = client
-            .send_to_plugin(
-                self.session_id,
-                self.id,
-                request.into(),
-                R::IGNORE_ACK,
-                None,
-            )
-            .await?
+            .send_to_plugin(self.session_id, self.id, request.into(), R::IS_ASYNC, None)
             .await?
             .try_into()?;
 
@@ -440,10 +463,9 @@ impl InnerHandle {
                 self.session_id,
                 self.id,
                 request.into(),
-                R::IGNORE_ACK,
+                R::IS_ASYNC,
                 Some(jsep),
             )
-            .await?
             .await?
             .try_into()?;
 
@@ -456,6 +478,7 @@ impl InnerHandle {
         let response = plugin_data
             .try_into()
             .map_err(|_| error::Error::InvalidResponse)?;
+
         Ok((response, jsep))
     }
 
@@ -467,44 +490,27 @@ impl InnerHandle {
             .upgrade()
             .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
 
-        let _response = client
-            .send_trickle(self.session_id, self.id, msg)
-            .await?
-            .await?;
+        client.send_trickle(self.session_id, self.id, msg).await?;
 
         Ok(())
     }
 
     pub(crate) async fn detach(&mut self, client: Arc<InnerClient>) -> Result<(), error::Error> {
-        // Create request outside of task to avoid move
-        let tsx_id = InnerClient::get_tx_id();
-        let (tsx_send, tsx_receive) = oneshot::channel();
-
-        client.transactions.lock().insert(
-            tsx_id.clone(),
-            Transaction {
-                ignore_ack: true,
-                channel: tsx_send,
-            },
-        );
-
-        let request = JanusRequest::Detach {
-            session_id: self.session_id,
-            handle_id: self.id,
-            transaction: tsx_id,
-        };
+        let transaction = client.create_transaction(false).await?;
 
         // Set detached to true before checking sending request to avoid panicking on well
         // behaving code even when janus or rabbitmq fail
         self.detached = true;
 
-        client.send(&request).await?;
+        client
+            .send(&JanusRequest::Detach {
+                session_id: self.session_id,
+                handle_id: self.id,
+                transaction: transaction.id(),
+            })
+            .await?;
 
-        let response = tsx_receive
-            .await
-            .expect("Backend dropped sender without sending a message");
-
-        match response {
+        match transaction.receive().await? {
             JanusMessage::Success(_) => {
                 log::trace!("Detached InnerHandle for handle {}", self.id);
 
@@ -517,25 +523,44 @@ impl InnerHandle {
 
 impl Drop for InnerHandle {
     fn drop(&mut self) {
-        if !std::thread::panicking() {
-            debug_assert!(self.detached);
+        if !self.detached {
+            log::error!("Dropped InnerHandle({}) before detaching", self.id);
         }
     }
+}
+
+struct StoredTransaction {
+    sender: mpsc::Sender<JanusMessage>,
 }
 
 async fn rabbitmq_event_handling_loop(
     id: ClientId,
     mut shutdown_sig: broadcast::Receiver<()>,
     mut stream: Consumer,
-    transactions: Arc<Mutex<TransactionMap>>,
+    mut cmd_receiver: mpsc::UnboundedReceiver<TaskCmd>,
     sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
     sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
 ) {
+    let mut transactions: HashMap<TransactionId, StoredTransaction> = HashMap::new();
+
     loop {
         tokio::select! {
             _ = shutdown_sig.recv() => {
                 log::debug!("RabbitMQ event handling loop got shutdown signal, exiting task");
                 return;
+            }
+            cmd = cmd_receiver.recv() => {
+                match cmd {
+                    Some(TaskCmd::Transaction { id, sender }) => {
+                        transactions.insert(id, StoredTransaction {sender});
+                    }
+                    Some(TaskCmd::TransactionEnd(id)) => {
+                        transactions.remove(&id);
+                    }
+                    None => {
+                        log::error!("Event handling loop exiting because task_sender was dropped");
+                    }
+                }
             }
             // TODO handle none (disconnect)
             Some(consumer_result) = stream.next() => {
@@ -551,7 +576,7 @@ async fn rabbitmq_event_handling_loop(
                                 match event_handling_loop_inner(
                                     &id,
                                     msg,
-                                    transactions.clone(),
+                                    &transactions,
                                     sessions.clone(),
                                     &sink,
                                 )
@@ -592,62 +617,38 @@ async fn rabbitmq_event_handling_loop(
             }
         }
     }
-    // Todo reconnect when this connection closed?
-    // Todo clear the transaction table on a disconnect
 }
 
 async fn event_handling_loop_inner(
     id: &ClientId,
     msg: String,
-    transactions: Arc<Mutex<TransactionMap>>,
+    transactions: &HashMap<TransactionId, StoredTransaction>,
     sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
     sink: &mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
 ) -> Result<(), error::Error> {
     match serde_json::from_str::<JanusMessage>(&msg) {
-        Ok(janus_result) => {
-            match janus_result.transaction_id() {
-                Some(tx_id) => {
-                    let transaction_sink = transactions.lock().remove(tx_id);
-                    match transaction_sink {
-                        Some(Transaction {
-                            ignore_ack: true,
-                            channel,
-                        }) => {
-                            if matches!(janus_result, JanusMessage::Ack { .. }) {
-                                transactions.lock().insert(
-                                    tx_id.clone(),
-                                    Transaction {
-                                        ignore_ack: true,
-                                        channel,
-                                    },
-                                );
-                            } else if channel.send(janus_result).is_err() {
-                                log::error!("Failed to inform the waiting future of the transaction response");
-                            }
-                        }
-                        Some(Transaction {
-                            ignore_ack: false,
-                            channel,
-                        }) => {
-                            if channel.send(janus_result).is_err() {
-                                log::error!("Failed to inform the waiting future of the transaction response");
-                            }
-                        }
-                        None => {
-                            // We could not find a transaction_id in our hashmap, try to route it based on the sessionId
-                            route_message(id, &sessions, &sink, Arc::new(janus_result)).await;
-                        }
-                    };
+        Ok(janus_message) => {
+            match janus_message
+                .transaction_id()
+                .and_then(|id| transactions.get(id))
+            {
+                Some(tsx) => {
+                    if let Err(e) = tsx.sender.send(janus_message).await {
+                        log::error!("Failed to deliver transactional {:?}", e.0);
+                    }
+
+                    Ok(())
                 }
                 None => {
-                    // This is a transactionless msg. Try route it based on the sessionId
-                    route_message(id, &sessions, &sink, Arc::new(janus_result)).await;
+                    // We could not find a transaction_id in our hashmap, try to route it based on the sessionId
+                    route_message(id, &sessions, &sink, Arc::new(janus_message)).await;
+
+                    Ok(())
                 }
             }
-            Ok(())
         }
         Err(e) => {
-            log::error!("Got invalid JSON from Janus: {} : {:?}", e, msg);
+            log::error!("Got invalid json from rabbitmq, {}", e);
             Err(e.into())
         }
     }

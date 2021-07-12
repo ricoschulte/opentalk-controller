@@ -43,6 +43,7 @@ pub struct EchoPluginUnnamed {
 
 impl PluginRequest for EchoPluginUnnamed {
     type PluginResponse = incoming::EchoPluginDataEvent;
+    const IS_ASYNC: bool = true;
 }
 
 impl From<EchoPluginUnnamed> for PluginBody {

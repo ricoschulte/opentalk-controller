@@ -5,7 +5,7 @@ use lapin::{
         QueueDeclareOptions,
     },
     types::FieldTable,
-    BasicProperties, Channel, Consumer, Queue,
+    BasicProperties, Channel, Queue,
 };
 
 /// Configuration for the Rabbit MQ connection the janus-client uses.
@@ -28,7 +28,6 @@ pub struct RabbitMqConnection {
     from_janus_routing_key: String,
     incoming_queue: Queue,
     tag: String,
-    pub(crate) consumer: Consumer,
     channel: Channel,
 }
 
@@ -53,7 +52,7 @@ impl RabbitMqConfig {
     }
 
     /// Returns a [RabbitMqConnection] with already declared queues and setup [Consumer]
-    pub(crate) async fn setup(self) -> Result<RabbitMqConnection, error::Error> {
+    pub(crate) async fn setup(self) -> Result<(RabbitMqConnection, lapin::Consumer), error::Error> {
         log::debug!(
             "Setup RabbitMQ Outgoing({}), Incoming({},{})",
             self.to_janus_routing_key,
@@ -100,25 +99,18 @@ impl RabbitMqConfig {
             )
             .await?;
 
-        Ok(RabbitMqConnection {
-            to_janus_routing_key: self.to_janus_routing_key,
-            janus_exchange: self.janus_exchange,
-            from_janus_routing_key: self.from_janus_routing_key,
-            incoming_queue: from_janus,
-            tag: self.tag,
-            consumer,
-            channel: self.channel,
-        })
-    }
+        Ok((
+            RabbitMqConnection {
+                to_janus_routing_key: self.to_janus_routing_key,
+                janus_exchange: self.janus_exchange,
+                from_janus_routing_key: self.from_janus_routing_key,
+                incoming_queue: from_janus,
+                tag: self.tag,
 
-    pub async fn destroy(&self) {
-        if let Err(e) = self
-            .channel
-            .basic_cancel(&self.tag, Default::default())
-            .await
-        {
-            log::error!("Failed to destroy consumer with tag {}, {}", self.tag, e);
-        }
+                channel: self.channel,
+            },
+            consumer,
+        ))
     }
 }
 
@@ -142,5 +134,15 @@ impl RabbitMqConnection {
             .await?;
 
         Ok(correlation_id)
+    }
+
+    pub async fn destroy(&self) {
+        if let Err(e) = self
+            .channel
+            .basic_cancel(&self.tag, Default::default())
+            .await
+        {
+            log::error!("Failed to destroy consumer with tag {}, {}", self.tag, e);
+        }
     }
 }

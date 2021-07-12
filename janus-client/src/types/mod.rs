@@ -10,12 +10,12 @@ pub use incoming::{PluginData, Success};
 pub trait PluginRequest: Into<outgoing::PluginBody> {
     type PluginResponse: TryFrom<incoming::PluginData>;
 
-    /// Ignore ACK flag
+    /// Marks a request as async
     ///
-    /// true for asynchronous messages to skip the ACK and wait the actual response
-    /// true for sync messages which are expected to return some information
-    /// false for sync messages which dont return anything and instead receive an ACK
-    const IGNORE_ACK: bool = true;
+    /// Async requests are for operations that may take a while.
+    /// This means that the request will be acknowledged directly as soon as possible and
+    /// the final response will be delivered later in the context of the transaction.
+    const IS_ASYNC: bool = false;
 }
 
 /// Audio codecs supported by Janus

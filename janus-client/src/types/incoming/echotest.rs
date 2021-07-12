@@ -1,6 +1,7 @@
 //! Datatypes for the EchoTest plugin
 
-use super::{AudioCodec, JanusInternalError, VideoCodec};
+use super::{AudioCodec, VideoCodec};
+use crate::error::JanusPluginError;
 use crate::{error, PluginData};
 use serde::{self, Deserialize};
 use std::{convert::TryFrom, path::PathBuf};
@@ -52,19 +53,14 @@ pub enum EchoPluginData {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum EchoPluginDataEvent {
-    Ok {
-        result: String,
-    },
-    Err {
-        error: String,
-        error_code: JanusInternalError,
-    },
+    Ok { result: String },
+    Error(JanusPluginError),
 }
 
 impl TryFrom<PluginData> for EchoPluginDataEvent {
     type Error = error::Error;
 
-    fn try_from(value: PluginData) -> Result<Self, Self::Error> {
+    fn try_from(value: PluginData) -> Result<Self, error::Error> {
         match value {
             PluginData::EchoTest(EchoPluginData::Event(e)) => Ok(e),
             _ => Err(error::Error::InvalidResponse),
@@ -75,6 +71,7 @@ impl TryFrom<PluginData> for EchoPluginDataEvent {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::error::JanusInternalError;
     use crate::types::{
         incoming::{Event, JanusMessage, PluginData},
         HandleId, SessionId, TransactionId,
@@ -105,9 +102,9 @@ mod test {
                 jsep: None,
                 session_id,
             }) => {
-                assert!(sender == HandleId::new(1815153248));
-                assert!(transaction.unwrap() == TransactionId("sBJNyUhH6Vc6".into()));
-                assert!(session_id == SessionId::new(1234));
+                assert_eq!(sender, HandleId::new(1815153248));
+                assert_eq!(transaction.unwrap(), TransactionId("sBJNyUhH6Vc6".into()));
+                assert_eq!(session_id, SessionId::new(1234));
                 match plugindata {
                     PluginData::EchoTest(data) => match data {
                         EchoPluginData::Event(EchoPluginDataEvent::Ok { result }) => {
@@ -152,13 +149,16 @@ mod test {
                 jsep: None,
                 session_id,
             }) => {
-                assert!(sender == HandleId::new(1739642080530886));
-                assert!(session_id == SessionId::new(280835257881068));
-                assert!(transaction.unwrap() == TransactionId("2".into()));
+                assert_eq!(sender, HandleId::new(1739642080530886));
+                assert_eq!(session_id, SessionId::new(280835257881068));
+                assert_eq!(transaction.unwrap(), TransactionId("2".into()));
                 match plugindata {
                     PluginData::EchoTest(data) => match data {
-                        EchoPluginData::Event(EchoPluginDataEvent::Err { error_code, .. }) => {
-                            assert!(error_code == JanusInternalError::EchotestErrorInvalidElement);
+                        EchoPluginData::Event(EchoPluginDataEvent::Error(error)) => {
+                            assert_eq!(
+                                error.error_code(),
+                                JanusInternalError::EchotestErrorInvalidElement
+                            );
                         }
                         _ => {
                             assert!(false)

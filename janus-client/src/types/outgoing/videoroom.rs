@@ -13,25 +13,25 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "request")]
 pub enum VideoRoomPluginBody {
-    /// Create request
+    /// Create request, sync
     #[serde(rename = "create")]
     Create(VideoRoomPluginCreate),
-    /// Configure request
+    /// Configure request, async
     #[serde(rename = "configure")]
     Configure(VideoRoomPluginConfigure),
-    /// Join request
+    /// Join request, async
     #[serde(rename = "join")]
     Join(VideoRoomPluginJoin),
-    /// Start request
+    /// Start request, async
     #[serde(rename = "start")]
     Start(VideoRoomPluginStart),
-    /// List request
+    /// List request, sync
     #[serde(rename = "list")]
     ListRooms(VideoRoomPluginListRooms),
-    /// Destroy request
+    /// Destroy request, sync
     #[serde(rename = "destroy")]
     Destroy(VideoRoomPluginDestroy),
-    /// Publish request
+    /// Publish request, async
     #[serde(rename = "publish")]
     Publish(VideoRoomPluginPublish),
 }
@@ -105,6 +105,7 @@ impl Default for VideoRoomPluginPublish {
 
 impl PluginRequest for VideoRoomPluginPublish {
     type PluginResponse = incoming::VideoRoomPluginEventConfigured;
+    const IS_ASYNC: bool = true;
 }
 
 impl From<VideoRoomPluginPublish> for PluginBody {
@@ -152,6 +153,7 @@ pub struct VideoRoomPluginConfigurePublisher {
 
 impl PluginRequest for VideoRoomPluginConfigurePublisher {
     type PluginResponse = incoming::VideoRoomPluginEventConfigured;
+    const IS_ASYNC: bool = true;
 }
 
 impl From<VideoRoomPluginConfigurePublisher> for PluginBody {
@@ -198,6 +200,7 @@ pub struct VideoRoomPluginConfigureSubscriber {
 
 impl PluginRequest for VideoRoomPluginConfigureSubscriber {
     type PluginResponse = incoming::VideoRoomPluginEventConfigured;
+    const IS_ASYNC: bool = true;
 }
 
 impl From<VideoRoomPluginConfigureSubscriber> for PluginBody {
@@ -315,6 +318,7 @@ pub struct VideoRoomPluginJoinSubscriber {
 
 impl PluginRequest for VideoRoomPluginJoinSubscriber {
     type PluginResponse = incoming::VideoRoomPluginDataAttached;
+    const IS_ASYNC: bool = true;
 }
 
 impl From<VideoRoomPluginJoinSubscriber> for PluginBody {
@@ -345,6 +349,7 @@ pub struct VideoRoomPluginJoinPublisher {
 
 impl PluginRequest for VideoRoomPluginJoinPublisher {
     type PluginResponse = incoming::VideoRoomPluginDataJoined;
+    const IS_ASYNC: bool = true;
 }
 
 impl From<VideoRoomPluginJoinPublisher> for PluginBody {
@@ -402,6 +407,7 @@ pub struct VideoRoomPluginStart {
 
 impl PluginRequest for VideoRoomPluginStart {
     type PluginResponse = incoming::VideoRoomPluginEventStarted;
+    const IS_ASYNC: bool = true;
 }
 
 impl From<VideoRoomPluginStart> for PluginBody {

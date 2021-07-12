@@ -105,9 +105,8 @@ use crate::outgoing::TrickleMessage;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
-use tokio::time::{sleep, timeout};
+use tokio::time::sleep;
 
-mod async_types;
 mod client;
 pub mod error;
 pub mod rabbitmq;
@@ -136,9 +135,7 @@ impl Client {
         sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
         shutdown: broadcast::Sender<()>,
     ) -> Result<Self, error::Error> {
-        let mut inner_client = InnerClient::new(config, id, sink, shutdown);
-
-        inner_client.connect().await?;
+        let inner_client = InnerClient::new(config, id, sink, shutdown).await?;
 
         let client = Self {
             inner: Arc::new(inner_client),
@@ -155,19 +152,15 @@ impl Client {
     ///
     /// Returns a [`Session`](Session) or [`Error`](error::Error) if something went wrong
     pub async fn create_session(&self) -> Result<Session, error::Error> {
-        let session_future = self.inner.request_create_session().await?;
-
-        let session_id = match timeout(Duration::from_secs(10), session_future).await {
-            Ok(Some(session_id)) => session_id,
-            Ok(None) => return Err(error::Error::FailedToCreateSession),
-            Err(_) => return Err(error::Error::Timeout),
-        };
+        let session_id = self.inner.create_session().await?;
 
         let session = Arc::new(InnerSession::new(Arc::downgrade(&self.inner), session_id));
+
         self.inner
             .sessions
             .lock()
             .insert(session_id, Arc::downgrade(&session));
+
         Ok(Session { inner: session })
     }
 }
@@ -310,30 +303,28 @@ impl Handle {
             .inner
             .client
             .upgrade()
-            .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
+            .ok_or(error::Error::NotConnected)?;
 
         let sessions = client.sessions.lock();
 
         if let Some(session) = sessions.get(&self.inner.session_id).and_then(Weak::upgrade) {
             session.handles.lock().remove(&self.inner.id);
+        } else {
+            // session no longer exists cannot detach anyway
+            return Ok(());
         }
 
         drop(sessions);
 
         loop {
-            let strong_count = Arc::strong_count(&self.inner);
-
-            log::debug!(
-                "Detaching Handle({}), waiting strong_count to reach 1 (is {})",
-                self.inner.id,
-                strong_count
-            );
-
-            if strong_count == 1 {
-                let inner = Arc::get_mut(&mut self.inner).expect("already checked strong_count");
-
+            if let Some(inner) = Arc::get_mut(&mut self.inner) {
                 return inner.detach(client).await;
             } else {
+                log::debug!(
+                    "Detaching Handle({}), waiting refcount to reach 1",
+                    self.inner.id,
+                );
+
                 sleep(Duration::from_millis(100)).await;
             }
         }

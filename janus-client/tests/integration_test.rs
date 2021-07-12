@@ -31,7 +31,7 @@ async fn echo_external_channel() {
 
     let id = ClientId(Arc::new("janus-client".into()));
 
-    let (sink, _) = mpsc::channel(1);
+    let (sink, _recv) = mpsc::channel(48);
     let client = Client::new(config, id, sink, shutdown).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let echo_handle = session
@@ -48,9 +48,9 @@ async fn echo_external_channel() {
         .unwrap();
     match echo.0 {
         incoming::EchoPluginDataEvent::Ok { result } => {
-            assert!(result == "ok")
+            assert_eq!(result, "ok")
         }
-        incoming::EchoPluginDataEvent::Err { .. } => panic!(),
+        incoming::EchoPluginDataEvent::Error(_) => panic!(),
     }
 
     echo_handle.detach().await.unwrap();
@@ -79,7 +79,7 @@ async fn create_and_list_rooms() {
     );
     let id = ClientId(Arc::new("janus-client".into()));
 
-    let (sink, _) = mpsc::channel(1);
+    let (sink, _recv) = mpsc::channel(48);
     let client = Client::new(config, id, sink, shutdown).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let handle = session
@@ -163,7 +163,7 @@ async fn send_offer() {
 
     let id = ClientId(Arc::new("janus-client".into()));
 
-    let (sink, _) = mpsc::channel(1);
+    let (sink, _recv) = mpsc::channel(48);
     let client = Client::new(config, id, sink, shutdown).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let publisher_handle = session
