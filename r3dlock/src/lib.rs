@@ -23,8 +23,7 @@ end";
 /// Represents a redlock mutex over a resource inside a single redis instance
 ///
 /// The lock can be acquired using [`lock()`](Mutex::lock()).
-pub struct Mutex<C, K> {
-    redis: C,
+pub struct Mutex<K> {
     key: K,
 
     wait_time: Range<Duration>,
@@ -35,15 +34,14 @@ pub struct Mutex<C, K> {
 ///
 /// As these locks can expire in redis, this carries an Instant. Call [`is_locked()`](MutexGuard::is_locked())
 /// During unlock, it is checked whether the canary is still present as the locks key value.
-pub struct MutexGuard<'a, C, K> {
+pub struct MutexGuard<'a, K> {
     key: &'a K,
-    redis: &'a mut C,
     canary: Vec<u8>,
     created: Instant,
     locked: bool,
 }
 
-impl<C, K> MutexGuard<'_, C, K> {
+impl<K> MutexGuard<'_, K> {
     /// Returns true when the [`MutexGuard`] / locked redlock mutex is still valid
     ///
     /// If the [`MutexGuard`]/lock expired in Redis, this returns false.
@@ -60,15 +58,17 @@ impl<C, K> MutexGuard<'_, C, K> {
     }
 }
 
-impl<C, K> MutexGuard<'_, C, K>
+impl<K> MutexGuard<'_, K>
 where
-    C: ConnectionLike,
     K: ToRedisArgs,
 {
     /// Unlocks this [`MutexGuard`] / locked redlock mutex
     ///
     /// If Redis fails to unlock this lock, or this lock is already unlocked, this method returns a [`RedisError`]
-    pub async fn unlock(self) -> Result<()> {
+    pub async fn unlock<C>(self, redis: &mut C) -> Result<()>
+    where
+        C: ConnectionLike,
+    {
         if self.is_expired() {
             return Err(Error::AlreadyExpired);
         }
@@ -77,7 +77,7 @@ where
         let result: i32 = script
             .key(ToRedisArgsRef(self.key))
             .arg(&self.canary[..])
-            .invoke_async(self.redis)
+            .invoke_async(redis)
             .await?;
 
         if result == 1 {
@@ -88,7 +88,7 @@ where
     }
 }
 
-impl<C, K> Drop for MutexGuard<'_, C, K> {
+impl<K> Drop for MutexGuard<'_, K> {
     fn drop(&mut self) {
         if !std::thread::panicking() {
             debug_assert!(self.is_locked(), "MutexGuard must be unlocked before drop");
@@ -96,21 +96,18 @@ impl<C, K> Drop for MutexGuard<'_, C, K> {
     }
 }
 
-impl<C, K> Mutex<C, K>
+impl<K> Mutex<K>
 where
-    C: ConnectionLike,
     K: ToRedisArgs,
 {
     /// Creates a new [`Mutex`]
     ///
-    /// Takes any async redis [`ConnectionLike`] implementation to drive the mutex
-    /// and a key which represents the resource used as a lock
-    pub fn new(redis: C, key: K) -> Self
+    /// Takes a key which represents the resource used as a lock
+    pub fn new(key: K) -> Self
     where
         K: ToRedisArgs,
     {
         Self {
-            redis,
             key,
             wait_time: Duration::from_millis(10)..Duration::from_millis(50),
             retries: 10,
@@ -132,7 +129,10 @@ where
     /// Locks the [`Mutex`] and returns a [`MutexGuard`] / redlock mutex
     ///
     /// When the lock cannot be acquired, this returns a [`RedisError`] with Kind [`TryAgain`](redis::ErrorKind::TryAgain) and `failed to acquire lock`
-    pub async fn lock(&mut self) -> Result<MutexGuard<'_, C, K>> {
+    pub async fn lock<C>(&mut self, redis: &mut C) -> Result<MutexGuard<'_, K>>
+    where
+        C: ConnectionLike,
+    {
         let canary = thread_rng()
             .sample_iter(rand::distributions::Alphanumeric)
             .take(20)
@@ -152,13 +152,12 @@ where
                 .arg("NX")
                 .arg("PX")
                 .arg(LOCK_TIME.as_millis() as u64)
-                .query_async(&mut self.redis)
+                .query_async(redis)
                 .await?;
 
             if let Value::Okay = res {
                 let guard = MutexGuard {
                     key: &self.key,
-                    redis: &mut self.redis,
                     canary,
                     created,
                     locked: true,
@@ -198,17 +197,17 @@ mod tests {
             std::env::var("REDIS_ADDR").unwrap_or_else(|_| "redis://localhost:6379/".to_owned());
         let redis = redis::Client::open(redis_url).expect("Invalid redis url");
 
-        let redis_conn = redis
+        let mut redis_conn = redis
             .get_multiplexed_async_connection()
             .await
             .expect("Failed to get redis connection");
 
-        let mut mutex = Mutex::new(redis_conn, "test-1MY-REDIS-LOCK");
+        let mut mutex = Mutex::new("test-1MY-REDIS-LOCK");
 
-        let guard = mutex.lock().await.unwrap();
-        guard.unlock().await.unwrap();
-        let guard2 = mutex.lock().await.unwrap();
-        guard2.unlock().await.unwrap();
+        let guard = mutex.lock(&mut redis_conn).await.unwrap();
+        guard.unlock(&mut redis_conn).await.unwrap();
+        let guard2 = mutex.lock(&mut redis_conn).await.unwrap();
+        guard2.unlock(&mut redis_conn).await.unwrap();
     }
 
     #[tokio::test]
@@ -217,19 +216,19 @@ mod tests {
             std::env::var("REDIS_ADDR").unwrap_or_else(|_| "redis://localhost:6379/".to_owned());
         let redis = redis::Client::open(redis_url).expect("Invalid redis url");
 
-        let redis_conn = redis
+        let mut redis_conn = redis
             .get_multiplexed_async_connection()
             .await
             .expect("Failed to get redis connection");
 
-        let mut mutex1 = Mutex::new(redis_conn.clone(), "test2-MY-REDIS-LOCK");
-        let mut mutex2 = Mutex::new(redis_conn, "test2-MY-REDIS-LOCK");
+        let mut mutex1 = Mutex::new("test2-MY-REDIS-LOCK");
+        let mut mutex2 = Mutex::new("test2-MY-REDIS-LOCK");
 
-        let guard1 = mutex1.lock().await.unwrap();
-        let guard2 = mutex2.lock().await.err().unwrap();
+        let guard1 = mutex1.lock(&mut redis_conn).await.unwrap();
+        let guard2 = mutex2.lock(&mut redis_conn).await.err().unwrap();
 
         // Unlock first to cleanup redis ressources.
-        guard1.unlock().await.unwrap();
+        guard1.unlock(&mut redis_conn).await.unwrap();
 
         assert_eq!(guard2, Error::CouldNotAcquireLock);
     }
