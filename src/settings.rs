@@ -1,46 +1,16 @@
 //! Handles the application settings via a config file and environment variables.
-
+use crate::cli::Args;
 use config::{Config, ConfigError, Environment, File};
 use log::Level;
 use openidconnect::{ClientId, ClientSecret, IssuerUrl};
 use serde::{Deserialize, Deserializer};
 use std::convert::TryFrom;
 use std::path::{Path, PathBuf};
-use structopt::StructOpt;
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "k3k-controller")]
-struct Args {
-    #[structopt(
-        short,
-        parse(from_occurrences),
-        help = "-v => Info, -vv => Debug, -vvv => Trace"
-    )]
-    verbose: u8,
-
-    #[structopt(
-        short,
-        long,
-        default_value = "config.toml",
-        help = "Specify path to configuration file"
-    )]
-    config: PathBuf,
-
-    #[structopt(
-        short,
-        long,
-        parse(from_os_str),
-        help = "logoutput or \"-\" for stdout"
-    )]
-    logoutput: Option<PathBuf>,
-}
-
-/// Parses the CLI-Arguments into [`Args`] and [`Settings`]
+/// Loads settings from [`Args`] and config file
 ///
 /// The settings specified in the CLI-Arguments have a higher priority than the settings specified in the config file
-pub fn load_settings() -> Result<Settings, ConfigError> {
-    let args = Args::from_args();
-
+pub fn load_settings(args: Args) -> Result<Settings, ConfigError> {
     let mut settings = Settings::load(&args.config)?;
 
     if args.verbose > 0 {

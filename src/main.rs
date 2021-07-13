@@ -22,6 +22,7 @@ use tokio::time::sleep;
 use tokio_amqp::LapinTokioExt;
 
 mod api;
+mod cli;
 mod db;
 mod ha_sync;
 mod modules;
@@ -33,7 +34,15 @@ extern crate diesel;
 
 #[actix_web::main]
 async fn main() -> Result<()> {
-    let settings = settings::load_settings().context("Failed to load settings from file")?;
+    let args = cli::parse_args()?;
+    if args.controller_should_start() {
+        start_controller(args).await?
+    }
+    Ok(())
+}
+
+async fn start_controller(args: cli::Args) -> Result<()> {
+    let settings = settings::load_settings(args)?;
 
     setup_logging(&settings.logging)?;
 
