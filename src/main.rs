@@ -297,7 +297,7 @@ fn v1_scope(db_ctx: Data<DbInterface>, oidc_ctx: Data<OidcContext>) -> Scope {
     // the latest version contains the root services
     web::scope("/v1")
         .service(api::v1::auth::login)
-        .service(api::v1::auth::oidc_providers)
+        .service(api::v1::auth::oidc_provider)
         .service(
             // empty scope to differentiate between auth endpoints
             web::scope("")
