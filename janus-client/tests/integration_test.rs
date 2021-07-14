@@ -26,10 +26,10 @@ async fn echo_external_channel() {
         "to-janus".to_owned(),
         "janus-exchange".to_owned(),
         "from-janus".to_owned(),
-        "k3k-signaling".to_owned(),
+        "k3k-signaling-echo-external-channel".to_owned(),
     );
 
-    let id = ClientId(Arc::new("janus-client".into()));
+    let id = ClientId(Arc::new("janus-test-echo".into()));
 
     let (sink, _recv) = mpsc::channel(48);
     let client = Client::new(config, id, sink, shutdown).await.unwrap();
@@ -75,9 +75,9 @@ async fn create_and_list_rooms() {
         "to-janus".to_owned(),
         "janus-exchange".to_owned(),
         "from-janus".to_owned(),
-        "k3k-signaling".to_owned(),
+        "k3k-signaling-create-and-list-rooms".to_owned(),
     );
-    let id = ClientId(Arc::new("janus-client".into()));
+    let id = ClientId(Arc::new("janus-test-list".into()));
 
     let (sink, _recv) = mpsc::channel(48);
     let client = Client::new(config, id, sink, shutdown).await.unwrap();
@@ -95,13 +95,15 @@ async fn create_and_list_rooms() {
         .await
         .unwrap();
 
-    match room1.0 {
+    let room1 = match room1.0 {
         incoming::VideoRoomPluginDataCreated::Ok { room, permanent } => {
             assert!(Into::<u64>::into(room) > 0);
             assert!(permanent == false);
+            room
         }
         _ => panic!(),
-    }
+    };
+
     let room2 = handle
         .send(outgoing::VideoRoomPluginCreate {
             description: "Testroom2".to_owned(),
@@ -109,13 +111,16 @@ async fn create_and_list_rooms() {
         })
         .await
         .unwrap();
-    match room2.0 {
+
+    let room2 = match room2.0 {
         incoming::VideoRoomPluginDataCreated::Ok { room, permanent } => {
             assert!(Into::<u64>::into(room) > 0);
             assert!(permanent == false);
+            room
         }
         _ => panic!(),
-    }
+    };
+
     let rooms = handle
         .send(outgoing::VideoRoomPluginListRooms)
         .await
@@ -133,6 +138,26 @@ async fn create_and_list_rooms() {
                 .any(|s| *s.description() == "Testroom2".to_owned()));
         }
     }
+
+    handle
+        .send(outgoing::VideoRoomPluginDestroy {
+            room: room1,
+            secret: None,
+            permanent: None,
+            token: None,
+        })
+        .await
+        .unwrap();
+
+    handle
+        .send(outgoing::VideoRoomPluginDestroy {
+            room: room2,
+            secret: None,
+            permanent: None,
+            token: None,
+        })
+        .await
+        .unwrap();
 
     handle.detach().await.unwrap();
     session.destroy(false).await.unwrap();
@@ -158,10 +183,10 @@ async fn send_offer() {
         "to-janus".to_owned(),
         "janus-exchange".to_owned(),
         "from-janus".to_owned(),
-        "k3k-signaling".to_owned(),
+        "k3k-signaling-send-offer".to_owned(),
     );
 
-    let id = ClientId(Arc::new("janus-client".into()));
+    let id = ClientId(Arc::new("janus-test-offer".into()));
 
     let (sink, _recv) = mpsc::channel(48);
     let client = Client::new(config, id, sink, shutdown).await.unwrap();
@@ -182,8 +207,8 @@ async fn send_offer() {
     let room_id = match room1.0 {
         incoming::VideoRoomPluginDataCreated::Ok { room, permanent } => {
             assert!(Into::<u64>::into(room) > 0);
-            assert!(permanent == false);
-            Some(room)
+            assert!(!permanent);
+            room
         }
         _ => panic!(),
     };
@@ -199,15 +224,25 @@ async fn send_offer() {
                 .any(|s| *s.description() == "SendOfferTestroom1".to_owned()));
         }
     }
-    assert!(publisher_handle
+    publisher_handle
         .send(outgoing::VideoRoomPluginJoinPublisher {
-            room: room_id.unwrap(),
+            room: room_id,
             id: Some(1),
             display: None,
             token: None,
         })
         .await
-        .is_ok());
+        .unwrap();
+
+    publisher_handle
+        .send(outgoing::VideoRoomPluginDestroy {
+            room: room_id,
+            secret: None,
+            permanent: None,
+            token: None,
+        })
+        .await
+        .unwrap();
 
     publisher_handle.detach().await.unwrap();
     session.destroy(false).await.unwrap();

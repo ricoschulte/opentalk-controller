@@ -51,13 +51,18 @@ pub(crate) enum JanusRequest {
         trickle: TrickleMessage,
     },
     /// Destroys a handle
+    #[serde(rename = "detach")]
     Detach {
         session_id: SessionId,
         handle_id: HandleId,
         transaction: TransactionId,
     },
     /// Destroys a session
-    Destroy { session_id: SessionId },
+    #[serde(rename = "destroy")]
+    Destroy {
+        session_id: SessionId,
+        transaction: TransactionId,
+    },
 }
 
 /// Keepalive message

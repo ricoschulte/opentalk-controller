@@ -16,6 +16,7 @@ use lapin::{
     Consumer,
 };
 use parking_lot::Mutex;
+use rand::Rng;
 use std::{
     collections::HashMap,
     convert::TryInto,
@@ -28,55 +29,97 @@ use tokio::time::timeout;
 enum TaskCmd {
     Transaction {
         id: TransactionId,
-        sender: mpsc::Sender<JanusMessage>,
+        sender: mpsc::Sender<TaskMessage>,
     },
     TransactionEnd(TransactionId),
 }
 
+#[derive(Debug)]
+enum TaskMessage {
+    Registered,
+    JanusMessage(JanusMessage),
+}
+
 pub(crate) struct Transaction {
     id: TransactionId,
-    messages: mpsc::Receiver<JanusMessage>,
+    messages: mpsc::Receiver<TaskMessage>,
     task_sender: mpsc::UnboundedSender<TaskCmd>,
     is_async: bool,
+
+    // Message ordering, for async results before ack
+    backlog: Option<JanusMessage>,
 }
 
 impl Transaction {
+    /// Returns the [TransactionId] of this [Transaction]
     pub fn id(&self) -> TransactionId {
         self.id.clone()
     }
 
-    async fn do_receive_ack(&mut self) -> Result<(), error::Error> {
-        match timeout(Duration::from_secs(2), self.messages.recv()).await {
-            Ok(Some(msg)) => match msg.into_result()? {
-                JanusMessage::Ack(_) => Ok(()),
-                _ => Err(error::Error::InvalidResponse),
-            },
-            Ok(None) => Err(error::Error::NotConnected),
-            Err(_) => Err(error::Error::Timeout),
+    /// Retrieves the next message from the backing rabbitmq receive task
+    async fn next_message(&mut self) -> Option<JanusMessage> {
+        match self.messages.recv().await? {
+            TaskMessage::Registered => {
+                unreachable!("Registered messages must be caught on transaction creation")
+            }
+            TaskMessage::JanusMessage(msg) => Some(msg),
         }
     }
 
+    /// Receives a single ACK from self.messages.
+    /// If it receives a non ACK and exclusive is false, the received msg is put into the backlog.
+    /// This is needed as Janus may send the async response before the ACK to our request. ~skrrr~
+    async fn do_receive_ack(&mut self, exclusive: bool) -> Result<(), error::Error> {
+        loop {
+            let receive_result = match timeout(Duration::from_secs(2), self.next_message()).await {
+                Ok(Some(msg)) => msg.into_result(),
+                Ok(None) => Err(error::Error::NotConnected),
+                Err(_) => Err(error::Error::Timeout),
+            };
+
+            match receive_result? {
+                JanusMessage::Ack(_) => return Ok(()),
+                _ if exclusive => return Err(error::Error::InvalidResponse),
+                // We received a non-Ack before receiving an ack.
+                // Put that into our backlog to retrieve on a Transaction::receive call.
+                msg => {
+                    self.backlog = Some(msg);
+                    continue;
+                }
+            }
+        }
+    }
+
+    /// Retrieve the final response from janus which must be a single ACK
     pub async fn receive_ack(mut self) -> Result<(), error::Error> {
         assert!(
             !self.is_async,
             "Transaction type for receive_ack must be a sync request"
         );
 
-        self.do_receive_ack().await
+        self.do_receive_ack(true).await
     }
 
+    /// Receive the final response from janus.
+    ///
+    /// Depending on the request type the transaction will first receive an ACK and later the final
+    /// response. Out of order responses (ACK after final response received) will be handled.
     pub async fn receive(mut self) -> Result<JanusMessage, error::Error> {
         let msg_timeout = if self.is_async {
-            self.do_receive_ack().await?;
+            self.do_receive_ack(false).await?;
             Duration::from_secs(10)
         } else {
             Duration::from_secs(2)
         };
 
-        match timeout(msg_timeout, self.messages.recv()).await {
-            Ok(Some(msg)) => msg.into_result(),
-            Ok(None) => Err(error::Error::NotConnected),
-            Err(_) => Err(error::Error::Timeout),
+        if let Some(backlog) = self.backlog.take() {
+            Ok(backlog)
+        } else {
+            match timeout(msg_timeout, self.next_message()).await {
+                Ok(Some(msg)) => msg.into_result(),
+                Ok(None) => Err(error::Error::NotConnected),
+                Err(_) => Err(error::Error::Timeout),
+            }
         }
     }
 }
@@ -146,9 +189,15 @@ impl InnerClient {
         &self,
         is_async: bool,
     ) -> Result<Transaction, error::Error> {
-        let id = TransactionId::new(format!("{}-{}", self.id.0, rand::random::<u64>()));
+        let random_string = rand::thread_rng()
+            .sample_iter(rand::distributions::Alphanumeric)
+            .take(10)
+            .map(char::from)
+            .collect::<String>();
 
-        let (sender, messages) = mpsc::channel(3);
+        let id = TransactionId::new(format!("{}-{}", self.id.0, random_string));
+
+        let (sender, mut messages) = mpsc::channel(3);
 
         if self
             .task_sender
@@ -161,12 +210,18 @@ impl InnerClient {
             return Err(error::Error::NotConnected);
         };
 
-        Ok(Transaction {
-            id,
-            messages,
-            task_sender: self.task_sender.clone(),
-            is_async,
-        })
+        if let Some(TaskMessage::Registered) = messages.recv().await {
+            Ok(Transaction {
+                id,
+                messages,
+                task_sender: self.task_sender.clone(),
+                is_async,
+                backlog: None,
+            })
+        } else {
+            log::error!("Failed to receive 'registered' task-message on new transaction");
+            Err(error::Error::NotConnected)
+        }
     }
 
     async fn send(&self, msg: &JanusRequest) -> Result<(), error::Error> {
@@ -328,10 +383,7 @@ impl InnerSession {
             .upgrade()
             .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
 
-        let handle_id = client
-            .attach_to_plugin(self.id, plugin)
-            .await
-            .map_err(|_| error::Error::FailedToAttachToPlugin)?;
+        let handle_id = client.attach_to_plugin(self.id, plugin).await?;
 
         let handle = Arc::new(InnerHandle::new(
             self.client.clone(),
@@ -361,14 +413,18 @@ impl InnerSession {
     }
 
     pub(crate) async fn destroy(&mut self, client: Arc<InnerClient>) -> Result<(), error::Error> {
+        let transaction = client.create_transaction(false).await?;
         let request = JanusRequest::Destroy {
             session_id: self.id,
+            transaction: transaction.id(),
         };
 
         client
             .send(&request)
             .await
             .expect("Failed to send destroy for session on drop");
+
+        transaction.receive().await?;
 
         self.assume_destroyed();
 
@@ -530,7 +586,7 @@ impl Drop for InnerHandle {
 }
 
 struct StoredTransaction {
-    sender: mpsc::Sender<JanusMessage>,
+    sender: mpsc::Sender<TaskMessage>,
 }
 
 async fn rabbitmq_event_handling_loop(
@@ -552,7 +608,11 @@ async fn rabbitmq_event_handling_loop(
             cmd = cmd_receiver.recv() => {
                 match cmd {
                     Some(TaskCmd::Transaction { id, sender }) => {
-                        transactions.insert(id, StoredTransaction {sender});
+                        if sender.send(TaskMessage::Registered).await.is_ok() {
+                            transactions.insert(id, StoredTransaction { sender });
+                        } else {
+                            log::error!("Could not send registered message to transaction, receiver dropped.")
+                        }
                     }
                     Some(TaskCmd::TransactionEnd(id)) => {
                         transactions.remove(&id);
@@ -569,49 +629,38 @@ async fn rabbitmq_event_handling_loop(
                         log::error!("Encountered error while receiving from RabbitMQ: {}", e);
                     }
                     Ok((_, delivery)) => {
-                        let msg = String::from_utf8(delivery.data.clone());
-                        match msg {
-                            Ok(msg) => {
-                                log::trace!("Received RabbitMQ message containing: {}", msg);
-                                match event_handling_loop_inner(
-                                    &id,
-                                    msg,
-                                    &transactions,
-                                    sessions.clone(),
-                                    &sink,
-                                )
-                                .await
-                                {
-                                    Ok(_) => delivery
-                                        .ack(BasicAckOptions::default())
-                                        .await
-                                        // Todo Handle Reconnects:
-                                        // return error, bubble up and reconnect
-                                        .expect("Could not send ACK. Check connection!"),
-                                    Err(e) => {
-                                        log::error!(
-                                            "Error handling the incoming msg from Rabbit MQ: {}",
-                                            e
-                                        );
-                                        delivery
-                                            .nack(BasicNackOptions::default())
-                                            .await
-                                            // Todo Handle Reconnects:
-                                            // return error, bubble up and reconnect
-                                            .expect("Could not send NACK. Check connection!")
+                        let msg = String::from_utf8_lossy(&delivery.data);
+                        log::trace!("Received RabbitMQ message containing: {}", msg);
+
+                        let res = event_handling_loop_inner(
+                            &id,
+                            &msg,
+                            &transactions,
+                            sessions.clone(),
+                            &sink,
+                        )
+                        .await;
+
+                        // spawn result handling to separate task
+                        tokio::spawn(async move {
+                            match res {
+                                Ok(_) => {
+                                    if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
+                                        log::error!("Failed to nack rabbitmq message which could not be handled, {}", e)
+                                    }
+                                }
+                                Err(e) => {
+                                    log::error!(
+                                        "Error handling the incoming msg from Rabbit MQ: {}",
+                                        e
+                                    );
+
+                                    if let Err(e) = delivery.nack(BasicNackOptions::default()).await {
+                                        log::error!("Failed to nack rabbitmq message which could not be handled, {}", e)
                                     }
                                 }
                             }
-                            Err(e) => {
-                                log::error!("Received RabbitMQ message with invalid UTF-8: {}", e);
-                                delivery
-                                    .nack(BasicNackOptions::default())
-                                    .await
-                                    // Todo Handle Reconnects:
-                                    // return error, bubble up and reconnect
-                                    .expect("Could not send NACK. Check connection!")
-                            }
-                        }
+                        });
                     }
                 }
             }
@@ -621,7 +670,7 @@ async fn rabbitmq_event_handling_loop(
 
 async fn event_handling_loop_inner(
     id: &ClientId,
-    msg: String,
+    msg: &str,
     transactions: &HashMap<TransactionId, StoredTransaction>,
     sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
     sink: &mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
@@ -633,7 +682,11 @@ async fn event_handling_loop_inner(
                 .and_then(|id| transactions.get(id))
             {
                 Some(tsx) => {
-                    if let Err(e) = tsx.sender.send(janus_message).await {
+                    if let Err(e) = tsx
+                        .sender
+                        .send(TaskMessage::JanusMessage(janus_message))
+                        .await
+                    {
                         log::error!("Failed to deliver transactional {:?}", e.0);
                     }
 
