@@ -726,6 +726,9 @@ async fn route_message(
         | JanusMessage::Media(incoming::Media {
             sender, session_id, ..
         })
+        | JanusMessage::SlowLink(incoming::SlowLink {
+            sender, session_id, ..
+        })
         | JanusMessage::WebRtcUp(incoming::WebRtcUp { sender, session_id }) => {
             if let Some(handle) = get_handle_from_sender(sessions, session_id, sender) {
                 match handle {

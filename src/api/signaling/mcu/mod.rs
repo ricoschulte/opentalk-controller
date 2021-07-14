@@ -770,6 +770,12 @@ async fn forward_janus_message(
                             media_session_key
                         );
                     }
+                    janus_client::incoming::VideoRoomPluginData::SlowLink(_) => {
+                        log::trace!(
+                            "Participant {}: Got a slow link event for its room",
+                            media_session_key
+                        );
+                    }
                     _ => log::warn!(
                         "Invalid handle event for participant {}: {:?}",
                         media_session_key,
