@@ -71,7 +71,7 @@ pub mod ee {
     pub use super::ws_modules::ee::chat::Chat;
 }
 
-pub use mcu::JanusMcu;
+pub use mcu::McuPool;
 pub use ws::SignalingHttpModule;
 
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]

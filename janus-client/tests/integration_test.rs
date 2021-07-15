@@ -4,8 +4,9 @@ use janus_client::types::outgoing;
 use janus_client::*;
 use lapin::Connection;
 use lapin::ConnectionProperties;
+use std::sync::Arc;
 use test_env_log::test;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 
 #[test(tokio::test)]
 async fn echo_external_channel() {
@@ -22,13 +23,16 @@ async fn echo_external_channel() {
         .expect("Could not create channel");
     let config = RabbitMqConfig::new_from_channel(
         channel,
-        "janus-gateway".to_owned(),
         "to-janus".to_owned(),
         "janus-exchange".to_owned(),
         "from-janus".to_owned(),
-        "k3k-signaling".to_owned(),
+        "k3k-signaling-echo-external-channel".to_owned(),
     );
-    let (client, _) = Client::new(config, shutdown).await.unwrap();
+
+    let id = ClientId(Arc::new("janus-test-echo".into()));
+
+    let (sink, _recv) = mpsc::channel(48);
+    let client = Client::new(config, id, sink, shutdown).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let echo_handle = session
         .attach_to_plugin(JanusPlugin::Echotest)
@@ -44,13 +48,13 @@ async fn echo_external_channel() {
         .unwrap();
     match echo.0 {
         incoming::EchoPluginDataEvent::Ok { result } => {
-            assert!(result == "ok")
+            assert_eq!(result, "ok")
         }
-        incoming::EchoPluginDataEvent::Err { .. } => panic!(),
+        incoming::EchoPluginDataEvent::Error(_) => panic!(),
     }
 
     echo_handle.detach().await.unwrap();
-    session.destroy().await.unwrap();
+    session.destroy(false).await.unwrap();
 }
 
 #[test(tokio::test)]
@@ -68,13 +72,15 @@ async fn create_and_list_rooms() {
         .expect("Could not create channel");
     let config = RabbitMqConfig::new_from_channel(
         channel,
-        "janus-gateway".to_owned(),
         "to-janus".to_owned(),
         "janus-exchange".to_owned(),
         "from-janus".to_owned(),
-        "k3k-signaling".to_owned(),
+        "k3k-signaling-create-and-list-rooms".to_owned(),
     );
-    let (client, _) = Client::new(config, shutdown).await.unwrap();
+    let id = ClientId(Arc::new("janus-test-list".into()));
+
+    let (sink, _recv) = mpsc::channel(48);
+    let client = Client::new(config, id, sink, shutdown).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let handle = session
         .attach_to_plugin(JanusPlugin::VideoRoom)
@@ -89,13 +95,15 @@ async fn create_and_list_rooms() {
         .await
         .unwrap();
 
-    match room1.0 {
+    let room1 = match room1.0 {
         incoming::VideoRoomPluginDataCreated::Ok { room, permanent } => {
             assert!(Into::<u64>::into(room) > 0);
             assert!(permanent == false);
+            room
         }
         _ => panic!(),
-    }
+    };
+
     let room2 = handle
         .send(outgoing::VideoRoomPluginCreate {
             description: "Testroom2".to_owned(),
@@ -103,13 +111,16 @@ async fn create_and_list_rooms() {
         })
         .await
         .unwrap();
-    match room2.0 {
+
+    let room2 = match room2.0 {
         incoming::VideoRoomPluginDataCreated::Ok { room, permanent } => {
             assert!(Into::<u64>::into(room) > 0);
             assert!(permanent == false);
+            room
         }
         _ => panic!(),
-    }
+    };
+
     let rooms = handle
         .send(outgoing::VideoRoomPluginListRooms)
         .await
@@ -128,8 +139,28 @@ async fn create_and_list_rooms() {
         }
     }
 
+    handle
+        .send(outgoing::VideoRoomPluginDestroy {
+            room: room1,
+            secret: None,
+            permanent: None,
+            token: None,
+        })
+        .await
+        .unwrap();
+
+    handle
+        .send(outgoing::VideoRoomPluginDestroy {
+            room: room2,
+            secret: None,
+            permanent: None,
+            token: None,
+        })
+        .await
+        .unwrap();
+
     handle.detach().await.unwrap();
-    session.destroy().await.unwrap();
+    session.destroy(false).await.unwrap();
 }
 
 #[test(tokio::test)]
@@ -146,15 +177,19 @@ async fn send_offer() {
         .create_channel()
         .await
         .expect("Could not create channel");
+
     let config = RabbitMqConfig::new_from_channel(
         channel,
-        "janus-gateway".to_owned(),
         "to-janus".to_owned(),
         "janus-exchange".to_owned(),
         "from-janus".to_owned(),
-        "k3k-signaling".to_owned(),
+        "k3k-signaling-send-offer".to_owned(),
     );
-    let (client, _) = Client::new(config, shutdown).await.unwrap();
+
+    let id = ClientId(Arc::new("janus-test-offer".into()));
+
+    let (sink, _recv) = mpsc::channel(48);
+    let client = Client::new(config, id, sink, shutdown).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let publisher_handle = session
         .attach_to_plugin(JanusPlugin::VideoRoom)
@@ -172,8 +207,8 @@ async fn send_offer() {
     let room_id = match room1.0 {
         incoming::VideoRoomPluginDataCreated::Ok { room, permanent } => {
             assert!(Into::<u64>::into(room) > 0);
-            assert!(permanent == false);
-            Some(room)
+            assert!(!permanent);
+            room
         }
         _ => panic!(),
     };
@@ -189,16 +224,26 @@ async fn send_offer() {
                 .any(|s| *s.description() == "SendOfferTestroom1".to_owned()));
         }
     }
-    assert!(publisher_handle
+    publisher_handle
         .send(outgoing::VideoRoomPluginJoinPublisher {
-            room: room_id.unwrap(),
+            room: room_id,
             id: Some(1),
             display: None,
             token: None,
         })
         .await
-        .is_ok());
+        .unwrap();
+
+    publisher_handle
+        .send(outgoing::VideoRoomPluginDestroy {
+            room: room_id,
+            secret: None,
+            permanent: None,
+            token: None,
+        })
+        .await
+        .unwrap();
 
     publisher_handle.detach().await.unwrap();
-    session.destroy().await.unwrap();
+    session.destroy(false).await.unwrap();
 }

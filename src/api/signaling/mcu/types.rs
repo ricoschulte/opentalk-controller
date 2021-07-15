@@ -20,15 +20,6 @@ pub enum Response {
     None,
 }
 
-#[derive(Hash, Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ClientId(pub(crate) u64);
-
-impl std::fmt::Display for ClientId {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
 /// Used to relay messages to the WebSocket
 #[derive(Debug)]
 pub enum WebRtcEvent {

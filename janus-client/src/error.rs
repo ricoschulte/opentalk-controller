@@ -11,8 +11,6 @@ pub enum Error {
     NotConnected,
     /// Failed to create a session
     FailedToCreateSession,
-    /// Failed to attach to plugin for the current session
-    FailedToAttachToPlugin,
     /// Got invalid response from Janus
     InvalidResponse,
     /// Got invalid response from Janus {0}

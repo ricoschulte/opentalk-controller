@@ -56,13 +56,18 @@ max_video_bitrate = "64000"
 # Example: 1MB/s
 max_screen_bitrate = "8000000"
 
-[room_server.connection]
 # Connection settings for the channel used to talk to the room server.
 # Currently these should be equal to the settings in janus.transport.rabbitmq.jcfg
-to_janus_queue = "janus-gateway"
-to_janus_routing_key = "to-janus"
+# of the respective janus instance.
+[[room_server.connections]]
+to_janus_routing_key = "to-janus-1"
 janus_exchange = "janus-exchange"
-from_janus_routing_key = "from-janus"
+from_janus_routing_key = "from-janus-1"
+
+[[room_server.connections]]
+to_janus_routing_key = "to-janus-2"
+janus_exchange = "janus-exchange"
+from_janus_routing_key = "from-janus-2"
 
 [rabbit_mq]
 # The URL to use to connect to the rabbit mq broker

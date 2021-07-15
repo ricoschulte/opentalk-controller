@@ -180,7 +180,8 @@ pub struct RedisConfig {
 
 #[derive(Debug, Deserialize)]
 pub struct JanusMcuConfig {
-    pub connection: JanusRabbitMqConnection,
+    pub connections: Vec<JanusRabbitMqConnection>,
+
     /// Max bitrate allowed for `video` media sessions
     #[serde(default = "default_max_video_bitrate")]
     pub max_video_bitrate: u64,
@@ -197,10 +198,8 @@ pub struct RabbitMqConfig {
 }
 
 /// Take the settings from your janus rabbit mq transport configuration.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct JanusRabbitMqConnection {
-    #[serde(default = "default_to_janus_queue")]
-    pub to_janus_queue: String,
     #[serde(default = "default_to_janus_routing_key")]
     pub to_janus_routing_key: String,
     #[serde(default = "default_janus_exchange")]
@@ -252,10 +251,6 @@ fn redis_default_url() -> url::Url {
 
 fn rabbitmq_default_url() -> String {
     "amqp://guest:guest@localhost:5672".to_owned()
-}
-
-fn default_to_janus_queue() -> String {
-    "janus-gateway".to_owned()
 }
 
 fn default_to_janus_routing_key() -> String {

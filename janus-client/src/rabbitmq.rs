@@ -5,7 +5,7 @@ use lapin::{
         QueueDeclareOptions,
     },
     types::FieldTable,
-    BasicProperties, Channel, Consumer, Queue,
+    BasicProperties, Channel, Queue,
 };
 
 /// Configuration for the Rabbit MQ connection the janus-client uses.
@@ -13,7 +13,6 @@ use lapin::{
 pub struct RabbitMqConfig {
     channel: Channel,
     to_janus_routing_key: String,
-    to_janus_queue: String,
     janus_exchange: String,
     from_janus_routing_key: String,
     tag: String,
@@ -25,12 +24,10 @@ pub struct RabbitMqConfig {
 #[derive(Debug)]
 pub struct RabbitMqConnection {
     to_janus_routing_key: String,
-    to_janus_queue: String,
     janus_exchange: String,
     from_janus_routing_key: String,
     incoming_queue: Queue,
     tag: String,
-    pub(crate) consumer: Consumer,
     channel: Channel,
 }
 
@@ -40,7 +37,6 @@ impl RabbitMqConfig {
     /// **Make sure that the Connection of this channel outlives the RabbitMqConfig and dependents.**
     pub fn new_from_channel(
         channel: Channel,
-        to_janus_queue: String,
         to_janus_routing_key: String,
         janus_exchange: String,
         from_janus_routing_key: String,
@@ -49,7 +45,6 @@ impl RabbitMqConfig {
         Self {
             channel,
             to_janus_routing_key,
-            to_janus_queue,
             janus_exchange,
             from_janus_routing_key,
             tag,
@@ -57,34 +52,28 @@ impl RabbitMqConfig {
     }
 
     /// Returns a [RabbitMqConnection] with already declared queues and setup [Consumer]
-    pub(crate) async fn setup(self) -> Result<RabbitMqConnection, error::Error> {
+    pub(crate) async fn setup(self) -> Result<(RabbitMqConnection, lapin::Consumer), error::Error> {
         log::debug!(
-            "Setup RabbitMQ Outgoing({},{}), Incoming({},{}",
+            "Setup RabbitMQ Outgoing({}), Incoming({},{})",
             self.to_janus_routing_key,
-            self.to_janus_queue,
             self.from_janus_routing_key,
             self.janus_exchange
         );
+
         let exclusive_queue_options = QueueDeclareOptions {
             exclusive: true,
             ..Default::default()
         };
+
         let from_janus = self
             .channel
             .queue_declare("", exclusive_queue_options, FieldTable::default())
-            .await?;
-        self.channel
-            .queue_declare(
-                &self.to_janus_queue,
-                QueueDeclareOptions::default(),
-                FieldTable::default(),
-            )
             .await?;
 
         self.channel
             .exchange_declare(
                 &self.janus_exchange,
-                lapin::ExchangeKind::Fanout,
+                lapin::ExchangeKind::Topic,
                 ExchangeDeclareOptions::default(),
                 FieldTable::default(),
             )
@@ -110,16 +99,18 @@ impl RabbitMqConfig {
             )
             .await?;
 
-        Ok(RabbitMqConnection {
-            to_janus_routing_key: self.to_janus_routing_key.clone(),
-            to_janus_queue: self.to_janus_queue.clone(),
-            janus_exchange: self.janus_exchange.clone(),
-            from_janus_routing_key: self.from_janus_routing_key.clone(),
-            incoming_queue: from_janus,
-            tag: self.tag.clone(),
+        Ok((
+            RabbitMqConnection {
+                to_janus_routing_key: self.to_janus_routing_key,
+                janus_exchange: self.janus_exchange,
+                from_janus_routing_key: self.from_janus_routing_key,
+                incoming_queue: from_janus,
+                tag: self.tag,
+
+                channel: self.channel,
+            },
             consumer,
-            channel: self.channel,
-        })
+        ))
     }
 }
 
@@ -130,16 +121,28 @@ impl RabbitMqConnection {
     // todo, can we use the same correlationId and TXId
     pub(crate) async fn send<T: Into<Vec<u8>>>(&self, msg: T) -> Result<String, error::Error> {
         let correlation_id = rand::random::<u64>().to_string();
+
         // routing_key is the queue we are targeting
         self.channel
             .basic_publish(
-                "",
-                &self.to_janus_queue,
+                &self.janus_exchange,
+                &self.to_janus_routing_key,
                 BasicPublishOptions::default(),
                 msg.into(),
                 BasicProperties::default().with_correlation_id(correlation_id.clone().into()),
             )
             .await?;
+
         Ok(correlation_id)
+    }
+
+    pub async fn destroy(&self) {
+        if let Err(e) = self
+            .channel
+            .basic_cancel(&self.tag, Default::default())
+            .await
+        {
+            log::error!("Failed to destroy consumer with tag {}, {}", self.tag, e);
+        }
     }
 }

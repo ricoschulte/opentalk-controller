@@ -61,6 +61,7 @@ test:cargo_test:
     RABBITMQ_DEFAULT_PASS: guest
     RABBITMQ_HOST: rabbitmq
     RABBITMQ_PORT: '5672'
+    JANUS_EXCHANGE_TYPE: topic
     # Used for integration tests
     DATABASE_URL: postgres://postgres:password123@postgres:5432/k3k
     AMQP_ADDR: amqp://guest:guest@rabbitmq:5672

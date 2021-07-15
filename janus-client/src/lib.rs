@@ -5,16 +5,18 @@
 //! Thus this creates needs to be run in a async/.await runtime. Currently we only support the tokio runtime.
 //!
 //! # Examples
-//! ```should_panic
+//!```should_panic
 //! # use janus_client::types::outgoing;
-//! # use janus_client::{JanusPlugin, Client, RabbitMqConfig};
-//! # use tokio::sync::broadcast;
+//! # use janus_client::{JanusPlugin, Client, RabbitMqConfig, ClientId};
+//! # use tokio::sync::{broadcast,mpsc};
+//! # use std::sync::Arc;
 //! # tokio_test::block_on(async {
 //! let (shutdown, _) = broadcast::channel(1);
+//! let (sink, _) = mpsc::channel(1);
 //! let connection = lapin::Connection::connect("amqp://janus-backend:5672", lapin::ConnectionProperties::default()).await.unwrap();
 //! let channel = connection.create_channel().await.unwrap();
-//! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway".into(), "to-janus".into(), "janus-exchange".into(), "from-janus".into(), "k3k-signaling".into());
-//! let (client, _) = Client::new(config, shutdown).await.unwrap();
+//! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway".into(), "to-janus".into(), "from-janus".into(), "k3k-signaling".into());
+//! let client = Client::new(config, ClientId(Arc::new(String::new())), sink, shutdown).await.unwrap();
 //! let session = client.create_session().await.unwrap();
 //! let echo_handle = session
 //!     .attach_to_plugin(JanusPlugin::Echotest)
@@ -36,15 +38,17 @@
 //! # use janus_client::{Client, Handle, JanusPlugin, RabbitMqConfig};
 //! # use janus_client::types::{TrickleCandidate, RoomId};
 //! # use janus_client::types::outgoing::{TrickleMessage, PluginBody, VideoRoomPluginJoin, VideoRoomPluginJoinSubscriber};
-//! # use tokio::sync::broadcast;
+//! # use tokio::sync::{broadcast, mpsc};
+//! # use janus_client::ClientId;
+//! # use std::sync::Arc;
 //! pub struct SubscriberClient(Handle);
 //! impl SubscriberClient {
 //!     /// Joins a Room
 //!     pub async fn join_room(&self, candidate: String ) {
-//!         let roomId = 2.into();
+//!         let room_id = 2.into();
 //!         let request =
 //!           VideoRoomPluginJoinSubscriber{
-//!             room: roomId,
+//!             room: room_id,
 //!             feed: 1.into(),
 //! #           audio: None, video:None, data: None, close_pc: None, private_id: None, offer_audio: None, offer_video: None, offer_data: None, spatial_layer: None, temporal_layer: None, substream: None, temporal: None
 //!           };
@@ -64,13 +68,13 @@
 //!     }
 //! }
 //! # fn main() {
-//! # tokio_test::block_on(async {
+//! tokio_test::block_on(async {
 //! let (shutdown, _) = broadcast::channel(1);
-//!
+//! let (sink, _) = mpsc::channel(1);
 //! let connection = lapin::Connection::connect("amqp://janus-backend:5672", lapin::ConnectionProperties::default()).await.unwrap();
 //! let channel = connection.create_channel().await.unwrap();
-//! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway".into(), "to-janus".into(), "janus-exchange".into(), "from-janus".into(), "k3k-signaling".into());
-//! let (client, _) = janus_client::Client::new(config, shutdown).await.unwrap();
+//! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway".into(), "to-janus".into(), "from-janus".into(), "k3k-signaling".into());
+//! let client = janus_client::Client::new(config, ClientId(Arc::new(String::new())), sink, shutdown).await.unwrap();
 //! let session = client.create_session().await.unwrap();
 //!
 //! let echo_handle = session
@@ -101,9 +105,8 @@ use crate::outgoing::TrickleMessage;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
-use tokio::time::{sleep, timeout};
+use tokio::time::sleep;
 
-mod async_types;
 mod client;
 pub mod error;
 pub mod rabbitmq;
@@ -112,6 +115,9 @@ pub mod types;
 pub use crate::rabbitmq::RabbitMqConfig;
 pub use crate::types::incoming::JanusMessage;
 pub use crate::types::*;
+
+#[derive(Debug, Clone)]
+pub struct ClientId(pub Arc<String>);
 
 /// Janus API Client
 #[derive(Debug, Clone)]
@@ -125,35 +131,36 @@ impl Client {
     /// Returns the client itself and a broadcast receiver for messages from Janus that are not a response
     pub async fn new(
         config: RabbitMqConfig,
+        id: ClientId,
+        sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
         shutdown: broadcast::Sender<()>,
-    ) -> Result<(Self, mpsc::Receiver<Arc<JanusMessage>>), error::Error> {
-        let (sn_sink, sn_recv) = mpsc::channel::<Arc<JanusMessage>>(10);
-        let mut inner_client = InnerClient::new(config, sn_sink.clone(), shutdown);
+    ) -> Result<Self, error::Error> {
+        let inner_client = InnerClient::new(config, id, sink, shutdown).await?;
 
-        inner_client.connect().await?;
         let client = Self {
             inner: Arc::new(inner_client),
         };
-        Ok((client, sn_recv))
+
+        Ok(client)
+    }
+
+    pub async fn destroy(&mut self) {
+        self.inner.destroy().await
     }
 
     /// Creates a Session
     ///
     /// Returns a [`Session`](Session) or [`Error`](error::Error) if something went wrong
     pub async fn create_session(&self) -> Result<Session, error::Error> {
-        let session_future = self.inner.request_create_session().await?;
-
-        let session_id = match timeout(Duration::from_secs(10), session_future).await {
-            Ok(Some(session_id)) => session_id,
-            Ok(None) => return Err(error::Error::FailedToCreateSession),
-            Err(_) => return Err(error::Error::Timeout),
-        };
+        let session_id = self.inner.create_session().await?;
 
         let session = Arc::new(InnerSession::new(Arc::downgrade(&self.inner), session_id));
+
         self.inner
             .sessions
             .lock()
             .insert(session_id, Arc::downgrade(&session));
+
         Ok(Session { inner: session })
     }
 }
@@ -190,10 +197,8 @@ impl Session {
     }
 
     /// Send Keep Alive
-    pub async fn keep_alive(&self) {
-        if let Err(e) = self.inner.keep_alive().await {
-            log::error!("Could not send keepalive: {}", e);
-        }
+    pub async fn keep_alive(&self) -> Result<(), error::Error> {
+        self.inner.keep_alive().await
     }
 
     /// Destroys the session.
@@ -202,7 +207,7 @@ impl Session {
     ///
     /// Assumes that all other occurrences of the same Session will be dropped.
     /// Waits for the strong reference count to reach zero and sends a Destroy request.
-    pub async fn destroy(&mut self) -> Result<(), error::Error> {
+    pub async fn destroy(&mut self, broken: bool) -> Result<(), error::Error> {
         let client = self
             .inner
             .client
@@ -223,7 +228,12 @@ impl Session {
             if strong_count == 1 {
                 let inner = Arc::get_mut(&mut self.inner).expect("already checked strong_count");
 
-                return inner.destroy(client).await;
+                if broken {
+                    inner.assume_destroyed();
+                    return Ok(());
+                } else {
+                    return inner.destroy(client).await;
+                }
             } else {
                 sleep(Duration::from_millis(100)).await;
             }
@@ -293,30 +303,28 @@ impl Handle {
             .inner
             .client
             .upgrade()
-            .expect("Failed Weak::upgrade. Expected the client reference to be still valid");
+            .ok_or(error::Error::NotConnected)?;
 
         let sessions = client.sessions.lock();
 
         if let Some(session) = sessions.get(&self.inner.session_id).and_then(Weak::upgrade) {
             session.handles.lock().remove(&self.inner.id);
+        } else {
+            // session no longer exists cannot detach anyway
+            return Ok(());
         }
 
         drop(sessions);
 
         loop {
-            let strong_count = Arc::strong_count(&self.inner);
-
-            log::debug!(
-                "Detaching Handle({}), waiting strong_count to reach 1 (is {})",
-                self.inner.id,
-                strong_count
-            );
-
-            if strong_count == 1 {
-                let inner = Arc::get_mut(&mut self.inner).expect("already checked strong_count");
-
+            if let Some(inner) = Arc::get_mut(&mut self.inner) {
                 return inner.detach(client).await;
             } else {
+                log::debug!(
+                    "Detaching Handle({}), waiting refcount to reach 1",
+                    self.inner.id,
+                );
+
                 sleep(Duration::from_millis(100)).await;
             }
         }

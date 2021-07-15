@@ -1,5 +1,5 @@
 use crate::api::signaling::mcu::{
-    JanusMcu, JanusPublisher, JanusSubscriber, MediaSessionKey, MediaSessionType, WebRtcEvent,
+    JanusPublisher, JanusSubscriber, McuPool, MediaSessionKey, MediaSessionType, WebRtcEvent,
 };
 use crate::api::signaling::ws_modules::media::MediaSessionState;
 use crate::api::signaling::ParticipantId;
@@ -35,7 +35,7 @@ impl MediaSessions {
     /// The created [JanusPublisher] is stored and a reference is returned.
     pub async fn create_publisher(
         &mut self,
-        mcu_client: &JanusMcu,
+        mcu_client: &McuPool,
         media_session_type: MediaSessionType,
     ) -> Result<&JanusPublisher> {
         ensure!(
@@ -44,7 +44,10 @@ impl MediaSessions {
         );
 
         let publisher = mcu_client
-            .new_publisher(self.sender.clone(), self.id, media_session_type, 0)
+            .new_publisher(
+                self.sender.clone(),
+                MediaSessionKey(self.id, media_session_type),
+            )
             .await?;
 
         self.publishers.insert(media_session_type, publisher);
@@ -65,7 +68,7 @@ impl MediaSessions {
     /// The created [JanusPublisher] is stored in this [MediaSessions] map, and a reference is returned.
     pub async fn create_subscriber(
         &mut self,
-        mcu_client: &JanusMcu,
+        mcu_client: &McuPool,
         participant: ParticipantId,
         media_session_type: MediaSessionType,
     ) -> Result<&JanusSubscriber> {
@@ -76,7 +79,10 @@ impl MediaSessions {
         );
 
         let subscriber = mcu_client
-            .new_subscriber(self.sender.clone(), participant, media_session_type)
+            .new_subscriber(
+                self.sender.clone(),
+                MediaSessionKey(participant, media_session_type),
+            )
             .await?;
 
         self.subscribers.insert(key, subscriber);
