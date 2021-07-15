@@ -12,6 +12,7 @@ use anyhow::{bail, Context, Result};
 use async_tungstenite::tungstenite::Message;
 use futures::stream::SelectAll;
 use futures::SinkExt;
+use lapin::message::DeliveryResult;
 use lapin::options::QueueDeclareOptions;
 use lapin::ExchangeKind;
 use redis::aio::ConnectionManager;
@@ -201,6 +202,7 @@ impl Builder {
             events: self.events,
             redis_conn: self.redis_conn,
             consumer,
+            consumer_delegated: false,
             rabbit_mq_channel: self.rabbitmq_channel,
             room_exchange,
             shutdown_sig,
@@ -242,6 +244,7 @@ pub struct Runner {
     // RabbitMQ queue consumer for this participant, will contain any events about room and
     // participant changes
     consumer: lapin::Consumer,
+    consumer_delegated: bool,
 
     // RabbitMQ channel to send events
     rabbit_mq_channel: lapin::Channel,
@@ -254,6 +257,18 @@ pub struct Runner {
 
     // When set to true the runner will gracefully exit on next loop
     exit: bool,
+}
+
+impl Drop for Runner {
+    fn drop(&mut self) {
+        // If the runner gets dropped without calling destroy it might have unacknowledged messages
+        // in its queue causing the channel to be closed by RabbitMQ.
+        //
+        // Avoid this by delegating all messages into extra tasks where they will be acknowledged
+        if !self.consumer_delegated {
+            self.delegate_consumer()
+        }
+    }
 }
 
 impl Runner {
@@ -281,8 +296,37 @@ impl Runner {
         }
     }
 
+    /// Delegate all messages of this consumer to leave no messages unacknowledged until it is properly destroyed
+    ///
+    /// After calling this function the runner will no longer receive rabbitmq messages
+    fn delegate_consumer(&mut self) {
+        let result = self.consumer.set_delegate(|delivery: DeliveryResult| {
+            Box::pin(async move {
+                match delivery {
+                    Ok(Some((_, delivery))) => {
+                        if let Err(e) = delivery.acker.nack(Default::default()).await {
+                            log::error!("Consumer delegate failed to acknowledge, {}", e);
+                        }
+                    }
+                    Ok(None) => {}
+                    Err(e) => {
+                        log::error!("Delegate received error, {}", e);
+                    }
+                }
+            })
+        });
+
+        if let Err(e) = result {
+            log::error!("Failed to delegate consumer, {}", e);
+        } else {
+            self.consumer_delegated = true;
+        }
+    }
+
     /// Destroys the runner and all associated resources
     pub async fn destroy(mut self) {
+        self.delegate_consumer();
+
         // Cancel subscription to not poison the rabbitmq channel with unacknowledged messages
         if let Err(e) = self
             .rabbit_mq_channel
