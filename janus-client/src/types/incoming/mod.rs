@@ -138,6 +138,9 @@ pub struct Detached {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SlowLink {
+    pub session_id: SessionId,
+    pub sender: HandleId,
+    pub media: String,
     pub uplink: bool,
     pub lost: u64,
 }

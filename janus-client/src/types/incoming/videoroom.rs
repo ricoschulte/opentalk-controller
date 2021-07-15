@@ -37,6 +37,8 @@ pub enum VideoRoomPluginData {
     Destroyed(VideoRoomPluginDataDestroyed),
     #[serde(rename = "attached")]
     Attached(VideoRoomPluginDataAttached),
+    #[serde(rename = "slow_link")]
+    SlowLink(VideoRoomPluginDataSlowLink),
 }
 
 /// A room
@@ -318,6 +320,17 @@ pub struct VideoRoomPluginDataAttached {
     display: Option<String>,
 }
 
+impl TryFrom<PluginData> for VideoRoomPluginDataSlowLink {
+    type Error = error::Error;
+
+    fn try_from(value: PluginData) -> Result<Self, Self::Error> {
+        match value {
+            PluginData::VideoRoom(VideoRoomPluginData::SlowLink(e)) => Ok(e),
+            _ => Err(error::Error::InvalidResponse),
+        }
+    }
+}
+
 impl TryFrom<PluginData> for VideoRoomPluginDataAttached {
     type Error = error::Error;
 
@@ -327,6 +340,11 @@ impl TryFrom<PluginData> for VideoRoomPluginDataAttached {
             _ => Err(error::Error::InvalidResponse),
         }
     }
+}
+#[derive(Debug, Clone, Deserialize)]
+pub struct VideoRoomPluginDataSlowLink {
+    #[serde(rename = "current-bitrate")]
+    current_bitrate: Option<u64>,
 }
 
 fn comma_separated<'de, V, T, D>(deserializer: D) -> Result<V, D::Error>
@@ -651,6 +669,44 @@ mod test {
                 );
             }
             _ => assert!(false, "Got no Destroyed Event"),
+        }
+    }
+
+    #[test]
+    fn parse_slow_link() {
+        // enum VideoRoomPluginDataEvent
+        let json = r#"{
+            "janus": "event",
+            "session_id": 8647349919335784,
+            "sender": 2928460009588638,
+            "plugindata": {
+               "plugin": "janus.plugin.videoroom",
+               "data": {
+                  "videoroom": "slow_link",
+                  "current-bitrate": 64000
+               }
+            }
+        }"#;
+        println!("{}", json);
+
+        let parsed_result: JanusMessage = serde_json::from_str(json).unwrap();
+        dbg!(&parsed_result);
+
+        match parsed_result {
+            JanusMessage::Event(Event {
+                session_id,
+                sender,
+                plugindata:
+                    PluginData::VideoRoom(VideoRoomPluginData::SlowLink(VideoRoomPluginDataSlowLink {
+                        current_bitrate,
+                    })),
+                ..
+            }) => {
+                assert_eq!(sender, HandleId::new(2928460009588638));
+                assert_eq!(session_id, SessionId::new(8647349919335784));
+                assert_eq!(current_bitrate, Some(64000));
+            }
+            _ => assert!(false, "Got no Videoroom SlowLink Event"),
         }
     }
 
