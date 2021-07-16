@@ -117,7 +117,11 @@ impl SignalingModule for Media {
                     )
                     .await
                 {
-                    log::error!("Failed to handle sdp offer, {:?}", e);
+                    log::error!(
+                        "Failed to handle sdp offer for {:?}, {:?}",
+                        targeted.target,
+                        e
+                    );
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process offer",
                     });
@@ -132,7 +136,7 @@ impl SignalingModule for Media {
                     )
                     .await
                 {
-                    log::error!("Failed to handle sdp answer, {:?}", e);
+                    log::error!("Failed to handle sdp answer {:?}, {:?}", targeted.target, e);
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process answer",
                     });
@@ -147,7 +151,11 @@ impl SignalingModule for Media {
                     )
                     .await
                 {
-                    log::error!("Failed to handle sdp candidate, {:?}", e);
+                    log::error!(
+                        "Failed to handle sdp candidate {:?}, {:?}",
+                        targeted.target,
+                        e
+                    );
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process candidate",
                     });
@@ -158,7 +166,11 @@ impl SignalingModule for Media {
                     .handle_sdp_end_of_candidates(target.target, target.media_session_type)
                     .await
                 {
-                    log::error!("Failed to handle sdp end-of-candidates, {:?}", e);
+                    log::error!(
+                        "Failed to handle sdp end-of-candidates {:?}, {:?}",
+                        target,
+                        e
+                    );
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process endOfCandidates",
                     });
@@ -169,7 +181,7 @@ impl SignalingModule for Media {
                     .handle_sdp_request_offer(&mut ctx, target.target, target.media_session_type)
                     .await
                 {
-                    log::error!("Failed to handle sdp request-offer, {:?}", e);
+                    log::error!("Failed to handle sdp request-offer {:?}, {:?}", target, e);
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process requestOffer",
                     });
@@ -251,7 +263,7 @@ impl SignalingModule for Media {
 
     async fn on_destroy(self, mut ctx: DestroyContext<'_>) {
         if let Err(e) = storage::del_state(ctx.redis_conn(), self.room, self.id).await {
-            log::warn!(
+            log::error!(
                 "Media module for {} failed to remove its data from redis, {}",
                 self.id,
                 e
@@ -337,25 +349,18 @@ impl Media {
     ) -> Result<()> {
         if target == self.id {
             // Get the publisher and create if it doesnt exists
-            let publisher = if let Some(publisher) = self.media.get_publisher(media_session_type) {
-                publisher
-            } else {
-                self.media
-                    .create_publisher(&self.mcu, media_session_type)
-                    .await?
-            };
+            let publisher = self
+                .media
+                .get_publisher(media_session_type)
+                .context("SDP Answer for nonexistent publisher received")?;
 
             // Send to offer and await the result
             publisher.send_message(Request::SdpAnswer(answer)).await?;
         } else {
-            let subscriber =
-                if let Some(subscriber) = self.media.get_subscriber(target, media_session_type) {
-                    subscriber
-                } else {
-                    self.media
-                        .create_subscriber(self.mcu.as_ref(), target, media_session_type)
-                        .await?
-                };
+            let subscriber = self
+                .media
+                .get_subscriber(target, media_session_type)
+                .context("SDP Answer for nonexisting subscriber received")?;
 
             subscriber.send_message(Request::SdpAnswer(answer)).await?;
         }
@@ -372,24 +377,17 @@ impl Media {
         let req = Request::Candidate(candidate);
 
         if target == self.id {
-            let publisher = if let Some(publisher) = self.media.get_publisher(media_session_type) {
-                publisher
-            } else {
-                self.media
-                    .create_publisher(&self.mcu, media_session_type)
-                    .await?
-            };
+            let publisher = self
+                .media
+                .get_publisher(media_session_type)
+                .context("SDP candidate for nonexistent publisher received")?;
 
             publisher.send_message(req).await?;
         } else {
-            let subscriber =
-                if let Some(subscriber) = self.media.get_subscriber(target, media_session_type) {
-                    subscriber
-                } else {
-                    self.media
-                        .create_subscriber(self.mcu.as_ref(), target, media_session_type)
-                        .await?
-                };
+            let subscriber = self
+                .media
+                .get_subscriber(target, media_session_type)
+                .context("SDP candidate for nonexisting subscriber received")?;
 
             subscriber.send_message(req).await?;
         }
@@ -403,24 +401,17 @@ impl Media {
         media_session_type: MediaSessionType,
     ) -> Result<()> {
         if target == self.id {
-            let publisher = if let Some(publisher) = self.media.get_publisher(media_session_type) {
-                publisher
-            } else {
-                self.media
-                    .create_publisher(&self.mcu, media_session_type)
-                    .await?
-            };
+            let publisher = self
+                .media
+                .get_publisher(media_session_type)
+                .context("SDP end-of-candidates for nonexistent publisher received")?;
 
             publisher.send_message(Request::EndOfCandidates).await?;
         } else {
-            let subscriber =
-                if let Some(subscriber) = self.media.get_subscriber(target, media_session_type) {
-                    subscriber
-                } else {
-                    self.media
-                        .create_subscriber(self.mcu.as_ref(), target, media_session_type)
-                        .await?
-                };
+            let subscriber = self
+                .media
+                .get_subscriber(target, media_session_type)
+                .context("SDP end-of-candidates for nonexisting subscriber received")?;
 
             subscriber.send_message(Request::EndOfCandidates).await?;
         }
