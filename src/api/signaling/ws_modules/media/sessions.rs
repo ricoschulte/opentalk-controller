@@ -117,18 +117,16 @@ impl MediaSessions {
     pub async fn remove_dangling_subscriber(
         &mut self,
         participant: ParticipantId,
-        lookup: &HashMap<MediaSessionType, MediaSessionState>,
+        new_media_state: &HashMap<MediaSessionType, MediaSessionState>,
     ) {
-        while let Some(key) = self
+        let to_remove = self
             .subscribers
             .keys()
-            .find(|key| key.0 == participant)
+            .filter(|key| key.0 == participant && !new_media_state.contains_key(&key.1))
             .copied()
-        {
-            if lookup.contains_key(&key.1) {
-                continue;
-            }
+            .collect::<Vec<MediaSessionKey>>();
 
+        for key in to_remove {
             // Safe unwrap since key was taken from hashmap
             let subscriber = self.subscribers.remove(&key).unwrap();
 
