@@ -158,7 +158,7 @@ pub fn setup_logging() -> Result<()> {
                 message
             ))
         })
-        .level(log::LevelFilter::Warn)
+        .level(log::LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()
         .context("Failed to setup logging utility")

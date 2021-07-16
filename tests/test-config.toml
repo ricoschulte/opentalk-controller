@@ -1,5 +1,5 @@
 [logging]
-level = "WARN"
+level = "INFO"
 
 [database]
 # Database server address
@@ -11,9 +11,14 @@ port = 5432
 # Database name
 name = "k3k"
 
-# Maximum number of connections allowed to the server
-# The servers default maximum is 100. Do not use all of it for one client.
-max_connections = 100
+# Maximum number of connections allowed to the server.
+# Defaults to 100 which is the default of postgres.
+# max_connections = 100
+
+# Minimum number of connections that are at least open.
+# If load increases the controller will open new connection, at most max_connections many.
+# Defaults to 10
+# min_idle_connections = 10
 
 # Database user
 user = "postgres"
@@ -24,6 +29,7 @@ password = "password123"
 [[room_server.connections]]
 # Connection settings for the channel used to talk to the room server.
 # Currently these should be equal to the settings in janus.transport.rabbitmq.jcfg
+to_janus_queue = "janus-gateway"
 to_janus_routing_key = "to-janus"
 janus_exchange = "janus-exchange"
 from_janus_routing_key = "from-janus"
@@ -43,3 +49,23 @@ client_id = "Controller"
 
 # OIDC Client secret (application requires confidential client)
 client_secret = "180a89c9-a802-4799-ab54-652777d88160"
+
+[room_server]
+# Maximum bitrate allowed for media sessions that will be used to transmit webcam video/audio
+# Example: 64kB/s
+max_video_bitrate = "64000"
+
+# Maximum bitrate allowed for media sessions used for screen share
+# Example: 1MB/s
+max_screen_bitrate = "8000000"
+
+[rabbit_mq]
+# The URL to use to connect to the rabbit mq broker
+# url = "amqp://guest:guest@172.18.0.2/%2F"
+
+[redis]
+# Redis URL used to connect the redis server
+# url = "redis://172.18.0.5:6379/"
+# use
+# # docker network inspect testing-environments_default
+# to find the IP address
