@@ -143,7 +143,7 @@ async fn run_service(settings: Settings) -> Result<()> {
                 .context("Could not create rabbit mq channel for signaling")?;
 
             application.add_http_module(
-                SignalingHttpModule::new(redis_conn, signaling_channel)
+                SignalingHttpModule::new(redis_conn.clone(), signaling_channel)
                     .with_module::<signaling::ce::Echo>(())
                     .with_module::<signaling::ce::Media>(Arc::downgrade(&mcu))
                     .with_module::<signaling::ce::Chat>(())
@@ -173,12 +173,15 @@ async fn run_service(settings: Settings) -> Result<()> {
                 // Unwraps cannot panic. Server gets stopped before dropping the Arc.
                 let db_ctx = Data::from(db_ctx.upgrade().unwrap());
                 let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
+                let redis_ctx = Data::new(redis_conn.clone());
+
                 let application = application_weak.upgrade().unwrap();
 
                 App::new()
                     .wrap(cors)
                     .app_data(db_ctx.clone())
                     .app_data(oidc_ctx.clone())
+                    .app_data(redis_ctx)
                     .app_data(turn_servers.clone())
                     .app_data(Data::new(shutdown.clone()))
                     .app_data(rabbitmq_channel.clone())

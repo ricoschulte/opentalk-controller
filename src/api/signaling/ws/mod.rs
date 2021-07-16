@@ -1,4 +1,5 @@
 use crate::api::signaling::ParticipantId;
+use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::DbInterface;
 use adapter::ActixTungsteniteAdapter;
@@ -15,7 +16,6 @@ use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio_stream::Stream;
-use uuid::Uuid;
 
 mod adapter;
 mod echo;
@@ -74,7 +74,7 @@ where
     M: SignalingModule,
 {
     id: ParticipantId,
-    room: Uuid,
+    room: &'ctx Room,
     user: &'ctx User,
     db: &'ctx Arc<DbInterface>,
     rabbitmq_exchanges: &'ctx mut Vec<RabbitMqExchange>,
@@ -105,8 +105,8 @@ where
         self.id
     }
 
-    /// ID of the room the participant is inside
-    pub fn room_id(&self) -> Uuid {
+    /// Room the participant is inside
+    pub fn room(&self) -> &Room {
         self.room
     }
 

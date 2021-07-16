@@ -1,5 +1,6 @@
 //! Auth related API structs and Endpoints
 use super::{ApiError, INVALID_ID_TOKEN};
+use crate::api::v1::WwwAuthHeader;
 use crate::db;
 use crate::db::users::ModifiedUser;
 use crate::db::DbInterface;
@@ -42,7 +43,10 @@ pub async fn login(
     match oidc_ctx.verify_id_token(&id_token).await {
         Err(e) => {
             log::warn!("Got invalid ID Token {}", e);
-            Err(ApiError::Auth(INVALID_ID_TOKEN, e.to_string()))
+            Err(ApiError::Auth(
+                WwwAuthHeader::new_bearer_invalid_token(INVALID_ID_TOKEN),
+                e.to_string(),
+            ))
         }
         Ok(info) => {
             let user_uuid = match uuid::Uuid::from_str(&info.sub) {
@@ -50,7 +54,7 @@ pub async fn login(
                 Err(_) => {
                     log::error!("Unable to parse UUID from id token sub '{}'", &info.sub);
                     return Err(ApiError::Auth(
-                        INVALID_ID_TOKEN,
+                        WwwAuthHeader::new_bearer_invalid_token(INVALID_ID_TOKEN),
                         "Unable to parse UUID from id token".to_string(),
                     ));
                 }

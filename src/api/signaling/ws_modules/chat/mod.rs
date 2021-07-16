@@ -73,7 +73,7 @@ impl SignalingModule for Chat {
         _protocol: &'static str,
     ) -> Result<Self> {
         let id = ctx.participant_id();
-        let room = ctx.room_id();
+        let room = ctx.room().uuid;
         Ok(Self { id, room })
     }
 

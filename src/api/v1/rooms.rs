@@ -6,9 +6,12 @@ use crate::api::v1::ApiError;
 use crate::db::rooms as db_rooms;
 use crate::db::users::User;
 use crate::db::DbInterface;
-use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json, Path, ReqData};
-use actix_web::{get, post, put, web, HttpRequest, HttpResponse};
+use actix_web::{get, post, put, web};
+use displaydoc::Display;
+use rand::Rng;
+use redis::aio::ConnectionManager;
+use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
@@ -238,15 +241,107 @@ pub async fn get(
     Ok(Json(room_details))
 }
 
-/// API Endpoint *GET /rooms/{room_uuid}/start*
+/// The JSON body expected when making a *POST /rooms/{room_uuid}/start*
+#[derive(Debug, Deserialize)]
+pub struct StartRequest {
+    password: Option<String>,
+}
+
+#[derive(Display, Validate, Debug, Clone, Serialize)]
+/// k3k-signaling:ticket={ticket}
+#[ignore_extra_doc_attributes]
+/// The ticket for a room used at /signaling to start a WebSocket connection.
 ///
-/// TODO: Implement redirection
-#[get("/rooms/{room_uuid}/start")]
+/// The Display implementation represents the redis key for the underlying [`TicketData`]
+pub struct Ticket {
+    #[validate(length(min = 64, max = 64))]
+    pub ticket: String,
+}
+
+impl_to_redis_args!(&Ticket);
+
+/// Data stored behind the [`Ticket`] key.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TicketData {
+    pub user: Uuid,
+    pub room: Uuid,
+}
+
+impl_from_redis_value_de!(TicketData);
+impl_to_redis_args_se!(&TicketData);
+
+/// API Endpoint *POST /rooms/{room_uuid}/start*
+///
+/// This endpoint has to be called in order to get a [`Ticket`]. When joining a room, the ticket
+/// must be provided as a `Sec-WebSocket-Protocol` header field when starting the WebSocket
+/// connection.
+///
+/// When the requested room has a password set, the requester has to provide the correct password
+/// through the [`StartRequest`] JSON in the requests body. When the room has no password set,
+/// the provided password will be ignored.
+///
+/// Returns a [`Ticket`] for the specified room.
+///
+/// # Errors
+///
+/// Returns [`ApiError::NotFound`] when the requested room could not be found.
+/// Returns [`ApiError::InsufficientPermission`] when the provided password is wrong.
+#[post("/rooms/{room_uuid}/start")]
 pub async fn start(
-    _db_ctx: Data<DbInterface>,
-    _oidc_ctx: Data<OidcContext>,
-    _request: HttpRequest,
-    _room_id: Path<Uuid>,
-) -> Result<HttpResponse, ApiError> {
-    Ok(HttpResponse::NotImplemented().finish())
+    db_ctx: Data<DbInterface>,
+    redis_ctx: Data<ConnectionManager>,
+    current_user: ReqData<User>,
+    room_uuid: Path<Uuid>,
+    request: Json<StartRequest>,
+) -> Result<Json<Ticket>, ApiError> {
+    let room_uuid = room_uuid.into_inner();
+
+    let room = web::block(move || -> Result<db_rooms::Room, ApiError> {
+        let room = db_ctx
+            .get_room_by_uuid(&room_uuid)?
+            .ok_or(ApiError::NotFound)?;
+
+        Ok(room)
+    })
+    .await
+    .map_err(|e| {
+        log::error!("BlockingError on GET /rooms/{{room_uuid}}/start - {}", e);
+        ApiError::Internal
+    })??;
+
+    if !room.password.is_empty() {
+        if let Some(pw) = &request.password {
+            if pw != &room.password {
+                return Err(ApiError::InsufficientPermission);
+            }
+        } else {
+            return Err(ApiError::InsufficientPermission);
+        }
+    }
+    let ticket = rand::thread_rng()
+        .sample_iter(rand::distributions::Alphanumeric)
+        .take(64)
+        .map(char::from)
+        .collect::<String>();
+
+    let ticket = Ticket { ticket };
+
+    let ticket_data = TicketData {
+        user: current_user.oidc_uuid,
+        room: room_uuid,
+    };
+
+    let mut redis_conn = (**redis_ctx).clone();
+
+    // TODO: make the expiration configurable through settings
+    // let the ticket expire in 30 seconds
+    redis_conn
+        .set_ex(&ticket, &ticket_data, 30)
+        .await
+        .map_err(|e| {
+            log::error!("Unable to store ticket in redis, {}", e);
+            ApiError::Internal
+        })?;
+
+    Ok(Json(ticket))
 }

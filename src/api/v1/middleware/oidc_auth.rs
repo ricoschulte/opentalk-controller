@@ -1,5 +1,7 @@
 //! Handles user Authentication in API requests
-use crate::api::v1::{ApiError, ACCESS_TOKEN_INACTIVE, INVALID_ACCESS_TOKEN, SESSION_EXPIRED};
+use crate::api::v1::{
+    ApiError, WwwAuthHeader, ACCESS_TOKEN_INACTIVE, INVALID_ACCESS_TOKEN, SESSION_EXPIRED,
+};
 use crate::db::users::User;
 use crate::db::DbInterface;
 use crate::oidc::OidcContext;
@@ -81,7 +83,7 @@ where
             Err(e) => {
                 log::warn!("Unable to parse access token, {}", e);
                 let error = ApiError::Auth(
-                    INVALID_ACCESS_TOKEN,
+                    WwwAuthHeader::new_bearer_invalid_token(INVALID_ACCESS_TOKEN),
                     "Unable to parse access token".to_string(),
                 );
                 let response = req.into_response(error.error_response());
@@ -108,14 +110,17 @@ pub async fn check_access_token(
     let uuid = match oidc_ctx.verify_access_token(&access_token) {
         Err(e) => {
             log::error!("Invalid access token, {}", e);
-            return Err(ApiError::Auth(INVALID_ACCESS_TOKEN, e.to_string()));
+            return Err(ApiError::Auth(
+                WwwAuthHeader::new_bearer_invalid_token(INVALID_ACCESS_TOKEN),
+                e.to_string(),
+            ));
         }
         Ok(sub) => match Uuid::from_str(&sub) {
             Ok(uuid) => uuid,
             Err(e) => {
                 log::error!("Unable to parse UUID from sub '{}', {}", &sub, e);
                 return Err(ApiError::Auth(
-                    INVALID_ACCESS_TOKEN,
+                    WwwAuthHeader::new_bearer_invalid_token(INVALID_ACCESS_TOKEN),
                     "Unable to parse UUID from access token".to_string(),
                 ));
             }
@@ -138,7 +143,7 @@ pub async fn check_access_token(
     // check if the id token is expired
     if chrono::Utc::now().timestamp() > current_user.id_token_exp {
         return Err(ApiError::Auth(
-            SESSION_EXPIRED,
+            WwwAuthHeader::new_bearer_invalid_token(SESSION_EXPIRED),
             "The session for this user has expired".to_string(),
         ));
     }
@@ -155,7 +160,7 @@ pub async fn check_access_token(
         Ok(current_user)
     } else {
         Err(ApiError::Auth(
-            ACCESS_TOKEN_INACTIVE,
+            WwwAuthHeader::new_bearer_invalid_token(ACCESS_TOKEN_INACTIVE),
             "The provided access token is inactive".to_string(),
         ))
     }

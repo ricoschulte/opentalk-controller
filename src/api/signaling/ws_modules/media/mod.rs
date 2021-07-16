@@ -65,7 +65,7 @@ impl SignalingModule for Media {
         let state = HashMap::new();
 
         let id = ctx.participant_id();
-        let room = ctx.room_id();
+        let room = ctx.room().uuid;
 
         storage::set_state(ctx.redis_conn(), room, id, &state).await?;
 

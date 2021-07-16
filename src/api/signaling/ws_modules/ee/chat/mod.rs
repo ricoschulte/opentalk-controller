@@ -76,14 +76,14 @@ impl SignalingModule for Chat {
 
             ctx.add_rabbitmq_binding(
                 group_routing_key(&group.id),
-                rabbitmq::room_exchange_name(ctx.room_id()),
+                rabbitmq::room_exchange_name(ctx.room().uuid),
                 Default::default(),
             );
         }
 
         Ok(Self {
             id: ctx.participant_id(),
-            room: ctx.room_id(),
+            room: ctx.room().uuid,
             groups,
         })
     }
