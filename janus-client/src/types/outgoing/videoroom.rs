@@ -6,7 +6,8 @@ use crate::{
     types::{is_default, AudioCodec, RoomId, VideoCodec},
     FeedId, PluginRequest,
 };
-use serde::{self, Serialize};
+use serde::{self, Serialize, Serializer};
+use std::fmt::Write;
 use std::path::PathBuf;
 
 /// Plugin request body for the videoroom plugin
@@ -218,13 +219,13 @@ impl From<VideoRoomPluginConfigureSubscriber> for PluginBody {
 #[derive(Debug, Clone, Serialize)]
 #[serde(untagged)]
 pub enum VideoRoomPluginConfigure {
-    // videoroom.htm for subscribingl#vroompub
+    // videoroom.htm for subscribing#vroompub
     Publisher(VideoRoomPluginConfigurePublisher),
     // videoroom.html#vroomsub
     Subscriber(VideoRoomPluginConfigureSubscriber),
 }
 
-/// Create call
+/// Create a new room witht he given room settings.
 ///
 /// See [Janus Videoroom Plugin Docs](https://janus.conf.meetecho.com/docs/videoroom.html#sfuapi) for more information
 // todo add and document remaining fields
@@ -254,6 +255,44 @@ pub struct VideoRoomPluginCreate {
     /// whether the above cap should act as a limit to dynamic bitrate changes by publishers, default=false
     #[serde(skip_serializing_if = "Option::is_none")]
     pub bitrate_cap: Option<bool>,
+    /// send a FIR to publishers every fir_freq seconds
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fir_req: Option<u64>,
+    /// Enable the transport wide CC RTP extension must be used for this room
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transport_wide_cc_ext: Option<bool>,
+    /// audio codec(s) to force on publishers, default to opus if not set
+    /// can be a comma separated list in order of preference, e.g., opus,pcmu
+    #[serde(serialize_with = "comma_seperated")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub audiocodec: Vec<AudioCodec>,
+    /// video codec(s) to force on publishers, default=vp8
+    /// can be a comma separated list in order of preference, e.g., vp9,vp8,h264
+    #[serde(serialize_with = "comma_seperated")]
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub videocodec: Vec<VideoCodec>,
+    /// VP9-specific profile to prefer (e.g., "2" for "profile-id=2")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vp9_profile: Option<String>,
+    /// H.264-specific profile to prefer (e.g., "42e01f" for "profile-level-id=42e01f")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub h264_profile: Option<String>,
+    /// whether inband FEC must be negotiated; only works for Opus, default to false if not set
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub opus_fec: Option<bool>,
+    /// whether SVC support must be enabled; only works for VP9, default to false if not set
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_svc: Option<bool>,
+    /// whether the ssrc-audio-level RTP extension must
+    /// be negotiated/used or not for new publishers, default is true if not set
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audiolevel_ext: Option<bool>,
+    /// whether to emit event to other users or not, default is false if not set
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audiolevel_event: Option<bool>,
+    /// number of packets with audio level, default is 100, 2 seconds if not set
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_active_packets: Option<i64>,
 }
 
 impl PluginRequest for VideoRoomPluginCreate {
@@ -416,12 +455,32 @@ impl From<VideoRoomPluginStart> for PluginBody {
     }
 }
 
+fn comma_seperated<S, T>(items: &[T], serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+    T: std::fmt::Display,
+{
+    let mut iter = items.iter();
+
+    if let Some(first) = iter.next() {
+        let mut string = first.to_string();
+
+        for el in iter {
+            let _ = write!(string, ",{}", el);
+        }
+
+        serializer.serialize_str(&string)
+    } else {
+        serializer.serialize_none()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::{
         outgoing::{JanusRequest, PluginBody, PluginMessage},
-        HandleId, Jsep, JsepType, SessionId, TransactionId,
+        HandleId, Jsep, JsepType, SessionId, TransactionId, VideoCodec,
     };
     use pretty_assertions::assert_eq;
 
@@ -452,6 +511,7 @@ mod tests {
                 description: "TestRoom|StreamType".into(),
                 publishers: Some(1),
                 videoorient_ext: Some(false),
+                videocodec: vec![],
                 ..Default::default()
             })),
             jsep: None,
@@ -677,6 +737,45 @@ mod tests {
                 trickle: None,
             }),
         });
+        assert_eq!(reference, serde_json::to_string(&our).unwrap());
+    }
+
+    #[test]
+    fn test_full_room_config() {
+        let reference = r#"{
+            "janus":"message",
+            "handle_id":234,
+            "session_id":123,
+            "transaction":"k3k-rulez",
+            "body":{
+                "request":"create",
+                "description":"TestRoom|StreamType",
+                "publishers":1,
+                "videoorient_ext":false,
+                "audiocodec":"g722",
+                "videocodec":"av1,vp8"
+
+            }
+        }"#;
+        let reference = reference
+            .lines()
+            .map(|s| s.trim_start())
+            .collect::<String>();
+        let our = JanusRequest::PluginMessage(PluginMessage {
+            transaction: TransactionId::new("k3k-rulez".into()),
+            session_id: SessionId::new(123),
+            handle_id: HandleId::new(234),
+            body: PluginBody::VideoRoom(VideoRoomPluginBody::Create(VideoRoomPluginCreate {
+                description: "TestRoom|StreamType".into(),
+                publishers: Some(1),
+                videoorient_ext: Some(false),
+                videocodec: vec![VideoCodec::Av1, VideoCodec::Vp8],
+                audiocodec: vec![AudioCodec::G722],
+                ..Default::default()
+            })),
+            jsep: None,
+        });
+        // print!("{}", serde_json::to_string_pretty(&our).unwrap());
         assert_eq!(reference, serde_json::to_string(&our).unwrap());
     }
 }

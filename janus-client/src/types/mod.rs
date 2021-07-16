@@ -1,5 +1,6 @@
 use crate::error;
 use serde::{self, Deserialize, Serialize};
+use std::fmt;
 use std::{convert::TryFrom, str::FromStr};
 
 pub mod incoming;
@@ -36,6 +37,21 @@ pub enum AudioCodec {
     #[serde(rename = "g722")]
     G722,
 }
+
+impl fmt::Display for AudioCodec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            AudioCodec::Opus => f.write_str("opus"),
+            AudioCodec::MultiOpus => f.write_str("multiopus"),
+            AudioCodec::Isac32 => f.write_str("isac32"),
+            AudioCodec::Isac16 => f.write_str("isac16"),
+            AudioCodec::Pcmu => f.write_str("pcmu"),
+            AudioCodec::Pcma => f.write_str("pcma"),
+            AudioCodec::G722 => f.write_str("g722"),
+        }
+    }
+}
+
 impl FromStr for AudioCodec {
     type Err = crate::error::Error;
     fn from_str(value: &str) -> Result<Self, crate::error::Error> {
@@ -65,6 +81,18 @@ pub enum VideoCodec {
     Av1,
     #[serde(rename = "h265")]
     H265,
+}
+
+impl fmt::Display for VideoCodec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            VideoCodec::Vp8 => f.write_str("vp8"),
+            VideoCodec::Vp9 => f.write_str("vp9"),
+            VideoCodec::H264 => f.write_str("h264"),
+            VideoCodec::Av1 => f.write_str("av1"),
+            VideoCodec::H265 => f.write_str("h265"),
+        }
+    }
 }
 
 impl FromStr for VideoCodec {
