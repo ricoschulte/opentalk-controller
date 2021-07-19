@@ -31,6 +31,7 @@ pub(crate) mod videoroom;
 /// Ingoing and Outgoing JSON strictly typed API
 #[derive(Debug, Serialize)]
 #[serde(tag = "janus")]
+#[allow(clippy::large_enum_variant)]
 pub(crate) enum JanusRequest {
     /// Keepalive
     #[serde(rename = "keepalive")]
@@ -40,6 +41,9 @@ pub(crate) enum JanusRequest {
     #[serde(rename = "attach")]
     AttachToPlugin(AttachToPlugin),
     #[serde(rename = "message")]
+    // This variant is more than 200 bytes larger than the other variants. Clippy suggests to box this variant.
+    // As this variant is used most of the time, this most likely results in a lot of heap allocations.
+    // Having the size deviation here is the better choice.
     PluginMessage(PluginMessage),
     /// Trickle request
     #[serde(rename = "trickle")]
