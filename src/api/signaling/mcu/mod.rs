@@ -297,7 +297,12 @@ impl McuPool {
         let publisher_info_json: String = redis
             .hget(PUBLISHER_INFO, media_session_key.to_string())
             .await
-            .context("Failed to get mcu id for media session key")?;
+            .with_context(|| {
+                format!(
+                    "Failed to get mcu id for media session key {}",
+                    media_session_key
+                )
+            })?;
 
         let info: PublisherInfo = serde_json::from_str(&publisher_info_json)
             .context("Failed to deserialize publisher info")?;
