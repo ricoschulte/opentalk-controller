@@ -10,7 +10,7 @@ edition = "2018"
 [dependencies]
 percent-encoding = "2.1"
 thiserror = "1"
-reqwest = { version = "0.11", features = ["json", "cookies"] }
+reqwest = { version = "0.11", default-features = false, features = ["json", "cookies", "rustls-tls"] }
 html-escape = "0.2"
 openidconnect = "2.0"
 anyhow = "1.0"

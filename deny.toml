@@ -189,9 +189,11 @@ skip = [
     { name = "time", version = "=0.1.43" },
     { name = "uuid", version = "=0.6.5" },
     { name = "wasi", version = "=0.9.0" },
-    { name = "cookie", version = "=0.15.0" },
-    { name = "cookie", version = "=0.15.0" },
-    { name = "ansi_term", version = "=0.11.0" }
+    { name = "cookie", version = "=0.15.1" },
+    { name = "ansi_term", version = "=0.11.0" },
+    { name = "rustc_version", version = "=0.3.3" },
+    { name = "semver", version = "=0.11.0" },
+    { name = "semver-parser", version = "=0.10.2" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive
