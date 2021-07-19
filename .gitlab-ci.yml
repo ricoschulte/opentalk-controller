@@ -11,12 +11,6 @@ variables:
   # Enable one network per build for the test container and services
   FF_NETWORK_PER_BUILD: 'true'
 
-cache:
-  key: $CI_JOB_STAGE
-  paths:
-    - .cargo/
-    - target/
-
 lint:fmt:
   stage: lint
   before_script:
