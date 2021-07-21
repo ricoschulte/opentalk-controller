@@ -1,5 +1,5 @@
 //! TURN related API structs and Endpoints
-use super::ApiError;
+use super::DefaultApiError;
 use super::NoContent;
 use crate::db::users::User;
 use crate::settings;
@@ -32,7 +32,7 @@ pub struct Turn {
 pub async fn get(
     turn_servers: Data<Option<settings::Turn>>,
     current_user: ReqData<User>,
-) -> Result<Either<Json<Vec<Turn>>, NoContent>, ApiError> {
+) -> Result<Either<Json<Vec<Turn>>, NoContent>, DefaultApiError> {
     log::trace!(
         "Generating new turn credentials for user {} and servers {:?}",
         current_user.oidc_uuid,
@@ -85,7 +85,7 @@ fn rr_servers<T: Rng + CryptoRng>(
     rng: &mut T,
     servers: &[TurnServer],
     expires: i64,
-) -> Result<Vec<Turn>, ApiError> {
+) -> Result<Vec<Turn>, DefaultApiError> {
     // Create a list of TURN responses for each configured TURN server.
     match servers.len() {
         0 => Ok(vec![]),
@@ -94,7 +94,7 @@ fn rr_servers<T: Rng + CryptoRng>(
             Ok(turn) => Ok(vec![turn]),
             Err(e) => {
                 log::error!("TURN credential error: {}", e);
-                Err(ApiError::Internal)
+                Err(DefaultApiError::Internal)
             }
         },
         // When we have two configured TURN servers, draw a random one and return the credentials for this drawn one.
@@ -110,7 +110,7 @@ fn rr_servers<T: Rng + CryptoRng>(
                 Ok(turn) => Ok(vec![turn]),
                 Err(e) => {
                     log::error!("TURN credential error: {}", e);
-                    Err(ApiError::Internal)
+                    Err(DefaultApiError::Internal)
                 }
             }
         }
@@ -123,11 +123,11 @@ fn rr_servers<T: Rng + CryptoRng>(
                     Ok(turn) => Ok(turn),
                     Err(e) => {
                         log::error!("TURN credential error: {}", e);
-                        Err(ApiError::Internal)
+                        Err(DefaultApiError::Internal)
                     }
                 }
             })
-            .collect::<Result<Vec<_>, ApiError>>(),
+            .collect::<Result<Vec<_>, DefaultApiError>>(),
     }
 }
 

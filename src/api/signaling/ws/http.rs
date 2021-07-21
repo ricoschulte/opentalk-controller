@@ -4,7 +4,7 @@ use super::runner::Runner;
 use super::ParticipantId;
 use super::SignalingModule;
 use crate::api::v1::rooms::{Ticket, TicketData};
-use crate::api::v1::{ApiError, WwwAuthHeader};
+use crate::api::v1::DefaultApiError;
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::DbInterface;
@@ -110,7 +110,6 @@ async fn ws_service(
         .get(header::SEC_WEBSOCKET_PROTOCOL)
         .and_then(|v| v.to_str().ok())
     {
-        log::debug!("got sec_websocet header: {}", &value);
         let values = value.split(',').map(str::trim);
 
         for value in values {
@@ -132,7 +131,7 @@ async fn ws_service(
         Some(protocol) => protocol,
         None => {
             log::debug!("Rejecting websocket request, missing valid protocol");
-            return Err(ApiError::BadRequest("Missing protocol".into()).into());
+            return Err(DefaultApiError::BadRequest("Missing protocol".into()).into());
         }
     };
 
@@ -151,8 +150,8 @@ async fn ws_service(
         },
         None => {
             log::debug!("Rejecting websocket request, missing ticket");
-            return Err(ApiError::Auth(
-                WwwAuthHeader::new_bearer_invalid_request("missing ticket"),
+            return Err(DefaultApiError::auth_bearer_invalid_request(
+                "missing ticket",
                 "Please request a ticket from /v1/rooms/<room_uuid>/start".into(),
             )
             .into());
@@ -166,37 +165,37 @@ async fn ws_service(
         .await
         .map_err(|e| {
             log::warn!("Unable to get ticket data in redis: {}", e);
-            ApiError::Internal
+            DefaultApiError::Internal
         })?;
 
     let ticket_data = ticket_data.ok_or_else(|| {
-        ApiError::Auth(
-            WwwAuthHeader::new_bearer_invalid_token("ticket invalid or expired"),
+        DefaultApiError::auth_bearer_invalid_token(
+            "ticket invalid or expired",
             "Please request a new ticket from /v1/rooms/<room_uuid>/start".into(),
         )
     })?;
 
     let cloned_db_ctx = db_ctx.clone();
 
-    let (user, room) = web::block(move || -> Result<(User, Room), ApiError> {
+    let (user, room) = web::block(move || -> Result<(User, Room), DefaultApiError> {
         let user = cloned_db_ctx
             .get_user_by_uuid(&ticket_data.user)
-            .map_err(ApiError::from)?;
+            .map_err(DefaultApiError::from)?;
 
-        let user = user.ok_or(ApiError::Internal)?;
+        let user = user.ok_or(DefaultApiError::Internal)?;
 
         let room = cloned_db_ctx
             .get_room_by_uuid(&ticket_data.room)
-            .map_err(ApiError::from)?;
+            .map_err(DefaultApiError::from)?;
 
-        let room = room.ok_or(ApiError::NotFound)?;
+        let room = room.ok_or(DefaultApiError::NotFound)?;
 
         Ok((user, room))
     })
     .await
     .map_err(|e| {
         log::error!("BlockingError on ws_service - {}", e);
-        ApiError::Internal
+        DefaultApiError::Internal
     })??;
 
     let mut response = ws::handshake(&req)?;
@@ -221,7 +220,7 @@ async fn ws_service(
         if let Err(e) = module.build(&mut builder).await {
             log::error!("Failed to initialize module, {:?}", e);
             builder.abort().await;
-            return HttpResponse::InternalServerError().await;
+            return Ok(HttpResponse::InternalServerError().finish());
         }
     }
 
@@ -230,7 +229,7 @@ async fn ws_service(
         Ok(runner) => runner,
         Err(e) => {
             log::error!("Failed to initialize runner, {}", e);
-            return HttpResponse::InternalServerError().await;
+            return Ok(HttpResponse::InternalServerError().finish());
         }
     };
 

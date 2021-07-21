@@ -2,10 +2,11 @@
 use crate::db::DatabaseError;
 use actix_web::body::Body;
 use actix_web::http::{header, HeaderValue, StatusCode};
-use actix_web::web::BytesMut;
 use actix_web::{HttpResponse, Responder, ResponseError};
-use std::convert::TryFrom;
-use std::fmt::{Display, Formatter, Write};
+use actix_web_httpauth::headers::www_authenticate::bearer::{Bearer, Error};
+use actix_web_httpauth::headers::www_authenticate::Challenge;
+use serde::Serialize;
+use std::fmt;
 
 pub mod auth;
 pub mod middleware;
@@ -19,12 +20,21 @@ static INVALID_ACCESS_TOKEN: &str = "invalid access token";
 static ACCESS_TOKEN_INACTIVE: &str = "access token inactive";
 static SESSION_EXPIRED: &str = "session expired";
 
+/// The default ApiError
+pub type DefaultApiError = ApiError<StandardErrorKind>;
+
 /// Error type of all frontend REST-endpoints
 #[derive(Debug, thiserror::Error, PartialEq)]
-pub enum ApiError {
-    /// Contains WWW-Authenticate header (0) & html body (1) for an appropriate 401 response
+pub enum ApiError<E = StandardErrorKind>
+where
+    E: fmt::Debug + Serialize,
+{
+    /// Contains a bearer WWW-Authenticate header (0) & html body (1) for an 401 response
     #[error("Authentication error: {1}")]
-    Auth(WwwAuthHeader, String),
+    Auth(Bearer, String),
+    /// A 401 response without the WWW-Authenticate header, contains a serializable json body
+    #[error("{0}")]
+    AuthJson(ErrorBody<E>),
     #[error("The requesting user has insufficient permissions")]
     InsufficientPermission,
     #[error("The requested resource could not be found")]
@@ -37,150 +47,178 @@ pub enum ApiError {
     Internal,
 }
 
-impl ResponseError for ApiError {
+/// The standard error type for the [`ApiError`]
+#[derive(Debug, Serialize)]
+pub enum StandardErrorKind {}
+
+/// Used by [`ApiError`] variants that contain a JSON body.
+///
+/// Uses the Display implementation to serialize.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct ErrorBody<E> {
+    error: E,
+}
+
+impl<E> From<E> for ErrorBody<E>
+where
+    E: fmt::Debug + Serialize,
+{
+    fn from(error: E) -> Self {
+        Self { error }
+    }
+}
+
+impl<E> fmt::Display for ErrorBody<E>
+where
+    E: fmt::Debug + Serialize,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            serde_json::to_string(self).map_err(|_| fmt::Error)?
+        )
+    }
+}
+
+impl<E> ResponseError for ApiError<E>
+where
+    E: fmt::Debug + Serialize,
+{
     fn status_code(&self) -> StatusCode {
         match self {
-            ApiError::Auth(_, _) => StatusCode::UNAUTHORIZED,
+            Self::Auth(_, _) => StatusCode::UNAUTHORIZED,
 
-            ApiError::InsufficientPermission => StatusCode::FORBIDDEN,
+            Self::AuthJson(_) => StatusCode::UNAUTHORIZED,
 
-            ApiError::NotFound => StatusCode::NOT_FOUND,
+            Self::InsufficientPermission => StatusCode::FORBIDDEN,
 
-            ApiError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            Self::NotFound => StatusCode::NOT_FOUND,
 
-            ApiError::ValidationFailed => StatusCode::BAD_REQUEST,
+            Self::BadRequest(_) => StatusCode::BAD_REQUEST,
 
-            ApiError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+            Self::ValidationFailed => StatusCode::BAD_REQUEST,
+
+            Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
     fn error_response(&self) -> HttpResponse<Body> {
-        let mut resp = HttpResponse::new(self.status_code());
+        let mut response = HttpResponse::new(self.status_code());
 
-        if let Self::Auth(header, _) = self {
-            resp.headers_mut()
-                .insert(header::WWW_AUTHENTICATE, header.as_header_value());
-        }
+        match self {
+            Self::Auth(bearer, _) => {
+                let header_value = match HeaderValue::from_maybe_shared(bearer.to_bytes()) {
+                    Ok(header_value) => header_value,
+                    Err(e) => {
+                        log::error!(
+                            "Error generating HeaderValue for WWW-Authenticate bearer '{:?}', {}",
+                            bearer,
+                            e
+                        );
+                        header::HeaderValue::from_static(r#"Bearer error="invalid_request""#)
+                    }
+                };
 
-        let mut buf = BytesMut::new();
-        let _ = write!(buf, "{}", self);
+                response
+                    .headers_mut()
+                    .insert(header::WWW_AUTHENTICATE, header_value);
 
-        resp.headers_mut().insert(
-            header::CONTENT_TYPE,
-            header::HeaderValue::from_static("text/plain; charset=utf-8"),
-        );
-
-        resp.set_body(Body::from(buf))
-    }
-}
-/// The WWW-Authenticate header as specified in RFC6750 & RFC6749
-///
-/// The Display implementation will convert this struct to a valid WWW-Authenticate header value.
-/// Most error codes and variants are not implemented because they are not needed yet.
-#[derive(Debug, PartialEq)]
-pub struct WwwAuthHeader {
-    pub auth_type: AuthenticationType,
-    pub error_description: &'static str,
-}
-
-impl WwwAuthHeader {
-    pub fn new_bearer_invalid_token(error_description: &'static str) -> Self {
-        WwwAuthHeader {
-            auth_type: AuthenticationType::Bearer(BearerAuthError::InvalidToken),
-            error_description,
-        }
-    }
-
-    pub fn new_bearer_invalid_request(error_description: &'static str) -> Self {
-        WwwAuthHeader {
-            auth_type: AuthenticationType::Bearer(BearerAuthError::InvalidRequest),
-            error_description,
-        }
-    }
-
-    fn as_header_value(&self) -> HeaderValue {
-        let header_result = header::HeaderValue::try_from(self.to_string());
-
-        match header_result {
-            Ok(header_value) => header_value,
-            Err(e) => {
-                log::error!(
-                    "Error generating HeaderValue for WWW-Authenticate header '{}', {}",
-                    self.to_string(),
-                    e
+                response.headers_mut().insert(
+                    header::CONTENT_TYPE,
+                    header::HeaderValue::from_static("text/plain; charset=utf-8"),
                 );
 
-                match self.auth_type {
-                    AuthenticationType::Bearer(_) => {
-                        header::HeaderValue::from_static(r#"Bearer error="invalid_token""#)
-                    }
-                }
+                response.set_body(Body::from(self.to_string()))
+            }
+            Self::AuthJson(json) => {
+                response.headers_mut().insert(
+                    header::CONTENT_TYPE,
+                    header::HeaderValue::from_static("text/json; charset=utf-8"),
+                );
+
+                response.set_body(Body::from(json.to_string()))
+            }
+            _ => {
+                response.headers_mut().insert(
+                    header::CONTENT_TYPE,
+                    header::HeaderValue::from_static("text/plain; charset=utf-8"),
+                );
+
+                response.set_body(Body::from(self.to_string()))
             }
         }
     }
 }
 
-impl Display for WwwAuthHeader {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if self.error_description.is_empty() {
-            write!(f, "{}", self.auth_type)?;
-        } else {
-            write!(
-                f,
-                r#"{}, error_description="{}""#,
-                self.auth_type, self.error_description
-            )?;
-        }
-        Ok(())
+impl DefaultApiError {
+    /// Create an invalid token [`ApiError::Auth`] error
+    ///
+    /// Resolves to the following WWW-Authenticate header:
+    ///
+    /// ```
+    /// Bearer error="invalid_token", error_description="<error_description>"
+    /// ```
+    ///
+    /// The `response_body` will be sent as a plaintext html body.
+    pub fn auth_bearer_invalid_token(
+        error_description: &'static str,
+        response_body: String,
+    ) -> DefaultApiError {
+        DefaultApiError::Auth(
+            Bearer::build()
+                .error(Error::InvalidToken)
+                .error_description(error_description)
+                .finish(),
+            response_body,
+        )
+    }
+
+    /// Create an invalid request [`ApiError::Auth`] error
+    ///
+    /// Resolves to the following WWW-Authenticate header:
+    ///
+    /// ```
+    /// Bearer error="invalid_request", error_description="<error_description>"
+    /// ```
+    ///
+    /// The `response_body` will be sent as a plaintext html body.
+    pub fn auth_bearer_invalid_request(
+        error_description: &'static str,
+        response_body: String,
+    ) -> DefaultApiError {
+        DefaultApiError::Auth(
+            Bearer::build()
+                .error(Error::InvalidRequest)
+                .error_description(error_description)
+                .finish(),
+            response_body,
+        )
     }
 }
 
-/// The WWW-Authenticate authorization type
-///
-/// The variants contain their respective error variants as fields.
-#[derive(Debug, PartialEq)]
-pub enum AuthenticationType {
-    Bearer(BearerAuthError),
-}
-
-impl Display for AuthenticationType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AuthenticationType::Bearer(e) => write!(f, r#"Bearer error="{}""#, e)?,
-        }
-        Ok(())
-    }
-}
-
-/// WWW-Authenticate Bearer errors
-#[derive(Debug, PartialEq)]
-pub enum BearerAuthError {
-    InvalidToken,
-    InvalidRequest,
-}
-
-impl Display for BearerAuthError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BearerAuthError::InvalidToken => write!(f, "invalid_token"),
-            BearerAuthError::InvalidRequest => write!(f, "invalid_request"),
-        }
-    }
-}
-
-impl From<actix_web::Error> for ApiError {
+impl<E> From<actix_web::Error> for ApiError<E>
+where
+    E: fmt::Debug + Serialize,
+{
     fn from(_: actix_web::Error) -> Self {
         Self::Internal
     }
 }
 
-impl From<anyhow::Error> for ApiError {
+impl<E> From<anyhow::Error> for ApiError<E>
+where
+    E: fmt::Debug + Serialize,
+{
     fn from(_: anyhow::Error) -> Self {
         Self::Internal
     }
 }
 
-impl From<crate::db::DatabaseError> for ApiError {
+impl<E> From<crate::db::DatabaseError> for ApiError<E>
+where
+    E: fmt::Debug + Serialize,
+{
     fn from(e: DatabaseError) -> Self {
         match e {
             DatabaseError::NotFound => Self::NotFound,

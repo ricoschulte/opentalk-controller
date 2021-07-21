@@ -2,7 +2,7 @@
 //!
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar
 //! structs are defined in the Database module [`k3k_controller::db`] for database operations.
-use crate::api::v1::ApiError;
+use crate::api::v1::{ApiError, DefaultApiError};
 use crate::db::rooms as db_rooms;
 use crate::db::users::User;
 use crate::db::DbInterface;
@@ -80,14 +80,14 @@ fn disallow_empty(modify_room: &ModifyRoom) -> Result<(), ValidationError> {
 pub async fn owned(
     db_ctx: Data<DbInterface>,
     current_user: ReqData<User>,
-) -> Result<Json<Vec<Room>>, ApiError> {
-    let rooms = web::block(move || -> Result<Vec<db_rooms::Room>, ApiError> {
+) -> Result<Json<Vec<Room>>, DefaultApiError> {
+    let rooms = web::block(move || -> Result<Vec<db_rooms::Room>, DefaultApiError> {
         Ok(db_ctx.get_owned_rooms(&current_user)?)
     })
     .await
     .map_err(|e| {
         log::error!("BlockingError on GET /rooms - {}", e);
-        ApiError::Internal
+        DefaultApiError::Internal
     })??;
 
     let rooms = rooms
@@ -113,15 +113,15 @@ pub async fn new(
     db_ctx: Data<DbInterface>,
     current_user: ReqData<User>,
     new_room: Json<NewRoom>,
-) -> Result<Json<Room>, ApiError> {
+) -> Result<Json<Room>, DefaultApiError> {
     let new_room = new_room.into_inner();
 
     if let Err(e) = new_room.validate() {
         log::warn!("API new room validation error {}", e);
-        return Err(ApiError::ValidationFailed);
+        return Err(DefaultApiError::ValidationFailed);
     }
 
-    let db_room = web::block(move || -> Result<db_rooms::Room, ApiError> {
+    let db_room = web::block(move || -> Result<db_rooms::Room, DefaultApiError> {
         let new_room = db_rooms::NewRoom {
             uuid: uuid::Uuid::new_v4(),
             owner: current_user.id,
@@ -135,7 +135,7 @@ pub async fn new(
     .await
     .map_err(|e| {
         log::error!("BlockingError on POST /rooms - {}", e);
-        ApiError::Internal
+        DefaultApiError::Internal
     })??;
 
     let room = Room {
@@ -159,24 +159,24 @@ pub async fn modify(
     current_user: ReqData<User>,
     room_uuid: Path<Uuid>,
     modify_room: Json<ModifyRoom>,
-) -> Result<Json<Room>, ApiError> {
+) -> Result<Json<Room>, DefaultApiError> {
     let room_uuid = room_uuid.into_inner();
     let modify_room = modify_room.into_inner();
 
     if let Err(e) = modify_room.validate() {
         log::warn!("API modify room validation error {}", e);
-        return Err(ApiError::ValidationFailed);
+        return Err(DefaultApiError::ValidationFailed);
     }
 
     let db_room = web::block(move || {
         let room = db_ctx.get_room_by_uuid(&room_uuid)?;
 
         match room {
-            None => Err(ApiError::NotFound),
+            None => Err(DefaultApiError::NotFound),
             Some(room) => {
                 // TODO: check user permissions when implemented
                 if room.owner != current_user.id {
-                    return Err(ApiError::InsufficientPermission);
+                    return Err(DefaultApiError::InsufficientPermission);
                 }
 
                 let change_room = db_rooms::ModifyRoom {
@@ -193,7 +193,7 @@ pub async fn modify(
     .await
     .map_err(|e| {
         log::error!("BlockingError on PUT /rooms{{room_id}} - {}", e);
-        ApiError::Internal
+        DefaultApiError::Internal
     })??;
 
     let room = Room {
@@ -214,21 +214,21 @@ pub async fn modify(
 pub async fn get(
     db_ctx: Data<DbInterface>,
     room_uuid: Path<Uuid>,
-) -> Result<Json<RoomDetails>, ApiError> {
+) -> Result<Json<RoomDetails>, DefaultApiError> {
     let room_uuid = room_uuid.into_inner();
 
     let db_room = web::block(move || {
         let room = db_ctx.get_room_by_uuid(&room_uuid)?;
 
         match room {
-            None => Err(ApiError::NotFound),
+            None => Err(DefaultApiError::NotFound),
             Some(room) => Ok(room),
         }
     })
     .await
     .map_err(|e| {
         log::error!("BlockingError on GET /rooms{{room_id}} - {}", e);
-        ApiError::Internal
+        DefaultApiError::Internal
     })??;
 
     let room_details = RoomDetails {
@@ -270,6 +270,14 @@ pub struct TicketData {
 impl_from_redis_value_de!(TicketData);
 impl_to_redis_args_se!(&TicketData);
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StartRoomError {
+    WrongRoomPassword,
+}
+
+type StartError = ApiError<StartRoomError>;
+
 /// API Endpoint *POST /rooms/{room_uuid}/start*
 ///
 /// This endpoint has to be called in order to get a [`Ticket`]. When joining a room, the ticket
@@ -284,8 +292,8 @@ impl_to_redis_args_se!(&TicketData);
 ///
 /// # Errors
 ///
-/// Returns [`ApiError::NotFound`] when the requested room could not be found.
-/// Returns [`ApiError::InsufficientPermission`] when the provided password is wrong.
+/// Returns [`StartError::NotFound`] when the requested room could not be found.
+/// Returns [`StartError::AuthJson`] when the provided password is wrong.
 #[post("/rooms/{room_uuid}/start")]
 pub async fn start(
     db_ctx: Data<DbInterface>,
@@ -293,31 +301,36 @@ pub async fn start(
     current_user: ReqData<User>,
     room_uuid: Path<Uuid>,
     request: Json<StartRequest>,
-) -> Result<Json<Ticket>, ApiError> {
+) -> Result<Json<Ticket>, StartError> {
     let room_uuid = room_uuid.into_inner();
 
-    let room = web::block(move || -> Result<db_rooms::Room, ApiError> {
+    let room = web::block(move || -> Result<db_rooms::Room, StartError> {
         let room = db_ctx
             .get_room_by_uuid(&room_uuid)?
-            .ok_or(ApiError::NotFound)?;
+            .ok_or(StartError::NotFound)?;
 
         Ok(room)
     })
     .await
     .map_err(|e| {
         log::error!("BlockingError on GET /rooms/{{room_uuid}}/start - {}", e);
-        ApiError::Internal
+        StartError::Internal
     })??;
 
     if !room.password.is_empty() {
         if let Some(pw) = &request.password {
             if pw != &room.password {
-                return Err(ApiError::InsufficientPermission);
+                return Err(StartError::AuthJson(
+                    StartRoomError::WrongRoomPassword.into(),
+                ));
             }
         } else {
-            return Err(ApiError::InsufficientPermission);
+            return Err(StartError::AuthJson(
+                StartRoomError::WrongRoomPassword.into(),
+            ));
         }
     }
+
     let ticket = rand::thread_rng()
         .sample_iter(rand::distributions::Alphanumeric)
         .take(64)
@@ -340,7 +353,7 @@ pub async fn start(
         .await
         .map_err(|e| {
             log::error!("Unable to store ticket in redis, {}", e);
-            ApiError::Internal
+            StartError::Internal
         })?;
 
     Ok(Json(ticket))
