@@ -57,17 +57,42 @@ pub async fn get_all_participants(
         .await
         .context("Failed to lock participant list")?;
 
-    let participants: HashSet<ParticipantId> = redis_conn
+    let participants_result: Result<HashSet<ParticipantId>> = redis_conn
         .smembers(RoomParticipants { room })
         .await
-        .context("Failed to get participants")?;
+        .context("Failed to get participants");
 
     guard
         .unlock(redis_conn)
         .await
         .context("Failed to unlock participant list")?;
 
-    Ok(participants)
+    participants_result
+}
+
+pub async fn participants_contains(
+    redis_conn: &mut ConnectionManager,
+    room: Uuid,
+    participant: ParticipantId,
+) -> Result<bool> {
+    let mut mutex = participant_set_mutex(room);
+
+    let guard = mutex
+        .lock(redis_conn)
+        .await
+        .context("Failed to lock participant list")?;
+
+    let is_member_result: Result<bool> = redis_conn
+        .sismember(RoomParticipants { room }, participant)
+        .await
+        .context("Failed to check if participants contains participant");
+
+    guard
+        .unlock(redis_conn)
+        .await
+        .context("Failed to unlock participant list")?;
+
+    is_member_result
 }
 
 pub async fn add_participant_to_set(
@@ -82,17 +107,17 @@ pub async fn add_participant_to_set(
         .await
         .context("Failed to lock participant list")?;
 
-    redis_conn
+    let add_result = redis_conn
         .sadd(RoomParticipants { room }, participant)
         .await
-        .context("Failed to add own participant id to set")?;
+        .context("Failed to add own participant id to set");
 
     guard
         .unlock(redis_conn)
         .await
         .context("Failed to unlock participant list")?;
 
-    Ok(())
+    add_result
 }
 
 /// Removes the given participant from the room's participant set and returns the number of

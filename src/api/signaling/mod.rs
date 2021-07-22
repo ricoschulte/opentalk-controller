@@ -69,6 +69,7 @@ pub mod ce {
 }
 
 pub mod ee {
+    pub use super::ws_modules::ee::automod::AutoMod;
     pub use super::ws_modules::ee::chat::Chat;
 }
 
@@ -82,6 +83,11 @@ impl ParticipantId {
     #[cfg(test)]
     fn nil() -> Self {
         Self(Uuid::nil())
+    }
+
+    #[cfg(test)]
+    fn new_test(id: u128) -> Self {
+        Self(Uuid::from_u128(id))
     }
 
     fn new() -> Self {
@@ -115,3 +121,12 @@ impl FromRedisValue for ParticipantId {
 }
 
 impl_to_redis_args!(ParticipantId);
+
+/// Role of the participant inside a room
+#[derive(Debug, Serialize, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    User,
+    Moderator,
+    // TODO Administrator,
+}

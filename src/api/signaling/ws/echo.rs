@@ -35,6 +35,7 @@ impl SignalingModule for Echo {
             Event::Ext(_) => unreachable!("no registered external events"),
             // Ignore
             Event::Joined { .. } => {}
+            Event::Leaving => {}
             Event::ParticipantJoined(..) => {}
             Event::ParticipantLeft(_) => {}
             Event::ParticipantUpdated(..) => {}

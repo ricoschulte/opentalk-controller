@@ -1,4 +1,4 @@
-use crate::api::signaling::ParticipantId;
+use crate::api::signaling::{ParticipantId, Role};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -26,6 +26,8 @@ pub enum Message {
 pub struct JoinSuccess {
     pub id: ParticipantId,
 
+    pub role: Role,
+
     #[serde(flatten)]
     pub module_data: HashMap<&'static str, serde_json::Value>,
 
@@ -51,10 +53,11 @@ mod test {
 
     #[test]
     fn join_success() {
-        let expected = r#"{"message":"join_success","id":"00000000-0000-0000-0000-000000000000","participants":[]}"#;
+        let expected = r#"{"message":"join_success","id":"00000000-0000-0000-0000-000000000000","role":"user","participants":[]}"#;
 
         let produced = serde_json::to_string(&Message::JoinSuccess(JoinSuccess {
             id: ParticipantId::nil(),
+            role: Role::User,
             module_data: Default::default(),
             participants: vec![],
         }))

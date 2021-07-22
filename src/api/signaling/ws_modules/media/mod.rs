@@ -261,6 +261,7 @@ impl SignalingModule for Media {
                     *evt_state = Some(state);
                 }
             }
+            Event::Leaving => {}
         }
 
         Ok(())
