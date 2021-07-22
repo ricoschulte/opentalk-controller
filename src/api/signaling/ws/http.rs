@@ -3,23 +3,24 @@ use super::modules::{ModuleBuilder, ModuleBuilderImpl};
 use super::runner::Runner;
 use super::ParticipantId;
 use super::SignalingModule;
-use crate::api::v1::middleware::oidc_auth::check_access_token;
+use crate::api::v1::rooms::{Ticket, TicketData};
+use crate::api::v1::{ApiError, DefaultApiError};
+use crate::db::rooms::Room;
+use crate::db::users::User;
 use crate::db::DbInterface;
 use crate::modules::http::HttpModule;
-use crate::oidc::OidcContext;
 use actix_web::http::{header, HeaderValue};
 use actix_web::web::{Data, ServiceConfig};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use async_tungstenite::tungstenite::protocol::Role;
 use async_tungstenite::WebSocketStream;
-use openidconnect::AccessToken;
 use redis::aio::ConnectionManager;
 use std::marker::PhantomData;
 use std::rc::Rc;
 use tokio::sync::broadcast;
 use tokio::task;
-use uuid::Uuid;
+use validator::Validate;
 
 /// Signaling endpoint which can be registered to a `ApplicationBuilder`.
 ///
@@ -74,11 +75,10 @@ impl HttpModule for SignalingHttpModule {
 
         app.service(web::scope("").route(
             "/signaling",
-            web::get().to(move |shutdown, db_ctx, oidc_ctx, req, stream| {
+            web::get().to(move |shutdown, db_ctx, req, stream| {
                 ws_service(
                     shutdown,
                     db_ctx,
-                    oidc_ctx,
                     redis_conn.clone(),
                     rabbit_mq_channel.clone(),
                     protocols,
@@ -95,74 +95,25 @@ impl HttpModule for SignalingHttpModule {
 async fn ws_service(
     shutdown: Data<broadcast::Sender<()>>,
     db_ctx: Data<DbInterface>,
-    oidc_ctx: Data<OidcContext>,
-    redis_conn: ConnectionManager,
+    mut redis_conn: ConnectionManager,
     rabbit_mq_channel: lapin::Channel,
     protocols: &'static [&'static str],
     modules: Rc<[Box<dyn ModuleBuilder>]>,
-    req: HttpRequest,
+    request: HttpRequest,
     stream: web::Payload,
 ) -> actix_web::Result<HttpResponse> {
-    let mut protocol = None;
-    let mut access_token = None;
+    let (ticket, protocol) = read_request_header(&request, protocols)?;
 
-    if let Some(value) = req
-        .headers()
-        .get(header::SEC_WEBSOCKET_PROTOCOL)
-        .and_then(|v| v.to_str().ok())
-    {
-        let mut values = value.split(',').map(str::trim);
+    let ticket_data = get_ticket_data_from_redis(&mut redis_conn, &ticket).await?;
 
-        while let Some(value) = values.next() {
-            if value == "access_token" {
-                access_token = values.next();
-                continue;
-            } else if protocol.is_some() {
-                continue;
-            } else if let Some(value) = protocols.iter().find(|&&v| v == value) {
-                protocol = Some(value);
-            }
-        }
-    }
+    let (user, room) = get_user_and_room_from_ticket(db_ctx.clone(), ticket_data).await?;
 
-    let (protocol, access_token) = match (protocol, access_token) {
-        (Some(protocol), Some(access_token)) => (protocol, access_token),
-        // TODO how to handle the rejection properly
-        // usually if no protocol offered by the client is compatible, the server should continue
-        // with the websocket upgrade and return an empty SEC_WEBSOCKET_PROTOCOL header, to let the
-        // client decide if they want to continue or not. (chromium aborts and firefox continues)
-        //
-        // There is no defined way how to handle authorization for websockets other than
-        // sending a challenge for the client to solve. That makes it hard to decide which status
-        // code should be returned here if the access_token is missing or invalid.
-        //
-        // Possible solution:
-        // Get short lived one time ticket token from REST endpoint
-        // Access endpoint with ?ticket=... query
-        // This avoids having the access_token inside server logs and keeps it outside headers
-        // it doesnt belong into
-        _ => {
-            log::debug!("Rejecting request, missing access_token or invalid protocol");
-
-            return Ok(HttpResponse::Forbidden().finish());
-        }
-    };
-
-    let user = check_access_token(
-        db_ctx.clone(),
-        oidc_ctx,
-        AccessToken::new(access_token.into()),
-    )
-    .await?;
-
-    let mut response = ws::handshake(&req)?;
+    let mut response = ws::handshake(&request)?;
 
     let (adapter, actix_stream) = ActixTungsteniteAdapter::from_actix_payload(stream);
     let websocket = WebSocketStream::from_raw_socket(adapter, Role::Server, None).await;
 
-    // TODO: Get these information from somewhere reliable (ticket-system + redis)?
     let id = ParticipantId::new();
-    let room = Uuid::nil();
 
     let mut builder = Runner::builder(
         id,
@@ -179,7 +130,7 @@ async fn ws_service(
         if let Err(e) = module.build(&mut builder).await {
             log::error!("Failed to initialize module, {:?}", e);
             builder.abort().await;
-            return HttpResponse::InternalServerError().await;
+            return Ok(HttpResponse::InternalServerError().finish());
         }
     }
 
@@ -188,18 +139,131 @@ async fn ws_service(
         Ok(runner) => runner,
         Err(e) => {
             log::error!("Failed to initialize runner, {}", e);
-            return HttpResponse::InternalServerError().await;
+            return Ok(HttpResponse::InternalServerError().finish());
         }
     };
 
     // Spawn the runner task
     task::spawn_local(runner.run());
 
-    // TODO: maybe change the SEC_WEBSOCKET_PROTOCOL header to access_token=kdpaosd2eja9dj,k3k-signaling-json-v1 to avoid ordering
     response.insert_header((
         header::SEC_WEBSOCKET_PROTOCOL,
         HeaderValue::from_str(protocol).unwrap(),
     ));
 
     Ok(response.streaming(actix_stream))
+}
+
+fn read_request_header(
+    request: &HttpRequest,
+    allowed_protocols: &'static [&'static str],
+) -> Result<(Ticket, &'static str), ApiError> {
+    let mut protocol = None;
+    let mut ticket = None;
+
+    // read the SEC_WEBSOCKET_PROTOCOL header
+    if let Some(value) = request
+        .headers()
+        .get(header::SEC_WEBSOCKET_PROTOCOL)
+        .and_then(|v| v.to_str().ok())
+    {
+        let values = value.split(',').map(str::trim);
+
+        for value in values {
+            if value.starts_with("ticket#") {
+                let (_, tmp_ticket) = value.split_once("#").unwrap();
+                ticket = Some(Ticket {
+                    ticket: tmp_ticket.into(),
+                });
+                continue;
+            } else if protocol.is_some() {
+                continue;
+            } else if let Some(value) = allowed_protocols.iter().find(|&&v| v == value) {
+                protocol = Some(value);
+            }
+        }
+    }
+
+    // look if valid protocol exists
+    let protocol = match protocol {
+        Some(protocol) => protocol,
+        None => {
+            log::debug!("Rejecting websocket request, missing valid protocol");
+            return Err(DefaultApiError::BadRequest("Missing protocol".into()));
+        }
+    };
+
+    // look if ticket exists
+    let ticket = match ticket {
+        Some(ticket) => match ticket.validate() {
+            Ok(_) => ticket,
+            Err(e) => {
+                log::warn!("Ticket validation failed for {:?}, {}", ticket, e);
+
+                return Err(DefaultApiError::auth_bearer_invalid_token(
+                    "ticket invalid",
+                    "Please request a new ticket from /v1/rooms/<room_uuid>/start".into(),
+                ));
+            }
+        },
+        None => {
+            log::debug!("Rejecting websocket request, missing ticket");
+            return Err(DefaultApiError::auth_bearer_invalid_request(
+                "missing ticket",
+                "Please request a ticket from /v1/rooms/<room_uuid>/start".into(),
+            ));
+        }
+    };
+
+    Ok((ticket, protocol))
+}
+
+async fn get_ticket_data_from_redis(
+    redis_conn: &mut ConnectionManager,
+    ticket: &Ticket,
+) -> Result<TicketData, ApiError> {
+    // GETDEL available since redis 6.2.0, missing direct support by redis crate
+    let ticket_data: Option<TicketData> = redis::cmd("GETDEL")
+        .arg(ticket)
+        .query_async(redis_conn)
+        .await
+        .map_err(|e| {
+            log::warn!("Unable to get ticket data in redis: {}", e);
+            DefaultApiError::Internal
+        })?;
+
+    let ticket_data = ticket_data.ok_or_else(|| {
+        DefaultApiError::auth_bearer_invalid_token(
+            "ticket invalid or expired",
+            "Please request a new ticket from /v1/rooms/<room_uuid>/start".into(),
+        )
+    })?;
+
+    Ok(ticket_data)
+}
+
+async fn get_user_and_room_from_ticket(
+    db_ctx: Data<DbInterface>,
+    ticket_data: TicketData,
+) -> Result<(User, Room), ApiError> {
+    web::block(move || -> Result<(User, Room), DefaultApiError> {
+        let user = db_ctx
+            .get_user_by_uuid(&ticket_data.user)
+            .map_err(DefaultApiError::from)?;
+
+        let user = user.ok_or(DefaultApiError::Internal)?;
+
+        let room = db_ctx
+            .get_room_by_uuid(&ticket_data.room)
+            .map_err(DefaultApiError::from)?;
+
+        let room = room.ok_or(DefaultApiError::NotFound)?;
+
+        Ok((user, room))
+    })
+    .await
+    .map_err(|e| {
+        log::error!("BlockingError on ws_service - {}", e);
+        DefaultApiError::Internal
+    })?
 }

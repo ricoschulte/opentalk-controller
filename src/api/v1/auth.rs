@@ -1,5 +1,5 @@
 //! Auth related API structs and Endpoints
-use super::{ApiError, INVALID_ID_TOKEN};
+use super::{DefaultApiError, INVALID_ID_TOKEN};
 use crate::db;
 use crate::db::users::ModifiedUser;
 use crate::db::DbInterface;
@@ -36,71 +36,78 @@ pub async fn login(
     oidc_ctx: Data<OidcContext>,
     rabbitmq_channel: Data<lapin::Channel>,
     body: Json<Login>,
-) -> Result<Json<LoginResponse>, ApiError> {
+) -> Result<Json<LoginResponse>, DefaultApiError> {
     let id_token = body.into_inner().id_token;
 
     match oidc_ctx.verify_id_token(&id_token).await {
         Err(e) => {
             log::warn!("Got invalid ID Token {}", e);
-            Err(ApiError::Auth(INVALID_ID_TOKEN, e.to_string()))
+            Err(DefaultApiError::auth_bearer_invalid_token(
+                INVALID_ID_TOKEN,
+                e.to_string(),
+            ))
         }
         Ok(info) => {
             let user_uuid = match uuid::Uuid::from_str(&info.sub) {
                 Ok(uuid) => uuid,
                 Err(_) => {
                     log::error!("Unable to parse UUID from id token sub '{}'", &info.sub);
-                    return Err(ApiError::Auth(
+                    return Err(DefaultApiError::auth_bearer_invalid_token(
                         INVALID_ID_TOKEN,
-                        "Unable to parse UUID from id token".to_string(),
+                        "Unable to parse UUID from id token".into(),
                     ));
                 }
             };
 
-            let modified_user = web::block(move || -> Result<Option<ModifiedUser>, ApiError> {
-                let user = db_ctx.get_user_by_uuid(&user_uuid)?;
+            let modified_user =
+                web::block(move || -> Result<Option<ModifiedUser>, DefaultApiError> {
+                    let user = db_ctx.get_user_by_uuid(&user_uuid)?;
 
-                match user {
-                    Some(user) => {
-                        let modify_user = db::users::ModifyUser {
-                            title: None,
-                            theme: None,
-                            language: None,
-                            id_token_exp: Some(info.expiration.timestamp()),
-                        };
+                    match user {
+                        Some(user) => {
+                            let modify_user = db::users::ModifyUser {
+                                title: None,
+                                theme: None,
+                                language: None,
+                                id_token_exp: Some(info.expiration.timestamp()),
+                            };
 
-                        let modified_user =
-                            db_ctx.modify_user(user.oidc_uuid, modify_user, Some(info.x_grp))?;
+                            let modified_user = db_ctx.modify_user(
+                                user.oidc_uuid,
+                                modify_user,
+                                Some(info.x_grp),
+                            )?;
 
-                        Ok(Some(modified_user))
+                            Ok(Some(modified_user))
+                        }
+                        None => {
+                            let new_user = db::users::NewUser {
+                                oidc_uuid: user_uuid,
+                                email: info.email,
+                                title: String::new(),
+                                firstname: info.firstname,
+                                lastname: info.lastname,
+                                id_token_exp: info.expiration.timestamp(),
+                                theme: "default".to_string(),
+                                language: "en-US".to_string(), // TODO: set language based on browser
+                            };
+
+                            let new_user = db::users::NewUserWithGroups {
+                                new_user,
+                                groups: info.x_grp,
+                            };
+
+                            db_ctx.create_user(new_user)?;
+
+                            Ok(None)
+                        }
                     }
-                    None => {
-                        let new_user = db::users::NewUser {
-                            oidc_uuid: user_uuid,
-                            email: info.email,
-                            title: String::new(),
-                            firstname: info.firstname,
-                            lastname: info.lastname,
-                            id_token_exp: info.expiration.timestamp(),
-                            theme: "default".to_string(),
-                            language: "en-US".to_string(), // TODO: set language based on browser
-                        };
-
-                        let new_user = db::users::NewUserWithGroups {
-                            new_user,
-                            groups: info.x_grp,
-                        };
-
-                        db_ctx.create_user(new_user)?;
-
-                        Ok(None)
-                    }
-                }
-            })
-            .await
-            .map_err(|e| {
-                log::error!("BlockingError on POST /auth/login - {}", e);
-                ApiError::Internal
-            })??;
+                })
+                .await
+                .map_err(|e| {
+                    log::error!("BlockingError on POST /auth/login - {}", e);
+                    DefaultApiError::Internal
+                })??;
 
             if let Some(modified_user) = modified_user {
                 let message = user_update::Message {

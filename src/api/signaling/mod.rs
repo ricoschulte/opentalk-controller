@@ -1,3 +1,4 @@
+#![macro_use]
 use redis::{FromRedisValue, RedisError, RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use std::fmt;

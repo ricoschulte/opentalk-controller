@@ -5,6 +5,7 @@ use super::{DestroyContext, Namespaced, RabbitMqBinding, RabbitMqExchange, WebSo
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::{incoming, outgoing, rabbitmq, storage};
 use crate::api::signaling::ParticipantId;
+use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::DbInterface;
 use crate::ha_sync::user_update;
@@ -26,7 +27,6 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time::{sleep, Sleep};
 use tokio_stream::StreamExt;
-use uuid::Uuid;
 
 const WS_TIMEOUT: Duration = Duration::from_secs(20);
 
@@ -36,7 +36,7 @@ const NAMESPACE: &str = "control";
 /// Passed into [`ModuleBuilder::build`] function to create [`InitContext`]
 pub struct Builder {
     pub(super) id: ParticipantId,
-    pub(super) room: Uuid,
+    pub(super) room: Room,
     pub(super) user: User,
     pub(super) protocol: &'static str,
     pub(super) modules: Modules,
@@ -69,7 +69,7 @@ impl Builder {
         // ==== CONTROL MODULE DECLARATIONS ====
 
         // The name of the room exchange
-        let room_exchange = rabbitmq::room_exchange_name(self.room);
+        let room_exchange = rabbitmq::room_exchange_name(self.room.uuid);
 
         // Routing key to receive messages directed to all participants
         let all_routing_key = rabbitmq::room_all_routing_key();
@@ -221,11 +221,10 @@ pub struct Runner {
     // participant id that the runner is connected to
     id: ParticipantId,
 
-    // ID of the room the participant is inside
-    room: Uuid,
+    // Room the participant is inside
+    room: Room,
 
     // User behind the participant
-    // Not used yet
     user: User,
 
     // The control data. Initialized when frontend send join
@@ -274,7 +273,7 @@ impl Drop for Runner {
 impl Runner {
     pub fn builder(
         id: ParticipantId,
-        room: Uuid,
+        room: Room,
         user: User,
         protocol: &'static str,
         db: Arc<DbInterface>,
@@ -338,7 +337,7 @@ impl Runner {
 
         // The retry/wait_time values are set extra high
         // since a lot of operations are being done while holding the lock
-        let mut set_lock = storage::participant_set_mutex(self.room);
+        let mut set_lock = storage::participant_set_mutex(self.room.uuid);
 
         let set_guard = match set_lock.lock(&mut self.redis_conn).await {
             Ok(guard) => guard,
@@ -362,7 +361,7 @@ impl Runner {
         let destroy_room = match storage::remove_participant_from_set(
             &set_guard,
             &mut self.redis_conn,
-            self.room,
+            self.room.uuid,
             self.id,
         )
         .await
@@ -376,7 +375,7 @@ impl Runner {
         };
 
         if let Err(e) =
-            storage::remove_all_attributes(&mut self.redis_conn, self.room, self.id).await
+            storage::remove_all_attributes(&mut self.redis_conn, self.room.uuid, self.id).await
         {
             log::error!("Failed to remove all control attributes, {}", e);
         }
@@ -518,7 +517,7 @@ impl Runner {
 
                 storage::set_attribute(
                     &mut self.redis_conn,
-                    self.room,
+                    self.room.uuid,
                     self.id,
                     "display_name",
                     &join.display_name,
@@ -531,11 +530,11 @@ impl Runner {
                 });
 
                 let participant_set =
-                    storage::get_all_participants(&mut self.redis_conn, self.room)
+                    storage::get_all_participants(&mut self.redis_conn, self.room.uuid)
                         .await
                         .context("Failed to get all active participants")?;
 
-                storage::add_participant_to_set(&mut self.redis_conn, self.room, self.id)
+                storage::add_participant_to_set(&mut self.redis_conn, self.room.uuid, self.id)
                     .await
                     .context("Failed to add self to participants set")?;
 
@@ -584,7 +583,8 @@ impl Runner {
         };
 
         let display_name: String =
-            storage::get_attribute(&mut self.redis_conn, self.room, id, "display_name").await?;
+            storage::get_attribute(&mut self.redis_conn, self.room.uuid, id, "display_name")
+                .await?;
 
         participant.module_data.insert(
             NAMESPACE,

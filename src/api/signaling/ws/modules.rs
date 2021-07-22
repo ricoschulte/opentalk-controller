@@ -287,7 +287,7 @@ where
     async fn build(&self, builder: &mut Builder) -> Result<()> {
         let ctx = InitContext {
             id: builder.id,
-            room: builder.room,
+            room: &builder.room,
             user: &builder.user,
             db: &builder.db,
             rabbitmq_exchanges: &mut builder.rabbitmq_exchanges,

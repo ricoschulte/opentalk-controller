@@ -2,7 +2,7 @@
 //!
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar
 //! structs are defined in the Database module [`k3k_controller::db`] for database operations.
-use crate::api::v1::ApiError;
+use crate::api::v1::DefaultApiError;
 use crate::db::users as db_users;
 use crate::db::users::User;
 use crate::db::DbInterface;
@@ -69,14 +69,15 @@ fn disallow_empty(modify_user: &ModifyUser) -> Result<(), ValidationError> {
 ///
 /// Returns a JSON array of all database users as [`UserDetails`]
 #[get("/users")]
-pub async fn all(db_ctx: Data<DbInterface>) -> Result<Json<Vec<UserDetails>>, ApiError> {
-    let db_users =
-        web::block(move || -> Result<Vec<db_users::User>, ApiError> { Ok(db_ctx.get_users()?) })
-            .await
-            .map_err(|e| {
-                log::error!("BlockingError on GET /users - {}", e);
-                ApiError::Internal
-            })??;
+pub async fn all(db_ctx: Data<DbInterface>) -> Result<Json<Vec<UserDetails>>, DefaultApiError> {
+    let db_users = web::block(move || -> Result<Vec<db_users::User>, DefaultApiError> {
+        Ok(db_ctx.get_users()?)
+    })
+    .await
+    .map_err(|e| {
+        log::error!("BlockingError on GET /users - {}", e);
+        DefaultApiError::Internal
+    })??;
 
     let users = db_users
         .into_iter()
@@ -101,15 +102,15 @@ pub async fn set_current_user_profile(
     db_ctx: Data<DbInterface>,
     current_user: ReqData<User>,
     modify_user: Json<ModifyUser>,
-) -> Result<Json<UserProfile>, ApiError> {
+) -> Result<Json<UserProfile>, DefaultApiError> {
     let modify_user = modify_user.into_inner();
 
     if let Err(e) = modify_user.validate() {
         log::warn!("API modify user validation error {}", e);
-        return Err(ApiError::ValidationFailed);
+        return Err(DefaultApiError::ValidationFailed);
     }
 
-    let db_user = web::block(move || -> Result<db_users::User, ApiError> {
+    let db_user = web::block(move || -> Result<db_users::User, DefaultApiError> {
         let modify_user = db_users::ModifyUser {
             title: modify_user.title,
             theme: modify_user.theme,
@@ -124,7 +125,7 @@ pub async fn set_current_user_profile(
     .await
     .map_err(|e| {
         log::error!("BlockingError on PUT /users - {}", e);
-        ApiError::Internal
+        DefaultApiError::Internal
     })??;
 
     let user_profile = UserProfile {
@@ -146,7 +147,7 @@ pub async fn set_current_user_profile(
 #[get("/users/me")]
 pub async fn current_user_profile(
     current_user: ReqData<User>,
-) -> Result<Json<UserProfile>, ApiError> {
+) -> Result<Json<UserProfile>, DefaultApiError> {
     let current_user = current_user.into_inner();
 
     let user_profile = UserProfile {
@@ -169,18 +170,18 @@ pub async fn current_user_profile(
 pub async fn user_details(
     db_ctx: Data<DbInterface>,
     user_id: Path<i64>,
-) -> Result<Json<UserDetails>, ApiError> {
-    let db_user = web::block(move || -> Result<Option<db_users::User>, ApiError> {
+) -> Result<Json<UserDetails>, DefaultApiError> {
+    let db_user = web::block(move || -> Result<Option<db_users::User>, DefaultApiError> {
         Ok(db_ctx.get_user_by_id(user_id.into_inner())?)
     })
     .await
     .map_err(|e| {
         log::error!("BlockingError on GET /users/me - {}", e);
-        ApiError::Internal
+        DefaultApiError::Internal
     })??;
 
     match db_user {
-        None => Err(ApiError::NotFound),
+        None => Err(DefaultApiError::NotFound),
         Some(db_user) => {
             let user_details = UserDetails {
                 id: db_user.id,
