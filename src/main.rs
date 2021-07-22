@@ -1,18 +1,20 @@
 use crate::api::signaling::SignalingHttpModule;
+use crate::settings::{Logging, Settings, SharedSettings};
 use actix_cors::Cors;
 use actix_web::http::header;
 use actix_web::web::Data;
 use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{anyhow, Context, Result};
 use api::signaling;
+use arc_swap::ArcSwap;
 use db::DbInterface;
 use fern::colors::{Color, ColoredLevelConfig};
 use oidc::OidcContext;
 use rustls::internal::pemfile::{certs, rsa_private_keys};
-use settings::{Logging, Settings};
 use std::fs::File;
 use std::io::BufReader;
 use std::net::Ipv6Addr;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::signal::ctrl_c;
@@ -42,13 +44,13 @@ async fn main() -> Result<()> {
 }
 
 async fn start_controller(args: cli::Args) -> Result<()> {
-    let settings = settings::load_settings(args)?;
+    let settings = settings::load_settings(&args)?;
 
     setup_logging(&settings.logging)?;
 
     log::info!("Starting K3K Controller");
 
-    match run_service(settings).await {
+    match run_service(settings, &args.config).await {
         Ok(()) => Ok(()),
         Err(e) => {
             log::error!("Crashed with error: {:?}", e);
@@ -58,7 +60,10 @@ async fn start_controller(args: cli::Args) -> Result<()> {
     }
 }
 
-async fn run_service(settings: Settings) -> Result<()> {
+async fn run_service(settings: Settings, config_path: &Path) -> Result<()> {
+    let settings = Arc::new(settings);
+    let shared_settings: SharedSettings = Arc::new(ArcSwap::from(settings.clone()));
+
     db::migrations::start_migration(&settings.database)
         .await
         .context("Failed to migrate database")?;
@@ -86,12 +91,12 @@ async fn run_service(settings: Settings) -> Result<()> {
     {
         // Connect to postgres
         let db_ctx = Arc::new(
-            DbInterface::connect(settings.database).context("Failed to connect to database")?,
+            DbInterface::connect(&settings.database).context("Failed to connect to database")?,
         );
 
         // Discover OIDC Provider
         let oidc_ctx = Arc::new(
-            OidcContext::from_config(settings.oidc)
+            OidcContext::from_config(settings.oidc.clone())
                 .await
                 .context("Failed to initialize OIDC Context")?,
         );
@@ -116,15 +121,16 @@ async fn run_service(settings: Settings) -> Result<()> {
         };
 
         // Build redis client. Does not check if redis is reachable.
-        let redis = redis::Client::open(settings.redis.url).context("Invalid redis url")?;
+        let redis = redis::Client::open(settings.redis.url.clone()).context("Invalid redis url")?;
         let redis_conn = redis::aio::ConnectionManager::new(redis)
             .await
             .context("Failed to create redis connection manager")?;
 
         // Connect to Janus via rabbitmq
-        let mut mcu = {
+        let mut mcu_pool = {
             let mcu = signaling::McuPool::build(
-                settings.room_server,
+                &settings.room_server,
+                shared_settings.clone(),
                 rabbitmq_channel.clone(),
                 redis_conn.clone(),
             )
@@ -145,7 +151,7 @@ async fn run_service(settings: Settings) -> Result<()> {
             application.add_http_module(
                 SignalingHttpModule::new(redis_conn.clone(), signaling_channel)
                     .with_module::<signaling::ce::Echo>(())
-                    .with_module::<signaling::ce::Media>(Arc::downgrade(&mcu))
+                    .with_module::<signaling::ce::Media>(Arc::downgrade(&mcu_pool))
                     .with_module::<signaling::ce::Chat>(())
                     .with_module::<signaling::ee::Chat>(()),
             );
@@ -153,12 +159,9 @@ async fn run_service(settings: Settings) -> Result<()> {
 
         let application = application.finish();
 
-        // Store the turn server configuration for the turn endpoint
-        let turn_servers = Data::new(settings.turn);
-
         // Start external HTTP Server
         let ext_http_server = {
-            let cors = settings.http.cors;
+            let cors = settings.http.cors.clone();
 
             let rabbitmq_channel = Data::new(rabbitmq_channel);
 
@@ -166,6 +169,7 @@ async fn run_service(settings: Settings) -> Result<()> {
             let oidc_ctx = Arc::downgrade(&oidc_ctx);
             let application_weak = Arc::downgrade(&application);
             let shutdown = shutdown.clone();
+            let shared_settings = shared_settings.clone();
 
             HttpServer::new(move || {
                 let cors = setup_cors(&cors);
@@ -179,10 +183,10 @@ async fn run_service(settings: Settings) -> Result<()> {
 
                 App::new()
                     .wrap(cors)
+                    .app_data(Data::new(shared_settings.clone()))
                     .app_data(db_ctx.clone())
                     .app_data(oidc_ctx.clone())
                     .app_data(redis_ctx)
-                    .app_data(turn_servers.clone())
                     .app_data(Data::new(shutdown.clone()))
                     .app_data(rabbitmq_channel.clone())
                     .service(v1_scope(db_ctx, oidc_ctx))
@@ -193,7 +197,7 @@ async fn run_service(settings: Settings) -> Result<()> {
         let ext_address = (Ipv6Addr::UNSPECIFIED, settings.http.port);
         let int_address = (Ipv6Addr::UNSPECIFIED, settings.http.internal_port);
 
-        let (ext_http_server, int_http_server) = if let Some(tls) = settings.http.tls {
+        let (ext_http_server, int_http_server) = if let Some(tls) = &settings.http.tls {
             let config = setup_rustls(tls).context("Failed to setup TLS context")?;
 
             (
@@ -248,7 +252,14 @@ async fn run_service(settings: Settings) -> Result<()> {
                 _ = reload_signal.recv() => {
                     log::info!("Got reload signal, reloading");
 
-                    mcu.try_reconnect().await;
+                    if let Err(e) = settings::reload_settings(shared_settings.clone(), config_path) {
+                        log::error!("Failed to reload settings, {}", e);
+                        continue
+                    }
+
+                    let new_settings = shared_settings.load_full();
+
+                    mcu_pool.reload_janus_config(&new_settings).await;
                 }
             }
         }
@@ -281,7 +292,7 @@ async fn run_service(settings: Settings) -> Result<()> {
         // Now that all ref-pointers to mcu are dropped use Arc::get_mut to get a mutable
         // reference and call JanusMcu::destroy
         log::debug!("Destroying JanusMcu");
-        Arc::get_mut(&mut mcu)
+        Arc::get_mut(&mut mcu_pool)
             .expect("Not all ref-pointers to mcu dropped")
             .destroy()
             .await;
@@ -388,7 +399,7 @@ fn setup_logging(logging: &Logging) -> Result<()> {
     .context("Failed to setup logging utility")
 }
 
-fn setup_rustls(tls: settings::HttpTls) -> Result<rustls::ServerConfig> {
+fn setup_rustls(tls: &settings::HttpTls) -> Result<rustls::ServerConfig> {
     let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
 
     let cert_file = File::open(&tls.certificate)

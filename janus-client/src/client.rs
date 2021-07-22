@@ -141,8 +141,6 @@ pub(crate) struct InnerClient {
     /// Sink for general messages from Janus that are not part of a request, such as notifications, etc.
     server_notification_sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
     pub(crate) sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
-    /// shutdown signal
-    shutdown: broadcast::Sender<()>,
 }
 
 impl InnerClient {
@@ -154,7 +152,6 @@ impl InnerClient {
         config: RabbitMqConfig,
         id: ClientId,
         sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
-        shutdown: broadcast::Sender<()>,
     ) -> Result<Self, error::Error> {
         let (connection, consumer) = config.setup().await?;
 
@@ -164,7 +161,6 @@ impl InnerClient {
 
         tokio::spawn(rabbitmq_event_handling_loop(
             id.clone(),
-            shutdown.subscribe(),
             consumer,
             cmd_receiver,
             sessions.clone(),
@@ -177,7 +173,6 @@ impl InnerClient {
             connection,
             server_notification_sink: sink,
             sessions,
-            shutdown,
         })
     }
 
@@ -556,7 +551,7 @@ impl InnerHandle {
 
         // Set detached to true before checking sending request to avoid panicking on well
         // behaving code even when janus or rabbitmq fail
-        self.detached = true;
+        self.assume_detached();
 
         client
             .send(&JanusRequest::Detach {
@@ -575,6 +570,10 @@ impl InnerHandle {
             _ => Err(error::Error::InvalidResponse),
         }
     }
+
+    pub(crate) fn assume_detached(&mut self) {
+        self.detached = true;
+    }
 }
 
 impl Drop for InnerHandle {
@@ -591,7 +590,6 @@ struct StoredTransaction {
 
 async fn rabbitmq_event_handling_loop(
     id: ClientId,
-    mut shutdown_sig: broadcast::Receiver<()>,
     mut stream: Consumer,
     mut cmd_receiver: mpsc::UnboundedReceiver<TaskCmd>,
     sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
@@ -601,10 +599,6 @@ async fn rabbitmq_event_handling_loop(
 
     loop {
         tokio::select! {
-            _ = shutdown_sig.recv() => {
-                log::debug!("RabbitMQ event handling loop got shutdown signal, exiting task");
-                return;
-            }
             cmd = cmd_receiver.recv() => {
                 match cmd {
                     Some(TaskCmd::Transaction { id, sender }) => {
@@ -618,7 +612,8 @@ async fn rabbitmq_event_handling_loop(
                         transactions.remove(&id);
                     }
                     None => {
-                        log::error!("Event handling loop exiting because task_sender was dropped");
+                        log::info!("Event handling loop exiting because cmd_receiver was dropped");
+                        return;
                     }
                 }
             }

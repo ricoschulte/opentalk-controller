@@ -3,12 +3,13 @@ use super::DefaultApiError;
 use super::NoContent;
 use crate::db::users::User;
 use crate::settings;
-use crate::settings::TurnServer;
+use crate::settings::{Settings, TurnServer};
 use actix_web::get;
 use actix_web::web::Data;
 use actix_web::web::Json;
 use actix_web::web::ReqData;
 use actix_web::Either;
+use arc_swap::ArcSwap;
 use rand::distributions::{Distribution, Uniform};
 use rand::prelude::SliceRandom;
 use rand::CryptoRng;
@@ -30,16 +31,18 @@ pub struct Turn {
 /// Returns a list of ['Turn'] with HMAC-SHA1 credentials following https://datatracker.ietf.org/doc/html/draft-uberti-behave-turn-rest-00
 #[get("/turn")]
 pub async fn get(
-    turn_servers: Data<Option<settings::Turn>>,
+    settings: Data<arc_swap::ArcSwap<settings::Settings>>,
     current_user: ReqData<User>,
 ) -> Result<Either<Json<Vec<Turn>>, NoContent>, DefaultApiError> {
+    let settings: &ArcSwap<Settings> = &**settings;
+    let settings = settings.load();
+    let turn_servers = &settings.turn;
+
     log::trace!(
         "Generating new turn credentials for user {} and servers {:?}",
         current_user.oidc_uuid,
         turn_servers
     );
-
-    let turn_servers: &Option<settings::Turn> = turn_servers.as_ref();
 
     let turn_config = match turn_servers.as_ref() {
         Some(turn_config) => turn_config,

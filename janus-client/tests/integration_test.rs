@@ -6,12 +6,10 @@ use lapin::Connection;
 use lapin::ConnectionProperties;
 use std::sync::Arc;
 use test_env_log::test;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 
 #[test(tokio::test)]
 async fn echo_external_channel() {
-    let (shutdown, _) = broadcast::channel(1);
-
     let rabbit_addr =
         std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://localhost:5672".to_owned());
     let connection = Connection::connect(&rabbit_addr, ConnectionProperties::default())
@@ -29,10 +27,10 @@ async fn echo_external_channel() {
         "k3k-signaling-echo-external-channel".to_owned(),
     );
 
-    let id = ClientId(Arc::new("janus-test-echo".into()));
+    let id = ClientId(Arc::from("janus-test-echo"));
 
     let (sink, _recv) = mpsc::channel(48);
-    let client = Client::new(config, id, sink, shutdown).await.unwrap();
+    let client = Client::new(config, id, sink).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let echo_handle = session
         .attach_to_plugin(JanusPlugin::Echotest)
@@ -53,14 +51,12 @@ async fn echo_external_channel() {
         incoming::EchoPluginDataEvent::Error(_) => panic!(),
     }
 
-    echo_handle.detach().await.unwrap();
+    echo_handle.detach(false).await.unwrap();
     session.destroy(false).await.unwrap();
 }
 
 #[test(tokio::test)]
 async fn create_and_list_rooms() {
-    let (shutdown, _) = broadcast::channel(1);
-
     let rabbit_addr =
         std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://localhost:5672".to_owned());
     let connection = Connection::connect(&rabbit_addr, ConnectionProperties::default())
@@ -77,10 +73,10 @@ async fn create_and_list_rooms() {
         "from-janus".to_owned(),
         "k3k-signaling-create-and-list-rooms".to_owned(),
     );
-    let id = ClientId(Arc::new("janus-test-list".into()));
+    let id = ClientId(Arc::from("janus-test-list"));
 
     let (sink, _recv) = mpsc::channel(48);
-    let client = Client::new(config, id, sink, shutdown).await.unwrap();
+    let client = Client::new(config, id, sink).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let handle = session
         .attach_to_plugin(JanusPlugin::VideoRoom)
@@ -159,14 +155,12 @@ async fn create_and_list_rooms() {
         .await
         .unwrap();
 
-    handle.detach().await.unwrap();
+    handle.detach(false).await.unwrap();
     session.destroy(false).await.unwrap();
 }
 
 #[test(tokio::test)]
 async fn send_offer() {
-    let (shutdown, _) = broadcast::channel(1);
-
     let rabbit_addr =
         std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://localhost:5672".to_owned());
 
@@ -186,10 +180,10 @@ async fn send_offer() {
         "k3k-signaling-send-offer".to_owned(),
     );
 
-    let id = ClientId(Arc::new("janus-test-offer".into()));
+    let id = ClientId(Arc::from("janus-test-offer"));
 
     let (sink, _recv) = mpsc::channel(48);
-    let client = Client::new(config, id, sink, shutdown).await.unwrap();
+    let client = Client::new(config, id, sink).await.unwrap();
     let mut session = client.create_session().await.unwrap();
     let publisher_handle = session
         .attach_to_plugin(JanusPlugin::VideoRoom)
@@ -244,6 +238,6 @@ async fn send_offer() {
         .await
         .unwrap();
 
-    publisher_handle.detach().await.unwrap();
+    publisher_handle.detach(false).await.unwrap();
     session.destroy(false).await.unwrap();
 }

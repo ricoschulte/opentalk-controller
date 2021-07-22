@@ -188,13 +188,18 @@ impl SignalingModule for Media {
                 }
             }
             Event::Ext((media_session_key, message)) => match message {
+                WebRtcEvent::AssociatedMcuDied => {
+                    self.remove_broken_media_session(&mut ctx, media_session_key)
+                        .await?;
+                    ctx.ws_send(outgoing::Message::WebRtcDown(media_session_key.into()))
+                }
                 WebRtcEvent::WebRtcUp => {
                     ctx.ws_send(outgoing::Message::WebRtcUp(media_session_key.into()))
                 }
                 WebRtcEvent::WebRtcDown => {
                     ctx.ws_send(outgoing::Message::WebRtcDown(media_session_key.into()));
 
-                    self.remove_media_session(&mut ctx, media_session_key)
+                    self.gracefully_remove_media_session(&mut ctx, media_session_key)
                         .await?;
                 }
                 WebRtcEvent::SlowLink(link_direction) => {
@@ -279,13 +284,16 @@ impl SignalingModule for Media {
 }
 
 impl Media {
-    /// Removes the media session that is associated with the provided MediaSessionKey
-    async fn remove_media_session(
+    /// Gracefully removes the media session that is associated with the provided MediaSessionKey
+    ///
+    /// Send detach and destroy messages to janus in order to remove a media session gracefully.
+    async fn gracefully_remove_media_session(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
         media_session_key: MediaSessionKey,
     ) -> Result<()> {
         if media_session_key.0 == self.id {
+            log::trace!("Removing publisher {}", media_session_key);
             self.media.remove_publisher(media_session_key.1).await;
             self.state.remove(&media_session_key.1);
 
@@ -295,7 +303,38 @@ impl Media {
 
             ctx.invalidate_data();
         } else {
+            log::trace!("Removing subscriber {}", media_session_key);
             self.media.remove_subscriber(&media_session_key).await;
+        }
+        Ok(())
+    }
+
+    /// Kills a media session
+    ///
+    /// Opposed to [`gracefully_remove_media_session(...)`], this function will not inform janus
+    /// about any changes to the media session.
+    async fn remove_broken_media_session(
+        &mut self,
+        ctx: &mut ModuleContext<'_, Self>,
+        media_session_key: MediaSessionKey,
+    ) -> Result<()> {
+        if media_session_key.0 == self.id {
+            log::trace!("Removing broken publisher {}", media_session_key);
+            self.media
+                .remove_broken_publisher(media_session_key.1)
+                .await;
+            self.state.remove(&media_session_key.1);
+
+            storage::set_state(ctx.redis_conn(), self.room, self.id, &self.state)
+                .await
+                .context("Failed to set state attribute in storage")?;
+
+            ctx.invalidate_data();
+        } else {
+            log::trace!("Removing broken subscriber {}", media_session_key);
+            self.media
+                .remove_broken_subscriber(&media_session_key)
+                .await;
         }
         Ok(())
     }

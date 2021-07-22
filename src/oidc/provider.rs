@@ -64,7 +64,7 @@ impl ProviderClient {
 
         Ok(ProviderClient {
             metadata,
-            client_id: provider.client_id,
+            client_id: ClientId::new(provider.client_id.into()),
             client,
         })
     }

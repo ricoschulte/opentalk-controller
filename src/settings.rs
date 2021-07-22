@@ -1,16 +1,43 @@
 //! Handles the application settings via a config file and environment variables.
 use crate::cli::Args;
+use arc_swap::ArcSwap;
 use config::{Config, ConfigError, Environment, File};
 use log::Level;
 use openidconnect::{ClientId, ClientSecret, IssuerUrl};
 use serde::{Deserialize, Deserializer};
 use std::convert::TryFrom;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+pub type SharedSettings = Arc<ArcSwap<Settings>>;
+
+/// Reload the settings from the `config_path` & the environment
+///
+/// Not all settings are used, as most of the settings are not reloadable while the
+/// controller is running.
+pub fn reload_settings(
+    shared_settings: SharedSettings,
+    config_path: &Path,
+) -> Result<(), ConfigError> {
+    let new_settings = Settings::load(config_path)?;
+    let mut current_settings = (*shared_settings.load_full()).clone();
+
+    // reload janus connection config
+    current_settings.room_server.connections = new_settings.room_server.connections;
+
+    // reload turn settings
+    current_settings.turn = new_settings.turn;
+
+    // replace the shared settings with the modified ones
+    shared_settings.store(Arc::new(current_settings));
+
+    Ok(())
+}
 
 /// Loads settings from [`Args`] and config file
 ///
 /// The settings specified in the CLI-Arguments have a higher priority than the settings specified in the config file
-pub fn load_settings(args: Args) -> Result<Settings, ConfigError> {
+pub fn load_settings(args: &Args) -> Result<Settings, ConfigError> {
     let mut settings = Settings::load(&args.config)?;
 
     if args.verbose > 0 {
@@ -22,7 +49,7 @@ pub fn load_settings(args: Args) -> Result<Settings, ConfigError> {
         };
     }
 
-    if let Some(log_output) = args.logoutput {
+    if let Some(log_output) = args.logoutput.clone() {
         settings.logging.file = if log_output == PathBuf::from("-") {
             None
         } else {
@@ -56,7 +83,7 @@ pub fn load_settings(args: Args) -> Result<Settings, ConfigError> {
 /// ```
 /// # Note
 /// Fields set via environment variables do not affect the underlying config file.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Settings {
     pub database: Database,
     pub oidc: Oidc,
@@ -85,7 +112,7 @@ impl Settings {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Database {
     pub server: String,
     pub port: u32,
@@ -99,20 +126,20 @@ pub struct Database {
 }
 
 /// Settings for OpenID Connect protocol which is used for user management.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Oidc {
     pub provider: OidcProvider,
 }
 
 /// Information about the OIDC Provider
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct OidcProvider {
     pub issuer: IssuerUrl,
     pub client_id: ClientId,
     pub client_secret: ClientSecret,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Http {
     #[serde(default = "default_http_port")]
     pub port: u16,
@@ -124,14 +151,14 @@ pub struct Http {
     pub tls: Option<HttpTls>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct HttpTls {
     pub certificate: PathBuf,
     pub private_key: PathBuf,
 }
 
 /// Settings for CORS (Cross Origin Resource Sharing)
-#[derive(Default, Clone, Debug, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize)]
 pub struct HttpCors {
     #[serde(default)]
     pub allowed_origin: Vec<String>,
@@ -156,7 +183,7 @@ fn default_logging() -> Logging {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Turn {
     /// How long should a credential pair be valid, in seconds
     #[serde(deserialize_with = "duration_from_secs")]
@@ -165,20 +192,20 @@ pub struct Turn {
     pub servers: Vec<TurnServer>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct TurnServer {
     // TURN URIs for this TURN server following rfc7065
     pub uris: Vec<String>,
     pub pre_shared_key: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RedisConfig {
     #[serde(default = "redis_default_url")]
     pub url: url::Url,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct JanusMcuConfig {
     pub connections: Vec<JanusRabbitMqConnection>,
 
@@ -191,14 +218,14 @@ pub struct JanusMcuConfig {
     pub max_screen_bitrate: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct RabbitMqConfig {
     #[serde(default = "rabbitmq_default_url")]
     pub url: String,
 }
 
 /// Take the settings from your janus rabbit mq transport configuration.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct JanusRabbitMqConnection {
     #[serde(default = "default_to_janus_routing_key")]
     pub to_janus_routing_key: String,

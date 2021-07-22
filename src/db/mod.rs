@@ -46,8 +46,8 @@ pub struct DbInterface {
 
 impl DbInterface {
     /// Creates a new DbInterface instance from the specified database settings.
-    pub fn connect(db_settings: settings::Database) -> Result<Self> {
-        let con_uri = pg_connection_uri(&db_settings);
+    pub fn connect(db_settings: &settings::Database) -> Result<Self> {
+        let con_uri = pg_connection_uri(db_settings);
 
         let manager = ConnectionManager::<PgConnection>::new(con_uri);
 
