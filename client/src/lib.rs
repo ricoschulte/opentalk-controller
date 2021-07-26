@@ -24,9 +24,8 @@ impl Config {
     ///
     /// Creates a new [`OpenIdConnectContext`]
     pub async fn openid_connect_discover(&self) -> Result<OpenIdConnectContext> {
-        let providers = get_oidc_provider(&self.k3k_url).await?;
-        anyhow::ensure!(providers.providers.len() == 1);
-        let issuer_url = &providers.providers[0].url;
+        let provider = get_oidc_provider(&self.k3k_url).await?;
+        let issuer_url = &provider.oidc.url;
         keycloak::discover(issuer_url, &self.client_id, &self.redirect_url).await
     }
 }

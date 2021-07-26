@@ -30,7 +30,7 @@ pub enum Message {
     #[serde(rename = "webrtc_slow")]
     WebRtcSlow(Link),
 
-    /// Error message, if received assume join failed.
+    /// Contains human readable error message about what request failed
     #[serde(rename = "error")]
     Error { text: &'static str },
 }

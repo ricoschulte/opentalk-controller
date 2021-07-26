@@ -50,7 +50,7 @@ pub struct OidcProvider {
 /// JSON Body of the response for *GET '/auth/login/*
 #[derive(Debug, Deserialize)]
 pub struct OidcProviders {
-    pub providers: Vec<OidcProvider>,
+    pub oidc: OidcProvider,
 }
 
 /// Calls *GET '/v1/auth/login/*
