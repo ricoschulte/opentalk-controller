@@ -63,7 +63,7 @@ test:cargo_test:
   services:
     - name: postgres:13-alpine
       alias: postgres
-    - name: rabbitmq:3
+    - name: rabbitmq:3.8
       alias: rabbitmq
     - name: quay.io/freswa/janus-gateway-rmq:latest
       alias: janus-gateway
