@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 pub enum Request {
     RequestOffer,
     SdpOffer(String),
