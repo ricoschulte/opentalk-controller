@@ -138,6 +138,14 @@ impl SignalingModule for AutoMod {
                 Ok(())
             }
             Event::Ext(_) => unreachable!(),
+            Event::RaiseHand => {
+                // TODO Add self to playlist if allowed
+                Ok(())
+            }
+            Event::LowerHand => {
+                // TODO
+                Ok(())
+            }
         }
     }
 

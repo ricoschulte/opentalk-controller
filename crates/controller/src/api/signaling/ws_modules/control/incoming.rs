@@ -1,10 +1,12 @@
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
-#[serde(tag = "action")]
+#[serde(tag = "action", rename_all = "snake_case")]
 pub enum Message {
-    #[serde(rename = "join")]
     Join(Join),
+
+    RaiseHand,
+    LowerHand,
 }
 
 #[derive(Debug, Deserialize)]
@@ -28,10 +30,36 @@ mod test {
 
         let msg: Message = serde_json::from_str(json).unwrap();
 
-        match msg {
-            Message::Join(Join { display_name }) => {
-                assert_eq!(display_name, "Test!");
-            }
+        if let Message::Join(Join { display_name }) = msg {
+            assert_eq!(display_name, "Test!");
+        } else {
+            panic!()
         }
+    }
+
+    #[test]
+    fn raise_hand() {
+        let json = r#"
+        {
+            "action": "raise_hand"
+        }
+        "#;
+
+        let msg: Message = serde_json::from_str(json).unwrap();
+
+        assert!(matches!(msg, Message::RaiseHand));
+    }
+
+    #[test]
+    fn lower_hand() {
+        let json = r#"
+        {
+            "action": "lower_hand"
+        }
+        "#;
+
+        let msg: Message = serde_json::from_str(json).unwrap();
+
+        assert!(matches!(msg, Message::LowerHand));
     }
 }

@@ -34,6 +34,8 @@ impl SignalingModule for Echo {
             Event::RabbitMq(_) => {}
             Event::Ext(_) => unreachable!("no registered external events"),
             // Ignore
+            Event::RaiseHand => {}
+            Event::LowerHand => {}
             Event::Joined { .. } => {}
             Event::Leaving => {}
             Event::ParticipantJoined(..) => {}

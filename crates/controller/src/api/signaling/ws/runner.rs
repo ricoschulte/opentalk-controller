@@ -457,7 +457,7 @@ impl Runner {
             }
         }
 
-        self.handle_module_broadcast_event(DynBroadcastEvent::Leaving)
+        self.handle_module_broadcast_event(DynBroadcastEvent::Leaving, false)
             .await;
 
         log::debug!("Stopping ws-runner task for participant {}", self.id);
@@ -550,6 +550,7 @@ impl Runner {
 
                 self.control_data = Some(ControlData {
                     display_name: join.display_name,
+                    hand_is_up: false,
                 });
 
                 let participant_set =
@@ -572,10 +573,10 @@ impl Runner {
 
                 let mut module_data = HashMap::new();
 
-                self.handle_module_broadcast_event(DynBroadcastEvent::Joined(
-                    &mut module_data,
-                    &mut participants,
-                ))
+                self.handle_module_broadcast_event(
+                    DynBroadcastEvent::Joined(&mut module_data, &mut participants),
+                    false,
+                )
                 .await;
 
                 self.ws
@@ -596,6 +597,32 @@ impl Runner {
                 self.rabbitmq_publish_control(None, rabbitmq::Message::Joined(self.id))
                     .await;
             }
+            incoming::Message::RaiseHand => {
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room.uuid,
+                    self.id,
+                    "hand_is_up",
+                    true,
+                )
+                .await?;
+
+                self.handle_module_broadcast_event(DynBroadcastEvent::RaiseHand, true)
+                    .await;
+            }
+            incoming::Message::LowerHand => {
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room.uuid,
+                    self.id,
+                    "hand_is_up",
+                    false,
+                )
+                .await?;
+
+                self.handle_module_broadcast_event(DynBroadcastEvent::LowerHand, true)
+                    .await;
+            }
         }
 
         Ok(())
@@ -611,10 +638,16 @@ impl Runner {
             storage::get_attribute(&mut self.redis_conn, self.room.uuid, id, "display_name")
                 .await?;
 
+        let hand_is_up: bool =
+            storage::get_attribute(&mut self.redis_conn, self.room.uuid, id, "hand_is_up").await?;
+
         participant.module_data.insert(
             NAMESPACE,
-            serde_json::to_value(ControlData { display_name })
-                .expect("Failed to convert ControlData to serde_json::Value"),
+            serde_json::to_value(ControlData {
+                display_name,
+                hand_is_up,
+            })
+            .expect("Failed to convert ControlData to serde_json::Value"),
         );
 
         Ok(participant)
@@ -698,9 +731,10 @@ impl Runner {
 
                 let mut participant = self.build_participant(id).await?;
 
-                self.handle_module_broadcast_event(DynBroadcastEvent::ParticipantJoined(
-                    &mut participant,
-                ))
+                self.handle_module_broadcast_event(
+                    DynBroadcastEvent::ParticipantJoined(&mut participant),
+                    false,
+                )
                 .await;
 
                 self.ws
@@ -718,7 +752,7 @@ impl Runner {
                     return Ok(());
                 }
 
-                self.handle_module_broadcast_event(DynBroadcastEvent::ParticipantLeft(id))
+                self.handle_module_broadcast_event(DynBroadcastEvent::ParticipantLeft(id), false)
                     .await;
 
                 self.ws
@@ -740,9 +774,10 @@ impl Runner {
 
                 let mut participant = self.build_participant(id).await?;
 
-                self.handle_module_broadcast_event(DynBroadcastEvent::ParticipantUpdated(
-                    &mut participant,
-                ))
+                self.handle_module_broadcast_event(
+                    DynBroadcastEvent::ParticipantUpdated(&mut participant),
+                    false,
+                )
                 .await;
 
                 self.ws
@@ -845,10 +880,13 @@ impl Runner {
     }
 
     /// Dispatch copyable event to all modules
-    async fn handle_module_broadcast_event(&mut self, dyn_event: DynBroadcastEvent<'_>) {
+    async fn handle_module_broadcast_event(
+        &mut self,
+        dyn_event: DynBroadcastEvent<'_>,
+        mut invalidate_data: bool,
+    ) {
         let mut ws_messages = vec![];
         let mut rabbitmq_publish = vec![];
-        let mut invalidate_data = false;
 
         let ctx = DynEventCtx {
             id: self.id,
@@ -903,6 +941,7 @@ fn error(text: &str) -> String {
 #[derive(Serialize)]
 struct ControlData {
     display_name: String,
+    hand_is_up: bool,
 }
 
 /// Helper websocket abstraction that pings the participants in regular intervals

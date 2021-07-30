@@ -152,7 +152,7 @@ impl SignalingModule for Chat {
                     ctx.ws_send(msg);
                 }
             }
-            Event::Ext(_) => {}
+            Event::RaiseHand | Event::LowerHand | Event::Ext(_) => {}
         }
 
         Ok(())

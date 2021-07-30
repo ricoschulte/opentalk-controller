@@ -88,8 +88,6 @@ impl SignalingModule for Chat {
                 *frontend_data =
                     Some(ChatHistory::for_current_room(ctx.redis_conn(), self.room).await?);
             }
-            Event::Leaving => {}
-            Event::ParticipantJoined(_, _) => {}
             Event::WsMessage(msg) => {
                 let source = self.id;
                 let timestamp = Utc::now();
@@ -134,7 +132,13 @@ impl SignalingModule for Chat {
             Event::RabbitMq(msg) => {
                 ctx.ws_send(msg);
             }
-            Event::ParticipantLeft(_) | Event::ParticipantUpdated(_, _) | Event::Ext(_) => {}
+            Event::Leaving
+            | Event::RaiseHand
+            | Event::LowerHand
+            | Event::ParticipantJoined(_, _)
+            | Event::ParticipantLeft(_)
+            | Event::ParticipantUpdated(_, _)
+            | Event::Ext(_) => {}
         }
 
         Ok(())
