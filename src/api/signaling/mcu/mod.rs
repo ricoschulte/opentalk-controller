@@ -189,7 +189,7 @@ impl McuPool {
 
         let info = serde_json::to_string(&PublisherInfo {
             room_id,
-            mcu_id: Cow::Borrowed(&client.id.0.as_str()),
+            mcu_id: Cow::Borrowed(client.id.0.as_str()),
         })
         .context("Failed to serialize publisher info")?;
 

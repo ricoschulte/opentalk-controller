@@ -438,8 +438,8 @@ impl Runner {
 
     async fn handle_ws_message(&mut self, message: Message) {
         let value: Result<Namespaced<'_, Value>, _> = match message {
-            Message::Text(ref text) => serde_json::from_str(&text),
-            Message::Binary(ref binary) => serde_json::from_slice(&binary),
+            Message::Text(ref text) => serde_json::from_str(text),
+            Message::Binary(ref binary) => serde_json::from_slice(binary),
             Message::Ping(data) => {
                 self.ws_send(Message::Pong(data)).await;
                 return;
@@ -773,7 +773,7 @@ impl Runner {
             .rabbit_mq_channel
             .basic_publish(
                 exchange.unwrap_or(&self.room_exchange),
-                &routing_key,
+                routing_key,
                 Default::default(),
                 message.into_bytes(),
                 Default::default(),

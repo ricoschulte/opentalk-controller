@@ -138,7 +138,7 @@ impl MediaSessions {
 
     /// Remove a specific subscriber
     pub async fn remove_subscriber(&mut self, media_session_key: &MediaSessionKey) {
-        if let Some(subscriber) = self.subscribers.remove(&media_session_key) {
+        if let Some(subscriber) = self.subscribers.remove(media_session_key) {
             if let Err(e) = subscriber.destroy().await {
                 log::error!("Failed to destroy subscriber, {}", e);
             }

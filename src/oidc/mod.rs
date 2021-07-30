@@ -55,7 +55,7 @@ impl OidcContext {
         let response = self
             .provider
             .client
-            .introspect(&access_token)?
+            .introspect(access_token)?
             .request_async(http_client)
             .await
             .context("Failed to verify token using the introspect endpoint")?;

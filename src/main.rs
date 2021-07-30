@@ -330,7 +330,7 @@ fn setup_cors(settings: &settings::HttpCors) -> Cors {
     let mut cors = Cors::default();
 
     for origin in &settings.allowed_origin {
-        cors = cors.allowed_origin(&origin)
+        cors = cors.allowed_origin(origin)
     }
 
     cors.allowed_header(header::CONTENT_TYPE)

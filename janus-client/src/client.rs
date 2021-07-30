@@ -675,7 +675,7 @@ async fn event_handling_loop_inner(
     sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
     sink: &mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
 ) -> Result<(), error::Error> {
-    match serde_json::from_str::<JanusMessage>(&msg) {
+    match serde_json::from_str::<JanusMessage>(msg) {
         Ok(janus_message) => {
             match janus_message
                 .transaction_id()
@@ -694,7 +694,7 @@ async fn event_handling_loop_inner(
                 }
                 None => {
                     // We could not find a transaction_id in our hashmap, try to route it based on the sessionId
-                    route_message(id, &sessions, &sink, Arc::new(janus_message)).await;
+                    route_message(id, &sessions, sink, Arc::new(janus_message)).await;
 
                     Ok(())
                 }
@@ -835,8 +835,8 @@ fn get_handle_from_sender(
     session_id: &SessionId,
     sender: &HandleId,
 ) -> Option<Result<Arc<InnerHandle>, error::Error>> {
-    let session = sessions.lock().get(&session_id).cloned();
+    let session = sessions.lock().get(session_id).cloned();
     session
         .and_then(|weak| weak.upgrade())
-        .map(|session| session.find_handle(&sender))
+        .map(|session| session.find_handle(sender))
 }
