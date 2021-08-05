@@ -1322,6 +1322,7 @@ dependencies = [
  "actix-web-actors",
  "actix-web-httpauth",
  "anyhow",
+ "arc-swap",
  "async-trait",
  "async-tungstenite",
  "barrel",

@@ -109,6 +109,15 @@ impl MediaSessions {
         }
     }
 
+    /// Removes a broken [JanusPublisher] for the given StreamType
+    pub async fn remove_broken_publisher(&mut self, media_session_type: MediaSessionType) {
+        if let Some(publisher) = self.publishers.remove(&media_session_type) {
+            if let Err(e) = publisher.destroy_broken().await {
+                log::error!("Failed to remove broken publisher, {}", e);
+            }
+        }
+    }
+
     /// When receiving an update message for a specific participant one must check if the updated
     /// participant has dropped any media sessions.
     ///
@@ -130,7 +139,7 @@ impl MediaSessions {
             // Safe unwrap since key was taken from hashmap
             let subscriber = self.subscribers.remove(&key).unwrap();
 
-            if let Err(e) = subscriber.destroy().await {
+            if let Err(e) = subscriber.destroy(false).await {
                 log::error!("Failed to destroy subscriber, {}", e);
             }
         }
@@ -139,12 +148,25 @@ impl MediaSessions {
     /// Remove a specific subscriber
     pub async fn remove_subscriber(&mut self, media_session_key: &MediaSessionKey) {
         if let Some(subscriber) = self.subscribers.remove(media_session_key) {
-            if let Err(e) = subscriber.destroy().await {
+            if let Err(e) = subscriber.destroy(false).await {
                 log::error!("Failed to destroy subscriber, {}", e);
             }
         } else {
             log::error!(
                 "Failed to destroy subscriber, unable to find subscriber by media_session_key {}",
+                media_session_key
+            )
+        }
+    }
+    /// Remove a specific broken subscriber
+    pub async fn remove_broken_subscriber(&mut self, media_session_key: &MediaSessionKey) {
+        if let Some(subscriber) = self.subscribers.remove(media_session_key) {
+            if let Err(e) = subscriber.destroy(true).await {
+                log::error!("Failed to remove broken subscriber, {}", e);
+            }
+        } else {
+            log::error!(
+                "Failed to destroy broken subscriber, unable to find subscriber by media_session_key {}",
                 media_session_key
             )
         }
@@ -167,7 +189,7 @@ impl MediaSessions {
     pub async fn destroy(mut self) {
         for (_, subscriber) in self.subscribers.drain() {
             log::debug!("Destroy subscriber {}", self.id);
-            if let Err(e) = subscriber.destroy().await {
+            if let Err(e) = subscriber.destroy(false).await {
                 log::error!("Failed to destroy subscriber, {}", e);
             }
         }

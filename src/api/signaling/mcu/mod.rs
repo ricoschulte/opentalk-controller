@@ -1,4 +1,5 @@
 use crate::settings;
+use crate::settings::{Settings, SharedSettings};
 use anyhow::{bail, Context, Result};
 use janus_client::types::{SdpAnswer, SdpOffer};
 use janus_client::{ClientId, JanusMessage, JsepType, RoomId as JanusRoomId, TrickleCandidate};
@@ -12,7 +13,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, oneshot, RwLock, RwLockReadGuard};
-use tokio::time::interval;
+use tokio::time::{interval, sleep};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
@@ -39,17 +40,43 @@ struct PublisherInfo<'i> {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
-pub struct McuID(Arc<String>);
+struct McuId(Arc<str>);
+
+impl McuId {
+    pub fn new(to_janus_key: &str, janus_exchange_key: &str, from_janus_key: &str) -> Self {
+        let key = Self::generate_id_string(to_janus_key, janus_exchange_key, from_janus_key);
+
+        Self(key.into_boxed_str().into())
+    }
+
+    pub fn generate_id_string(
+        to_janus_key: &str,
+        janus_exchange_key: &str,
+        from_janus_key: &str,
+    ) -> String {
+        format!("{}-{}-{}", to_janus_key, janus_exchange_key, from_janus_key)
+    }
+}
+
+impl From<&settings::JanusRabbitMqConnection> for McuId {
+    fn from(conn: &settings::JanusRabbitMqConnection) -> Self {
+        Self::new(
+            &conn.to_janus_routing_key,
+            &conn.janus_exchange,
+            &conn.from_janus_routing_key,
+        )
+    }
+}
 
 /// Pool of one or more configured `McuClient`s
 ///
 /// Distributes new publishers to a available Mcu with the least amount of subscribers
 pub struct McuPool {
-    config: settings::JanusMcuConfig,
-
     // Clients shared with the global receive task which sends keep-alive messages
     // and removes clients of vanished  janus instances
     clients: Arc<RwLock<HashSet<McuClient>>>,
+
+    shared_settings: SharedSettings,
 
     // Sender passed to created janus clients. Needed here to pass them to janus-clients
     // which are being reconnected
@@ -66,25 +93,27 @@ pub struct McuPool {
 
 impl McuPool {
     pub async fn build(
-        config: settings::JanusMcuConfig,
+        mcu_config: &settings::JanusMcuConfig,
+        shared_settings: SharedSettings,
         rabbitmq_channel: lapin::Channel,
         mut redis: ConnectionManager,
     ) -> Result<Self> {
         let (shutdown, shutdown_sig) = broadcast::channel(1);
 
-        let mut clients = HashSet::with_capacity(config.connections.len());
+        let mut clients = HashSet::with_capacity(mcu_config.connections.len());
         let (events_sender, events) = mpsc::channel(12);
 
-        for connection in config.connections.clone() {
-            let client =
-                McuClient::connect(rabbitmq_channel.clone(), connection, events_sender.clone())
-                    .await
-                    .context("Failed to create mcu client")?;
+        let connections = mcu_config.connections.clone();
 
-            redis
-                .zincr(MCU_STATE, client.id.0.as_str(), 0)
-                .await
-                .context("Failed to initialize subscriber count")?;
+        for connection in connections {
+            let client = McuClient::connect(
+                rabbitmq_channel.clone(),
+                &mut redis,
+                connection,
+                events_sender.clone(),
+            )
+            .await
+            .context("Failed to create mcu client")?;
 
             clients.insert(client);
         }
@@ -94,8 +123,8 @@ impl McuPool {
         tokio::spawn(global_receive_task(clients.clone(), events, shutdown_sig));
 
         Ok(Self {
-            config,
             clients,
+            shared_settings,
             events_sender,
             rabbitmq_channel,
             redis,
@@ -113,35 +142,63 @@ impl McuPool {
         }
     }
 
-    pub async fn try_reconnect(&self) {
+    /// Reload the janus config
+    ///
+    /// Reads the current state of the [`SharedSettings`] and loads the configured janus
+    /// configurations.
+    ///
+    /// This function will gracefully remove an active janus client if it happens to be missing
+    /// in the new config. The Publishers & Subscribers on the removed janus will get a WebRtcDown
+    /// event and should reconnect in order to use a different janus.
+    pub async fn reload_janus_config(&self, new_settings: &Settings) {
+        let mcu_settings = &new_settings.room_server;
+
         let mut clients = self.clients.write().await;
 
-        if clients.len() == self.config.connections.len() {
-            log::info!("All connections are up, nothing to do");
-            return;
+        // the new janus client list
+        let updated_clients = mcu_settings
+            .connections
+            .iter()
+            .map(McuId::from)
+            .collect::<Vec<McuId>>();
+
+        // figure out which old clients to remove
+        let removed_clients = clients
+            .iter()
+            .filter(|client| !updated_clients.contains(&client.id))
+            .map(|client| client.id.clone())
+            .collect::<Vec<McuId>>();
+
+        // gracefully shutdown all removed clients
+        for removed_client in removed_clients {
+            if let Some(client) = clients.take(&removed_client) {
+                client.destroy(false).await;
+            }
         }
 
-        for config in &self.config.connections {
-            if clients.contains(config.to_janus_routing_key.as_str()) {
+        // connect to new clients
+        for connection_config in &mcu_settings.connections {
+            if clients.contains(&McuId::from(connection_config)) {
                 continue;
             }
 
             match McuClient::connect(
                 self.rabbitmq_channel.clone(),
-                config.clone(),
+                &mut self.redis.clone(),
+                connection_config.clone(),
                 self.events_sender.clone(),
             )
             .await
             {
                 Ok(client) => {
-                    log::info!("Reconnected mcu {:?}", config.to_janus_routing_key);
+                    log::info!("Connected mcu {:?}", connection_config.to_janus_routing_key);
 
                     clients.insert(client);
                 }
                 Err(e) => {
                     log::error!(
-                        "Failed to reconnect to {:?}, {}",
-                        config.to_janus_routing_key,
+                        "Failed to connect to {:?}, {}",
+                        connection_config.to_janus_routing_key,
                         e
                     )
                 }
@@ -189,7 +246,7 @@ impl McuPool {
 
         let info = serde_json::to_string(&PublisherInfo {
             room_id,
-            mcu_id: Cow::Borrowed(client.id.0.as_str()),
+            mcu_id: Cow::Borrowed(client.id.0.as_ref()),
         })
         .context("Failed to serialize publisher info")?;
 
@@ -198,21 +255,21 @@ impl McuPool {
             .await
             .context("Failed to set publisher info")?;
 
+        tokio::spawn(JanusPublisher::run(
+            media_session_key,
+            BroadcastStream::new(handle.subscribe()),
+            event_sink,
+            client.pubsub_shutdown.subscribe(),
+            destroy_sig,
+        ));
+
         let publisher = JanusPublisher {
-            handle: handle.clone(),
+            handle,
             room_id,
             media_session_key,
             redis,
             destroy,
         };
-
-        tokio::spawn(JanusPublisher::run(
-            media_session_key,
-            handle,
-            event_sink,
-            client.shutdown.subscribe(),
-            destroy_sig,
-        ));
 
         Ok(publisher)
     }
@@ -230,9 +287,10 @@ impl McuPool {
 
         // TODO in the original code there was a check if a room for this publisher exists, check if necessary
 
+        let settings = &self.shared_settings.load().room_server;
         let bitrate = match media_session_key.1 {
-            MediaSessionType::Video => self.config.max_video_bitrate,
-            MediaSessionType::Screen => self.config.max_screen_bitrate,
+            MediaSessionType::Video => settings.max_video_bitrate,
+            MediaSessionType::Screen => settings.max_screen_bitrate,
         };
 
         let request = janus_client::outgoing::VideoRoomPluginCreate {
@@ -325,6 +383,14 @@ impl McuPool {
 
         let (destroy, destroy_sig) = oneshot::channel();
 
+        tokio::spawn(JanusSubscriber::run(
+            media_session_key,
+            BroadcastStream::new(handle.subscribe()),
+            event_sink,
+            client.pubsub_shutdown.subscribe(),
+            destroy_sig,
+        ));
+
         let subscriber = JanusSubscriber {
             handle: handle.clone(),
             room_id: info.room_id,
@@ -333,14 +399,6 @@ impl McuPool {
             redis,
             destroy,
         };
-
-        tokio::spawn(JanusSubscriber::run(
-            media_session_key,
-            handle,
-            event_sink,
-            client.shutdown.subscribe(),
-            destroy_sig,
-        ));
 
         Ok(subscriber)
     }
@@ -398,21 +456,29 @@ async fn keep_alive(mcu_clients: &RwLock<HashSet<McuClient>>) {
     let mut clients = mcu_clients.write().await;
 
     // Destroy all dead McuClients
-    for dead_client in dead {
-        if let Some(client) = clients.take(dead_client.0.as_str()) {
+    for dead_client_id in dead {
+        if let Some(client) = clients.take(&dead_client_id) {
             client.destroy(true).await;
         }
     }
 }
 
+#[derive(Debug, Clone)]
+pub enum ShutdownSignal {
+    // Shutdown signal that shuts down the Publisher/Subscriber loops
+    Graceful,
+    // Signals that the underlying janus client is gone and all resources should be freed immediately.
+    AlreadyDisconnected,
+}
+
 struct McuClient {
-    id: McuID,
+    pub id: McuId,
 
     session: janus_client::Session,
     client: janus_client::Client,
 
     // shutdown signal specific to this client
-    shutdown: broadcast::Sender<()>,
+    pubsub_shutdown: broadcast::Sender<ShutdownSignal>,
 }
 
 impl PartialEq for McuClient {
@@ -429,35 +495,55 @@ impl Hash for McuClient {
     }
 }
 
+impl Borrow<McuId> for McuClient {
+    fn borrow(&self) -> &McuId {
+        &self.id
+    }
+}
+
 impl Borrow<str> for McuClient {
     fn borrow(&self) -> &str {
-        self.id.0.as_str()
+        self.id_str()
     }
 }
 
 impl McuClient {
+    pub fn id_str(&self) -> &str {
+        self.id.0.as_ref()
+    }
+
     pub async fn connect(
         rabbitmq_channel: lapin::Channel,
+        redis: &mut ConnectionManager,
         config: settings::JanusRabbitMqConnection,
         events_sender: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
     ) -> Result<Self> {
-        let (shutdown, _) = broadcast::channel(1);
+        // We sent at most two signals
+        let (pubsub_shutdown, _) = broadcast::channel::<ShutdownSignal>(1);
 
-        let id = McuID(Arc::new(config.to_janus_routing_key.clone()));
+        let id = McuId::new(
+            &config.to_janus_routing_key,
+            &config.janus_exchange,
+            &config.from_janus_routing_key,
+        );
 
         let rabbit_mq_config = janus_client::RabbitMqConfig::new_from_channel(
             rabbitmq_channel.clone(),
             config.to_janus_routing_key,
             config.janus_exchange,
             config.from_janus_routing_key,
-            format!("k3k-signaling-janus-{}", id.0),
+            format!("k3k-sig-janus-{}", id.0),
         );
+
+        redis
+            .zincr(MCU_STATE, id.0.as_ref(), 0)
+            .await
+            .context("Failed to initialize subscriber count")?;
 
         let mut client = janus_client::Client::new(
             rabbit_mq_config,
             ClientId(id.0.clone()),
             events_sender.clone(),
-            shutdown.clone(),
         )
         .await
         .context("Failed to create janus client")?;
@@ -475,18 +561,56 @@ impl McuClient {
             id,
             session,
             client,
-            shutdown,
+            pubsub_shutdown,
         })
     }
 
     async fn destroy(mut self, broken: bool) {
+        log::trace!(
+            "Destroying McuClient {:?}, waiting for associated publishers & subscriber to shutdown",
+            self.id
+        );
+
+        if broken {
+            let _ = self
+                .pubsub_shutdown
+                .send(ShutdownSignal::AlreadyDisconnected);
+        } else {
+            let _ = self.pubsub_shutdown.send(ShutdownSignal::Graceful);
+        }
+
+        log::trace!("receiver count {}", self.pubsub_shutdown.receiver_count());
+
+        let mut all_receivers_dropped = false;
+
+        // This loop will block the thread, we wait a maximum 250ms for all subscribers & publishers
+        // to drop. If any subscriber or publisher takes longer, we assume they are detached and
+        // proceed with destroying the McuClient. This is done to avoid blocking for 10+ seconds as
+        // the subscribers and publishers may wait for a janus timeout.
+        for _ in 0..10 {
+            if self.pubsub_shutdown.receiver_count() == 0 {
+                all_receivers_dropped = true;
+                break;
+            }
+            sleep(Duration::from_millis(25)).await;
+        }
+
+        if !all_receivers_dropped {
+            log::warn!(
+                "Destroying McuClient without dropping all receivers, {} receivers are still alive",
+                self.pubsub_shutdown.receiver_count()
+            );
+        }
+
+        log::trace!("All subscribers & publishers shutdown");
+
         if let Err(e) = self.session.destroy(broken).await {
             log::error!("Failed to destroy broken session, {}", e);
         }
 
-        let _ = self.shutdown.send(());
-
         self.client.destroy().await;
+
+        log::trace!("Successfully destroyed McuClient {:?}", self.id);
     }
 }
 
@@ -530,18 +654,41 @@ impl JanusPublisher {
     }
 
     pub async fn destroy(mut self) -> Result<()> {
-        self.handle
+        if let Err(e) = self
+            .redis
+            .hdel::<_, _, ()>(PUBLISHER_INFO, self.media_session_key.to_string())
+            .await
+        {
+            log::error!("Failed to remove publisher info, {}", e);
+        }
+
+        if let Err(e) = self
+            .handle
             .send(janus_client::types::outgoing::VideoRoomPluginDestroy {
                 room: self.room_id,
                 secret: None,
                 permanent: None,
                 token: None,
             })
-            .await?;
+            .await
+        {
+            log::error!(
+                "Failed to send VideoRoomPluginDestroy event {}, continuing to detach anyway",
+                e
+            );
+        }
+
+        let detach_result = self.handle.detach(false).await;
 
         let _ = self.destroy.send(());
 
-        self.handle.detach().await?;
+        detach_result.map_err(From::from)
+    }
+
+    pub async fn destroy_broken(mut self) -> Result<()> {
+        let _ = self.destroy.send(());
+
+        self.handle.detach(true).await?;
 
         if let Err(e) = self
             .redis
@@ -559,25 +706,34 @@ impl JanusPublisher {
     /// Stops when all Senders of the handle [Receiver](tokio::sync::broadcast::Receiver) are dropped.
     async fn run(
         media_session_key: MediaSessionKey,
-        handle: janus_client::Handle,
+        mut stream: BroadcastStream<Arc<JanusMessage>>,
         event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
-        mut client_shutdown: broadcast::Receiver<()>,
+        mut client_shutdown: broadcast::Receiver<ShutdownSignal>,
         mut destroy_sig: oneshot::Receiver<()>,
     ) {
-        let mut stream = BroadcastStream::new(handle.subscribe());
-
         loop {
             tokio::select! {
                 _ = &mut destroy_sig => {
                     log::debug!("Publisher {} got destroy signal", media_session_key);
                     return;
                 }
-                _ = client_shutdown.recv() => {
+                shutdown_signal = client_shutdown.recv() => {
                     log::debug!("Publisher {} got client shutdown signal", media_session_key);
 
+                    if let Ok(shutdown_signal) = shutdown_signal {
+                        match shutdown_signal {
+                            ShutdownSignal::Graceful => {
+                                let _ = event_sink.send((media_session_key, WebRtcEvent::WebRtcDown)).await;
+                            }
+                            ShutdownSignal::AlreadyDisconnected => {
+                                let _ = event_sink.send((media_session_key, WebRtcEvent::AssociatedMcuDied)).await;
+                            }
+                        }
+                    } else {
+                        let _ = event_sink.send((media_session_key, WebRtcEvent::AssociatedMcuDied)).await;
+                    }
+
                     // ignore result since receiver might have been already dropped
-                    let _ = event_sink.send((media_session_key, WebRtcEvent::WebRtcDown)).await;
-                    return;
                 }
                 message = stream.next() => {
                     let message = match message {
@@ -606,7 +762,7 @@ impl JanusPublisher {
 pub struct JanusSubscriber {
     handle: janus_client::Handle,
     room_id: JanusRoomId,
-    mcu_id: McuID,
+    mcu_id: McuId,
     media_session_key: MediaSessionKey,
     redis: ConnectionManager,
     destroy: oneshot::Sender<()>,
@@ -646,17 +802,17 @@ impl JanusSubscriber {
         }
     }
 
-    pub async fn destroy(mut self) -> Result<()> {
+    pub async fn destroy(mut self, broken: bool) -> Result<()> {
+        let detach_result = self.handle.detach(broken).await;
+
         let _ = self.destroy.send(());
 
-        self.handle.detach().await?;
-
         self.redis
-            .zincr(MCU_STATE, self.mcu_id.0.as_str(), -1)
+            .zincr(MCU_STATE, self.mcu_id.0.as_ref(), -1)
             .await
             .context("Failed to decrease subscriber count")?;
 
-        Ok(())
+        detach_result.map_err(From::from)
     }
 
     /// Joins the room of the publisher this [JanusSubscriber](JanusSubscriber) is subscriber to
@@ -692,25 +848,32 @@ impl JanusSubscriber {
 
     async fn run(
         media_session_key: MediaSessionKey,
-        handle: janus_client::Handle,
+        mut stream: BroadcastStream<Arc<JanusMessage>>,
         event_sink: mpsc::Sender<(MediaSessionKey, WebRtcEvent)>,
-        mut client_shutdown: broadcast::Receiver<()>,
+        mut client_shutdown: broadcast::Receiver<ShutdownSignal>,
         mut destroy_sig: oneshot::Receiver<()>,
     ) {
-        let mut stream = BroadcastStream::new(handle.subscribe());
-
         loop {
             tokio::select! {
                 _ = &mut destroy_sig => {
                     log::debug!("Subscriber {} got destroy signal", media_session_key);
                     return;
                 }
-                _ = client_shutdown.recv() => {
+                shutdown_signal = client_shutdown.recv() => {
                     log::debug!("Subscriber {} got client shutdown signal", media_session_key);
 
-                    // ignore result since receiver might have been already dropped
-                    let _ = event_sink.send((media_session_key, WebRtcEvent::WebRtcDown)).await;
-                    return;
+                    if let Ok(shutdown_signal) = shutdown_signal {
+                        match shutdown_signal {
+                            ShutdownSignal::Graceful => {
+                                let _ = event_sink.send((media_session_key, WebRtcEvent::WebRtcDown)).await;
+                            }
+                            ShutdownSignal::AlreadyDisconnected => {
+                                let _ = event_sink.send((media_session_key, WebRtcEvent::AssociatedMcuDied)).await;
+                            }
+                        }
+                    } else {
+                        let _ = event_sink.send((media_session_key, WebRtcEvent::AssociatedMcuDied)).await;
+                    }
                 }
                 message = stream.next() => {
                     let message = match message {

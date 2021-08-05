@@ -11,12 +11,11 @@
 //! # use tokio::sync::{broadcast,mpsc};
 //! # use std::sync::Arc;
 //! # tokio_test::block_on(async {
-//! let (shutdown, _) = broadcast::channel(1);
 //! let (sink, _) = mpsc::channel(1);
 //! let connection = lapin::Connection::connect("amqp://janus-backend:5672", lapin::ConnectionProperties::default()).await.unwrap();
 //! let channel = connection.create_channel().await.unwrap();
 //! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway".into(), "to-janus".into(), "from-janus".into(), "k3k-signaling".into());
-//! let client = Client::new(config, ClientId(Arc::new(String::new())), sink, shutdown).await.unwrap();
+//! let client = Client::new(config, ClientId(Arc::from("")), sink).await.unwrap();
 //! let session = client.create_session().await.unwrap();
 //! let echo_handle = session
 //!     .attach_to_plugin(JanusPlugin::Echotest)
@@ -69,12 +68,11 @@
 //! }
 //! # fn main() {
 //! tokio_test::block_on(async {
-//! let (shutdown, _) = broadcast::channel(1);
 //! let (sink, _) = mpsc::channel(1);
 //! let connection = lapin::Connection::connect("amqp://janus-backend:5672", lapin::ConnectionProperties::default()).await.unwrap();
 //! let channel = connection.create_channel().await.unwrap();
 //! let config = RabbitMqConfig::new_from_channel(channel, "janus-gateway".into(), "to-janus".into(), "from-janus".into(), "k3k-signaling".into());
-//! let client = janus_client::Client::new(config, ClientId(Arc::new(String::new())), sink, shutdown).await.unwrap();
+//! let client = janus_client::Client::new(config, ClientId(Arc::from("")), sink).await.unwrap();
 //! let session = client.create_session().await.unwrap();
 //!
 //! let echo_handle = session
@@ -117,7 +115,7 @@ pub use crate::types::incoming::JanusMessage;
 pub use crate::types::*;
 
 #[derive(Debug, Clone)]
-pub struct ClientId(pub Arc<String>);
+pub struct ClientId(pub Arc<str>);
 
 /// Janus API Client
 #[derive(Debug, Clone)]
@@ -133,9 +131,8 @@ impl Client {
         config: RabbitMqConfig,
         id: ClientId,
         sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
-        shutdown: broadcast::Sender<()>,
     ) -> Result<Self, error::Error> {
-        let inner_client = InnerClient::new(config, id, sink, shutdown).await?;
+        let inner_client = InnerClient::new(config, id, sink).await?;
 
         let client = Self {
             inner: Arc::new(inner_client),
@@ -228,12 +225,12 @@ impl Session {
             if strong_count == 1 {
                 let inner = Arc::get_mut(&mut self.inner).expect("already checked strong_count");
 
-                if broken {
+                return if broken {
                     inner.assume_destroyed();
-                    return Ok(());
+                    Ok(())
                 } else {
-                    return inner.destroy(client).await;
-                }
+                    inner.destroy(client).await
+                };
             } else {
                 sleep(Duration::from_millis(100)).await;
             }
@@ -298,7 +295,8 @@ impl Handle {
     ///
     /// Assumes that all other occurrences of the same Handle will be dropped.
     /// Waits for the strong reference count to reach zero and sends a Detach request.
-    pub async fn detach(mut self) -> Result<(), error::Error> {
+    pub async fn detach(mut self, broken: bool) -> Result<(), error::Error> {
+        log::trace!("Detaching handle {}", self.id());
         let client = self
             .inner
             .client
@@ -310,7 +308,10 @@ impl Handle {
         if let Some(session) = sessions.get(&self.inner.session_id).and_then(Weak::upgrade) {
             session.handles.lock().remove(&self.inner.id);
         } else {
-            // session no longer exists cannot detach anyway
+            log::trace!(
+                "Failed to detach handle {}, session no longer exists",
+                self.id()
+            );
             return Ok(());
         }
 
@@ -318,7 +319,13 @@ impl Handle {
 
         loop {
             if let Some(inner) = Arc::get_mut(&mut self.inner) {
-                return inner.detach(client).await;
+                // skip the detach process if the client is broken
+                return if broken {
+                    inner.assume_detached();
+                    Ok(())
+                } else {
+                    inner.detach(client).await
+                };
             } else {
                 log::debug!(
                     "Detaching Handle({}), waiting refcount to reach 1",
