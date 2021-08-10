@@ -2,6 +2,7 @@
 use super::groups::{Group, UserGroup};
 use super::schema::{groups, user_groups, users};
 use super::{DatabaseError, DbConnection, DbInterface, Result};
+use crate::{impl_from_redis_value_de, impl_to_redis_args_se};
 use diesel::result::Error;
 use diesel::{
     Connection, ExpressionMethods, Identifiable, Insertable, QueryDsl, QueryResult, Queryable,
@@ -10,6 +11,9 @@ use diesel::{
 use uuid::Uuid;
 
 diesel_newtype!(UserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt");
+
+impl_to_redis_args_se!(UserId);
+impl_from_redis_value_de!(UserId);
 
 /// Diesel user struct
 ///

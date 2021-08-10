@@ -765,6 +765,7 @@ dependencies = [
  "diesel_derives",
  "pq-sys",
  "r2d2",
+ "serde_json",
  "uuid 0.6.5",
  "uuid 0.8.2",
 ]
@@ -1321,7 +1322,6 @@ dependencies = [
 name = "k3k-chat"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "k3k-controller-core",
  "serde",
 ]
@@ -1337,6 +1337,7 @@ dependencies = [
  "k3k-controller-core",
  "k3k-ee-chat",
  "k3k-janus-media",
+ "k3k-legal-vote",
 ]
 
 [[package]]
@@ -1423,7 +1424,6 @@ dependencies = [
 name = "k3k-ee-chat"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "k3k-controller-core",
  "serde",
 ]
@@ -1435,6 +1435,15 @@ dependencies = [
  "janus-client",
  "k3k-controller-core",
  "serde",
+]
+
+[[package]]
+name = "k3k-legal-vote"
+version = "0.1.0"
+dependencies = [
+ "k3k-controller-core",
+ "serde",
+ "serial_test",
 ]
 
 [[package]]

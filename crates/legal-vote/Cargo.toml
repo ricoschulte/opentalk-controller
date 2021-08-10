@@ -1,8 +1,12 @@
 [package]
-name = "k3k-ee-chat"
+name = "k3k-legal-vote"
 version = "0.1.0"
 edition = "2018"
+
 
 [dependencies]
 controller = { path = "../controller", package = "k3k-controller-core" }
 serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+serial_test = "0.5"

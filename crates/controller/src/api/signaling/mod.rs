@@ -82,7 +82,7 @@ impl ParticipantId {
     }
 
     /// Create a participant id from a number for testing purposes
-    pub fn new_test(id: u128) -> Self {
+    pub const fn new_test(id: u128) -> Self {
         Self(Uuid::from_u128(id))
     }
 

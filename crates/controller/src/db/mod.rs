@@ -85,6 +85,7 @@ macro_rules! diesel_newtype {
 }
 
 pub mod groups;
+pub mod legal_votes;
 pub mod migrations;
 pub mod rooms;
 mod schema;
@@ -127,13 +128,22 @@ impl DbInterface {
     /// Creates a new DbInterface instance from the specified database settings.
     #[tracing::instrument(skip(db_settings))]
     pub fn connect(db_settings: &settings::Database) -> Result<Self> {
-        let con_uri = pg_connection_uri(db_settings);
+        let con_url = pg_connection_uri(db_settings);
 
-        let manager = ConnectionManager::<PgConnection>::new(con_uri);
+        Self::connect_url(
+            &con_url,
+            db_settings.max_connections,
+            Some(db_settings.min_idle_connections),
+        )
+    }
+
+    /// Creates a new DbInterface instance from the specified database url.
+    pub fn connect_url(db_url: &str, max_conns: u32, min_idle: Option<u32>) -> Result<Self> {
+        let manager = ConnectionManager::<PgConnection>::new(db_url);
 
         let pool = diesel::r2d2::Pool::builder()
-            .max_size(db_settings.max_connections)
-            .min_idle(Some(db_settings.min_idle_connections))
+            .max_size(max_conns)
+            .min_idle(min_idle)
             .connection_timeout(Duration::from_secs(10))
             .build(manager)
             .map_err(|e| {
