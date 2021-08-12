@@ -48,6 +48,7 @@ pub struct ModifyRoom {
 }
 
 impl DbInterface {
+    #[tracing::instrument(skip(self, user))]
     pub fn get_owned_rooms(&self, user: &User) -> Result<Vec<Room>> {
         let con = self.get_con()?;
 
@@ -64,6 +65,7 @@ impl DbInterface {
         }
     }
 
+    #[tracing::instrument(skip(self, room))]
     pub fn new_room(&self, room: NewRoom) -> Result<Room> {
         let con = self.get_con()?;
 
@@ -81,10 +83,11 @@ impl DbInterface {
         }
     }
 
-    pub fn modify_room(&self, room_uuid: RoomId, room: ModifyRoom) -> Result<Room> {
+    #[tracing::instrument(skip(self, room_id, room))]
+    pub fn modify_room(&self, room_id: RoomId, room: ModifyRoom) -> Result<Room> {
         let con = self.get_con()?;
 
-        let target = rooms::table.filter(rooms::columns::uuid.eq(&room_uuid));
+        let target = rooms::table.filter(rooms::columns::uuid.eq(&room_id));
         let room_result = diesel::update(target).set(&room).get_result(&con);
 
         match room_result {
@@ -96,11 +99,12 @@ impl DbInterface {
         }
     }
 
-    pub fn get_room(&self, room_uuid: RoomId) -> Result<Option<Room>> {
+    #[tracing::instrument(skip(self, room_id))]
+    pub fn get_room(&self, room_id: RoomId) -> Result<Option<Room>> {
         let con = self.get_con()?;
 
         let result: QueryResult<Room> = rooms::table
-            .filter(rooms::columns::uuid.eq(room_uuid))
+            .filter(rooms::columns::uuid.eq(room_id))
             .get_result(&con);
 
         match result {

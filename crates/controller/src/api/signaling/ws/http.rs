@@ -202,7 +202,7 @@ async fn get_user_and_room_from_ticket(
     db_ctx: Data<DbInterface>,
     ticket_data: TicketData,
 ) -> Result<(User, Room), ApiError> {
-    web::block(move || -> Result<(User, Room), DefaultApiError> {
+    crate::block(move || -> Result<(User, Room), DefaultApiError> {
         let user = db_ctx
             .get_user_by_id(ticket_data.user)
             .map_err(DefaultApiError::from)?;

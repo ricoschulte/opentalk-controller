@@ -8,7 +8,7 @@ use crate::db::users::User;
 use crate::db::users::{self as db_users, UserId};
 use crate::db::DbInterface;
 use actix_web::web::{Data, Json, Path, ReqData};
-use actix_web::{get, put, web};
+use actix_web::{get, put};
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
@@ -71,7 +71,7 @@ fn disallow_empty(modify_user: &ModifyUser) -> Result<(), ValidationError> {
 /// Returns a JSON array of all database users as [`UserDetails`]
 #[get("/users")]
 pub async fn all(db_ctx: Data<DbInterface>) -> Result<Json<Vec<UserDetails>>, DefaultApiError> {
-    let db_users = web::block(move || -> Result<Vec<db_users::User>, DefaultApiError> {
+    let db_users = crate::block(move || -> Result<Vec<db_users::User>, DefaultApiError> {
         Ok(db_ctx.get_users()?)
     })
     .await
@@ -111,7 +111,7 @@ pub async fn set_current_user_profile(
         return Err(DefaultApiError::ValidationFailed);
     }
 
-    let db_user = web::block(move || -> Result<db_users::User, DefaultApiError> {
+    let db_user = crate::block(move || -> Result<db_users::User, DefaultApiError> {
         let modify_user = db_users::ModifyUser {
             title: modify_user.title,
             theme: modify_user.theme,
@@ -172,7 +172,7 @@ pub async fn user_details(
     db_ctx: Data<DbInterface>,
     user_id: Path<UserId>,
 ) -> Result<Json<UserDetails>, DefaultApiError> {
-    let db_user = web::block(move || -> Result<Option<db_users::User>, DefaultApiError> {
+    let db_user = crate::block(move || -> Result<Option<db_users::User>, DefaultApiError> {
         Ok(db_ctx.get_user_by_id(user_id.into_inner())?)
     })
     .await

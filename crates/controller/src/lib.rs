@@ -20,7 +20,8 @@
 //! }
 //! ```
 
-use crate::settings::{Logging, Settings, SharedSettings};
+use crate::api::v1::middleware::tracer::Tracer;
+use crate::settings::{Settings, SharedSettings};
 use actix_cors::Cors;
 use actix_web::http::header;
 use actix_web::web::Data;
@@ -28,7 +29,6 @@ use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{anyhow, Context, Result};
 use arc_swap::ArcSwap;
 use db::DbInterface;
-use fern::colors::{Color, ColoredLevelConfig};
 use oidc::OidcContext;
 use prelude::*;
 use redis::aio::ConnectionManager;
@@ -52,6 +52,7 @@ pub mod api;
 mod cli;
 mod ha_sync;
 mod oidc;
+mod trace;
 
 pub mod db;
 pub mod settings;
@@ -76,7 +77,21 @@ pub mod prelude {
     pub use thiserror;
     pub use tokio;
     pub use tokio_stream;
+    pub use tracing;
     pub use uuid;
+}
+
+/// Custom version of `actix_web::web::block` which retains the current tracing span
+pub async fn block<F, R>(f: F) -> Result<R, actix_web::error::BlockingError>
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
+    let span = tracing::Span::current();
+
+    let fut = actix_rt::task::spawn_blocking(move || span.in_scope(f));
+
+    fut.await.map_err(|_| actix_web::error::BlockingError)
 }
 
 /// Wrapper of the main function. Correctly outputs the error to the logging utility or stderr.
@@ -85,7 +100,11 @@ where
     F: std::future::Future<Output = Result<T>>,
 {
     match f.await {
-        Ok(ok) => ok,
+        Ok(ok) => {
+            trace::destroy().await;
+
+            ok
+        }
         Err(err) => {
             if log::log_enabled!(log::Level::Error) {
                 log::error!("Crashed with error: {:?}", err);
@@ -93,7 +112,8 @@ where
                 eprintln!("Crashed with error: {:?}", err);
             }
 
-            log::logger().flush();
+            trace::destroy().await;
+
             std::process::exit(-1);
         }
     }
@@ -151,6 +171,7 @@ impl Controller {
     /// subprogram (e.g. `--reload`) and must now exit.
     ///
     /// Otherwise it will return itself which can be modified and then run using [`Controller::run`]
+
     pub async fn create() -> Result<Option<Self>> {
         let args = cli::parse_args()?;
 
@@ -161,7 +182,7 @@ impl Controller {
 
         let settings = settings::load_settings(&args)?;
 
-        setup_logging(&settings.logging)?;
+        trace::init(&settings.logging)?;
 
         log::info!("Starting K3K Controller");
 
@@ -170,11 +191,12 @@ impl Controller {
         Ok(Some(controller))
     }
 
+    #[tracing::instrument(err, skip(settings, args))]
     async fn init(settings: Settings, args: cli::Args) -> Result<Self> {
         let settings = Arc::new(settings);
         let shared_settings: SharedSettings = Arc::new(ArcSwap::from(settings.clone()));
 
-        db::migrations::start_migration(&settings.database)
+        db::migrations::migrate_from_settings(&settings.database)
             .await
             .context("Failed to migrate database")?;
 
@@ -244,6 +266,7 @@ impl Controller {
                 let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
 
                 App::new()
+                    .wrap(Tracer)
                     .app_data(db_ctx)
                     .app_data(oidc_ctx)
                     .app_data(Data::new(shutdown.clone()))
@@ -277,6 +300,7 @@ impl Controller {
                 let signaling_modules = Data::from(signaling_modules.upgrade().unwrap());
 
                 App::new()
+                    .wrap(Tracer)
                     .wrap(cors)
                     .app_data(Data::from(shared_settings.clone()))
                     .app_data(db_ctx.clone())
@@ -434,56 +458,6 @@ fn setup_cors(settings: &settings::HttpCors) -> Cors {
     cors.allowed_header(header::CONTENT_TYPE)
         .allowed_header(header::AUTHORIZATION)
         .allow_any_method()
-}
-
-fn setup_logging(logging: &Logging) -> Result<()> {
-    let colors = ColoredLevelConfig {
-        error: Color::Red,
-        warn: Color::Yellow,
-        info: Color::Green,
-        debug: Color::Blue,
-        trace: Color::White,
-    };
-
-    let logger = fern::Dispatch::new()
-        .format(move |out, message, record| {
-            out.finish(format_args!(
-                "{}[{}][{}] {}",
-                chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
-                colors.color(record.level()),
-                record.target(),
-                message
-            ))
-        })
-        .level(logging.level.to_level_filter());
-
-    match logging.file {
-        Some(ref path) => {
-            let log_file = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(path)
-                .context("Failed to create or open the logging file")?;
-
-            logger.chain(log_file)
-        }
-        None => logger,
-    }
-    .chain(
-        fern::Dispatch::new()
-            .filter(|metadata| {
-                // Reject messages with the `Error` log level.
-                metadata.level() != log::LevelFilter::Error
-            })
-            .chain(std::io::stdout()),
-    )
-    .chain(
-        fern::Dispatch::new()
-            .level(log::LevelFilter::Error)
-            .chain(std::io::stderr()),
-    )
-    .apply()
-    .context("Failed to setup logging utility")
 }
 
 fn setup_rustls(tls: &settings::HttpTls) -> Result<rustls::ServerConfig> {

@@ -14,7 +14,7 @@ diesel_newtype!(UserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::Bi
 /// Diesel user struct
 ///
 /// Is used as a result in various queries. Represents a user column
-#[derive(Debug, Clone, Queryable, Identifiable)]
+#[derive(Clone, Queryable, Identifiable)]
 pub struct User {
     pub id: UserId,
     pub oidc_uuid: Uuid,
@@ -30,7 +30,7 @@ pub struct User {
 /// Diesel insertable user struct
 ///
 /// Represents fields that have to be provided on user insertion.
-#[derive(Debug, Insertable)]
+#[derive(Insertable)]
 #[table_name = "users"]
 pub struct NewUser {
     pub oidc_uuid: Uuid,
@@ -43,7 +43,6 @@ pub struct NewUser {
     pub language: String,
 }
 
-#[derive(Debug)]
 pub struct NewUserWithGroups {
     pub new_user: NewUser,
     pub groups: Vec<String>,
@@ -52,7 +51,7 @@ pub struct NewUserWithGroups {
 /// Diesel user struct for updates
 ///
 /// Is used in update queries. None fields will be ignored on update queries
-#[derive(Debug, AsChangeset)]
+#[derive(AsChangeset)]
 #[table_name = "users"]
 pub struct ModifyUser {
     pub title: Option<String>,
@@ -72,6 +71,7 @@ pub struct ModifiedUser {
 }
 
 impl DbInterface {
+    #[tracing::instrument(skip(self, new_user))]
     pub fn create_user(&self, new_user: NewUserWithGroups) -> Result<()> {
         let con = self.get_con()?;
 
@@ -90,6 +90,7 @@ impl DbInterface {
         })
     }
 
+    #[tracing::instrument(skip(self))]
     pub fn get_users(&self) -> Result<Vec<User>> {
         let con = self.get_con()?;
 
@@ -104,6 +105,7 @@ impl DbInterface {
         }
     }
 
+    #[tracing::instrument(skip(self, uuid))]
     pub fn get_user_by_uuid(&self, uuid: &Uuid) -> Result<Option<User>> {
         let con = self.get_con()?;
 
@@ -121,6 +123,7 @@ impl DbInterface {
         }
     }
 
+    #[tracing::instrument(skip(self, user_uuid, modify, groups))]
     pub fn modify_user(
         &self,
         user_uuid: Uuid,
@@ -169,6 +172,7 @@ impl DbInterface {
         })
     }
 
+    #[tracing::instrument(skip(self, user_id))]
     pub fn get_user_by_id(&self, user_id: UserId) -> Result<Option<User>> {
         let con = self.get_con()?;
 

@@ -2,24 +2,33 @@ use crate::settings::Database;
 use actix_web::rt;
 use anyhow::{Context, Result};
 use refinery::include_migration_mods;
-use refinery_core::tokio_postgres::{connect, NoTls};
+use refinery_core::tokio_postgres::{Config, NoTls};
 use tokio::sync::oneshot;
+use tracing::Instrument;
 
 include_migration_mods!("src/db/migrations");
 
-async fn start_migration_from_url(url: String) -> Result<()> {
-    let (mut client, conn) = connect(&url, NoTls)
+#[tracing::instrument(skip(config))]
+async fn migrate(config: Config) -> Result<()> {
+    log::debug!("config: {:?}", config);
+
+    let (mut client, conn) = config
+        .connect(NoTls)
         .await
         .context("Unable to connect to database")?;
 
     let (tx, rx) = oneshot::channel();
 
-    rt::spawn(async move {
-        if let Err(e) = conn.await {
-            log::error!("connection error: {}", e)
+    rt::spawn(
+        async move {
+            if let Err(e) = conn.await {
+                log::error!("connection error: {}", e)
+            }
+
+            tx.send(()).expect("Channel unexpectedly dropped");
         }
-        tx.send(()).expect("Channel unexpectedly dropped");
-    });
+        .instrument(tracing::Span::current()),
+    );
 
     // The runner is specified through the `include_migration_mods` macro
     runner().run_async(&mut client).await?;
@@ -32,13 +41,17 @@ async fn start_migration_from_url(url: String) -> Result<()> {
     Ok(())
 }
 
-pub async fn start_migration(db_config: &Database) -> Result<()> {
-    let connection_config = format!(
-        "host={} port={} dbname={} user={} password={}",
-        db_config.server, db_config.port, db_config.name, db_config.user, db_config.password
-    );
+pub async fn migrate_from_settings(db_config: &Database) -> Result<()> {
+    let mut config = Config::new();
 
-    start_migration_from_url(connection_config).await
+    config
+        .dbname(&db_config.name)
+        .user(&db_config.user)
+        .password(&db_config.password)
+        .host(&db_config.server)
+        .port(db_config.port);
+
+    migrate(config).await
 }
 
 #[cfg(test)]
@@ -58,9 +71,7 @@ mod migration_tests {
         let url = std::env::var("DATABASE_URL")
             .unwrap_or("postgres://postgres:password123@localhost:5432/k3k".to_string());
 
-        start_migration_from_url(url)
-            .await
-            .context("Migration failed")?;
+        migrate(url.parse()?).await.context("Migration failed")?;
 
         Ok(())
     }

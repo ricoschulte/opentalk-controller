@@ -1,9 +1,20 @@
 [logging]
-# Available levels (ERROR, WARN, INFO, DEBUG, TRACE)
-#level = "WARN"
+# Default tracing directives that will always be applied after RUST_LOG's directives.
+# Each array entry may contain a single directive.
+# Below are some example directives which are used by default
+# to reduce the extreme amount of spamming some crates do by default
+#default_directives = [
+#   "pinky_swear=OFF",
+#   "rustls=WARN",
+#   "mio=ERROR",
+#   "lapin=WARN",
+#]
 
-# Specifiy a path for a log file.
-#file = "/var/log/k3k-controller.log"
+# Enable opentelemtry-jaeger support, an jaeger-agent must be running
+#enable_opentelemetry = false
+
+# Service name when using opentelemetry
+#service_name = "k3k-controller"
 
 [database]
 # Database server address.
@@ -13,7 +24,7 @@ server = "localhost"
 port = 5432
 
 # Database name.
-name = "migration_test"
+name = "k3k"
 
 # Maximum number of connections allowed to the server.
 # Defaults to 100 which is the default of postgres.
@@ -60,14 +71,14 @@ max_screen_bitrate = "8000000"
 # Currently these should be equal to the settings in janus.transport.rabbitmq.jcfg
 # of the respective janus instance.
 [[room_server.connections]]
-to_janus_routing_key = "to-janus-1"
-janus_exchange = "janus-exchange"
-from_janus_routing_key = "from-janus-1"
+to_routing_key = "to-janus-1"
+exchange = "janus-exchange"
+from_routing_key = "from-janus-1"
 
 [[room_server.connections]]
-to_janus_routing_key = "to-janus-2"
-janus_exchange = "janus-exchange"
-from_janus_routing_key = "from-janus-2"
+to_routing_key = "to-janus-2"
+exchange = "janus-exchange"
+from_routing_key = "from-janus-2"
 
 [rabbit_mq]
 # The URL to use to connect to the rabbit mq broker

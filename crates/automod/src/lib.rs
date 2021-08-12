@@ -187,6 +187,7 @@ impl AutoMod {
     ///
     /// Checks if the automod is active by reading the config. If active set the `frontend_data`
     /// to the current config and automod state (history + remaining).
+    #[tracing::instrument(name = "automod_on_joined", skip(self, ctx, frontend_data))]
     async fn on_joined(
         &mut self,
         mut ctx: ModuleContext<'_, Self>,
@@ -240,6 +241,7 @@ impl AutoMod {
     ///
     /// Removes this participants from the playlist, allow_list and sets the speaker to none if
     /// speaker is the leaving participant.
+    #[tracing::instrument(name = "automod_on_leaving", skip(self, ctx))]
     async fn on_leaving(&mut self, mut ctx: ModuleContext<'_, Self>) -> Result<()> {
         let mut mutex = storage::lock::new(self.room);
         let guard = mutex.lock(ctx.redis_conn()).await?;
@@ -263,6 +265,7 @@ impl AutoMod {
         Ok(())
     }
 
+    #[tracing::instrument(name = "automod_on_ws_message", skip(self, ctx, msg))]
     async fn on_ws_message(
         &mut self,
         mut ctx: ModuleContext<'_, Self>,
@@ -453,6 +456,7 @@ impl AutoMod {
 
     /// Selects a specific participant to be the next speaker. Will check the participant if
     /// selection is valid.
+    #[tracing::instrument(name = "automod_select_specific", skip(self, ctx, config))]
     async fn select_specific(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
@@ -478,6 +482,7 @@ impl AutoMod {
     }
 
     /// Selects a random participant to be the next speaker.
+    #[tracing::instrument(name = "automod_select_random", skip(self, ctx, config))]
     async fn select_random(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
@@ -494,6 +499,7 @@ impl AutoMod {
         self.handle_selection_result(ctx, result).await
     }
 
+    #[tracing::instrument(name = "automod_select_next", skip(self, ctx, config))]
     async fn select_next(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
@@ -537,6 +543,7 @@ impl AutoMod {
         }
     }
 
+    #[tracing::instrument(name = "automod_on_rabbitmq_msg", skip(self, ctx, msg))]
     fn on_rabbitmq_msg(&mut self, mut ctx: ModuleContext<'_, Self>, msg: rabbitmq::Message) {
         match msg {
             rabbitmq::Message::Start(rabbitmq::Start { frontend_config }) => {

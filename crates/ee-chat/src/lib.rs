@@ -63,9 +63,9 @@ impl SignalingModule for Chat {
         let user_id = ctx.user().id;
         let db = ctx.db().clone();
 
-        let groups = actix_web::web::block(move || db.get_groups_for_user(user_id))
+        let groups = controller::block(move || db.get_groups_for_user(user_id))
             .await
-            .context("web::block failed")?
+            .context("controller::block failed")?
             .context("Failed to retrieve groups for user")?;
 
         for group in &groups {
@@ -169,10 +169,11 @@ impl SignalingModule for Chat {
                 Ok(guard) => guard,
                 Err(e) => {
                     log::error!(
-                        "Failed to acquire lock to cleanup group {}, {}",
+                        "Failed to acquire lock to cleanup group {:?}, {}",
                         group.id,
                         e
                     );
+
                     continue;
                 }
             };

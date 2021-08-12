@@ -19,16 +19,21 @@ pub struct RoomAutoModSpeaker {
 impl_to_redis_args!(RoomAutoModSpeaker);
 
 /// Get the current speaker. Returns [`None`] if there is no active speaker.
-pub async fn get(redis: &mut ConnectionManager, room: RoomId) -> Result<Option<ParticipantId>> {
-    redis
+#[tracing::instrument(name = "get_speaker", level = "debug", skip(redis_conn))]
+pub async fn get(
+    redis_conn: &mut ConnectionManager,
+    room: RoomId,
+) -> Result<Option<ParticipantId>> {
+    redis_conn
         .get(RoomAutoModSpeaker { room })
         .await
         .context("Failed to set active speaker")
 }
 
 /// Sets the new current speaker and returns the old one if it was set
+#[tracing::instrument(name = "set_speaker", level = "debug", skip(redis_conn))]
 pub async fn set(
-    redis: &mut ConnectionManager,
+    redis_conn: &mut ConnectionManager,
     room: RoomId,
     participant: ParticipantId,
 ) -> Result<Option<ParticipantId>> {
@@ -36,16 +41,20 @@ pub async fn set(
         .arg(RoomAutoModSpeaker { room })
         .arg(participant)
         .arg("GET")
-        .query_async(redis)
+        .query_async(redis_conn)
         .await
         .context("Failed to set active speaker")
 }
 
 /// Delete the current speaker and return if there was any speaker.
-pub async fn del(redis: &mut ConnectionManager, room: RoomId) -> Result<Option<ParticipantId>> {
+#[tracing::instrument(name = "del_speaker", level = "debug", skip(redis_conn))]
+pub async fn del(
+    redis_conn: &mut ConnectionManager,
+    room: RoomId,
+) -> Result<Option<ParticipantId>> {
     redis::cmd("GETDEL")
         .arg(RoomAutoModSpeaker { room })
-        .query_async(redis)
+        .query_async(redis_conn)
         .await
         .context("Failed to del active speaker")
 }

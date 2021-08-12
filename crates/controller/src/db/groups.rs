@@ -31,6 +31,7 @@ pub struct UserGroup {
 }
 
 impl DbInterface {
+    #[tracing::instrument(skip(self, user_id))]
     pub fn get_groups_for_user(&self, user_id: UserId) -> Result<HashSet<Group>> {
         let con = self.get_con()?;
 

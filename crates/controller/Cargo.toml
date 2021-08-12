@@ -7,7 +7,12 @@ edition = "2018"
 [dependencies]
 ### Logging utilities
 log = { version = "0.4", features = ["serde"] }
-fern = { version = "0.6", features = ["colored"] }
+tracing = { version = "0.1" }
+tracing-futures = "0.2"
+tracing-subscriber = { version = "0.2", features = ["parking_lot"] }
+tracing-opentelemetry = "0.15"
+opentelemetry = { version = "0.16", default-features = false, features = ["trace", "rt-tokio-current-thread"] }
+opentelemetry-jaeger = { version = "0.15", features = ["rt-tokio-current-thread"] }
 
 ### Config
 config = { version = "0.11", default-features = false, features = ["toml"] }
@@ -78,6 +83,7 @@ sysinfo = { version = "0.20.0", default-features = false }
 nix = "0.22.0"
 
 [dev-dependencies]
+fern = "0.6"
 k3k-controller-client = { path = "../client" }
 tokio-postgres = "0.7"
 serial_test = "0.5"

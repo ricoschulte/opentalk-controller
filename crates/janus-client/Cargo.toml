@@ -30,6 +30,7 @@ thiserror = "1.0.24"
 # Reduce clutter arround docs/error strings
 displaydoc = "0.2.1"
 # Logging
+tracing = "0.1"
 log = "0.4.14"
 
 [dev-dependencies]
