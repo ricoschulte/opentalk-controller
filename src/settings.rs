@@ -89,6 +89,7 @@ pub struct Settings {
     pub oidc: Oidc,
     pub http: Http,
     pub turn: Option<Turn>,
+    pub stun: Option<Stun>,
     pub redis: RedisConfig,
     pub rabbit_mq: RabbitMqConfig,
     pub room_server: JanusMcuConfig,
@@ -197,6 +198,12 @@ pub struct TurnServer {
     // TURN URIs for this TURN server following rfc7065
     pub uris: Vec<String>,
     pub pre_shared_key: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Stun {
+    // STUN URIs for this TURN server following rfc7065
+    pub uris: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

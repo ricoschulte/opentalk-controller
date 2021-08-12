@@ -90,3 +90,6 @@ from_janus_routing_key = "from-janus-2"
 #]
 # The Pre Shared Key set with --static-auth-secret=...
 #pre_shared_key = "k3k2"
+
+#[stun]
+#uris = ["stun:127.0.0.1:3478"]

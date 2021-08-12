@@ -26,6 +26,27 @@ pub struct Turn {
     pub uris: Vec<String>,
 }
 
+/// STUN Server for users.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct Stun {
+    pub uris: Vec<String>,
+}
+
+impl From<&settings::Stun> for Stun {
+    fn from(stun: &settings::Stun) -> Self {
+        Stun {
+            uris: stun.uris.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum IceServer {
+    Turn(Turn),
+    Stun(Stun),
+}
+
 /// API Endpoint *GET /turn*
 ///
 /// Returns a list of ['Turn'] with HMAC-SHA1 credentials following https://datatracker.ietf.org/doc/html/draft-uberti-behave-turn-rest-00
@@ -33,10 +54,12 @@ pub struct Turn {
 pub async fn get(
     settings: Data<arc_swap::ArcSwap<settings::Settings>>,
     current_user: ReqData<User>,
-) -> Result<Either<Json<Vec<Turn>>, NoContent>, DefaultApiError> {
+) -> Result<Either<Json<Vec<IceServer>>, NoContent>, DefaultApiError> {
     let settings: &ArcSwap<Settings> = &**settings;
     let settings = settings.load();
+
     let turn_servers = &settings.turn;
+    let stun_servers = &settings.stun;
 
     log::trace!(
         "Generating new turn credentials for user {} and servers {:?}",
@@ -52,14 +75,20 @@ pub async fn get(
     let turn_credentials = {
         let expires = (chrono::Utc::now() + turn_config.lifetime).timestamp();
         let mut rand_rng = ::rand::thread_rng();
-        rr_servers(&mut rand_rng, &turn_config.servers, expires)
-    }?;
+        rr_servers(&mut rand_rng, &turn_config.servers, expires)?
+    };
 
-    if turn_credentials.is_empty() {
+    let response = turn_credentials
+        .into_iter()
+        .map(IceServer::Turn)
+        .chain(stun_servers.iter().map(|stun| IceServer::Stun(stun.into())))
+        .collect::<Vec<_>>();
+
+    if response.is_empty() {
         return Ok(Either::Right(NoContent {}));
     }
 
-    Ok(Either::Left(Json(turn_credentials)))
+    Ok(Either::Left(Json(response)))
 }
 
 fn create_credentials<T: Rng + CryptoRng>(
