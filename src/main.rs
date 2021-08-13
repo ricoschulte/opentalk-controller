@@ -184,7 +184,7 @@ async fn run_service(settings: Settings, config_path: &Path) -> Result<()> {
 
                 App::new()
                     .wrap(cors)
-                    .app_data(Data::new(shared_settings.clone()))
+                    .app_data(Data::from(shared_settings.clone()))
                     .app_data(db_ctx.clone())
                     .app_data(oidc_ctx.clone())
                     .app_data(redis_ctx)
