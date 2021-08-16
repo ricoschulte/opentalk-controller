@@ -1,7 +1,9 @@
 use super::modules::{
     AnyStream, DynBroadcastEvent, DynEventCtx, DynTargetedEvent, Modules, NoSuchModuleError,
 };
-use super::{DestroyContext, Namespaced, RabbitMqBinding, RabbitMqExchange, WebSocket};
+use super::{
+    DestroyContext, Namespaced, RabbitMqBinding, RabbitMqExchange, RabbitMqPublish, WebSocket,
+};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::{incoming, outgoing, rabbitmq, storage};
 use crate::api::signaling::{ParticipantId, Role};
@@ -10,6 +12,8 @@ use crate::db::users::User;
 use crate::db::DbInterface;
 use crate::ha_sync::user_update;
 use anyhow::{bail, Context, Result};
+use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use async_tungstenite::tungstenite::protocol::CloseFrame;
 use async_tungstenite::tungstenite::Message;
 use futures::stream::SelectAll;
 use futures::SinkExt;
@@ -199,6 +203,7 @@ impl Builder {
                 websocket,
                 timeout: Box::pin(sleep(WS_TIMEOUT)),
                 awaiting_pong: false,
+                state: State::Open,
             },
             modules: self.modules,
             events: self.events,
@@ -411,14 +416,22 @@ impl Runner {
 
     /// Runs the runner until the peer closes its websocket connection or a fatal error occurres.
     pub async fn run(mut self) {
-        while !self.exit {
+        while matches!(self.ws.state, State::Open | State::Closing) {
+            if self.exit && matches!(self.ws.state, State::Open) {
+                // This case handles exit on errors unrelated to websocket or controller shutdown
+                self.ws.close(CloseCode::Abnormal).await;
+            }
+
             tokio::select! {
                 res = self.ws.receive() => {
                     match res {
-                        Ok(msg) => self.handle_ws_message(msg).await,
+                        Ok(Some(msg)) => self.handle_ws_message(msg).await,
+                        Ok(None) => {
+                            // Ws was in closing state, runner will now exit gracefully
+                        }
                         Err(e) => {
+                            // Ws is now going to be in error state and cause the runner to exit
                             log::error!("Failed to receive ws message for participant {}, {}", self.id ,e);
-                            self.exit = true;
                         }
                     }
                 }
@@ -438,7 +451,7 @@ impl Runner {
                         .expect("Should not get events from unknown modules");
                 }
                 _ = self.shutdown_sig.recv() => {
-                    self.exit = true;
+                    self.ws.close(CloseCode::Away).await;
                 }
             }
         }
@@ -455,18 +468,8 @@ impl Runner {
         let value: Result<Namespaced<'_, Value>, _> = match message {
             Message::Text(ref text) => serde_json::from_str(text),
             Message::Binary(ref binary) => serde_json::from_slice(binary),
-            Message::Ping(data) => {
-                self.ws_send(Message::Pong(data)).await;
-                return;
-            }
-            Message::Pong(_) => {
-                // Response to keep alive
-                self.ws.awaiting_pong = false;
-                return;
-            }
-            Message::Close(_) => {
-                self.exit = true;
-                return;
+            Message::Ping(_) | Message::Pong(_) | Message::Close(_) => {
+                unreachable!()
             }
         };
 
@@ -475,7 +478,8 @@ impl Runner {
             Err(e) => {
                 log::error!("Failed to parse namespaced message, {}", e);
 
-                self.ws_send(Message::Text(error("invalid json message")))
+                self.ws
+                    .send(Message::Text(error("invalid json message")))
                     .await;
 
                 return;
@@ -493,7 +497,8 @@ impl Runner {
                 Err(e) => {
                     log::error!("Failed to parse control payload, {}", e);
 
-                    self.ws_send(Message::Text(error("invalid json payload")))
+                    self.ws
+                        .send(Message::Text(error("invalid json payload")))
                         .await;
                 }
             }
@@ -506,7 +511,8 @@ impl Runner {
                 )
                 .await
             {
-                self.ws_send(Message::Text(error("unknown namespace")))
+                self.ws
+                    .send(Message::Text(error("unknown namespace")))
                     .await;
             }
         }
@@ -516,16 +522,17 @@ impl Runner {
         match msg {
             incoming::Message::Join(join) => {
                 if join.display_name.is_empty() {
-                    self.ws_send(Message::Text(
-                        Namespaced {
-                            namespace: NAMESPACE,
-                            payload: outgoing::Message::Error {
-                                text: "invalid username",
-                            },
-                        }
-                        .to_json(),
-                    ))
-                    .await;
+                    self.ws
+                        .send(Message::Text(
+                            Namespaced {
+                                namespace: NAMESPACE,
+                                payload: outgoing::Message::Error {
+                                    text: "invalid username",
+                                },
+                            }
+                            .to_json(),
+                        ))
+                        .await;
 
                     return Ok(());
                 }
@@ -570,19 +577,20 @@ impl Runner {
                 ))
                 .await;
 
-                self.ws_send(Message::Text(
-                    Namespaced {
-                        namespace: NAMESPACE,
-                        payload: outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
-                            id: self.id,
-                            role: self.role,
-                            module_data,
-                            participants,
-                        }),
-                    }
-                    .to_json(),
-                ))
-                .await;
+                self.ws
+                    .send(Message::Text(
+                        Namespaced {
+                            namespace: NAMESPACE,
+                            payload: outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
+                                id: self.id,
+                                role: self.role,
+                                module_data,
+                                participants,
+                            }),
+                        }
+                        .to_json(),
+                    ))
+                    .await;
 
                 self.rabbitmq_publish_control(None, rabbitmq::Message::Joined(self.id))
                     .await;
@@ -694,14 +702,15 @@ impl Runner {
                 ))
                 .await;
 
-                self.ws_send(Message::Text(
-                    Namespaced {
-                        namespace: NAMESPACE,
-                        payload: outgoing::Message::Joined(participant),
-                    }
-                    .to_json(),
-                ))
-                .await;
+                self.ws
+                    .send(Message::Text(
+                        Namespaced {
+                            namespace: NAMESPACE,
+                            payload: outgoing::Message::Joined(participant),
+                        }
+                        .to_json(),
+                    ))
+                    .await;
             }
             rabbitmq::Message::Left(id) => {
                 if self.id == id {
@@ -711,14 +720,17 @@ impl Runner {
                 self.handle_module_broadcast_event(DynBroadcastEvent::ParticipantLeft(id))
                     .await;
 
-                self.ws_send(Message::Text(
-                    Namespaced {
-                        namespace: NAMESPACE,
-                        payload: outgoing::Message::Left(outgoing::AssociatedParticipant { id }),
-                    }
-                    .to_json(),
-                ))
-                .await;
+                self.ws
+                    .send(Message::Text(
+                        Namespaced {
+                            namespace: NAMESPACE,
+                            payload: outgoing::Message::Left(outgoing::AssociatedParticipant {
+                                id,
+                            }),
+                        }
+                        .to_json(),
+                    ))
+                    .await;
             }
             rabbitmq::Message::Update(id) => {
                 if self.id == id {
@@ -732,14 +744,15 @@ impl Runner {
                 ))
                 .await;
 
-                self.ws_send(Message::Text(
-                    Namespaced {
-                        namespace: NAMESPACE,
-                        payload: outgoing::Message::Update(participant),
-                    }
-                    .to_json(),
-                ))
-                .await;
+                self.ws
+                    .send(Message::Text(
+                        Namespaced {
+                            namespace: NAMESPACE,
+                            payload: outgoing::Message::Update(participant),
+                        }
+                        .to_json(),
+                    ))
+                    .await;
             }
         }
 
@@ -802,16 +815,6 @@ impl Runner {
         }
     }
 
-    /// Send message via websocket, abort task if failed
-    async fn ws_send(&mut self, message: Message) {
-        log::trace!("Send message to websocket: {:?}", message);
-
-        if let Err(e) = self.ws.websocket.send(message).await {
-            log::error!("Failed to send websocket message, {}", e);
-            self.exit = true;
-        }
-    }
-
     /// Dispatch owned event to a single module
     async fn handle_module_targeted_event(
         &mut self,
@@ -834,23 +837,8 @@ impl Runner {
             .on_event_targeted(ctx, module, dyn_event)
             .await?;
 
-        for ws_message in ws_messages {
-            self.ws_send(ws_message).await;
-        }
-
-        for publish in rabbitmq_publish {
-            self.rabbitmq_publish(
-                Some(&publish.exchange),
-                &publish.routing_key,
-                publish.message,
-            )
+        self.handle_module_requested_actions(ws_messages, rabbitmq_publish, invalidate_data)
             .await;
-        }
-
-        if invalidate_data {
-            self.rabbitmq_publish_control(None, rabbitmq::Message::Update(self.id))
-                .await;
-        }
 
         Ok(())
     }
@@ -871,8 +859,20 @@ impl Runner {
 
         self.modules.on_event_broadcast(ctx, dyn_event).await;
 
+        self.handle_module_requested_actions(ws_messages, rabbitmq_publish, invalidate_data)
+            .await;
+    }
+
+    /// Modules can request certain actions via the module context (e.g send websocket msg)
+    /// these are executed here
+    async fn handle_module_requested_actions(
+        &mut self,
+        ws_messages: Vec<Message>,
+        rabbitmq_publish: Vec<RabbitMqPublish>,
+        invalidate_data: bool,
+    ) {
         for ws_message in ws_messages {
-            self.ws_send(ws_message).await;
+            self.ws.send(ws_message).await;
         }
 
         for publish in rabbitmq_publish {
@@ -909,23 +909,81 @@ struct Ws {
     websocket: WebSocket,
     // Timeout trigger
     timeout: Pin<Box<Sleep>>,
+
     awaiting_pong: bool,
+
+    state: State,
+}
+
+enum State {
+    Open,
+    Closing,
+    Closed,
+    Error,
 }
 
 impl Ws {
-    async fn receive(&mut self) -> Result<Message> {
+    /// Send message via websocket
+    async fn send(&mut self, message: Message) {
+        log::trace!("Send message to websocket: {:?}", message);
+
+        if let Err(e) = self.websocket.send(message).await {
+            log::error!("Failed to send websocket message, {}", e);
+            self.state = State::Error;
+        }
+    }
+
+    /// Close the websocket connection if needed
+    async fn close(&mut self, code: CloseCode) {
+        if !matches!(self.state, State::Open) {
+            return;
+        }
+
+        let frame = CloseFrame {
+            code,
+            reason: "".into(),
+        };
+
+        if let Err(e) = self.websocket.close(Some(frame)).await {
+            log::error!("Failed to close websocket, {}", e);
+            self.state = State::Error;
+        } else {
+            self.state = State::Closing;
+            self.timeout.set(sleep(WS_TIMEOUT));
+        }
+    }
+
+    /// Receive a message from the websocket
+    ///
+    /// Sends a health check ping message every WS_TIMEOUT.
+    async fn receive(&mut self) -> Result<Option<Message>> {
         loop {
             tokio::select! {
                 message = self.websocket.next() => {
                     match message {
                         Some(Ok(msg)) => {
-                            // Received a message, reset timeout.
-                            self.timeout.set(sleep(WS_TIMEOUT));
+                            if matches!(self.state, State::Open) {
+                                // Received a message, reset timeout.
+                                self.timeout.set(sleep(WS_TIMEOUT));
+                            }
 
-                            return Ok(msg);
+                            match msg {
+                                Message::Ping(ping) => self.send(Message::Pong(ping)).await,
+                                Message::Pong(_) => self.awaiting_pong = false,
+                                Message::Close(_) => self.state = State::Closing,
+                                msg => return Ok(Some(msg))
+                            }
                         }
-                        Some(Err(e)) => bail!(e),
-                        None => bail!("WebSocket stream closed unexpectedly"),
+                        Some(Err(e)) => {
+                            self.state = State::Error;
+                            bail!(e);
+                        }
+                        None => if matches!(self.state, State::Closing) {
+                            self.state = State::Closed;
+                            return Ok(None)
+                        } else {
+                            bail!("WebSocket stream closed unexpectedly")
+                        },
                     }
                 }
                 _ = self.timeout.as_mut() => {
