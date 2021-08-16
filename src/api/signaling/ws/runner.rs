@@ -982,12 +982,14 @@ impl Ws {
                             self.state = State::Closed;
                             return Ok(None)
                         } else {
+                            self.state = State::Error;
                             bail!("WebSocket stream closed unexpectedly")
                         },
                     }
                 }
                 _ = self.timeout.as_mut() => {
                     if self.awaiting_pong {
+                        self.state = State::Error;
                         bail!("Websocket timed out, peer no longer responds");
                     } else {
                         self.timeout.set(sleep(WS_TIMEOUT));
