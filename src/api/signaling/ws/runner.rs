@@ -4,7 +4,7 @@ use super::modules::{
 use super::{DestroyContext, Namespaced, RabbitMqBinding, RabbitMqExchange, WebSocket};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::{incoming, outgoing, rabbitmq, storage};
-use crate::api::signaling::ParticipantId;
+use crate::api::signaling::{ParticipantId, Role};
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::DbInterface;
@@ -38,6 +38,7 @@ pub struct Builder {
     pub(super) id: ParticipantId,
     pub(super) room: Room,
     pub(super) user: User,
+    pub(super) role: Role,
     pub(super) protocol: &'static str,
     pub(super) modules: Modules,
     pub(super) rabbitmq_exchanges: Vec<RabbitMqExchange>,
@@ -192,6 +193,7 @@ impl Builder {
             id: self.id,
             room: self.room,
             user: self.user,
+            role: self.role,
             control_data: None,
             ws: Ws {
                 websocket,
@@ -226,6 +228,9 @@ pub struct Runner {
 
     // User behind the participant
     user: User,
+
+    // The role of the participant inside the room
+    role: Role,
 
     // The control data. Initialized when frontend send join
     control_data: Option<ControlData>,
@@ -280,10 +285,17 @@ impl Runner {
         redis_conn: ConnectionManager,
         rabbitmq_channel: lapin::Channel,
     ) -> Builder {
+        let role = if user.id == room.owner {
+            Role::Moderator
+        } else {
+            Role::User
+        };
+
         Builder {
             id,
             room,
             user,
+            role,
             protocol,
             modules: Default::default(),
             rabbitmq_exchanges: vec![],
@@ -431,6 +443,9 @@ impl Runner {
             }
         }
 
+        self.handle_module_broadcast_event(DynBroadcastEvent::Leaving)
+            .await;
+
         log::debug!("Stopping ws-runner task for participant {}", self.id);
 
         self.destroy().await
@@ -560,6 +575,7 @@ impl Runner {
                         namespace: NAMESPACE,
                         payload: outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
                             id: self.id,
+                            role: self.role,
                             module_data,
                             participants,
                         }),

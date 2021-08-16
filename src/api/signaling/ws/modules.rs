@@ -107,6 +107,7 @@ pub enum DynBroadcastEvent<'evt> {
         &'evt mut HashMap<&'static str, Value>,
         &'evt mut Vec<Participant>,
     ),
+    Leaving,
     ParticipantJoined(&'evt mut Participant),
     ParticipantLeft(ParticipantId),
     ParticipantUpdated(&'evt mut Participant),
@@ -221,6 +222,9 @@ where
                     }
                 }
             }
+            DynBroadcastEvent::Leaving => {
+                self.module.on_event(ctx, Event::Leaving).await?;
+            }
             DynBroadcastEvent::ParticipantJoined(participant) => {
                 let mut data = None;
 
@@ -289,6 +293,7 @@ where
             id: builder.id,
             room: &builder.room,
             user: &builder.user,
+            role: builder.role,
             db: &builder.db,
             rabbitmq_exchanges: &mut builder.rabbitmq_exchanges,
             rabbitmq_bindings: &mut builder.rabbitmq_bindings,

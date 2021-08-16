@@ -153,7 +153,8 @@ async fn run_service(settings: Settings, config_path: &Path) -> Result<()> {
                     .with_module::<signaling::ce::Echo>(())
                     .with_module::<signaling::ce::Media>(Arc::downgrade(&mcu_pool))
                     .with_module::<signaling::ce::Chat>(())
-                    .with_module::<signaling::ee::Chat>(()),
+                    .with_module::<signaling::ee::Chat>(())
+                    .with_module::<signaling::ee::AutoMod>(()),
             );
         }
 

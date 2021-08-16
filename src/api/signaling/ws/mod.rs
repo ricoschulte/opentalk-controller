@@ -1,4 +1,4 @@
-use crate::api::signaling::ParticipantId;
+use crate::api::signaling::{ParticipantId, Role};
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::DbInterface;
@@ -46,6 +46,12 @@ where
         participants: &'evt mut HashMap<ParticipantId, Option<M::PeerFrontendData>>,
     },
 
+    /// The participant is in the process of leaving the room, this event will be called before
+    /// `on_destroy` is called and before the rabbitmq control message `Left` has been sent.
+    ///
+    /// Note: Calls to `ModuleContext::ws_send` when receiving this event will almost certainly fail
+    Leaving,
+
     /// Participant with the associated id has joined the room
     ParticipantJoined(ParticipantId, &'evt mut Option<M::PeerFrontendData>),
 
@@ -76,6 +82,7 @@ where
     id: ParticipantId,
     room: &'ctx Room,
     user: &'ctx User,
+    role: Role,
     db: &'ctx Arc<DbInterface>,
     rabbitmq_exchanges: &'ctx mut Vec<RabbitMqExchange>,
     rabbitmq_bindings: &'ctx mut Vec<RabbitMqBinding>,
@@ -113,6 +120,11 @@ where
     /// Returns the user associated with the participant
     pub fn user(&self) -> &User {
         self.user
+    }
+
+    /// Returns the role of participant inside the room
+    pub fn role(&self) -> Role {
+        self.role
     }
 
     /// Returns a reference to the controllers database interface

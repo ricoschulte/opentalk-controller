@@ -118,6 +118,7 @@ impl SignalingModule for Chat {
 
                 *frontend_data = Some(group_messages);
             }
+            Event::Leaving => {}
             Event::ParticipantJoined(_, _) => {}
             Event::ParticipantLeft(_) => {}
             Event::ParticipantUpdated(_, _) => {}

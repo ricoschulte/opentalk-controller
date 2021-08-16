@@ -90,6 +90,7 @@ impl SignalingModule for Chat {
                 *frontend_data =
                     Some(ChatHistory::for_current_room(ctx.redis_conn(), self.room).await?);
             }
+            Event::Leaving => {}
             Event::ParticipantJoined(_, _) => {}
             Event::WsMessage(msg) => {
                 let source = self.id;

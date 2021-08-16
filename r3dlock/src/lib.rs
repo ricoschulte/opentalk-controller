@@ -27,7 +27,7 @@ pub struct Mutex<K> {
     key: K,
 
     wait_time: Range<Duration>,
-    retries: usize,
+    tries: usize,
 }
 
 /// Represents a locked redlock mutex
@@ -65,10 +65,11 @@ where
     /// Unlocks this [`MutexGuard`] / locked redlock mutex
     ///
     /// If Redis fails to unlock this lock, or this lock is already unlocked, this method returns a [`RedisError`]
-    pub async fn unlock<C>(self, redis: &mut C) -> Result<()>
+    pub async fn unlock<C>(mut self, redis: &mut C) -> Result<()>
     where
         C: ConnectionLike,
     {
+        self.locked = false;
         if self.is_expired() {
             return Err(Error::AlreadyExpired);
         }
@@ -91,7 +92,7 @@ where
 impl<K> Drop for MutexGuard<'_, K> {
     fn drop(&mut self) {
         if !std::thread::panicking() {
-            debug_assert!(self.is_locked(), "MutexGuard must be unlocked before drop");
+            debug_assert!(!self.is_locked(), "MutexGuard must be unlocked before drop");
         }
     }
 }
@@ -110,7 +111,7 @@ where
         Self {
             key,
             wait_time: Duration::from_millis(10)..Duration::from_millis(50),
-            retries: 10,
+            tries: 10,
         }
     }
 
@@ -122,7 +123,7 @@ where
 
     /// Set the amount of locking retries
     pub fn with_retries(mut self, retries: usize) -> Self {
-        self.retries = retries;
+        self.tries = retries.saturating_add(1);
         self
     }
 
@@ -138,7 +139,7 @@ where
             .take(20)
             .collect::<Vec<u8>>();
 
-        for _ in 0..self.retries {
+        for _ in 0..self.tries {
             let created = Instant::now();
 
             // Send the SET command to create a lock with the following args:
