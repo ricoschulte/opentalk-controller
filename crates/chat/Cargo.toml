@@ -1,0 +1,9 @@
+[package]
+name = "k3k-chat"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+controller = { path = "../controller", package = "k3k-controller-core" }
+chrono = "0.4"
+serde = { version = "1", features = ["derive"] }

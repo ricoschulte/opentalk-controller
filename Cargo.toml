@@ -3,95 +3,27 @@ name = "k3k-controller"
 version = "0.1.0"
 authors = [
     "Konstanin Baltruschat <k.baltruschat@heinlein-video.de>",
-    "Marvin Ankert <m.ankert@heinlein-video.de>"
+    "Marvin Ankert <m.ankert@heinlein-video.de>",
 ]
 edition = "2018"
 
 [workspace]
 members = [
-    "janus-client",
-    "client",
-    "r3dlock"
+    "crates/janus-client",
+    "crates/janus-media",
+    "crates/automod",
+    "crates/ee-chat",
+    "crates/chat",
+    "crates/controller",
+    "crates/client",
+    "crates/r3dlock",
 ]
 
 [dependencies]
-### Logging utilities
-log = { version = "0.4", features = ["serde"] }
-fern = { version = "0.6", features = ["colored"] }
-
-### Config
-config = { version = "0.11", default-features = false, features = ["toml"] }
-serde = { version = "1", features = ["derive"] }
-structopt = "0.3"
-arc-swap = "1.3"
-
-### Error handling
 anyhow = "1.0"
-thiserror = "1.0"
-validator = { version = "0.13", features = ["derive"] }
-
-### Database ORM
-diesel = { version = "1.4.6", features = ["postgres", "uuid", "uuidv07", "r2d2"] }
-uuid = { version = "0.8.2", features = ["serde", "v4"] }
-
-### Database migrations
-refinery = { version = "0.5", features = ["tokio-postgres", "tokio"] }
-refinery-core = "0.5"
-diesel_migrations = "1.4"
-barrel = { version = "0.6", features = ["pg"] }
-
-### Web Framework & Runtime
-tokio = { version = " 1", features = ["signal"] }
-tokio-stream = { version = "0.1.5", features = ["sync"] }
-actix-web = { version = "= 4.0.0-beta.8", features = ["rustls"] }
-actix-rt = "2.2"
-actix-web-httpauth = "0.6.0-beta.2"
-actix-cors = "0.6.0-beta.2"
-futures-util = "0.3"
-async-trait = "0.1"
-futures = "0.3"
-bytes = "1"
-serde_json = "1"
-parking_lot = "0.11"
-
-### RabbitMQ
-lapin = { version = "1.7", default-features = false }
-tokio-amqp = { version = "1", default-features = false }
-
-### Redis
-redis = { version = "0.20", features = ["tokio-comp", "connection-manager"] }
-url = "2"
-r3dlock = { path = "r3dlock" }
-
-### OpenID Connect & JWT
-openidconnect = { version = "2" }
-jsonwebtoken = "7"
-base64 = "0.13"
-chrono = "0.4"
-
-### Websockets
-async-tungstenite = "0.13"
-actix-web-actors = { git = "https://github.com/actix/actix-web.git", tag = "web-v4.0.0-beta.8" }
-
-### Janus
-janus-client = { path = "janus-client" }
-
-### Rust Encryption
-ring = "0.16"
-rustls = "0.19"
-
-### QoL
-displaydoc = "0.2"
-
-# Random Distributions etc. Used for RR
-rand = "0.8.3"
-
-### Reload controller process
-sysinfo = { version = "0.19.0", default-features = false }
-nix = "0.21.0"
-
-[dev-dependencies]
-k3k-controller-client = { path = "client" }
-tokio-postgres = "0.7"
-serial_test = "0.5"
-regex = "1.5"
+actix-web = "4.0.0-beta.8"
+controller = { path = "crates/controller", package = "k3k-controller-core" }
+janus-media = { path = "crates/janus-media", package = "k3k-janus-media" }
+automod = { path = "crates/automod", package = "k3k-automod" }
+ee-chat = { path = "crates/ee-chat", package = "k3k-ee-chat" }
+chat = { path = "crates/chat", package = "k3k-chat" }

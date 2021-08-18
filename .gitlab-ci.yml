@@ -74,7 +74,7 @@ test:cargo_test:
     - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"
   script:
     - cargo test --workspace
-    - ./.cargo/bin/diesel print-schema | /usr/local/cargo/bin/rustfmt | diff src/db/schema.rs -
+    - ./.cargo/bin/diesel print-schema | /usr/local/cargo/bin/rustfmt | diff crates/controller/src/db/schema.rs -
 
 build:release:
   stage: build

@@ -5,7 +5,7 @@
 
 # How to change the schema?
 
-* add file `V<version_nr>__<name>.rs` under src/db/migrations/
+* add file `V<version_nr>__<name>.rs` under crates/controller/src/db/migrations/
 * implement the following structure:
 
 ```rust
