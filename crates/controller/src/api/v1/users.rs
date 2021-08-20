@@ -4,8 +4,8 @@
 //! structs are defined in the Database module [`crate::db`] for database operations.
 
 use crate::api::v1::DefaultApiError;
-use crate::db::users as db_users;
 use crate::db::users::User;
+use crate::db::users::{self as db_users, UserId};
 use crate::db::DbInterface;
 use actix_web::web::{Data, Json, Path, ReqData};
 use actix_web::{get, put, web};
@@ -17,7 +17,7 @@ use validator::{Validate, ValidationError};
 /// Contains general "public" information about a user. Is accessible to all other users.
 #[derive(Debug, Serialize)]
 pub struct UserDetails {
-    pub id: i64,
+    pub id: UserId,
     pub email: String,
     pub title: String,
     pub firstname: String,
@@ -31,7 +31,7 @@ pub struct UserDetails {
 /// Is used on */users/me* endpoints.
 #[derive(Debug, Serialize)]
 pub struct UserProfile {
-    pub id: i64,
+    pub id: UserId,
     pub email: String,
     pub title: String,
     pub firstname: String,
@@ -170,7 +170,7 @@ pub async fn current_user_profile(
 #[get("/users/{user_id}")]
 pub async fn user_details(
     db_ctx: Data<DbInterface>,
-    user_id: Path<i64>,
+    user_id: Path<UserId>,
 ) -> Result<Json<UserDetails>, DefaultApiError> {
     let db_user = web::block(move || -> Result<Option<db_users::User>, DefaultApiError> {
         Ok(db_ctx.get_user_by_id(user_id.into_inner())?)

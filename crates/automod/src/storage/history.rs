@@ -8,19 +8,19 @@
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Display)]
 /// k3k-signaling:room={room}:automod:history
 #[ignore_extra_doc_attributes]
 /// Typed key to the automod history
 struct RoomAutoModHistory {
-    room: Uuid,
+    room: RoomId,
 }
 
 impl_to_redis_args!(RoomAutoModHistory);
@@ -67,7 +67,7 @@ impl Entry {
 }
 
 /// Adds the given entry to the history
-pub async fn add(redis_conn: &mut ConnectionManager, room: Uuid, entry: &Entry) -> Result<()> {
+pub async fn add(redis_conn: &mut ConnectionManager, room: RoomId, entry: &Entry) -> Result<()> {
     redis_conn
         .zadd(
             RoomAutoModHistory { room },
@@ -82,7 +82,7 @@ pub async fn add(redis_conn: &mut ConnectionManager, room: Uuid, entry: &Entry) 
 /// timestamp.
 pub async fn get(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     since: DateTime<Utc>,
 ) -> Result<Vec<ParticipantId>> {
     let entries: Vec<Entry> = redis_conn
@@ -104,7 +104,7 @@ pub async fn get(
 }
 
 /// Delete the history.
-pub async fn del(redis_conn: &mut ConnectionManager, room: Uuid) -> Result<()> {
+pub async fn del(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<()> {
     redis_conn
         .del(RoomAutoModHistory { room })
         .await
@@ -114,7 +114,7 @@ pub async fn del(redis_conn: &mut ConnectionManager, room: Uuid) -> Result<()> {
 #[cfg(test)]
 pub(crate) async fn get_entries(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     since: DateTime<Utc>,
 ) -> Result<Vec<Entry>> {
     redis_conn

@@ -9,12 +9,14 @@ use diesel::{
 };
 use uuid::Uuid;
 
+diesel_newtype!(UserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt");
+
 /// Diesel user struct
 ///
 /// Is used as a result in various queries. Represents a user column
 #[derive(Debug, Clone, Queryable, Identifiable)]
 pub struct User {
-    pub id: i64,
+    pub id: UserId,
     pub oidc_uuid: Uuid,
     pub email: String,
     pub title: String,
@@ -167,7 +169,7 @@ impl DbInterface {
         })
     }
 
-    pub fn get_user_by_id(&self, user_id: i64) -> Result<Option<User>> {
+    pub fn get_user_by_id(&self, user_id: UserId) -> Result<Option<User>> {
         let con = self.get_con()?;
 
         let result: QueryResult<User> = users::table

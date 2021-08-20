@@ -1,10 +1,10 @@
 use super::State;
 use anyhow::{Context, Result};
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
-use uuid::Uuid;
 
 #[derive(Display)]
 /// k3k-signaling:room={room}:participant={participant}:namespace=media:state
@@ -12,7 +12,7 @@ use uuid::Uuid;
 /// Data related to a module inside a participant
 // TODO can this be removed?
 struct MediaState {
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
 }
 
@@ -20,7 +20,7 @@ impl_to_redis_args!(MediaState);
 
 pub async fn get_state(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
 ) -> Result<State> {
     let json: Vec<u8> = redis_conn
@@ -33,7 +33,7 @@ pub async fn get_state(
 
 pub async fn set_state(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
     state: &State,
 ) -> Result<()> {
@@ -49,7 +49,7 @@ pub async fn set_state(
 
 pub async fn del_state(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
 ) -> Result<()> {
     redis_conn

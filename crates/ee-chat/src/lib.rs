@@ -2,12 +2,12 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use control::rabbitmq;
 use controller::db::groups::Group;
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use r3dlock::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use storage::StoredMessage;
-use uuid::Uuid;
 
 mod storage;
 
@@ -33,7 +33,7 @@ fn group_routing_key(group: &str) -> String {
 
 pub struct Chat {
     id: ParticipantId,
-    room: Uuid,
+    room: RoomId,
 
     groups: HashSet<Group>,
 }

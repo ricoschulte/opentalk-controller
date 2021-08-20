@@ -4,8 +4,8 @@
 //! structs are defined in the Database module [`crate::db`] for database operations.
 
 use crate::api::v1::{ApiError, DefaultApiError};
-use crate::db::rooms as db_rooms;
-use crate::db::users::User;
+use crate::db::rooms::{self as db_rooms, RoomId};
+use crate::db::users::{User, UserId};
 use crate::db::DbInterface;
 use actix_web::web::{Data, Json, Path, ReqData};
 use actix_web::{get, post, put, web};
@@ -14,7 +14,6 @@ use rand::Rng;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 use validator::{Validate, ValidationError};
 
 /// A Room
@@ -23,8 +22,8 @@ use validator::{Validate, ValidationError};
 /// appropriate permissions.
 #[derive(Debug, Serialize)]
 pub struct Room {
-    pub uuid: Uuid,
-    pub owner: i64,
+    pub uuid: RoomId,
+    pub owner: UserId,
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
@@ -35,8 +34,8 @@ pub struct Room {
 /// Contains general public information about a room.
 #[derive(Debug, Serialize)]
 pub struct RoomDetails {
-    pub uuid: Uuid,
-    pub owner: i64,
+    pub uuid: RoomId,
+    pub owner: UserId,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
 }
@@ -124,7 +123,7 @@ pub async fn new(
 
     let db_room = web::block(move || -> Result<db_rooms::Room, DefaultApiError> {
         let new_room = db_rooms::NewRoom {
-            uuid: uuid::Uuid::new_v4(),
+            uuid: RoomId::from(uuid::Uuid::new_v4()),
             owner: current_user.id,
             password: new_room.password,
             wait_for_moderator: new_room.wait_for_moderator,
@@ -158,10 +157,10 @@ pub async fn new(
 pub async fn modify(
     db_ctx: Data<DbInterface>,
     current_user: ReqData<User>,
-    room_uuid: Path<Uuid>,
+    room_id: Path<RoomId>,
     modify_room: Json<ModifyRoom>,
 ) -> Result<Json<Room>, DefaultApiError> {
-    let room_uuid = room_uuid.into_inner();
+    let room_id = room_id.into_inner();
     let modify_room = modify_room.into_inner();
 
     if let Err(e) = modify_room.validate() {
@@ -170,7 +169,7 @@ pub async fn modify(
     }
 
     let db_room = web::block(move || {
-        let room = db_ctx.get_room_by_uuid(&room_uuid)?;
+        let room = db_ctx.get_room(room_id)?;
 
         match room {
             None => Err(DefaultApiError::NotFound),
@@ -187,7 +186,7 @@ pub async fn modify(
                     listen_only: modify_room.listen_only,
                 };
 
-                Ok(db_ctx.modify_room_by_uuid(&room_uuid, change_room)?)
+                Ok(db_ctx.modify_room(room_id, change_room)?)
             }
         }
     })
@@ -214,12 +213,12 @@ pub async fn modify(
 #[get("/rooms/{room_uuid}")]
 pub async fn get(
     db_ctx: Data<DbInterface>,
-    room_uuid: Path<Uuid>,
+    room_id: Path<RoomId>,
 ) -> Result<Json<RoomDetails>, DefaultApiError> {
-    let room_uuid = room_uuid.into_inner();
+    let room_id = room_id.into_inner();
 
     let db_room = web::block(move || {
-        let room = db_ctx.get_room_by_uuid(&room_uuid)?;
+        let room = db_ctx.get_room(room_id)?;
 
         match room {
             None => Err(DefaultApiError::NotFound),
@@ -264,8 +263,8 @@ impl_to_redis_args!(&Ticket);
 /// Data stored behind the [`Ticket`] key.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TicketData {
-    pub user: Uuid,
-    pub room: Uuid,
+    pub user: UserId,
+    pub room: RoomId,
 }
 
 impl_from_redis_value_de!(TicketData);
@@ -300,15 +299,13 @@ pub async fn start(
     db_ctx: Data<DbInterface>,
     redis_ctx: Data<ConnectionManager>,
     current_user: ReqData<User>,
-    room_uuid: Path<Uuid>,
+    room_id: Path<RoomId>,
     request: Json<StartRequest>,
 ) -> Result<Json<Ticket>, StartError> {
-    let room_uuid = room_uuid.into_inner();
+    let room_id = room_id.into_inner();
 
     let room = web::block(move || -> Result<db_rooms::Room, StartError> {
-        let room = db_ctx
-            .get_room_by_uuid(&room_uuid)?
-            .ok_or(StartError::NotFound)?;
+        let room = db_ctx.get_room(room_id)?.ok_or(StartError::NotFound)?;
 
         Ok(room)
     })
@@ -341,8 +338,8 @@ pub async fn start(
     let ticket = Ticket { ticket };
 
     let ticket_data = TicketData {
-        user: current_user.oidc_uuid,
-        room: room_uuid,
+        user: current_user.id,
+        room: room_id,
     };
 
     let mut redis_conn = (**redis_ctx).clone();

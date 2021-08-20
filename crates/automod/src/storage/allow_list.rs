@@ -10,18 +10,18 @@
 // TODO: Playlist mode will use this to filter which participants can add themself to the playlist via hand-raise
 
 use anyhow::{Context, Result};
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
-use uuid::Uuid;
 
 #[derive(Display)]
 /// k3k-signaling:room={room}:automod:allow_list
 #[ignore_extra_doc_attributes]
 /// Typed key to the allow_list
 struct RoomAutoModAllowList {
-    room: Uuid,
+    room: RoomId,
 }
 
 impl_to_redis_args!(RoomAutoModAllowList);
@@ -30,7 +30,7 @@ impl_to_redis_args!(RoomAutoModAllowList);
 /// the entry will just be deleted.
 pub async fn set(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     allow_list: &[ParticipantId],
 ) -> Result<()> {
     redis_conn
@@ -51,7 +51,7 @@ pub async fn set(
 /// Remove the given participant from the allow_list
 pub async fn remove(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
 ) -> Result<()> {
     redis_conn
@@ -63,7 +63,7 @@ pub async fn remove(
 /// Get a random `participant` from the allow_list. Will return `None` if the allow_list if empty.
 pub async fn random(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
 ) -> Result<Option<ParticipantId>> {
     redis_conn
         .srandmember(RoomAutoModAllowList { room })
@@ -75,7 +75,7 @@ pub async fn random(
 /// always return `true`.
 pub async fn is_allowed(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
 ) -> Result<bool> {
     let exists: bool = redis_conn.exists(RoomAutoModAllowList { room }).await?;
@@ -92,7 +92,10 @@ pub async fn is_allowed(
 }
 
 /// Return all members of the `allow_list`.
-pub async fn get_all(redis_conn: &mut ConnectionManager, room: Uuid) -> Result<Vec<ParticipantId>> {
+pub async fn get_all(
+    redis_conn: &mut ConnectionManager,
+    room: RoomId,
+) -> Result<Vec<ParticipantId>> {
     redis_conn
         .smembers(RoomAutoModAllowList { room })
         .await
@@ -100,7 +103,7 @@ pub async fn get_all(redis_conn: &mut ConnectionManager, room: Uuid) -> Result<V
 }
 
 /// Delete the `allow_list`.
-pub async fn del(redis_conn: &mut ConnectionManager, room: Uuid) -> Result<()> {
+pub async fn del(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<()> {
     redis_conn
         .del(RoomAutoModAllowList { room })
         .await

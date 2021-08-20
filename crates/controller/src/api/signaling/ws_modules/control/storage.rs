@@ -1,4 +1,5 @@
 use crate::api::signaling::ParticipantId;
+use crate::db::rooms::RoomId;
 use anyhow::{Context, Result};
 use displaydoc::Display;
 use r3dlock::{Mutex, MutexGuard};
@@ -7,7 +8,6 @@ use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use std::collections::HashSet;
 use std::fmt::Debug;
 use std::time::Duration;
-use uuid::Uuid;
 
 #[derive(Display)]
 /// k3k-signaling:room={room}:participants
@@ -15,7 +15,7 @@ use uuid::Uuid;
 /// Describes a set of participants inside a room.
 /// This MUST always be locked before accessing it
 struct RoomParticipants {
-    room: Uuid,
+    room: RoomId,
 }
 
 #[derive(Display)]
@@ -23,7 +23,7 @@ struct RoomParticipants {
 #[ignore_extra_doc_attributes]
 /// Key used for the lock over the room participants set
 pub struct RoomParticipantsLock {
-    pub room: Uuid,
+    pub room: RoomId,
 }
 
 #[derive(Display)]
@@ -31,7 +31,7 @@ pub struct RoomParticipantsLock {
 #[ignore_extra_doc_attributes]
 /// Key used for the lock over the room participants set
 struct RoomParticipantAttributes {
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
 }
 
@@ -40,7 +40,7 @@ impl_to_redis_args!(RoomParticipantsLock);
 impl_to_redis_args!(RoomParticipantAttributes);
 
 /// The participant set mutex parameters are set very high since it is being held while destroying all modules which can take while
-pub fn participant_set_mutex(room: Uuid) -> Mutex<RoomParticipantsLock> {
+pub fn participant_set_mutex(room: RoomId) -> Mutex<RoomParticipantsLock> {
     Mutex::new(RoomParticipantsLock { room })
         .with_wait_time(Duration::from_millis(20)..Duration::from_millis(60))
         .with_retries(20)
@@ -48,7 +48,7 @@ pub fn participant_set_mutex(room: Uuid) -> Mutex<RoomParticipantsLock> {
 
 pub async fn get_all_participants(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
 ) -> Result<HashSet<ParticipantId>> {
     let mut mutex = participant_set_mutex(room);
 
@@ -72,7 +72,7 @@ pub async fn get_all_participants(
 
 pub async fn participants_contains(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
 ) -> Result<bool> {
     let mut mutex = participant_set_mutex(room);
@@ -97,7 +97,7 @@ pub async fn participants_contains(
 
 pub async fn add_participant_to_set(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
 ) -> Result<()> {
     let mut mutex = participant_set_mutex(room);
@@ -125,7 +125,7 @@ pub async fn add_participant_to_set(
 pub async fn remove_participant_from_set(
     _set_guard: &MutexGuard<'_, RoomParticipantsLock>,
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
 ) -> Result<usize> {
     redis_conn
@@ -141,7 +141,7 @@ pub async fn remove_participant_from_set(
 
 pub async fn remove_all_attributes(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
 ) -> Result<()> {
     redis_conn
@@ -152,7 +152,7 @@ pub async fn remove_all_attributes(
 
 pub async fn set_attribute<K, V>(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
     key: K,
     value: V,
@@ -171,7 +171,7 @@ where
 
 pub async fn get_attribute<K, V>(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     participant: ParticipantId,
     key: K,
 ) -> Result<V>

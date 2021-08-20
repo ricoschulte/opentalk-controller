@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use controller::Controller;
 use janus_client::TrickleCandidate;
@@ -14,7 +15,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
-use uuid::Uuid;
 
 mod incoming;
 mod mcu;
@@ -25,7 +25,7 @@ mod storage;
 
 pub struct Media {
     id: ParticipantId,
-    room: Uuid,
+    room: RoomId,
 
     mcu: Arc<McuPool>,
     media: MediaSessions,
