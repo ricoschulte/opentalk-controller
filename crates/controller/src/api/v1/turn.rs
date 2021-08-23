@@ -67,28 +67,26 @@ pub async fn get(
         turn_servers
     );
 
-    let turn_config = match turn_servers.as_ref() {
-        Some(turn_config) => turn_config,
-        None => return Ok(Either::Right(NoContent {})),
+    let mut ice_servers = match turn_servers {
+        Some(turn_config) => {
+            let expires = (chrono::Utc::now() + turn_config.lifetime).timestamp();
+            let mut rand_rng = ::rand::thread_rng();
+            rr_servers(&mut rand_rng, &turn_config.servers, expires)?
+        }
+        None => vec![],
     };
 
-    let turn_credentials = {
-        let expires = (chrono::Utc::now() + turn_config.lifetime).timestamp();
-        let mut rand_rng = ::rand::thread_rng();
-        rr_servers(&mut rand_rng, &turn_config.servers, expires)?
-    };
+    if let Some(stun_config) = stun_servers {
+        ice_servers.push(IceServer::Stun(Stun {
+            uris: stun_config.uris.clone(),
+        }));
+    }
 
-    let response = turn_credentials
-        .into_iter()
-        .map(IceServer::Turn)
-        .chain(stun_servers.iter().map(|stun| IceServer::Stun(stun.into())))
-        .collect::<Vec<_>>();
-
-    if response.is_empty() {
+    if ice_servers.is_empty() {
         return Ok(Either::Right(NoContent {}));
     }
 
-    Ok(Either::Left(Json(response)))
+    Ok(Either::Left(Json(ice_servers)))
 }
 
 fn create_credentials<T: Rng + CryptoRng>(
@@ -96,7 +94,7 @@ fn create_credentials<T: Rng + CryptoRng>(
     psk: &str,
     ttl: i64,
     uris: &[String],
-) -> Result<Turn, anyhow::Error> {
+) -> Result<IceServer, anyhow::Error> {
     // TODO We should invest time to add SHA265 support to coturn or our own turn server.
     let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, psk.as_bytes());
 
@@ -105,19 +103,19 @@ fn create_credentials<T: Rng + CryptoRng>(
     let username = format!("{}:turn_random_for_privacy_{}", ttl, random_part);
     let password = base64::encode(hmac::sign(&key, username.as_bytes()).as_ref());
 
-    Ok(Turn {
+    Ok(IceServer::Turn(Turn {
         username,
         password,
         ttl: ttl.to_string(),
         uris: uris.to_vec(),
-    })
+    }))
 }
 
 fn rr_servers<T: Rng + CryptoRng>(
     rng: &mut T,
     servers: &[TurnServer],
     expires: i64,
-) -> Result<Vec<Turn>, DefaultApiError> {
+) -> Result<Vec<IceServer>, DefaultApiError> {
     // Create a list of TURN responses for each configured TURN server.
     match servers.len() {
         0 => Ok(vec![]),
@@ -176,12 +174,12 @@ mod test {
             create_credentials(&mut rng, "PSK", 3400, &["turn:turn.turn.turn".to_owned()]).unwrap();
         assert_eq!(
             credentials,
-            Turn {
+            IceServer::Turn(Turn {
                 username: "3400:turn_random_for_privacy_8VbonSpZc9GXSw9gMxaV0A==".to_owned(),
                 password: "h3R6Ob2G0+nH3oRhO2y/IuK757Y=".to_owned(),
                 ttl: 3400.to_string(),
                 uris: vec!["turn:turn.turn.turn".to_owned()]
-            }
+            })
         );
     }
 
@@ -202,12 +200,12 @@ mod test {
         }];
         assert_eq!(
             rr_servers(&mut rng, &one_server, 1200).unwrap(),
-            vec![Turn {
+            vec![IceServer::Turn(Turn {
                 username: "1200:turn_random_for_privacy_8VbonSpZc9GXSw9gMxaV0A==".to_owned(),
                 password: "G7hjqVZX/dVAOgzzb+GeS8vEpcU=".to_owned(),
                 ttl: 1200.to_string(),
                 uris: vec!["turn:turn1.turn.turn".to_owned()]
-            }]
+            })]
         );
 
         // Two configured servers
@@ -224,12 +222,12 @@ mod test {
         ];
         assert_eq!(
             rr_servers(&mut rng, &two_servers, 1200).unwrap(),
-            vec![Turn {
+            vec![IceServer::Turn(Turn {
                 username: "1200:turn_random_for_privacy_VuidKllz0ZdLD2AzFpXQYA==".to_owned(),
                 password: "Aybo95/GPrJhWN2qqbz6yP2qEvg=".to_owned(),
                 ttl: 1200.to_string(),
                 uris: vec!["turn:turn1.turn.turn".to_owned()]
-            }]
+            })]
         );
 
         // Three configured servers
@@ -251,18 +249,18 @@ mod test {
         assert_eq!(
             rr_servers(&mut rng, &&three_servers, 1200).unwrap(),
             vec![
-                Turn {
+                IceServer::Turn(Turn {
                     username: "1200:turn_random_for_privacy_nSpZc9GXSw9gMxaV0GDahQ==".to_owned(),
                     password: "6zfptEfCPlF3oWFtPKtlAPwjAWs=".to_owned(),
                     ttl: 1200.to_string(),
                     uris: vec!["turn:turn1.turn.turn".to_owned()]
-                },
-                Turn {
+                }),
+                IceServer::Turn(Turn {
                     username: "1200:turn_random_for_privacy_AYzBIYeOCHhhiwR7CQ3X1A==".to_owned(),
                     password: "fiWX+emwV1thN/dBcZ9melA061g=".to_owned(),
                     ttl: 1200.to_string(),
                     uris: vec!["turn:turn3.turn.turn".to_owned()]
-                }
+                })
             ]
         );
 
@@ -274,6 +272,10 @@ mod test {
             rr_servers(&mut rng, &&three_servers, 1200)
                 .unwrap()
                 .iter()
+                .filter_map(|e| match e {
+                    IceServer::Turn(turn) => Some(turn),
+                    _ => None,
+                })
                 .for_each(|e| match e.uris[0].as_ref() {
                     "turn:turn1.turn.turn" => first += 1,
                     "turn:turn2.turn.turn" => second += 1,
