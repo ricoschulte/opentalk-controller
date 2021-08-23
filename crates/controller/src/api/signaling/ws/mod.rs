@@ -54,6 +54,13 @@ where
     /// Note: Calls to `ModuleContext::ws_send` when receiving this event will almost certainly fail
     Leaving,
 
+    /// A user can request attention by 'raising' his hand, this event gets broadcast to every
+    /// module.
+    RaiseHand,
+
+    /// User lowered his hand and no longer requests attention.
+    LowerHand,
+
     /// Participant with the associated id has joined the room
     ParticipantJoined(ParticipantId, &'evt mut Option<M::PeerFrontendData>),
 

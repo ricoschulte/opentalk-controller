@@ -108,6 +108,8 @@ pub enum DynBroadcastEvent<'evt> {
         &'evt mut Vec<Participant>,
     ),
     Leaving,
+    RaiseHand,
+    LowerHand,
     ParticipantJoined(&'evt mut Participant),
     ParticipantLeft(ParticipantId),
     ParticipantUpdated(&'evt mut Participant),
@@ -224,6 +226,12 @@ where
             }
             DynBroadcastEvent::Leaving => {
                 self.module.on_event(ctx, Event::Leaving).await?;
+            }
+            DynBroadcastEvent::RaiseHand => {
+                self.module.on_event(ctx, Event::RaiseHand).await?;
+            }
+            DynBroadcastEvent::LowerHand => {
+                self.module.on_event(ctx, Event::LowerHand).await?;
             }
             DynBroadcastEvent::ParticipantJoined(participant) => {
                 let mut data = None;
