@@ -1,13 +1,13 @@
 use actix_web::web;
 use bytes::Bytes;
 use futures::channel::mpsc as fut_mpsc;
-use futures::{AsyncRead, AsyncWrite, Stream, TryStreamExt};
+use futures::{ready, AsyncRead, AsyncWrite, SinkExt, Stream, TryStreamExt};
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
 pub struct ActixTungsteniteAdapter {
-    send: fut_mpsc::UnboundedSender<io::Result<Bytes>>,
+    send: fut_mpsc::Sender<io::Result<Bytes>>,
     read: Box<dyn AsyncRead + Unpin>,
 }
 
@@ -19,7 +19,7 @@ impl ActixTungsteniteAdapter {
             payload.map_err(|e| io::Error::new(io::ErrorKind::BrokenPipe, e)),
         );
 
-        let (send, recv) = fut_mpsc::unbounded::<io::Result<Bytes>>();
+        let (send, recv) = fut_mpsc::channel::<io::Result<Bytes>>(2);
 
         (
             Self {
@@ -33,12 +33,19 @@ impl ActixTungsteniteAdapter {
 
 impl AsyncWrite for ActixTungsteniteAdapter {
     fn poll_write(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
+        ready!(self.send.poll_ready_unpin(cx)).map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::BrokenPipe,
+                "ActixTungsteniteAdapter channel receiver has been dropped",
+            )
+        })?;
+
         self.send
-            .unbounded_send(Ok(Bytes::copy_from_slice(buf)))
+            .start_send(Ok(Bytes::copy_from_slice(buf)))
             .map_err(|_| {
                 io::Error::new(
                     io::ErrorKind::BrokenPipe,
