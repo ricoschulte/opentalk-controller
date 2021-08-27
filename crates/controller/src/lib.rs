@@ -20,8 +20,8 @@
 //! }
 //! ```
 
-use crate::api::v1::middleware::tracer::Tracer;
 use crate::settings::{Settings, SharedSettings};
+use crate::trace::ReducedSpanBuilder;
 use actix_cors::Cors;
 use actix_web::http::header;
 use actix_web::web::Data;
@@ -43,6 +43,7 @@ use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::broadcast;
 use tokio::time::sleep;
 use tokio_amqp::LapinTokioExt;
+use tracing_actix_web::TracingLogger;
 
 #[cfg(not(doc))]
 mod api;
@@ -266,7 +267,7 @@ impl Controller {
                 let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
 
                 App::new()
-                    .wrap(Tracer)
+                    .wrap(TracingLogger::<ReducedSpanBuilder>::new())
                     .app_data(db_ctx)
                     .app_data(oidc_ctx)
                     .app_data(Data::new(shutdown.clone()))
@@ -300,7 +301,7 @@ impl Controller {
                 let signaling_modules = Data::from(signaling_modules.upgrade().unwrap());
 
                 App::new()
-                    .wrap(Tracer)
+                    .wrap(TracingLogger::<ReducedSpanBuilder>::new())
                     .wrap(cors)
                     .app_data(Data::from(shared_settings.clone()))
                     .app_data(db_ctx.clone())
