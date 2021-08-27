@@ -66,11 +66,11 @@ use anyhow::Context;
 use anyhow::Result;
 use chrono::Utc;
 use config::{FrontendConfig, PublicConfig, SelectionStrategy, StorageConfig};
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use controller::Controller;
 use rabbitmq::Message;
 use serde::Serialize;
-use uuid::Uuid;
 
 mod config;
 mod incoming;
@@ -81,7 +81,7 @@ mod storage;
 
 pub struct AutoMod {
     id: ParticipantId,
-    room: Uuid,
+    room: RoomId,
     role: Role,
 }
 

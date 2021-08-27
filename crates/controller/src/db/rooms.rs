@@ -1,12 +1,13 @@
 //! Contains the room specific database structs and queries
 use super::Result;
 use crate::db::schema::rooms;
-use crate::db::users::User;
+use crate::db::users::{User, UserId};
 use crate::db::DbInterface;
 use crate::diesel::RunQueryDsl;
 use diesel::{ExpressionMethods, QueryDsl, QueryResult};
 use diesel::{Identifiable, Queryable};
-use uuid::Uuid;
+
+diesel_newtype!(RoomId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid");
 
 /// Diesel room struct
 ///
@@ -14,8 +15,8 @@ use uuid::Uuid;
 #[derive(Debug, Queryable, Identifiable)]
 pub struct Room {
     pub id: i64,
-    pub uuid: Uuid,
-    pub owner: i64,
+    pub uuid: RoomId,
+    pub owner: UserId,
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
@@ -27,8 +28,8 @@ pub struct Room {
 #[derive(Debug, Insertable)]
 #[table_name = "rooms"]
 pub struct NewRoom {
-    pub uuid: Uuid,
-    pub owner: i64,
+    pub uuid: RoomId,
+    pub owner: UserId,
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
@@ -40,7 +41,7 @@ pub struct NewRoom {
 #[derive(Debug, AsChangeset)]
 #[table_name = "rooms"]
 pub struct ModifyRoom {
-    pub owner: Option<i64>,
+    pub owner: Option<UserId>,
     pub password: Option<String>,
     pub wait_for_moderator: Option<bool>,
     pub listen_only: Option<bool>,
@@ -80,7 +81,7 @@ impl DbInterface {
         }
     }
 
-    pub fn modify_room_by_uuid(&self, room_uuid: &Uuid, room: ModifyRoom) -> Result<Room> {
+    pub fn modify_room(&self, room_uuid: RoomId, room: ModifyRoom) -> Result<Room> {
         let con = self.get_con()?;
 
         let target = rooms::table.filter(rooms::columns::uuid.eq(&room_uuid));
@@ -95,7 +96,7 @@ impl DbInterface {
         }
     }
 
-    pub fn get_room_by_uuid(&self, room_uuid: &Uuid) -> Result<Option<Room>> {
+    pub fn get_room(&self, room_uuid: RoomId) -> Result<Option<Room>> {
         let con = self.get_con()?;
 
         let result: QueryResult<Room> = rooms::table

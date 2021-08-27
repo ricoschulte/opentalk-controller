@@ -1,5 +1,6 @@
 //! RabbitMQ utilities related to updates of users
 
+use crate::db::users::UserId;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
@@ -7,7 +8,7 @@ use serde::{Deserialize, Serialize};
 pub const EXCHANGE: &str = "user-update";
 
 /// Helper function to generate topic for a update message
-pub fn routing_key(user_id: i64) -> String {
+pub fn routing_key(user_id: UserId) -> String {
     format!("user.{}", user_id)
 }
 
@@ -20,7 +21,7 @@ pub struct Message {
 }
 
 impl Message {
-    pub async fn send_via(self, rabbitmq_channel: &lapin::Channel, user_id: i64) -> Result<()> {
+    pub async fn send_via(self, rabbitmq_channel: &lapin::Channel, user_id: UserId) -> Result<()> {
         let message = serde_json::to_vec(&self).context("Failed to serialize message")?;
 
         rabbitmq_channel

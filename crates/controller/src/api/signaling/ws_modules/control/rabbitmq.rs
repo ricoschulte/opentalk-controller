@@ -1,6 +1,6 @@
 use crate::api::signaling::ParticipantId;
+use crate::db::rooms::RoomId;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 /// Control messages sent between controller modules to communicate changes inside a room
 #[derive(Debug, Serialize, Deserialize)]
@@ -13,8 +13,8 @@ pub enum Message {
 
 /// Returns the name of the RabbitMQ topic exchange used to send messages between participants for
 /// the given room-id
-pub fn room_exchange_name(room: Uuid) -> String {
-    format!("k3k-signaling.room.{}", room)
+pub fn room_exchange_name(room: RoomId) -> String {
+    format!("k3k-signaling.room.{}", room.into_inner())
 }
 
 /// Returns the routing-key/topic used to send a message to the given participant

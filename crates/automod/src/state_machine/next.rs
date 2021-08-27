@@ -2,16 +2,16 @@ use super::Error;
 use crate::config::{Parameter, SelectionStrategy, StorageConfig};
 use crate::{rabbitmq, storage};
 use anyhow::Result;
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use rand::Rng;
 use redis::aio::ConnectionManager;
-use uuid::Uuid;
 
 /// Depending on the config will inspect/change the state_machine's state to select the next
 /// user to be speaker.
 pub async fn select_next<R: Rng>(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     config: &StorageConfig,
     user_selected: Option<ParticipantId>,
     rng: &mut R,
@@ -51,7 +51,7 @@ pub async fn select_next<R: Rng>(
 /// Returns the next (if any) participant to be selected inside a `Nomination` selection strategy.
 async fn select_next_nomination(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     config: &StorageConfig,
     user_selected: Option<ParticipantId>,
     allow_double_selection: bool,

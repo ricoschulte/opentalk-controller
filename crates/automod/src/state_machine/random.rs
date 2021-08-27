@@ -2,17 +2,17 @@ use super::Error;
 use crate::config::{Parameter, SelectionStrategy, StorageConfig};
 use crate::{rabbitmq, storage};
 use anyhow::Result;
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use redis::aio::ConnectionManager;
-use uuid::Uuid;
 
 /// Depending on the config will select a random participant to be speaker. This may be used when
 /// the selection_strategy ist `random` or a moderator issues a `Select::Random` command.
 pub async fn select_random<R: Rng>(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     config: &StorageConfig,
     rng: &mut R,
 ) -> Result<Option<rabbitmq::SpeakerUpdate>, Error> {

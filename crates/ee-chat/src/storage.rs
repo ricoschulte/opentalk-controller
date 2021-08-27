@@ -1,19 +1,19 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use r3dlock::{Mutex, MutexGuard};
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Display)]
 /// k3k-signaling:room={room}:group={group}:participants
 #[ignore_extra_doc_attributes]
 /// A set of group members inside a room
 struct RoomGroupParticipants<'s> {
-    room: Uuid,
+    room: RoomId,
     group: &'s str,
 }
 
@@ -22,7 +22,7 @@ struct RoomGroupParticipants<'s> {
 #[ignore_extra_doc_attributes]
 /// A lock for the set of group members inside a room
 pub struct RoomGroupParticipantsLock<'s> {
-    pub room: Uuid,
+    pub room: RoomId,
     pub group: &'s str,
 }
 
@@ -31,7 +31,7 @@ pub struct RoomGroupParticipantsLock<'s> {
 #[ignore_extra_doc_attributes]
 /// A lock for the set of group members inside a room
 struct RoomGroupChatHistory<'s> {
-    room: Uuid,
+    room: RoomId,
     group: &'s str,
 }
 
@@ -41,7 +41,7 @@ impl_to_redis_args!(RoomGroupChatHistory<'_>);
 
 pub async fn add_participant_to_set(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     group: &str,
     participant: ParticipantId,
 ) -> Result<()> {
@@ -68,7 +68,7 @@ pub async fn add_participant_to_set(
 pub async fn remove_participant_from_set(
     _set_guard: &MutexGuard<'_, RoomGroupParticipantsLock<'_>>,
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     group: &str,
     participant: ParticipantId,
 ) -> Result<usize> {
@@ -96,7 +96,7 @@ impl_to_redis_args_se!(&StoredMessage);
 
 pub async fn get_group_chat_history(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     group: &str,
 ) -> Result<Vec<StoredMessage>> {
     redis_conn
@@ -107,7 +107,7 @@ pub async fn get_group_chat_history(
 
 pub async fn add_message_to_group_chat_history(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     group: &str,
     message: &StoredMessage,
 ) -> Result<()> {
@@ -124,7 +124,7 @@ pub async fn add_message_to_group_chat_history(
 
 pub async fn delete_group_chat_history(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     group: &str,
 ) -> Result<()> {
     redis_conn

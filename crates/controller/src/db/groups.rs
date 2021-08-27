@@ -1,4 +1,5 @@
 use super::schema::{groups, user_groups};
+use super::users::UserId;
 use super::{DatabaseError, DbInterface, Result};
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use std::borrow::Borrow;
@@ -25,12 +26,12 @@ impl Borrow<String> for Group {
 #[derive(Debug, Queryable, Insertable)]
 #[table_name = "user_groups"]
 pub struct UserGroup {
-    pub user_id: i64,
+    pub user_id: UserId,
     pub group_id: String,
 }
 
 impl DbInterface {
-    pub fn get_groups_for_user(&self, user_id: i64) -> Result<HashSet<Group>> {
+    pub fn get_groups_for_user(&self, user_id: UserId) -> Result<HashSet<Group>> {
         let con = self.get_con()?;
 
         let groups: Vec<Group> = user_groups::table

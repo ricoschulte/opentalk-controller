@@ -204,13 +204,13 @@ async fn get_user_and_room_from_ticket(
 ) -> Result<(User, Room), ApiError> {
     web::block(move || -> Result<(User, Room), DefaultApiError> {
         let user = db_ctx
-            .get_user_by_uuid(&ticket_data.user)
+            .get_user_by_id(ticket_data.user)
             .map_err(DefaultApiError::from)?;
 
         let user = user.ok_or(DefaultApiError::Internal)?;
 
         let room = db_ctx
-            .get_room_by_uuid(&ticket_data.room)
+            .get_room(ticket_data.room)
             .map_err(DefaultApiError::from)?;
 
         let room = room.ok_or(DefaultApiError::NotFound)?;

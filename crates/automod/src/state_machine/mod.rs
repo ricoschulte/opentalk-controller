@@ -7,9 +7,9 @@ use crate::config::{SelectionStrategy, StorageConfig};
 use crate::rabbitmq;
 use crate::storage;
 use anyhow::Result;
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use redis::aio::ConnectionManager;
-use uuid::Uuid;
 
 mod next;
 mod random;
@@ -35,7 +35,7 @@ pub enum Error {
 /// Does not check if the participant exists or is even eligible to be speaker.
 pub async fn select_unchecked(
     redis_conn: &mut ConnectionManager,
-    room: Uuid,
+    room: RoomId,
     config: &StorageConfig,
     participant: Option<ParticipantId>,
 ) -> Result<Option<rabbitmq::SpeakerUpdate>, Error> {
@@ -82,14 +82,14 @@ pub async fn select_unchecked(
 #[cfg(test)]
 mod test {
     use chrono::{DateTime, Utc};
+    use controller::db::rooms::RoomId;
     use controller::prelude::*;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
     use redis::aio::ConnectionManager;
     use std::time::{Duration, SystemTime};
-    use uuid::Uuid;
 
-    pub const ROOM: Uuid = Uuid::nil();
+    pub const ROOM: RoomId = RoomId::from(uuid::Uuid::nil());
 
     pub async fn setup() -> ConnectionManager {
         let redis_url =

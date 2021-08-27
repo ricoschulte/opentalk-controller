@@ -1,11 +1,11 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use control::rabbitmq;
+use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use controller::{impl_from_redis_value_de, impl_to_redis_args_se};
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 mod storage;
 
@@ -35,7 +35,7 @@ impl_to_redis_args_se!(&Message);
 
 pub struct Chat {
     id: ParticipantId,
-    room: Uuid,
+    room: RoomId,
 }
 
 #[derive(Debug, Serialize)]
@@ -44,7 +44,10 @@ pub struct ChatHistory {
 }
 
 impl ChatHistory {
-    pub async fn for_current_room(redis_conn: &mut ConnectionManager, room: Uuid) -> Result<Self> {
+    pub async fn for_current_room(
+        redis_conn: &mut ConnectionManager,
+        room: RoomId,
+    ) -> Result<Self> {
         let room_history = storage::get_room_chat_history(redis_conn, room).await?;
         Ok(Self { room_history })
     }
