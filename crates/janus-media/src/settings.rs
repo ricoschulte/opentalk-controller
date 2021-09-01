@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct JanusMcuConfig {
-    pub connections: Vec<JanusRabbitMqConnection>,
+    pub connections: Vec<Connection>,
 
     /// Max bitrate allowed for `video` media sessions
     #[serde(default = "default_max_video_bitrate")]
@@ -31,13 +31,13 @@ impl JanusMcuConfig {
 
 /// Take the settings from your janus rabbit mq transport configuration.
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct JanusRabbitMqConnection {
+pub struct Connection {
     #[serde(default = "default_to_janus_routing_key")]
-    pub to_janus_routing_key: String,
+    pub to_routing_key: String,
     #[serde(default = "default_janus_exchange")]
-    pub janus_exchange: String,
+    pub exchange: String,
     #[serde(default = "default_from_janus_routing_key")]
-    pub from_janus_routing_key: String,
+    pub from_routing_key: String,
 }
 
 const fn default_max_video_bitrate() -> u64 {

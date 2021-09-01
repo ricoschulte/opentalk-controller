@@ -8,7 +8,7 @@ use crate::db::rooms::{self as db_rooms, RoomId};
 use crate::db::users::{User, UserId};
 use crate::db::DbInterface;
 use actix_web::web::{Data, Json, Path, ReqData};
-use actix_web::{get, post, put, web};
+use actix_web::{get, post, put};
 use displaydoc::Display;
 use rand::Rng;
 use redis::aio::ConnectionManager;
@@ -81,7 +81,7 @@ pub async fn owned(
     db_ctx: Data<DbInterface>,
     current_user: ReqData<User>,
 ) -> Result<Json<Vec<Room>>, DefaultApiError> {
-    let rooms = web::block(move || -> Result<Vec<db_rooms::Room>, DefaultApiError> {
+    let rooms = crate::block(move || -> Result<Vec<db_rooms::Room>, DefaultApiError> {
         Ok(db_ctx.get_owned_rooms(&current_user)?)
     })
     .await
@@ -121,7 +121,7 @@ pub async fn new(
         return Err(DefaultApiError::ValidationFailed);
     }
 
-    let db_room = web::block(move || -> Result<db_rooms::Room, DefaultApiError> {
+    let db_room = crate::block(move || -> Result<db_rooms::Room, DefaultApiError> {
         let new_room = db_rooms::NewRoom {
             uuid: RoomId::from(uuid::Uuid::new_v4()),
             owner: current_user.id,
@@ -168,7 +168,7 @@ pub async fn modify(
         return Err(DefaultApiError::ValidationFailed);
     }
 
-    let db_room = web::block(move || {
+    let db_room = crate::block(move || {
         let room = db_ctx.get_room(room_id)?;
 
         match room {
@@ -217,7 +217,7 @@ pub async fn get(
 ) -> Result<Json<RoomDetails>, DefaultApiError> {
     let room_id = room_id.into_inner();
 
-    let db_room = web::block(move || {
+    let db_room = crate::block(move || {
         let room = db_ctx.get_room(room_id)?;
 
         match room {
@@ -304,7 +304,7 @@ pub async fn start(
 ) -> Result<Json<Ticket>, StartError> {
     let room_id = room_id.into_inner();
 
-    let room = web::block(move || -> Result<db_rooms::Room, StartError> {
+    let room = crate::block(move || -> Result<db_rooms::Room, StartError> {
         let room = db_ctx.get_room(room_id)?.ok_or(StartError::NotFound)?;
 
         Ok(room)

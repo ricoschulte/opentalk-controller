@@ -26,6 +26,7 @@ struct RoomAutoModPlaylist {
 impl_to_redis_args!(RoomAutoModPlaylist);
 
 /// Set the playlist. If the `playlist` parameter is empty the old one will still be removed.
+#[tracing::instrument(name = "set_playlist", level = "debug", skip(redis_conn, playlist))]
 pub async fn set(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -47,6 +48,7 @@ pub async fn set(
 }
 
 /// Get the next participant from the playlist
+#[tracing::instrument(name = "pop_playlist", level = "debug", skip(redis_conn))]
 pub async fn pop(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -58,6 +60,7 @@ pub async fn pop(
 }
 
 /// Returns the playlist in a Vec.
+#[tracing::instrument(name = "get_playlist", level = "debug", skip(redis_conn))]
 pub async fn get_all(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -69,6 +72,7 @@ pub async fn get_all(
 }
 
 /// Remove first occurrence of `participant` from the playlist.
+#[tracing::instrument(name = "remove_from_playlist", level = "debug", skip(redis_conn))]
 pub async fn remove_first(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -81,6 +85,7 @@ pub async fn remove_first(
 }
 
 /// Delete the complete playlist.
+#[tracing::instrument(name = "del_playlist", level = "debug", skip(redis_conn))]
 pub async fn del(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<()> {
     redis_conn
         .del(RoomAutoModPlaylist { room })

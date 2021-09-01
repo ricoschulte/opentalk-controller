@@ -59,13 +59,9 @@ impl McuId {
     }
 }
 
-impl From<&settings::JanusRabbitMqConnection> for McuId {
-    fn from(conn: &settings::JanusRabbitMqConnection) -> Self {
-        Self::new(
-            &conn.to_janus_routing_key,
-            &conn.janus_exchange,
-            &conn.from_janus_routing_key,
-        )
+impl From<&settings::Connection> for McuId {
+    fn from(conn: &settings::Connection) -> Self {
+        Self::new(&conn.to_routing_key, &conn.exchange, &conn.from_routing_key)
     }
 }
 
@@ -204,14 +200,14 @@ impl McuPool {
             .await
             {
                 Ok(client) => {
-                    log::info!("Connected mcu {:?}", connection_config.to_janus_routing_key);
+                    log::info!("Connected mcu {:?}", connection_config.to_routing_key);
 
                     clients.insert(client);
                 }
                 Err(e) => {
                     log::error!(
                         "Failed to connect to {:?}, {}",
-                        connection_config.to_janus_routing_key,
+                        connection_config.to_routing_key,
                         e
                     )
                 }
@@ -535,26 +531,27 @@ impl McuClient {
         self.id.0.as_ref()
     }
 
+    #[tracing::instrument(level = "debug", skip(rabbitmq_channel, redis, events_sender))]
     pub async fn connect(
         rabbitmq_channel: lapin::Channel,
         redis: &mut ConnectionManager,
-        config: settings::JanusRabbitMqConnection,
+        config: settings::Connection,
         events_sender: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
     ) -> Result<Self> {
         // We sent at most two signals
         let (pubsub_shutdown, _) = broadcast::channel::<ShutdownSignal>(1);
 
         let id = McuId::new(
-            &config.to_janus_routing_key,
-            &config.janus_exchange,
-            &config.from_janus_routing_key,
+            &config.to_routing_key,
+            &config.exchange,
+            &config.from_routing_key,
         );
 
         let rabbit_mq_config = janus_client::RabbitMqConfig::new_from_channel(
             rabbitmq_channel.clone(),
-            config.to_janus_routing_key,
-            config.janus_exchange,
-            config.from_janus_routing_key,
+            config.to_routing_key,
+            config.exchange,
+            config.from_routing_key,
             format!("k3k-sig-janus-{}", id.0),
         );
 
@@ -588,6 +585,7 @@ impl McuClient {
         })
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn destroy(mut self, broken: bool) {
         log::trace!(
             "Destroying McuClient {:?}, waiting for associated publishers & subscriber to shutdown",

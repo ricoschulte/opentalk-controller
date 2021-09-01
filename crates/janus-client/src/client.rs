@@ -91,6 +91,12 @@ impl Transaction {
     }
 
     /// Retrieve the final response from janus which must be a single ACK
+    #[tracing::instrument(
+        name = "transaction_receive_ack",
+        level = "trace",
+        skip(self),
+        fields(transaction = %self.id)
+    )]
     pub async fn receive_ack(mut self) -> Result<(), error::Error> {
         assert!(
             !self.is_async,
@@ -104,6 +110,12 @@ impl Transaction {
     ///
     /// Depending on the request type the transaction will first receive an ACK and later the final
     /// response. Out of order responses (ACK after final response received) will be handled.
+    #[tracing::instrument(
+        name = "transaction_receive",
+        level = "trace",
+        skip(self),
+        fields(transaction = %self.id)
+    )]
     pub async fn receive(mut self) -> Result<JanusMessage, error::Error> {
         let msg_timeout = if self.is_async {
             self.do_receive_ack(false).await?;
@@ -177,6 +189,7 @@ impl InnerClient {
         self.connection.destroy().await;
     }
 
+    #[tracing::instrument(level = "trace", skip(self))]
     pub(crate) async fn create_transaction(
         &self,
         is_async: bool,
@@ -216,6 +229,7 @@ impl InnerClient {
         }
     }
 
+    #[tracing::instrument(level = "trace", skip(self, msg))]
     async fn send(&self, msg: &JanusRequest) -> Result<(), error::Error> {
         let json = serde_json::to_string_pretty(msg).unwrap();
 
@@ -231,6 +245,7 @@ impl InnerClient {
     /// Returns an error when the request could not be sent.
     /// Otherwise it will return a `CreateSessionRequest` future that will
     /// resolve once Janus sent the response to this request
+    #[tracing::instrument(level = "debug", skip(self))]
     pub(crate) async fn create_session(&self) -> Result<SessionId, error::Error> {
         let transaction = self.create_transaction(false).await?;
 
@@ -364,6 +379,12 @@ impl InnerSession {
     }
 
     /// Attaches to the given plugin
+    #[tracing::instrument(
+        name = "session_keep_alive",
+        level = "debug",
+        skip(self),
+        fields(session = %self.id),
+    )]
     pub(crate) async fn attach_to_plugin(
         &self,
         plugin: JanusPlugin,
@@ -388,7 +409,14 @@ impl InnerSession {
 
         Ok(handle)
     }
+
     /// Sends keepalive for this Session
+    #[tracing::instrument(
+        name = "session_keep_alive",
+        level = "debug",
+        skip(self),
+        fields(session = %self.id),
+    )]
     pub(crate) async fn keep_alive(&self) -> Result<(), error::Error> {
         let client = self
             .client
@@ -469,6 +497,12 @@ impl InnerHandle {
     /// Sends data to the attached plugin
     ///
     /// Checks if the returned result is of the correct type.
+    #[tracing::instrument(
+        name = "handle_send",
+        level = "trace",
+        skip(self, request),
+        fields(handle = %self.id),
+    )]
     pub(crate) async fn send<R: PluginRequest>(
         &self,
         request: R,
@@ -494,6 +528,12 @@ impl InnerHandle {
     /// Sends data to the attached plugin together with jsep
     ///
     /// Checks if the returned result is of the correct type.
+    #[tracing::instrument(
+        name = "handle_send_with_jsep",
+        level = "trace",
+        skip(self, request, jsep),
+        fields(handle = %self.id),
+    )]
     pub(crate) async fn send_with_jsep<R: PluginRequest>(
         &self,
         request: R,
@@ -530,6 +570,12 @@ impl InnerHandle {
 
     /// Sends the candidate SDP string to Janus
     // Todo
+    #[tracing::instrument(
+        name = "handle_trickle",
+        level = "trace",
+        skip(self, msg),
+        fields(handle = %self.id),
+    )]
     pub(crate) async fn trickle(&self, msg: TrickleMessage) -> Result<(), error::Error> {
         let client = self
             .client

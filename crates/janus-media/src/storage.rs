@@ -18,6 +18,7 @@ struct MediaState {
 
 impl_to_redis_args!(MediaState);
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_state(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -31,6 +32,7 @@ pub async fn get_state(
     serde_json::from_slice(&json).context("Failed to convert json to media state")
 }
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_state(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -47,6 +49,7 @@ pub async fn set_state(
     Ok(())
 }
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn del_state(
     redis_conn: &mut ConnectionManager,
     room: RoomId,

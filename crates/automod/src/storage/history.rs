@@ -67,6 +67,7 @@ impl Entry {
 }
 
 /// Adds the given entry to the history
+#[tracing::instrument(name = "add_history", level = "debug", skip(redis_conn, entry))]
 pub async fn add(redis_conn: &mut ConnectionManager, room: RoomId, entry: &Entry) -> Result<()> {
     redis_conn
         .zadd(
@@ -80,6 +81,7 @@ pub async fn add(redis_conn: &mut ConnectionManager, room: RoomId, entry: &Entry
 
 /// Get a ordered list of participants which appear in the history after the given `since` parameter
 /// timestamp.
+#[tracing::instrument(name = "get_history", level = "debug", skip(redis_conn))]
 pub async fn get(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -104,6 +106,7 @@ pub async fn get(
 }
 
 /// Delete the history.
+#[tracing::instrument(name = "del_history", level = "debug", skip(redis_conn))]
 pub async fn del(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<()> {
     redis_conn
         .del(RoomAutoModHistory { room })

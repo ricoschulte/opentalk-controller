@@ -148,6 +148,7 @@ impl<M> ModuleCaller for ModuleCallerImpl<M>
 where
     M: SignalingModule,
 {
+    #[tracing::instrument(skip(self, ctx, dyn_event), fields(module = %M::NAMESPACE))]
     async fn on_event_targeted(
         &mut self,
         ctx: DynEventCtx<'_>,
@@ -179,6 +180,7 @@ where
         }
     }
 
+    #[tracing::instrument(skip(self, ctx, dyn_event), fields(module = %M::NAMESPACE))]
     async fn on_event_broadcast(
         &mut self,
         ctx: DynEventCtx<'_>,
@@ -271,6 +273,7 @@ where
         Ok(())
     }
 
+    #[tracing::instrument(name = "module_destroy", skip(self, ctx), fields(module = %M::NAMESPACE))]
     async fn destroy(self: Box<Self>, ctx: DestroyContext<'_>) {
         self.module.on_destroy(ctx).await
     }

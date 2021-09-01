@@ -9,7 +9,7 @@ use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::error::Error;
 use actix_web::http::header::Header;
 use actix_web::web::Data;
-use actix_web::{web, HttpMessage, ResponseError};
+use actix_web::{HttpMessage, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use core::future::ready;
 use openidconnect::AccessToken;
@@ -127,7 +127,7 @@ pub async fn check_access_token(
         },
     };
 
-    let current_user = web::block(move || match db_ctx.get_user_by_uuid(&uuid)? {
+    let current_user = crate::block(move || match db_ctx.get_user_by_uuid(&uuid)? {
         None => {
             log::warn!("The requesting user could not be found in the database");
             Err(DefaultApiError::Internal)
@@ -136,7 +136,7 @@ pub async fn check_access_token(
     })
     .await
     .map_err(|e| {
-        log::error!("web::block failed, {}", e);
+        log::error!("crate::block failed, {}", e);
         DefaultApiError::Internal
     })??;
 

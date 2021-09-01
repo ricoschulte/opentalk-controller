@@ -94,6 +94,7 @@ pub struct StoredMessage {
 impl_from_redis_value_de!(StoredMessage);
 impl_to_redis_args_se!(&StoredMessage);
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_group_chat_history(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -105,6 +106,7 @@ pub async fn get_group_chat_history(
         .with_context(|| format!("Failed to get chat history, room={}, group={}", room, group))
 }
 
+#[tracing::instrument(level = "debug", skip(redis_conn, message))]
 pub async fn add_message_to_group_chat_history(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -122,6 +124,7 @@ pub async fn add_message_to_group_chat_history(
         })
 }
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn delete_group_chat_history(
     redis_conn: &mut ConnectionManager,
     room: RoomId,

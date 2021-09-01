@@ -46,6 +46,7 @@ pub fn participant_set_mutex(room: RoomId) -> Mutex<RoomParticipantsLock> {
         .with_retries(20)
 }
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_all_participants(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -70,6 +71,7 @@ pub async fn get_all_participants(
     participants_result
 }
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn participants_contains(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -95,6 +97,7 @@ pub async fn participants_contains(
     is_member_result
 }
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn add_participant_to_set(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -122,6 +125,7 @@ pub async fn add_participant_to_set(
 
 /// Removes the given participant from the room's participant set and returns the number of
 /// remaining participants
+#[tracing::instrument(level = "debug", skip(_set_guard, redis_conn))]
 pub async fn remove_participant_from_set(
     _set_guard: &MutexGuard<'_, RoomParticipantsLock>,
     redis_conn: &mut ConnectionManager,
@@ -139,6 +143,7 @@ pub async fn remove_participant_from_set(
         .context("Failed to get number of remaining participants inside the set")
 }
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn remove_all_attributes(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -150,6 +155,7 @@ pub async fn remove_all_attributes(
         .context("Failed to remove participant attributes")
 }
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_attribute<K, V>(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -158,8 +164,8 @@ pub async fn set_attribute<K, V>(
     value: V,
 ) -> Result<()>
 where
-    K: ToRedisArgs + Send + Sync + Debug + Copy,
-    V: ToRedisArgs + Send + Sync,
+    K: Debug + ToRedisArgs + Send + Sync + Debug + Copy,
+    V: Debug + ToRedisArgs + Send + Sync,
 {
     redis_conn
         .hset(RoomParticipantAttributes { room, participant }, key, value)
@@ -169,6 +175,7 @@ where
     Ok(())
 }
 
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_attribute<K, V>(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -176,7 +183,7 @@ pub async fn get_attribute<K, V>(
     key: K,
 ) -> Result<V>
 where
-    K: ToRedisArgs + Send + Sync + Debug + Copy,
+    K: Debug + ToRedisArgs + Send + Sync + Debug + Copy,
     V: FromRedisValue,
 {
     let value = redis_conn

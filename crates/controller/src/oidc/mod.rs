@@ -20,8 +20,10 @@ impl OidcContext {
     /// Create the OidcContext from the configuration.
     /// This reads the OidcProvider configuration and tries to fetch the metadata from it.
     /// If a provider is misconfigured or not reachable this function will fail.
+    #[tracing::instrument(name = "oidc_discover", skip(oidc_config))]
     pub async fn from_config(oidc_config: settings::Oidc) -> Result<Self> {
-        // TODO: support multiple oidc providers
+        log::debug!("OIDC config: {:?}", oidc_config);
+
         let client = ProviderClient::discover(oidc_config.provider).await?;
 
         Ok(Self { provider: client })
@@ -33,6 +35,7 @@ impl OidcContext {
     ///
     /// Note: This does __not__ check if the token is active or has been revoked.
     /// See `verify_access_token_active`.
+    #[tracing::instrument(name = "oidc_verify_access_token", skip(self, access_token))]
     pub fn verify_access_token(&self, access_token: &AccessToken) -> Result<String, VerifyError> {
         let claims = jwt::verify(
             self.provider.metadata.jwks(),
@@ -48,6 +51,7 @@ impl OidcContext {
     ///
     /// If the function returns Ok(_) the caller must inspect the returned [AccessTokenIntrospectInfo]
     /// to check if the AccessToken is still active.
+    #[tracing::instrument(name = "oidc_introspect_access_token", skip(self, access_token))]
     pub async fn introspect_access_token(
         &self,
         access_token: &AccessToken,
@@ -68,7 +72,8 @@ impl OidcContext {
     /// Verifies the signature and expiration of the ID Token and returns related info
     ///
     /// Returns an error if `id_token` is invalid or expired
-    pub async fn verify_id_token(&self, id_token: &str) -> Result<IdTokenInfo, VerifyError> {
+    #[tracing::instrument(name = "oidc_verify_id_token", skip(self, id_token))]
+    pub fn verify_id_token(&self, id_token: &str) -> Result<IdTokenInfo, VerifyError> {
         let claims = jwt::verify(self.provider.metadata.jwks(), id_token)?;
 
         Ok(IdTokenInfo {

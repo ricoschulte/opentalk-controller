@@ -6,7 +6,7 @@ use crate::db::DbInterface;
 use crate::ha_sync::user_update;
 use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json};
-use actix_web::{get, post, web};
+use actix_web::{get, post};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -39,7 +39,7 @@ pub async fn login(
 ) -> Result<Json<LoginResponse>, DefaultApiError> {
     let id_token = body.into_inner().id_token;
 
-    match oidc_ctx.verify_id_token(&id_token).await {
+    match oidc_ctx.verify_id_token(&id_token) {
         Err(e) => {
             log::warn!("Got invalid ID Token {}", e);
             Err(DefaultApiError::auth_bearer_invalid_token(
@@ -60,7 +60,7 @@ pub async fn login(
             };
 
             let modified_user =
-                web::block(move || -> Result<Option<ModifiedUser>, DefaultApiError> {
+                crate::block(move || -> Result<Option<ModifiedUser>, DefaultApiError> {
                     let user = db_ctx.get_user_by_uuid(&user_uuid)?;
 
                     match user {

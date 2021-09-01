@@ -289,6 +289,7 @@ impl Media {
     /// Gracefully removes the media session that is associated with the provided MediaSessionKey
     ///
     /// Send detach and destroy messages to janus in order to remove a media session gracefully.
+    #[tracing::instrument(level = "debug", skip(self, ctx))]
     async fn gracefully_remove_media_session(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
@@ -315,6 +316,7 @@ impl Media {
     ///
     /// Opposed to [`Media::gracefully_remove_media_session`], this function will not inform janus
     /// about any changes to the media session.
+    #[tracing::instrument(level = "debug", skip(self, ctx))]
     async fn remove_broken_media_session(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
@@ -341,6 +343,7 @@ impl Media {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip(self, ctx, offer))]
     async fn handle_sdp_offer(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
@@ -382,6 +385,7 @@ impl Media {
         }
     }
 
+    #[tracing::instrument(level = "debug", skip(self, answer))]
     async fn handle_sdp_answer(
         &mut self,
         target: ParticipantId,
@@ -409,6 +413,7 @@ impl Media {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip(self, candidate))]
     async fn handle_sdp_candidate(
         &mut self,
         target: ParticipantId,
@@ -436,6 +441,7 @@ impl Media {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn handle_sdp_end_of_candidates(
         &mut self,
         target: ParticipantId,
@@ -460,6 +466,7 @@ impl Media {
         Ok(())
     }
 
+    #[tracing::instrument(level = "debug", skip(self, ctx))]
     async fn handle_sdp_request_offer(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,

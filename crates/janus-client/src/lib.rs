@@ -127,6 +127,7 @@ impl Client {
     /// Creates a new [`Client`](Client)
     ///
     /// Returns the client itself and a broadcast receiver for messages from Janus that are not a response
+    #[tracing::instrument(name = "client_new", skip(sink, config))]
     pub async fn new(
         config: RabbitMqConfig,
         id: ClientId,
@@ -204,6 +205,12 @@ impl Session {
     ///
     /// Assumes that all other occurrences of the same Session will be dropped.
     /// Waits for the strong reference count to reach zero and sends a Destroy request.
+    #[tracing::instrument(
+        name = "session_destroy",
+        level = "debug",
+        skip(self),
+        fields(session = %self.inner.id),
+    )]
     pub async fn destroy(&mut self, broken: bool) -> Result<(), error::Error> {
         let client = self
             .inner
@@ -295,6 +302,12 @@ impl Handle {
     ///
     /// Assumes that all other occurrences of the same Handle will be dropped.
     /// Waits for the strong reference count to reach zero and sends a Detach request.
+    #[tracing::instrument(
+        name = "handle_detach",
+        level = "trace",
+        skip(self),
+        fields(handle = %self.inner.id),
+    )]
     pub async fn detach(mut self, broken: bool) -> Result<(), error::Error> {
         log::trace!("Detaching handle {}", self.id());
         let client = self

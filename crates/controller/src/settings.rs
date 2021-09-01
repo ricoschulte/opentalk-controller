@@ -2,7 +2,6 @@
 use crate::cli::Args;
 use arc_swap::ArcSwap;
 use config::{Config, ConfigError, Environment, File};
-use log::Level;
 use openidconnect::{ClientId, ClientSecret, IssuerUrl};
 use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
@@ -39,26 +38,7 @@ pub(crate) fn reload_settings(
 ///
 /// The settings specified in the CLI-Arguments have a higher priority than the settings specified in the config file
 pub fn load_settings(args: &Args) -> Result<Settings, ConfigError> {
-    let mut settings = Settings::load(&args.config)?;
-
-    if args.verbose > 0 {
-        settings.logging.level = match args.verbose {
-            0 => unreachable!(),
-            1 => Level::Info,
-            2 => Level::Debug,
-            _ => Level::Trace,
-        };
-    }
-
-    if let Some(log_output) = args.logoutput.clone() {
-        settings.logging.file = if log_output == PathBuf::from("-") {
-            None
-        } else {
-            Some(log_output)
-        };
-    }
-
-    Ok(settings)
+    Settings::load(&args.config)
 }
 
 /// Contains the application settings.
@@ -93,7 +73,6 @@ pub struct Settings {
     pub stun: Option<Stun>,
     pub redis: RedisConfig,
     pub rabbit_mq: RabbitMqConfig,
-    #[serde(default = "default_logging")]
     pub logging: Logging,
 
     #[serde(flatten)]
@@ -119,7 +98,7 @@ impl Settings {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Database {
     pub server: String,
-    pub port: u32,
+    pub port: u16,
     pub name: String,
     #[serde(default = "default_max_connections")]
     pub max_connections: u32,
@@ -170,21 +149,29 @@ pub struct HttpCors {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Logging {
-    #[serde(default = "default_log_level")]
-    pub level: log::Level,
+    #[serde(default = "default_directives")]
+    pub default_directives: Vec<String>,
+
     #[serde(default)]
-    pub file: Option<PathBuf>,
+    pub enable_opentelemetry: bool,
+
+    #[serde(default = "default_service_name")]
+    pub service_name: String,
 }
 
-fn default_log_level() -> log::Level {
-    Level::Warn
+fn default_service_name() -> String {
+    "k3k-controller".into()
 }
 
-fn default_logging() -> Logging {
-    Logging {
-        level: default_log_level(),
-        file: None,
-    }
+fn default_directives() -> Vec<String> {
+    // Disable spamming noninformative traces
+    vec![
+        "k3k=INFO".into(),
+        "pinky_swear=OFF".into(),
+        "rustls=WARN".into(),
+        "mio=ERROR".into(),
+        "lapin=WARN".into(),
+    ]
 }
 
 #[derive(Debug, Clone, Deserialize)]

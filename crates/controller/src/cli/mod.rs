@@ -9,26 +9,11 @@ mod reload;
 pub struct Args {
     #[structopt(
         short,
-        parse(from_occurrences),
-        help = "-v => Info, -vv => Debug, -vvv => Trace"
-    )]
-    pub verbose: u8,
-
-    #[structopt(
-        short,
         long,
         default_value = "config.toml",
         help = "Specify path to configuration file"
     )]
     pub config: PathBuf,
-
-    #[structopt(
-        short,
-        long,
-        parse(from_os_str),
-        help = "logoutput or \"-\" for stdout"
-    )]
-    pub logoutput: Option<PathBuf>,
 
     /// Triggers a reload of the Janus Server configuration
     #[structopt(long)]

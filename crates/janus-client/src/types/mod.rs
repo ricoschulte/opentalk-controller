@@ -229,6 +229,12 @@ impl From<u64> for TransactionId {
     }
 }
 
+impl std::fmt::Display for TransactionId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// The streamtypes we utilize
 // todo move to k3k-signaling
 pub enum StreamTypes {

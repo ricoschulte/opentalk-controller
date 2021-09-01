@@ -28,6 +28,7 @@ impl_to_redis_args!(RoomAutoModAllowList);
 
 /// Override the current allow_list with the given one. If the `allow_list` parameter is empty,
 /// the entry will just be deleted.
+#[tracing::instrument(name = "set_allow_list", skip(redis_conn, allow_list))]
 pub async fn set(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -49,6 +50,7 @@ pub async fn set(
 }
 
 /// Remove the given participant from the allow_list
+#[tracing::instrument(name = "remove_from_allow_list", skip(redis_conn))]
 pub async fn remove(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -61,6 +63,7 @@ pub async fn remove(
 }
 
 /// Get a random `participant` from the allow_list. Will return `None` if the allow_list if empty.
+#[tracing::instrument(name = "random_member_allow_list", skip(redis_conn))]
 pub async fn random(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -73,6 +76,7 @@ pub async fn random(
 
 /// Check if the given `participant` is allowed by the `allow_list`. An empty `allow_list` will
 /// always return `true`.
+#[tracing::instrument(skip(redis_conn))]
 pub async fn is_allowed(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -92,6 +96,7 @@ pub async fn is_allowed(
 }
 
 /// Return all members of the `allow_list`.
+#[tracing::instrument(name = "get_all_allow_list", skip(redis_conn))]
 pub async fn get_all(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
@@ -103,6 +108,7 @@ pub async fn get_all(
 }
 
 /// Delete the `allow_list`.
+#[tracing::instrument(name = "del_allow_list", skip(redis_conn))]
 pub async fn del(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<()> {
     redis_conn
         .del(RoomAutoModAllowList { room })

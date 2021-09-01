@@ -56,6 +56,7 @@ pub struct Builder {
 
 impl Builder {
     /// Abort the building process and destroy all already built modules
+    #[tracing::instrument(skip(self))]
     pub async fn abort(mut self) {
         let ctx = DestroyContext {
             redis_conn: &mut self.redis_conn,
@@ -67,6 +68,7 @@ impl Builder {
     }
 
     /// Build to runner from the data inside the builder and provided websocket
+    #[tracing::instrument(skip(self, websocket, shutdown_sig))]
     pub async fn build(
         mut self,
         websocket: WebSocket,
@@ -341,6 +343,7 @@ impl Runner {
     }
 
     /// Destroys the runner and all associated resources
+    #[tracing::instrument(skip(self), fields(id = %self.id))]
     pub async fn destroy(mut self) {
         self.delegate_consumer();
 
@@ -465,7 +468,10 @@ impl Runner {
         self.destroy().await
     }
 
+    #[tracing::instrument(skip(self, message), fields(id = %self.id))]
     async fn handle_ws_message(&mut self, message: Message) {
+        log::trace!("Received websocket message {}", message);
+
         let value: Result<Namespaced<'_, Value>, _> = match message {
             Message::Text(ref text) => serde_json::from_str(text),
             Message::Binary(ref binary) => serde_json::from_slice(binary),
@@ -653,6 +659,7 @@ impl Runner {
         Ok(participant)
     }
 
+    #[tracing::instrument(skip(self, delivery), fields(id = %self.id))]
     async fn handle_rabbitmq_msg(&mut self, _: lapin::Channel, delivery: lapin::message::Delivery) {
         if let Err(e) = delivery.acker.ack(Default::default()).await {
             log::warn!("Failed to ACK incoming delivery, {}", e);
@@ -821,18 +828,17 @@ impl Runner {
     /// Publish a rabbitmq message
     ///
     /// If exchange is `None`, `self.room_exchange` will be used.
+    #[tracing::instrument(
+        skip(self, exchange, message),
+        fields(id = %self.id, exchange = %exchange.unwrap_or(&self.room_exchange))
+    )]
     async fn rabbitmq_publish(
         &mut self,
         exchange: Option<&str>,
         routing_key: &str,
         message: String,
     ) {
-        log::trace!(
-            "Publish to rabbitmq exchange={:?} routing_key={:?} message={:?}",
-            exchange,
-            routing_key,
-            message
-        );
+        log::trace!("publish {}", message);
 
         if let Err(e) = self
             .rabbit_mq_channel
