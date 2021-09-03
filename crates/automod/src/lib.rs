@@ -62,15 +62,22 @@
 //!
 //! Moderators will always be able to execute a re-selection of the current speaker regardless of
 //! the `selection_strategy`.
+
 use anyhow::Context;
 use anyhow::Result;
 use chrono::Utc;
 use config::{FrontendConfig, PublicConfig, SelectionStrategy, StorageConfig};
 use controller::db::rooms::RoomId;
+use controller::prelude::futures::FutureExt;
+use controller::prelude::uuid::Uuid;
 use controller::prelude::*;
 use controller::Controller;
+use futures::stream::once;
 use rabbitmq::Message;
 use serde::Serialize;
+use state_machine::StateMachineOutput;
+use std::time::Duration;
+use tokio::time::sleep;
 
 mod config;
 mod incoming;
@@ -79,15 +86,29 @@ mod rabbitmq;
 mod state_machine;
 mod storage;
 
-pub struct AutoMod {
+struct AutoMod {
     id: ParticipantId,
     room: RoomId,
     role: Role,
+
+    current_expiry_id: Option<ExpiryId>,
+    current_animation_id: Option<AnimationId>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct ExpiryId(Uuid);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct AnimationId(Uuid);
+
+enum TimerEvent {
+    AnimationEnd(AnimationId, ParticipantId),
+    Expiry(ExpiryId),
 }
 
 /// Data sent to the frontend on `join_success`, when automod is active.
 #[derive(Debug, Serialize)]
-pub struct FrontendData {
+struct FrontendData {
     config: PublicConfig,
     speaker: Option<ParticipantId>,
 }
@@ -99,7 +120,7 @@ impl SignalingModule for AutoMod {
     type Incoming = incoming::Message;
     type Outgoing = outgoing::Message;
     type RabbitMqMessage = rabbitmq::Message;
-    type ExtEvent = ();
+    type ExtEvent = TimerEvent;
     type FrontendData = FrontendData;
     type PeerFrontendData = ();
 
@@ -112,6 +133,8 @@ impl SignalingModule for AutoMod {
             id: ctx.participant_id(),
             room: ctx.room().uuid,
             role: ctx.role(),
+            current_expiry_id: None,
+            current_animation_id: None,
         })
     }
 
@@ -133,11 +156,25 @@ impl SignalingModule for AutoMod {
                 Ok(())
             }
             Event::WsMessage(msg) => self.on_ws_message(ctx, msg).await,
-            Event::RabbitMq(msg) => {
-                self.on_rabbitmq_msg(ctx, msg);
+            Event::RabbitMq(msg) => self.on_rabbitmq_msg(ctx, msg).await,
+            Event::Ext(TimerEvent::AnimationEnd(animation_id, selection)) => {
+                if let Some(current_animation_id) = self.current_animation_id {
+                    if current_animation_id == animation_id {
+                        self.on_animation_end(ctx, selection).await?;
+                    }
+                }
+
                 Ok(())
             }
-            Event::Ext(_) => unreachable!(),
+            Event::Ext(TimerEvent::Expiry(expiry_id)) => {
+                if let Some(current_expiry_id) = self.current_expiry_id {
+                    if current_expiry_id == expiry_id {
+                        self.on_expired_event(ctx).await?;
+                    }
+                }
+
+                Ok(())
+            }
             Event::RaiseHand => {
                 // TODO Add self to playlist if allowed
                 Ok(())
@@ -215,7 +252,7 @@ impl AutoMod {
 
         let remaining = match config.parameter.selection_strategy {
             SelectionStrategy::None | SelectionStrategy::Random | SelectionStrategy::Nomination => {
-                vec![]
+                try_or_unlock!(storage::allow_list::get_all(ctx.redis_conn(), self.room).await; ctx, guard)
             }
             SelectionStrategy::Playlist => {
                 try_or_unlock!(storage::playlist::get_all(ctx.redis_conn(), self.room).await; ctx, guard)
@@ -250,13 +287,64 @@ impl AutoMod {
             try_or_unlock!(storage::config::get(ctx.redis_conn(), self.room).await; ctx, guard);
 
         if let Some(config) = config {
-            try_or_unlock!(storage::playlist::remove_first(ctx.redis_conn(), self.room, self.id).await; ctx, guard);
+            try_or_unlock!(storage::playlist::remove_all_occurences(ctx.redis_conn(), self.room, self.id).await; ctx, guard);
             try_or_unlock!(storage::allow_list::remove(ctx.redis_conn(), self.room, self.id).await; ctx, guard);
 
             let speaker = try_or_unlock!(storage::speaker::get(ctx.redis_conn(), self.room).await; ctx, guard);
 
             if speaker == Some(self.id) {
                 try_or_unlock!(self.select_next(&mut ctx, config, None).await; ctx, guard);
+            }
+        }
+
+        try_unlock!(ctx, guard);
+
+        Ok(())
+    }
+
+    /// Called when the speaking time of the participant ends.
+    ///
+    /// Checks if automod is still active (by getting the config), and if this participant is even still speaker.
+    /// If those things are true, state_mashine's select_next gets called without a nomination.
+    #[tracing::instrument(name = "automod_on_expired", skip(self, ctx))]
+    async fn on_expired_event(&mut self, mut ctx: ModuleContext<'_, Self>) -> Result<()> {
+        let mut mutex = storage::lock::new(self.room);
+        let guard = mutex.lock(ctx.redis_conn()).await?;
+
+        let config =
+            try_or_unlock!(storage::config::get(ctx.redis_conn(), self.room).await; ctx, guard);
+
+        if let Some(config) = config {
+            let speaker = try_or_unlock!(storage::speaker::get(ctx.redis_conn(), self.room).await; ctx, guard);
+
+            if speaker == Some(self.id) {
+                try_or_unlock!(self.select_next(&mut ctx, config, None).await; ctx, guard);
+            }
+        }
+
+        try_unlock!(ctx, guard);
+
+        Ok(())
+    }
+
+    /// Called whenenver the timer for the current animation ends
+    #[tracing::instrument(name = "automod_on_expired", skip(self, ctx))]
+    async fn on_animation_end(
+        &mut self,
+        mut ctx: ModuleContext<'_, Self>,
+        selection: ParticipantId,
+    ) -> Result<()> {
+        let mut mutex = storage::lock::new(self.room);
+        let guard = mutex.lock(ctx.redis_conn()).await?;
+
+        let config =
+            try_or_unlock!(storage::config::get(ctx.redis_conn(), self.room).await; ctx, guard);
+
+        if let Some(config) = config {
+            let speaker = try_or_unlock!(storage::speaker::get(ctx.redis_conn(), self.room).await; ctx, guard);
+
+            if speaker.is_none() {
+                try_or_unlock!(self.select_specific(&mut ctx, config, selection, false).await; ctx, guard);
             }
         }
 
@@ -300,7 +388,7 @@ impl AutoMod {
                     | SelectionStrategy::Random
                     | SelectionStrategy::Nomination => {
                         try_or_unlock!(storage::allow_list::set(ctx.redis_conn(), self.room, &allow_list).await; ctx,guard);
-                        vec![]
+                        allow_list
                     }
                     SelectionStrategy::Playlist => {
                         try_or_unlock!(storage::playlist::set(ctx.redis_conn(), self.room, &playlist).await; ctx,guard);
@@ -402,7 +490,7 @@ impl AutoMod {
                     match select {
                         incoming::Select::None => {
                             try_or_unlock!(
-                                self.select_specific(&mut ctx, config, None).await;
+                                self.select_none(&mut ctx, config).await;
                                 ctx,
                                 guard
                             );
@@ -414,9 +502,16 @@ impl AutoMod {
                                 guard
                             );
                         }
+                        incoming::Select::Next => {
+                            try_or_unlock!(
+                                self.select_next(&mut ctx, config, None).await;
+                                ctx,
+                                guard
+                            );
+                        }
                         incoming::Select::Specific(specific) => {
                             try_or_unlock!(
-                                self.select_specific(&mut ctx, config, Some(specific.participant)).await;
+                                self.select_specific(&mut ctx, config, specific.participant, specific.keep_in_remaining).await;
                                 ctx,
                                 guard
                             );
@@ -454,6 +549,19 @@ impl AutoMod {
         Ok(())
     }
 
+    /// Unselects the current speaker!!11elf
+    async fn select_none(
+        &mut self,
+        ctx: &mut ModuleContext<'_, Self>,
+        config: StorageConfig,
+    ) -> Result<()> {
+        let result = state_machine::map_select_unchecked(
+            state_machine::select_unchecked(ctx.redis_conn(), self.room, &config, None).await,
+        );
+
+        self.handle_selection_result(ctx, config, result).await
+    }
+
     /// Selects a specific participant to be the next speaker. Will check the participant if
     /// selection is valid.
     #[tracing::instrument(name = "automod_select_specific", skip(self, ctx, config))]
@@ -461,24 +569,42 @@ impl AutoMod {
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
         config: StorageConfig,
-        participant: Option<ParticipantId>,
+        participant: ParticipantId,
+        keep_in_remaining: bool,
     ) -> Result<()> {
-        // when selecting a specific participant check if its a valid one
-        if let Some(participant) = participant {
-            let is_valid =
-                control::storage::participants_contains(ctx.redis_conn(), self.room, participant)
-                    .await?;
+        let is_valid =
+            control::storage::participants_contains(ctx.redis_conn(), self.room, participant)
+                .await?;
 
-            if !is_valid {
-                return Ok(());
+        if !is_valid {
+            return Ok(());
+        }
+
+        if !keep_in_remaining {
+            match config.parameter.selection_strategy {
+                SelectionStrategy::None
+                | SelectionStrategy::Random
+                | SelectionStrategy::Nomination => {
+                    storage::allow_list::remove(ctx.redis_conn(), self.room, participant).await?;
+                }
+                SelectionStrategy::Playlist => {
+                    storage::playlist::remove_first(ctx.redis_conn(), self.room, participant)
+                        .await?;
+                }
             }
         }
 
-        let result =
-            state_machine::select_unchecked(ctx.redis_conn(), self.room, &config, participant)
-                .await;
+        let result = state_machine::map_select_unchecked(
+            state_machine::select_unchecked(
+                ctx.redis_conn(),
+                self.room,
+                &config,
+                Some(participant),
+            )
+            .await,
+        );
 
-        self.handle_selection_result(ctx, result).await
+        self.handle_selection_result(ctx, config, result).await
     }
 
     /// Selects a random participant to be the next speaker.
@@ -496,7 +622,7 @@ impl AutoMod {
         )
         .await;
 
-        self.handle_selection_result(ctx, result).await
+        self.handle_selection_result(ctx, config, result).await
     }
 
     #[tracing::instrument(name = "automod_select_next", skip(self, ctx, config))]
@@ -515,20 +641,52 @@ impl AutoMod {
         )
         .await;
 
-        self.handle_selection_result(ctx, result).await
+        self.handle_selection_result(ctx, config, result).await
     }
 
     async fn handle_selection_result(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
-        result: Result<Option<rabbitmq::SpeakerUpdate>, state_machine::Error>,
+        config: StorageConfig,
+        result: Result<Option<StateMachineOutput>, state_machine::Error>,
     ) -> Result<()> {
         match result {
-            Ok(Some(update)) => {
+            Ok(Some(StateMachineOutput::SpeakerUpdate(update))) => {
                 ctx.rabbitmq_publish(
                     control::rabbitmq::room_exchange_name(self.room),
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Message::SpeakerUpdate(update),
+                );
+
+                Ok(())
+            }
+            Ok(Some(StateMachineOutput::StartAnimation(start_animation))) => {
+                let animation_id = AnimationId(Uuid::new_v4());
+                self.current_animation_id = Some(animation_id);
+
+                let result = start_animation.result;
+                ctx.add_event_stream(once(
+                    sleep(Duration::from_secs(8))
+                        .map(move |_| TimerEvent::AnimationEnd(animation_id, result)),
+                ));
+
+                // Reset current speaker, cannot use self.select_none() as that would end in a recursive function
+                let update =
+                    state_machine::select_unchecked(ctx.redis_conn(), self.room, &config, None)
+                        .await?;
+
+                if let Some(update) = update {
+                    ctx.rabbitmq_publish(
+                        control::rabbitmq::room_exchange_name(self.room),
+                        control::rabbitmq::room_all_routing_key().into(),
+                        rabbitmq::Message::SpeakerUpdate(update),
+                    );
+                }
+
+                ctx.rabbitmq_publish(
+                    control::rabbitmq::room_exchange_name(self.room),
+                    control::rabbitmq::room_all_routing_key().into(),
+                    rabbitmq::Message::StartAnimation(start_animation),
                 );
 
                 Ok(())
@@ -544,7 +702,11 @@ impl AutoMod {
     }
 
     #[tracing::instrument(name = "automod_on_rabbitmq_msg", skip(self, ctx, msg))]
-    fn on_rabbitmq_msg(&mut self, mut ctx: ModuleContext<'_, Self>, msg: rabbitmq::Message) {
+    async fn on_rabbitmq_msg(
+        &mut self,
+        mut ctx: ModuleContext<'_, Self>,
+        msg: rabbitmq::Message,
+    ) -> Result<()> {
         match msg {
             rabbitmq::Message::Start(rabbitmq::Start { frontend_config }) => {
                 ctx.ws_send(outgoing::Message::Started(frontend_config.into_public()));
@@ -556,20 +718,62 @@ impl AutoMod {
                 speaker,
                 history,
                 remaining,
-            }) => ctx.ws_send(outgoing::Message::SpeakerUpdated(
-                outgoing::SpeakerUpdated {
-                    speaker,
-                    history,
-                    remaining,
-                },
-            )),
-            Message::RemainingUpdate(rabbitmq::RemainingUpdate { remaining }) => ctx.ws_send(
-                outgoing::Message::RemainingUpdated(outgoing::RemainingUpdated { remaining }),
-            ),
+            }) => {
+                // check if new speaker is self, then check for time limit
+                if speaker
+                    .map(|speaker| speaker == self.id)
+                    .unwrap_or_default()
+                {
+                    let mut mutex = storage::lock::new(self.room);
+                    let guard = mutex.lock(ctx.redis_conn()).await?;
+                    let config = try_or_unlock!(storage::config::get(ctx.redis_conn(), self.room).await; ctx, guard);
+
+                    // There is a config and it contains a time limit.
+                    // Add sleep "stream-future" which indicates the expiration of the speaker status
+                    if let Some(time_limit) = config.and_then(|config| config.parameter.time_limit)
+                    {
+                        let expiry_id = ExpiryId(Uuid::new_v4());
+                        self.current_expiry_id = Some(expiry_id);
+
+                        ctx.add_event_stream(once(
+                            sleep(time_limit).map(move |_| TimerEvent::Expiry(expiry_id)),
+                        ));
+                    }
+
+                    try_unlock!(ctx, guard);
+                } else {
+                    self.current_expiry_id = None;
+                    self.current_animation_id = None;
+                }
+
+                ctx.ws_send(outgoing::Message::SpeakerUpdated(
+                    outgoing::SpeakerUpdated {
+                        speaker,
+                        history,
+                        remaining,
+                    },
+                ));
+            }
+            Message::RemainingUpdate(rabbitmq::RemainingUpdate { remaining }) => {
+                ctx.ws_send(outgoing::Message::RemainingUpdated(
+                    outgoing::RemainingUpdated { remaining },
+                ));
+            }
+            Message::StartAnimation(start_animation) => {
+                ctx.ws_send(outgoing::Message::StartAnimation(
+                    outgoing::StartAnimation {
+                        pool: start_animation.pool,
+                        result: start_animation.result,
+                    },
+                ));
+            }
         }
+
+        Ok(())
     }
 }
 
+/// Registers the automod module into the given controller
 pub fn register(controller: &mut Controller) {
     controller.signaling.add_module::<AutoMod>(());
 }

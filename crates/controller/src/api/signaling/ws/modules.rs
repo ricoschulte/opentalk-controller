@@ -6,6 +6,7 @@ use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ParticipantId;
 use anyhow::{Context, Result};
 use async_tungstenite::tungstenite::Message;
+use futures::stream::SelectAll;
 use redis::aio::ConnectionManager;
 use serde_json::Value;
 use std::any::Any;
@@ -69,6 +70,7 @@ impl Modules {
                 ws_messages: ctx.ws_messages,
                 rabbitmq_publish: ctx.rabbitmq_publish,
                 redis_conn: ctx.redis_conn,
+                events: ctx.events,
                 invalidate_data: ctx.invalidate_data,
             };
 
@@ -121,6 +123,7 @@ pub(super) struct DynEventCtx<'ctx> {
     pub ws_messages: &'ctx mut Vec<Message>,
     pub rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
     pub redis_conn: &'ctx mut ConnectionManager,
+    pub events: &'ctx mut SelectAll<AnyStream>,
     pub invalidate_data: &'ctx mut bool,
 }
 
@@ -158,6 +161,7 @@ where
             ws_messages: ctx.ws_messages,
             rabbitmq_publish: ctx.rabbitmq_publish,
             redis_conn: ctx.redis_conn,
+            events: ctx.events,
             invalidate_data: ctx.invalidate_data,
             m: PhantomData::<fn() -> M>,
         };
@@ -190,6 +194,7 @@ where
             ws_messages: ctx.ws_messages,
             rabbitmq_publish: ctx.rabbitmq_publish,
             redis_conn: ctx.redis_conn,
+            events: ctx.events,
             invalidate_data: ctx.invalidate_data,
             m: PhantomData::<fn() -> M>,
         };

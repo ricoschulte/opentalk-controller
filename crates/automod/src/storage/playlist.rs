@@ -84,6 +84,23 @@ pub async fn remove_first(
         .context("Failed to remove participant from playlist")
 }
 
+/// Remove all occurrences of `participant` from the playlist.
+#[tracing::instrument(
+    name = "remove_all_occurences_from_playlist",
+    level = "debug",
+    skip(redis_conn)
+)]
+pub async fn remove_all_occurences(
+    redis_conn: &mut ConnectionManager,
+    room: RoomId,
+    participant: ParticipantId,
+) -> Result<()> {
+    redis_conn
+        .lrem(RoomAutoModPlaylist { room }, 0, participant)
+        .await
+        .context("Failed to remove all occurences of participant from playlist")
+}
+
 /// Delete the complete playlist.
 #[tracing::instrument(name = "del_playlist", level = "debug", skip(redis_conn))]
 pub async fn del(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<()> {

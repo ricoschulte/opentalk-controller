@@ -195,6 +195,7 @@ where
     ws_messages: &'ctx mut Vec<Message>,
     rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
     redis_conn: &'ctx mut ConnectionManager,
+    events: &'ctx mut SelectAll<AnyStream>,
     invalidate_data: &'ctx mut bool,
     m: PhantomData<fn() -> M>,
 }
@@ -246,6 +247,14 @@ where
     /// Access to the storage of the room
     pub fn redis_conn(&mut self) -> &mut ConnectionManager {
         &mut self.redis_conn
+    }
+
+    /// Add a custom event stream which return `M::ExtEvent`
+    pub fn add_event_stream<S>(&mut self, stream: S)
+    where
+        S: Stream<Item = M::ExtEvent> + 'static,
+    {
+        self.events.push(any_stream(M::NAMESPACE, stream));
     }
 
     /// Signals that the data related to the participant has changed

@@ -14,6 +14,13 @@ pub enum Message {
 
     SpeakerUpdate(SpeakerUpdate),
     RemainingUpdate(RemainingUpdate),
+
+    StartAnimation(StartAnimation),
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct Start {
+    pub frontend_config: FrontendConfig,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -28,7 +35,8 @@ pub struct RemainingUpdate {
     pub remaining: Vec<ParticipantId>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Start {
-    pub frontend_config: FrontendConfig,
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
+pub struct StartAnimation {
+    pub pool: Vec<ParticipantId>,
+    pub result: ParticipantId,
 }
