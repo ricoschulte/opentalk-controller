@@ -2,7 +2,6 @@ use anyhow::Context;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use controller::db::legal_votes::VoteId;
-use controller::db::rooms::RoomId;
 use controller::db::users::UserId;
 use controller::{db::DbInterface, prelude::*};
 use error::{Error, ErrorKind};
@@ -44,7 +43,7 @@ struct LegalVote {
     db_ctx: Arc<DbInterface>,
     participant_id: ParticipantId,
     user_id: UserId,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -67,7 +66,7 @@ impl SignalingModule for LegalVote {
             db_ctx: ctx.db().clone(),
             participant_id: ctx.participant_id(),
             user_id: ctx.user().id,
-            room_id: ctx.room().uuid,
+            room_id: ctx.room_id(),
         })
     }
 
@@ -179,7 +178,7 @@ impl LegalVote {
                 {
                     Ok(rabbitmq_parameters) => {
                         ctx.rabbitmq_publish(
-                            control::rabbitmq::room_exchange_name(self.room_id),
+                            control::rabbitmq::current_room_exchange_name(self.room_id),
                             control::rabbitmq::room_all_routing_key().into(),
                             rabbitmq::Event::Start(rabbitmq_parameters),
                         );
@@ -201,7 +200,7 @@ impl LegalVote {
                     .await?;
 
                 ctx.rabbitmq_publish(
-                    control::rabbitmq::room_exchange_name(self.room_id),
+                    control::rabbitmq::current_room_exchange_name(self.room_id),
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Event::Stop(StopVote { vote_id }),
                 );
@@ -214,7 +213,7 @@ impl LegalVote {
                     .await?;
 
                 ctx.rabbitmq_publish(
-                    control::rabbitmq::room_exchange_name(self.room_id),
+                    control::rabbitmq::current_room_exchange_name(self.room_id),
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Event::Cancel(Cancel {
                         vote_id,
@@ -233,7 +232,7 @@ impl LegalVote {
                     });
 
                     ctx.rabbitmq_publish(
-                        control::rabbitmq::room_exchange_name(self.room_id),
+                        control::rabbitmq::current_room_exchange_name(self.room_id),
                         control::rabbitmq::room_all_routing_key().into(),
                         update,
                     );
@@ -461,7 +460,7 @@ impl LegalVote {
                 .await?;
 
             ctx.rabbitmq_publish(
-                control::rabbitmq::room_exchange_name(self.room_id),
+                control::rabbitmq::current_room_exchange_name(self.room_id),
                 control::rabbitmq::room_all_routing_key().into(),
                 rabbitmq::Event::Cancel(rabbitmq::Cancel {
                     vote_id: current_vote_id,
@@ -543,7 +542,7 @@ impl LegalVote {
         let cancel_entry =
             ProtocolEntry::new(self.user_id, self.participant_id, VoteEvent::Cancel(reason));
 
-        if !storage::end_current_vote(redis_conn, vote_id, self.room_id, cancel_entry).await? {
+        if !storage::end_current_vote(redis_conn, self.room_id, vote_id, cancel_entry).await? {
             return Err(ErrorKind::InvalidVoteId.into());
         }
 
@@ -571,7 +570,7 @@ impl LegalVote {
 
         let stop_entry = ProtocolEntry::new(self.user_id, self.participant_id, VoteEvent::Stop);
 
-        if !storage::end_current_vote(redis_conn, vote_id, self.room_id, stop_entry).await? {
+        if !storage::end_current_vote(redis_conn, self.room_id, vote_id, stop_entry).await? {
             return Err(ErrorKind::InvalidVoteId.into());
         }
 
@@ -664,7 +663,7 @@ impl LegalVote {
             Error::Fatal(fatal) => {
                 // todo: error handling in case of redis error
                 ctx.rabbitmq_publish(
-                    control::rabbitmq::room_exchange_name(self.room_id),
+                    control::rabbitmq::current_room_exchange_name(self.room_id),
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Event::FatalServerError,
                 );
@@ -683,11 +682,13 @@ pub fn register(controller: &mut controller::Controller) {
 mod test {
     use super::*;
     use controller::db::migrations::migrate_from_url;
+    use controller::db::rooms::RoomId;
     use serial_test::serial;
     use uuid::Uuid;
 
     const VOTE_ID: VoteId = VoteId::from(uuid::Uuid::from_u128(1000));
-    const ROOM_ID: RoomId = RoomId::from(uuid::Uuid::from_u128(2000));
+    const ROOM_ID: SignalingRoomId =
+        SignalingRoomId::new_test(RoomId::from(uuid::Uuid::from_u128(2000)));
 
     const USER_1: UserId = UserId::from(1);
     const PARTICIPANT_1: ParticipantId = ParticipantId::new_test(1);

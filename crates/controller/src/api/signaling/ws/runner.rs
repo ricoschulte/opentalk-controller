@@ -4,9 +4,12 @@ use super::modules::{
 use super::{
     DestroyContext, Namespaced, RabbitMqBinding, RabbitMqExchange, RabbitMqPublish, WebSocket,
 };
+use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
-use crate::api::signaling::ws_modules::control::{incoming, outgoing, rabbitmq, storage};
-use crate::api::signaling::{ParticipantId, Role};
+use crate::api::signaling::ws_modules::control::{
+    incoming, outgoing, rabbitmq, storage, ControlData,
+};
+use crate::api::signaling::{ParticipantId, Role, SignalingRoomId};
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::DbInterface;
@@ -21,7 +24,6 @@ use lapin::message::DeliveryResult;
 use lapin::options::QueueDeclareOptions;
 use lapin::ExchangeKind;
 use redis::aio::ConnectionManager;
-use serde::Serialize;
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -42,6 +44,7 @@ const NAMESPACE: &str = "control";
 pub struct Builder {
     pub(super) id: ParticipantId,
     pub(super) room: Room,
+    pub(super) breakout_room: Option<BreakoutRoomId>,
     pub(super) user: User,
     pub(super) role: Role,
     pub(super) protocol: &'static str,
@@ -76,8 +79,10 @@ impl Builder {
     ) -> Result<Runner> {
         // ==== CONTROL MODULE DECLARATIONS ====
 
+        let room_id = SignalingRoomId(self.room.uuid, self.breakout_room);
+
         // The name of the room exchange
-        let room_exchange = rabbitmq::room_exchange_name(self.room.uuid);
+        let room_exchange = rabbitmq::current_room_exchange_name(room_id);
 
         // Routing key to receive messages directed to all participants
         let all_routing_key = rabbitmq::room_all_routing_key();
@@ -198,7 +203,7 @@ impl Builder {
 
         storage::set_attribute(
             &mut self.redis_conn,
-            self.room.uuid,
+            room_id,
             self.id,
             "user_id",
             self.user.id,
@@ -207,7 +212,7 @@ impl Builder {
 
         Ok(Runner {
             id: self.id,
-            room: self.room,
+            room_id,
             user: self.user,
             role: self.role,
             control_data: None,
@@ -240,8 +245,8 @@ pub struct Runner {
     // participant id that the runner is connected to
     id: ParticipantId,
 
-    // Room the participant is inside
-    room: Room,
+    // Full signaling room id
+    room_id: SignalingRoomId,
 
     // User behind the participant
     user: User,
@@ -293,9 +298,11 @@ impl Drop for Runner {
 }
 
 impl Runner {
+    #[allow(clippy::too_many_arguments)]
     pub fn builder(
         id: ParticipantId,
         room: Room,
+        breakout_room: Option<BreakoutRoomId>,
         user: User,
         protocol: &'static str,
         db: Arc<DbInterface>,
@@ -311,6 +318,7 @@ impl Runner {
         Builder {
             id,
             room,
+            breakout_room,
             user,
             role,
             protocol,
@@ -367,9 +375,9 @@ impl Runner {
 
         // The retry/wait_time values are set extra high
         // since a lot of operations are being done while holding the lock
-        let mut set_lock = storage::participant_set_mutex(self.room.uuid);
+        let mut room_mutex = storage::room_mutex(self.room_id);
 
-        let set_guard = match set_lock.lock(&mut self.redis_conn).await {
+        let room_guard = match room_mutex.lock(&mut self.redis_conn).await {
             Ok(guard) => guard,
             Err(r3dlock::Error::Redis(e)) => {
                 log::error!("Failed to acquire r3dlock, {}", e);
@@ -389,9 +397,9 @@ impl Runner {
 
         // Remove participant from set and check if set is empty
         let destroy_room = match storage::remove_participant_from_set(
-            &set_guard,
+            &room_guard,
             &mut self.redis_conn,
-            self.room.uuid,
+            self.room_id,
             self.id,
         )
         .await
@@ -417,7 +425,7 @@ impl Runner {
             }
         }
 
-        if let Err(e) = set_guard.unlock(&mut self.redis_conn).await {
+        if let Err(e) = room_guard.unlock(&mut self.redis_conn).await {
             log::error!("Failed to unlock set_guard r3dlock, {}", e);
         }
 
@@ -429,8 +437,8 @@ impl Runner {
 
     /// Cleanup the participant attributes that were set by the runner
     async fn cleanup_attributes(&mut self) -> Result<()> {
-        storage::remove_attribute_key(&mut self.redis_conn, self.room.uuid, "display_name").await?;
-        storage::remove_attribute_key(&mut self.redis_conn, self.room.uuid, "user_id").await
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "display_name").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "user_id").await
     }
 
     /// Runs the runner until the peer closes its websocket connection or a fatal error occurres.
@@ -561,7 +569,7 @@ impl Runner {
 
                 storage::set_attribute(
                     &mut self.redis_conn,
-                    self.room.uuid,
+                    self.room_id,
                     self.id,
                     "display_name",
                     &join.display_name,
@@ -569,19 +577,21 @@ impl Runner {
                 .await
                 .context("Failed to set display_name")?;
 
-                self.control_data = Some(ControlData {
-                    display_name: join.display_name,
-                    hand_is_up: false,
-                });
-
                 let participant_set =
-                    storage::get_all_participants(&mut self.redis_conn, self.room.uuid)
+                    storage::get_all_participants(&mut self.redis_conn, self.room_id)
                         .await
                         .context("Failed to get all active participants")?;
 
-                storage::add_participant_to_set(&mut self.redis_conn, self.room.uuid, self.id)
-                    .await
-                    .context("Failed to add self to participants set")?;
+                let num_added =
+                    storage::add_participant_to_set(&mut self.redis_conn, self.room_id, self.id)
+                        .await
+                        .context("Failed to add self to participants set")?;
+
+                // Check that SADD doesn't return 0. That would mean that the participant id would be a
+                // duplicate which cannot be allowed. Since this should never happen just error and exit.
+                if num_added == 0 {
+                    bail!("participant-id is already taken inside participant set");
+                }
 
                 let mut participants = vec![];
 
@@ -592,13 +602,20 @@ impl Runner {
                     };
                 }
 
+                let control_data = ControlData {
+                    display_name: join.display_name,
+                    hand_is_up: false,
+                };
+
                 let mut module_data = HashMap::new();
 
                 self.handle_module_broadcast_event(
-                    DynBroadcastEvent::Joined(&mut module_data, &mut participants),
+                    DynBroadcastEvent::Joined(&control_data, &mut module_data, &mut participants),
                     false,
                 )
                 .await;
+
+                self.control_data = Some(control_data);
 
                 self.ws
                     .send(Message::Text(
@@ -621,7 +638,7 @@ impl Runner {
             incoming::Message::RaiseHand => {
                 storage::set_attribute(
                     &mut self.redis_conn,
-                    self.room.uuid,
+                    self.room_id,
                     self.id,
                     "hand_is_up",
                     true,
@@ -634,7 +651,7 @@ impl Runner {
             incoming::Message::LowerHand => {
                 storage::set_attribute(
                     &mut self.redis_conn,
-                    self.room.uuid,
+                    self.room_id,
                     self.id,
                     "hand_is_up",
                     false,
@@ -656,11 +673,10 @@ impl Runner {
         };
 
         let display_name: String =
-            storage::get_attribute(&mut self.redis_conn, self.room.uuid, id, "display_name")
-                .await?;
+            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "display_name").await?;
 
         let hand_is_up: bool =
-            storage::get_attribute(&mut self.redis_conn, self.room.uuid, id, "hand_is_up").await?;
+            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_is_up").await?;
 
         participant.module_data.insert(
             NAMESPACE,
@@ -881,6 +897,7 @@ impl Runner {
         let mut ws_messages = vec![];
         let mut rabbitmq_publish = vec![];
         let mut invalidate_data = false;
+        let mut exit = None;
 
         let ctx = DynEventCtx {
             id: self.id,
@@ -889,13 +906,14 @@ impl Runner {
             redis_conn: &mut self.redis_conn,
             events: &mut self.events,
             invalidate_data: &mut invalidate_data,
+            exit: &mut exit,
         };
 
         self.modules
             .on_event_targeted(ctx, module, dyn_event)
             .await?;
 
-        self.handle_module_requested_actions(ws_messages, rabbitmq_publish, invalidate_data)
+        self.handle_module_requested_actions(ws_messages, rabbitmq_publish, invalidate_data, exit)
             .await;
 
         Ok(())
@@ -909,6 +927,7 @@ impl Runner {
     ) {
         let mut ws_messages = vec![];
         let mut rabbitmq_publish = vec![];
+        let mut exit = None;
 
         let ctx = DynEventCtx {
             id: self.id,
@@ -917,11 +936,12 @@ impl Runner {
             redis_conn: &mut self.redis_conn,
             events: &mut self.events,
             invalidate_data: &mut invalidate_data,
+            exit: &mut exit,
         };
 
         self.modules.on_event_broadcast(ctx, dyn_event).await;
 
-        self.handle_module_requested_actions(ws_messages, rabbitmq_publish, invalidate_data)
+        self.handle_module_requested_actions(ws_messages, rabbitmq_publish, invalidate_data, exit)
             .await;
     }
 
@@ -932,6 +952,7 @@ impl Runner {
         ws_messages: Vec<Message>,
         rabbitmq_publish: Vec<RabbitMqPublish>,
         invalidate_data: bool,
+        exit: Option<CloseCode>,
     ) {
         for ws_message in ws_messages {
             self.ws.send(ws_message).await;
@@ -950,6 +971,12 @@ impl Runner {
             self.rabbitmq_publish_control(None, rabbitmq::Message::Update(self.id))
                 .await;
         }
+
+        if let Some(exit) = exit {
+            self.exit = true;
+
+            self.ws.close(exit).await;
+        }
     }
 }
 
@@ -959,12 +986,6 @@ fn error(text: &str) -> String {
         payload: text,
     }
     .to_json()
-}
-
-#[derive(Serialize)]
-struct ControlData {
-    display_name: String,
-    hand_is_up: bool,
 }
 
 /// Helper websocket abstraction that pings the participants in regular intervals

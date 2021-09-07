@@ -1,9 +1,12 @@
-use crate::api::signaling::{ParticipantId, Role};
+use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
+use crate::api::signaling::ws_modules::control::ControlData;
+use crate::api::signaling::{ParticipantId, Role, SignalingRoomId};
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::DbInterface;
 use adapter::ActixTungsteniteAdapter;
 use anyhow::Result;
+use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
 use futures::stream::SelectAll;
@@ -37,6 +40,10 @@ where
 {
     /// The participant joined the room
     Joined {
+        /// Data set by the control module. Some modules require attributes specified by the
+        /// control module which are provided here on join
+        control_data: &'evt ControlData,
+
         /// The module can set this option to Some(M::FrontendData) to populate
         /// the `join_success` message with additional information to the frontend module counterpart
         frontend_data: &'evt mut Option<M::FrontendData>,
@@ -90,6 +97,7 @@ where
 {
     id: ParticipantId,
     room: &'ctx Room,
+    breakout_room: Option<BreakoutRoomId>,
     user: &'ctx User,
     role: Role,
     db: &'ctx Arc<DbInterface>,
@@ -121,9 +129,23 @@ where
         self.id
     }
 
-    /// Room the participant is inside
+    /// Returns a reference to the database representation of the the room
+    ///
+    /// Note that the room will always be the same regardless if inside a
+    /// breakout room or not.
     pub fn room(&self) -> &Room {
         self.room
+    }
+
+    /// ID of the room currently inside, this MUST be used when a module does not care about
+    /// whether it is inside a breakout room or not.
+    pub fn room_id(&self) -> SignalingRoomId {
+        SignalingRoomId(self.room.uuid, self.breakout_room)
+    }
+
+    /// Returns the ID of the breakout room, if inside one
+    pub fn breakout_room(&self) -> Option<BreakoutRoomId> {
+        self.breakout_room
     }
 
     /// Returns the user associated with the participant
@@ -147,8 +169,6 @@ where
     }
 
     /// Add a rabbitmq exchange to be created
-    // TODO Not used yet anywhere
-    #[allow(dead_code)]
     pub fn add_rabbitmq_exchange(
         &mut self,
         name: String,
@@ -197,6 +217,7 @@ where
     redis_conn: &'ctx mut ConnectionManager,
     events: &'ctx mut SelectAll<AnyStream>,
     invalidate_data: &'ctx mut bool,
+    exit: &'ctx mut Option<CloseCode>,
     m: PhantomData<fn() -> M>,
 }
 
@@ -260,6 +281,10 @@ where
     /// Signals that the data related to the participant has changed
     pub fn invalidate_data(&mut self) {
         *self.invalidate_data = true;
+    }
+
+    pub fn exit(&mut self, code: Option<CloseCode>) {
+        *self.exit = Some(code.unwrap_or(CloseCode::Normal));
     }
 }
 

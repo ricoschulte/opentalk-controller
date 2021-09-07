@@ -8,7 +8,6 @@ use super::VoteOption;
 use allowed_users::AllowedUsersKey;
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
-use controller::db::rooms::RoomId;
 use controller::db::users::UserId;
 use controller::prelude::*;
 use current_vote_id::CurrentVoteIdKey;
@@ -61,8 +60,8 @@ return 1
 #[tracing::instrument(name = "legalvote_end_current_vote", skip(redis_conn, end_entry))]
 pub(crate) async fn end_current_vote(
     redis_conn: &mut ConnectionManager,
+    room_id: SignalingRoomId,
     vote_id: VoteId,
-    room_id: RoomId,
     end_entry: ProtocolEntry,
 ) -> Result<bool> {
     redis::Script::new(END_CURRENT_VOTE_SCRIPT)
@@ -108,7 +107,7 @@ redis.call("del", KEYS[5])
 #[tracing::instrument(name = "legalvote_cleanup_vote", skip(redis_conn))]
 pub(crate) async fn cleanup_vote(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
     vote_id: VoteId,
 ) -> Result<()> {
     redis::Script::new(CLEANUP_SCRIPT)
@@ -202,7 +201,7 @@ impl FromRedisValue for VoteScriptResult {
 )]
 pub(crate) async fn vote(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
     vote_id: VoteId,
     user_id: UserId,
     participant_id: ParticipantId,

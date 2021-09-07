@@ -3,7 +3,6 @@
 
 use crate::config::StorageConfig;
 use anyhow::{Context, Result};
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
@@ -14,7 +13,7 @@ use redis::AsyncCommands;
 #[ignore_extra_doc_attributes]
 /// Typed key to the automod config
 pub struct RoomAutoModConfig {
-    room: RoomId,
+    room: SignalingRoomId,
 }
 
 impl_to_redis_args!(RoomAutoModConfig);
@@ -25,7 +24,7 @@ impl_from_redis_value_de!(StorageConfig);
 #[tracing::instrument(name = "set_config", level = "debug", skip(redis_conn, config))]
 pub async fn set(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     config: &StorageConfig,
 ) -> Result<()> {
     redis_conn
@@ -40,7 +39,7 @@ pub async fn set(
 #[tracing::instrument(name = "get_config", level = "debug", skip(redis_conn))]
 pub async fn get(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
 ) -> Result<Option<StorageConfig>> {
     redis_conn
         .get(RoomAutoModConfig { room })
@@ -50,7 +49,7 @@ pub async fn get(
 
 /// Delete the config.
 #[tracing::instrument(name = "del_config", level = "debug", skip(redis_conn))]
-pub async fn del(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<()> {
+pub async fn del(redis_conn: &mut ConnectionManager, room: SignalingRoomId) -> Result<()> {
     redis_conn
         .del(RoomAutoModConfig { room })
         .await

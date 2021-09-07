@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use control::rabbitmq;
 use controller::db::groups::Group;
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use r3dlock::Mutex;
 use serde::{Deserialize, Serialize};
@@ -33,7 +32,7 @@ fn group_routing_key(group: &str) -> String {
 
 pub struct Chat {
     id: ParticipantId,
-    room: RoomId,
+    room: SignalingRoomId,
 
     groups: HashSet<Group>,
 }
@@ -80,7 +79,7 @@ impl SignalingModule for Chat {
 
         Ok(Self {
             id: ctx.participant_id(),
-            room: ctx.room().uuid,
+            room: ctx.room_id(),
             groups,
         })
     }
@@ -92,6 +91,8 @@ impl SignalingModule for Chat {
     ) -> Result<()> {
         match event {
             Event::Joined {
+                control_data: _,
+
                 frontend_data,
                 participants: _,
             } => {
@@ -155,7 +156,7 @@ impl SignalingModule for Chat {
                     .await?;
 
                     ctx.rabbitmq_publish(
-                        rabbitmq::room_exchange_name(self.room),
+                        rabbitmq::current_room_exchange_name(self.room),
                         group_routing_key(&msg.group),
                         Message {
                             source: self.id,

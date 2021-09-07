@@ -1,7 +1,6 @@
 use crate::rabbitmq::Parameters;
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
@@ -13,7 +12,7 @@ use redis::AsyncCommands;
 ///
 /// Contains the [`Parameters`] of the a vote.
 pub(super) struct VoteParametersKey {
-    pub(super) room_id: RoomId,
+    pub(super) room_id: SignalingRoomId,
     pub(super) vote_id: VoteId,
 }
 
@@ -23,7 +22,7 @@ impl_to_redis_args!(VoteParametersKey);
 #[tracing::instrument(name = "legalvote_set_parameters", skip(redis_conn, parameters))]
 pub(crate) async fn set(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
     vote_id: VoteId,
     parameters: &Parameters,
 ) -> Result<()> {
@@ -42,7 +41,7 @@ pub(crate) async fn set(
 #[tracing::instrument(name = "legalvote_get_parameters", skip(redis_conn))]
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
     vote_id: VoteId,
 ) -> Result<Option<Parameters>> {
     redis_conn

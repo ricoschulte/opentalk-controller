@@ -1,4 +1,4 @@
-use crate::api::signaling::ParticipantId;
+use crate::api::signaling::{ParticipantId, SignalingRoomId};
 use crate::db::rooms::RoomId;
 use serde::{Deserialize, Serialize};
 
@@ -11,10 +11,18 @@ pub enum Message {
     Update(ParticipantId),
 }
 
-/// Returns the name of the RabbitMQ topic exchange used to send messages between participants for
-/// the given room-id
+/// Returns the name of the RabbitMQ topic exchange used to communicate inside a room.
+///
+/// Note that this exchange is used to communicate across breakout-room boundries and
+/// should only be used in special circumstances where that behaviour is intended.
 pub fn room_exchange_name(room: RoomId) -> String {
-    format!("k3k-signaling.room.{}", room.into_inner())
+    format!("k3k-signaling.room={}", room.into_inner())
+}
+
+/// Returns the name of the RabbitMQ topic exchange used inside the current room.
+/// This exchange should be used when writing behaviour constrained to a single room
+pub fn current_room_exchange_name(room: SignalingRoomId) -> String {
+    format!("k3k-signaling.{}", room)
 }
 
 /// Returns the routing-key/topic used to send a message to the given participant

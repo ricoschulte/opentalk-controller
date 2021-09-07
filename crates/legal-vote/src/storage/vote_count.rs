@@ -1,7 +1,6 @@
 use crate::VoteOption;
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::{aio::ConnectionManager, AsyncCommands};
@@ -16,7 +15,7 @@ use std::collections::HashMap;
 /// When a vote is casted, the corresponding vote option in this list will get incremented.
 /// See [`VOTE_SCRIPT`](super::VOTE_SCRIPT) for more details on the vote process.
 pub(super) struct VoteCountKey {
-    pub(super) room_id: RoomId,
+    pub(super) room_id: SignalingRoomId,
     pub(super) vote_id: VoteId,
 }
 
@@ -26,7 +25,7 @@ impl_to_redis_args!(VoteCountKey);
 #[tracing::instrument(name = "legalvote_get_vote_count", skip(redis_conn))]
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
     vote_id: VoteId,
 ) -> Result<HashMap<VoteOption, u64>> {
     redis_conn

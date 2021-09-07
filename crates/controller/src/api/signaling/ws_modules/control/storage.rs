@@ -1,11 +1,9 @@
-use crate::api::signaling::ParticipantId;
-use crate::db::rooms::RoomId;
+use crate::api::signaling::{ParticipantId, SignalingRoomId};
 use anyhow::{Context, Result};
 use displaydoc::Display;
 use r3dlock::{Mutex, MutexGuard};
 use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
-use std::collections::HashSet;
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -15,15 +13,15 @@ use std::time::Duration;
 /// Describes a set of participants inside a room.
 /// This MUST always be locked before accessing it
 struct RoomParticipants {
-    room: RoomId,
+    room: SignalingRoomId,
 }
 
 #[derive(Display)]
 /// k3k-signaling:room={room}:participants.lock
 #[ignore_extra_doc_attributes]
 /// Key used for the lock over the room participants set
-pub struct RoomParticipantsLock {
-    pub room: RoomId,
+pub struct RoomLock {
+    pub room: SignalingRoomId,
 }
 
 #[derive(Display)]
@@ -31,17 +29,23 @@ pub struct RoomParticipantsLock {
 #[ignore_extra_doc_attributes]
 /// Key used for the lock over the room participants set
 struct RoomParticipantAttributes<'s> {
-    room: RoomId,
+    room: SignalingRoomId,
     attribute_name: &'s str,
 }
 
 impl_to_redis_args!(RoomParticipants);
-impl_to_redis_args!(RoomParticipantsLock);
+impl_to_redis_args!(RoomLock);
 impl_to_redis_args!(RoomParticipantAttributes<'_>);
 
-/// The participant set mutex parameters are set very high since it is being held while destroying all modules which can take while
-pub fn participant_set_mutex(room: RoomId) -> Mutex<RoomParticipantsLock> {
-    Mutex::new(RoomParticipantsLock { room })
+/// The room's mutex
+///
+/// Must be taken when joining and leaving the room.
+/// This allows for cleanups when the last user leaves without anyone joining.
+///
+/// The redlock parameters are set a bit higher than usual to combat contention when a room gets
+/// gets destroyed while a large number of participants are inside it. (e.g. when a breakout room ends)
+pub fn room_mutex(room: SignalingRoomId) -> Mutex<RoomLock> {
+    Mutex::new(RoomLock { room })
         .with_wait_time(Duration::from_millis(20)..Duration::from_millis(60))
         .with_retries(20)
 }
@@ -49,87 +53,53 @@ pub fn participant_set_mutex(room: RoomId) -> Mutex<RoomParticipantsLock> {
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_all_participants(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
-) -> Result<HashSet<ParticipantId>> {
-    let mut mutex = participant_set_mutex(room);
-
-    let guard = mutex
-        .lock(redis_conn)
-        .await
-        .context("Failed to lock participant list")?;
-
-    let participants_result: Result<HashSet<ParticipantId>> = redis_conn
+    room: SignalingRoomId,
+) -> Result<Vec<ParticipantId>> {
+    redis_conn
         .smembers(RoomParticipants { room })
         .await
-        .context("Failed to get participants");
-
-    guard
-        .unlock(redis_conn)
-        .await
-        .context("Failed to unlock participant list")?;
-
-    participants_result
+        .context("Failed to get participants")
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn participants_contains(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<bool> {
-    let mut mutex = participant_set_mutex(room);
-
-    let guard = mutex
-        .lock(redis_conn)
-        .await
-        .context("Failed to lock participant list")?;
-
-    let is_member_result: Result<bool> = redis_conn
+    redis_conn
         .sismember(RoomParticipants { room }, participant)
         .await
-        .context("Failed to check if participants contains participant");
-
-    guard
-        .unlock(redis_conn)
-        .await
-        .context("Failed to unlock participant list")?;
-
-    is_member_result
+        .context("Failed to check if participants contains participant")
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn add_participant_to_set(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     participant: ParticipantId,
-) -> Result<()> {
-    let mut mutex = participant_set_mutex(room);
+) -> Result<usize> {
+    let mut room_mutex = room_mutex(room);
 
-    let guard = mutex
-        .lock(redis_conn)
-        .await
-        .context("Failed to lock participant list")?;
+    let guard = room_mutex.lock(redis_conn).await?;
 
-    let add_result = redis_conn
+    let sadd_result = redis_conn
         .sadd(RoomParticipants { room }, participant)
         .await
         .context("Failed to add own participant id to set");
 
-    guard
-        .unlock(redis_conn)
-        .await
-        .context("Failed to unlock participant list")?;
+    guard.unlock(redis_conn).await?;
 
-    add_result
+    sadd_result
 }
 
 /// Removes the given participant from the room's participant set and returns the number of
 /// remaining participants
-#[tracing::instrument(level = "debug", skip(_set_guard, redis_conn))]
+#[tracing::instrument(level = "debug", skip(_room_guard, redis_conn))]
 pub async fn remove_participant_from_set(
-    _set_guard: &MutexGuard<'_, RoomParticipantsLock>,
+    _room_guard: &MutexGuard<'_, RoomLock>,
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<usize> {
     redis_conn
@@ -146,7 +116,7 @@ pub async fn remove_participant_from_set(
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn remove_attribute_key(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     name: &str,
 ) -> Result<()> {
     redis_conn
@@ -161,7 +131,7 @@ pub async fn remove_attribute_key(
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_attribute<V>(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     participant: ParticipantId,
     name: &str,
     value: V,
@@ -187,7 +157,7 @@ where
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_attribute<V>(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     participant: ParticipantId,
     name: &str,
 ) -> Result<V>
@@ -213,7 +183,7 @@ where
 /// The index of the attributes in the returned vector is a direct mapping to the provided list of participants.
 pub async fn get_attribute_for_participants<V>(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     name: &str,
     participants: &[ParticipantId],
 ) -> Result<Vec<Option<V>>>

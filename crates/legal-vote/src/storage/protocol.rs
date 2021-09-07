@@ -2,7 +2,6 @@ use crate::VoteOption;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use controller::db::legal_votes::VoteId;
-use controller::db::rooms::RoomId;
 use controller::db::users::UserId;
 use controller::prelude::*;
 
@@ -19,7 +18,7 @@ use std::collections::HashMap;
 /// Contains the vote protocol. The vote protocol is a list of [`ProtocolEntries`](ProtocolEntry)
 /// with information about the event that happened.
 pub(super) struct ProtocolKey {
-    pub(super) room_id: RoomId,
+    pub(super) room_id: SignalingRoomId,
     pub(super) vote_id: VoteId,
 }
 
@@ -95,7 +94,7 @@ pub(crate) enum Reason {
 #[tracing::instrument(name = "legalvote_add_protocol_entry", skip(redis_conn, entry))]
 pub(crate) async fn add_entry(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
     vote_id: VoteId,
     entry: ProtocolEntry,
 ) -> Result<()> {
@@ -111,7 +110,7 @@ pub(crate) async fn add_entry(
 #[tracing::instrument(name = "legalvote_get_protocol", skip(redis_conn))]
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
     vote_id: VoteId,
 ) -> Result<Vec<ProtocolEntry>> {
     redis_conn

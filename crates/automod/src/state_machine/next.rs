@@ -2,7 +2,6 @@ use super::{Error, StateMachineOutput};
 use crate::config::{Parameter, SelectionStrategy, StorageConfig};
 use crate::storage;
 use anyhow::Result;
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use rand::Rng;
 use redis::aio::ConnectionManager;
@@ -11,7 +10,7 @@ use redis::aio::ConnectionManager;
 /// user to be speaker.
 pub async fn select_next<R: Rng>(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     config: &StorageConfig,
     user_selected: Option<ParticipantId>,
     rng: &mut R,
@@ -46,7 +45,7 @@ pub async fn select_next<R: Rng>(
 /// Returns the next (if any) participant to be selected inside a `Nomination` selection strategy.
 async fn select_next_nomination(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     user_selected: Option<ParticipantId>,
     allow_double_selection: bool,
 ) -> Result<Option<ParticipantId>, Error> {

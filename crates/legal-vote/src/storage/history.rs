@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
@@ -16,7 +15,7 @@ use std::collections::HashSet;
 /// When a vote is stopped or canceled, the vote id will be added to this key.
 /// See [`END_CURRENT_VOTE_SCRIPT`](super::END_CURRENT_VOTE_SCRIPT) for more details.
 pub(super) struct VoteHistoryKey {
-    pub(super) room_id: RoomId,
+    pub(super) room_id: SignalingRoomId,
 }
 
 impl_to_redis_args!(VoteHistoryKey);
@@ -25,7 +24,7 @@ impl_to_redis_args!(VoteHistoryKey);
 #[tracing::instrument(name = "legalvote_get_history", skip(redis_conn))]
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
 ) -> Result<HashSet<VoteId>> {
     redis_conn
         .smembers(VoteHistoryKey { room_id })
@@ -35,7 +34,10 @@ pub(crate) async fn get(
 
 /// Delete the vote history key
 #[tracing::instrument(name = "legalvote_delete_history", skip(redis_conn))]
-pub(crate) async fn delete(redis_conn: &mut ConnectionManager, room_id: RoomId) -> Result<()> {
+pub(crate) async fn delete(
+    redis_conn: &mut ConnectionManager,
+    room_id: SignalingRoomId,
+) -> Result<()> {
     redis_conn
         .del(VoteHistoryKey { room_id })
         .await

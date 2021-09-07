@@ -1,6 +1,5 @@
 use super::State;
 use anyhow::{Context, Result};
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
@@ -12,7 +11,7 @@ use redis::AsyncCommands;
 /// Data related to a module inside a participant
 // TODO can this be removed?
 struct MediaState {
-    room: RoomId,
+    room: SignalingRoomId,
     participant: ParticipantId,
 }
 
@@ -21,7 +20,7 @@ impl_to_redis_args!(MediaState);
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_state(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<State> {
     let json: Vec<u8> = redis_conn
@@ -35,7 +34,7 @@ pub async fn get_state(
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_state(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     participant: ParticipantId,
     state: &State,
 ) -> Result<()> {
@@ -52,7 +51,7 @@ pub async fn set_state(
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn del_state(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<()> {
     redis_conn
