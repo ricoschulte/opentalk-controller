@@ -79,7 +79,7 @@ pub struct McuPool {
     // which are being reconnected
     events_sender: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
 
-    rabbitmq_channel: lapin::Channel,
+    rabbitmq: Arc<lapin::Connection>,
     redis: ConnectionManager,
 
     // Mcu shutdown signal to all janus-client tasks.
@@ -92,7 +92,7 @@ impl McuPool {
     pub async fn build(
         settings: &controller::settings::Settings,
         shared_settings: SharedSettings,
-        rabbitmq_channel: lapin::Channel,
+        rabbitmq: Arc<lapin::Connection>,
         mut redis: ConnectionManager,
         controller_shutdown_sig: broadcast::Receiver<()>,
         controller_reload_sig: broadcast::Receiver<()>,
@@ -107,14 +107,11 @@ impl McuPool {
         let connections = mcu_config.connections.clone();
 
         for connection in connections {
-            let client = McuClient::connect(
-                rabbitmq_channel.clone(),
-                &mut redis,
-                connection,
-                events_sender.clone(),
-            )
-            .await
-            .context("Failed to create mcu client")?;
+            let channel = rabbitmq.create_channel().await?;
+
+            let client = McuClient::connect(channel, &mut redis, connection, events_sender.clone())
+                .await
+                .context("Failed to create mcu client")?;
 
             clients.insert(client);
         }
@@ -125,7 +122,7 @@ impl McuPool {
             clients,
             shared_settings,
             events_sender,
-            rabbitmq_channel,
+            rabbitmq,
             redis,
             shutdown,
         });
@@ -191,8 +188,10 @@ impl McuPool {
                 continue;
             }
 
+            let channel = self.rabbitmq.create_channel().await?;
+
             match McuClient::connect(
-                self.rabbitmq_channel.clone(),
+                channel,
                 &mut self.redis.clone(),
                 connection_config.clone(),
                 self.events_sender.clone(),
