@@ -87,8 +87,7 @@ impl SignalingModule for Media {
         event: Event<'_, Self>,
     ) -> Result<()> {
         match event {
-            Event::WsMessage(incoming::Message::PublishComplete(info))
-            | Event::WsMessage(incoming::Message::UpdateMediaSession(info)) => {
+            Event::WsMessage(incoming::Message::PublishComplete(info)) => {
                 self.state
                     .insert(info.media_session_type, info.media_session_state);
 
@@ -97,6 +96,17 @@ impl SignalingModule for Media {
                     .context("Failed to set state attribute in storage")?;
 
                 ctx.invalidate_data();
+            }
+            Event::WsMessage(incoming::Message::UpdateMediaSession(info)) => {
+                if let Some(state) = self.state.get_mut(&info.media_session_type) {
+                    *state = info.media_session_state;
+
+                    storage::set_state(ctx.redis_conn(), self.room, self.id, &self.state)
+                        .await
+                        .context("Failed to set state attribute in storage")?;
+
+                    ctx.invalidate_data();
+                }
             }
             Event::WsMessage(incoming::Message::Unpublish(assoc)) => {
                 self.media.remove_publisher(assoc.media_session_type).await;
