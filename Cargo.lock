@@ -1449,9 +1449,21 @@ dependencies = [
 name = "k3k-legal-vote"
 version = "0.1.0"
 dependencies = [
+ "actix-rt",
+ "diesel",
  "k3k-controller-core",
+ "k3k-test-util",
  "serde",
  "serial_test",
+]
+
+[[package]]
+name = "k3k-test-util"
+version = "0.1.0"
+dependencies = [
+ "diesel",
+ "fern",
+ "k3k-controller-core",
 ]
 
 [[package]]

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// An incoming message issued by an participant
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "action")]
-pub(crate) enum Message {
+pub enum Message {
     /// Start a new vote
     Start(UserParameters),
     /// Stop a vote and show results to the participants
@@ -19,7 +19,7 @@ pub(crate) enum Message {
 
 /// The users parameters to start a new vote
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize)]
-pub(crate) struct UserParameters {
+pub struct UserParameters {
     /// The name of the vote
     pub name: String,
     /// The topic that will be voted on
@@ -40,9 +40,9 @@ pub(crate) struct UserParameters {
 
 /// Stop a vote
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct Stop {
+pub struct Stop {
     /// The vote id of the targeted vote
-    pub(crate) vote_id: VoteId,
+    pub vote_id: VoteId,
 }
 
 impl_to_redis_args_se!(UserParameters);
@@ -50,20 +50,20 @@ impl_from_redis_value_de!(UserParameters);
 
 /// Cancel a vote
 #[derive(Debug, Clone, Deserialize)]
-pub(crate) struct Cancel {
+pub struct Cancel {
     /// The vote id of the targeted vote
-    pub(crate) vote_id: VoteId,
+    pub vote_id: VoteId,
     /// The reason for the cancel
-    pub(crate) reason: String,
+    pub reason: String,
 }
 
 /// Cast a vote
 #[derive(Debug, Clone, Copy, Deserialize)]
-pub(crate) struct VoteMessage {
+pub struct VoteMessage {
     /// The vote id of the targeted vote
-    pub(crate) vote_id: VoteId,
+    pub vote_id: VoteId,
     /// The chosen vote option
-    pub(crate) option: VoteOption,
+    pub option: VoteOption,
 }
 
 #[cfg(test)]

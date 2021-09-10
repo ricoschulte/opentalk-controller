@@ -7,7 +7,6 @@ use crate::db::DbInterface;
 use adapter::ActixTungsteniteAdapter;
 use anyhow::Result;
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
-use async_tungstenite::tungstenite::Message;
 use async_tungstenite::WebSocketStream;
 use futures::stream::SelectAll;
 use lapin::options::{ExchangeDeclareOptions, QueueBindOptions};
@@ -16,6 +15,7 @@ use modules::{any_stream, AnyStream};
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio_stream::Stream;
@@ -23,6 +23,7 @@ use tokio_stream::Stream;
 mod adapter;
 mod echo;
 mod http;
+pub mod module_tester;
 mod modules;
 mod runner;
 
@@ -85,7 +86,7 @@ where
 
     /// External event provided by eventstream which was added using [`InitContext::add_event_stream`].
     ///
-    /// Modules that didnt register external events will
+    /// Modules that didn't register external events will
     /// never receive this variant and can ignore it.
     Ext(M::ExtEvent),
 }
@@ -212,7 +213,7 @@ pub struct ModuleContext<'ctx, M>
 where
     M: SignalingModule,
 {
-    ws_messages: &'ctx mut Vec<Message>,
+    ws_messages: &'ctx mut Vec<Namespaced<'static, M::Outgoing>>,
     rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
     redis_conn: &'ctx mut ConnectionManager,
     events: &'ctx mut SelectAll<AnyStream>,
@@ -221,6 +222,7 @@ where
     m: PhantomData<fn() -> M>,
 }
 
+#[derive(Debug, Clone)]
 struct RabbitMqPublish {
     exchange: String,
     routing_key: String,
@@ -233,18 +235,11 @@ where
 {
     /// Queue a outgoing message to be sent via the websocket
     /// after exiting the `on_event` function
-    ///
-    /// # Panics
-    ///
-    /// If `M::Outgoing` type is not a json map or object it cannot be flattened causing a panic.
     pub fn ws_send(&mut self, message: M::Outgoing) {
-        self.ws_messages.push(Message::Text(
-            Namespaced {
-                namespace: M::NAMESPACE,
-                payload: message,
-            }
-            .to_json(),
-        ));
+        self.ws_messages.push(Namespaced {
+            namespace: M::NAMESPACE,
+            payload: message,
+        });
     }
 
     /// Queue a outgoing message to be sent via rabbitmq
@@ -323,7 +318,7 @@ pub trait SignalingModule: Sized + 'static {
     type Incoming: for<'de> Deserialize<'de>;
 
     /// The websocket outgoing message type
-    type Outgoing: Serialize;
+    type Outgoing: Serialize + PartialEq + Debug;
 
     /// Message type sent over rabbitmq to other participant's modules
     type RabbitMqMessage: for<'de> Deserialize<'de> + Serialize;

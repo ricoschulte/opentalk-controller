@@ -1,15 +1,10 @@
 [package]
-name = "k3k-legal-vote"
+name = "k3k-test-util"
 version = "0.1.0"
 edition = "2018"
 
 [dependencies]
 controller = { path = "../controller", package = "k3k-controller-core" }
-serde = { version = "1", features = ["derive"] }
-
-[dev-dependencies]
-test-util = { path = "../test-util", package = "k3k-test-util" }
-serial_test = "0.5"
 diesel = { version = "1.4.6", features = [
     "postgres",
     "uuid",
@@ -17,4 +12,4 @@ diesel = { version = "1.4.6", features = [
     "r2d2",
     "serde_json",
 ] }
-actix-rt = "2.2"
+fern = "0.6"

@@ -58,6 +58,8 @@ test:cargo_test:
     JANUS_EXCHANGE_TYPE: topic
     # Used for integration tests
     DATABASE_URL: postgres://postgres:password123@postgres:5432/k3k
+    TEST_DB_BASE_URL: postgres://postgres:password123@postgres:5432
+    TEST_DB_NAME: k3k_test
     AMQP_ADDR: amqp://guest:guest@rabbitmq:5672
     REDIS_ADDR: redis://redis:6379/
   services:

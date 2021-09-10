@@ -16,9 +16,9 @@ use storage::protocol::{reduce_protocol, ProtocolEntry, VoteEvent};
 use storage::VoteScriptResult;
 
 mod error;
-mod incoming;
-mod outgoing;
-mod rabbitmq;
+pub mod incoming;
+pub mod outgoing;
+pub mod rabbitmq;
 mod storage;
 
 /// The vote choices
@@ -26,7 +26,7 @@ mod storage;
 /// Abstain can be disabled through the vote parameters (See [`Parameters`](incoming::Parameters)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum VoteOption {
+pub enum VoteOption {
     Yes,
     No,
     Abstain,
@@ -39,7 +39,7 @@ impl_from_redis_value_de!(VoteOption);
 ///
 /// Holds a database interface and information about the underlying user & room. Vote information is
 /// saved and managed in redis via the [`storage`] module.
-struct LegalVote {
+pub struct LegalVote {
     db_ctx: Arc<DbInterface>,
     participant_id: ParticipantId,
     user_id: UserId,

@@ -3,7 +3,7 @@ use controller::prelude::*;
 use janus_client::TrickleCandidate;
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(tag = "message")]
 pub enum Message {
     /// SDP Offer, renegotiate publish
@@ -35,7 +35,7 @@ pub enum Message {
     Error { text: &'static str },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct Sdp {
     /// The payload of the sdp message
     pub sdp: String,
@@ -44,7 +44,7 @@ pub struct Sdp {
     pub source: Source,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct SdpCandidate {
     /// The payload of the sdp message
     pub candidate: TrickleCandidate,
@@ -53,7 +53,7 @@ pub struct SdpCandidate {
     pub source: Source,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct Source {
     /// The source of this message
     pub source: ParticipantId,
@@ -71,14 +71,14 @@ impl From<MediaSessionKey> for Source {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum LinkDirection {
     Upstream,
     Downstream,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct Link {
     pub direction: LinkDirection,
     #[serde(flatten)]

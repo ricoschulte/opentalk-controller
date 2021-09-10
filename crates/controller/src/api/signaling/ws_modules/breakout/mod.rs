@@ -35,14 +35,14 @@ impl fmt::Display for BreakoutRoomId {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct ParticipantInOtherRoom {
     pub breakout_room: Option<BreakoutRoomId>,
     pub id: ParticipantId,
     pub display_name: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct AssocParticipantInOtherRoom {
     pub breakout_room: Option<BreakoutRoomId>,
     pub id: ParticipantId,
@@ -56,7 +56,7 @@ pub struct BreakoutRooms {
     breakout_room: Option<BreakoutRoomId>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct BreakoutRoom {
     id: BreakoutRoomId,
 }
