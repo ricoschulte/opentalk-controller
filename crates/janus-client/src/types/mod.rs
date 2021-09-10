@@ -349,7 +349,7 @@ impl TryFrom<Jsep> for SdpAnswer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use outgoing::{AttachToPlugin, CreateSession, JanusRequest, KeepAlive};
+    use outgoing::{AttachToPlugin, JanusRequest, KeepAlive};
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -357,13 +357,9 @@ mod tests {
         assert_eq!(
             serde_json::json!({
                 "janus": "create",
-                "transaction": "k3k-rulez"
             })
             .to_string(),
-            serde_json::to_string(&JanusRequest::CreateSession(CreateSession {
-                transaction: TransactionId::new("k3k-rulez".into())
-            }))
-            .unwrap()
+            serde_json::to_string(&JanusRequest::CreateSession).unwrap()
         );
     }
 
@@ -373,12 +369,10 @@ mod tests {
             serde_json::json!({
                 "janus": "attach",
                 "plugin": JanusPlugin::VideoRoom,
-                "transaction": "k3k-rulez",
                 "session_id": 123
             })
             .to_string(),
             serde_json::to_string(&JanusRequest::AttachToPlugin(AttachToPlugin {
-                transaction: TransactionId::new("k3k-rulez".into()),
                 plugin: JanusPlugin::VideoRoom,
                 session_id: SessionId::new(123)
             }))
@@ -391,12 +385,10 @@ mod tests {
             serde_json::json!({
                 "janus": "keepalive",
                 "session_id": 134,
-                "transaction": "k3k-rulez"
             })
             .to_string(),
             serde_json::to_string(&JanusRequest::KeepAlive(KeepAlive {
                 session_id: SessionId::new(134),
-                transaction: TransactionId::new("k3k-rulez".into())
             }))
             .unwrap()
         );

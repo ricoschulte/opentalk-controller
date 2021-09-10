@@ -28,6 +28,13 @@ pub(crate) mod echotest;
 #[cfg(feature = "videoroom")]
 pub(crate) mod videoroom;
 
+#[derive(Debug, Serialize)]
+pub(crate) struct TransactionalRequest {
+    pub transaction: TransactionId,
+    #[serde(flatten)]
+    pub request: JanusRequest,
+}
+
 /// Ingoing and Outgoing JSON strictly typed API
 #[derive(Debug, Serialize)]
 #[serde(tag = "janus")]
@@ -37,7 +44,7 @@ pub(crate) enum JanusRequest {
     #[serde(rename = "keepalive")]
     KeepAlive(KeepAlive),
     #[serde(rename = "create")]
-    CreateSession(CreateSession),
+    CreateSession,
     #[serde(rename = "attach")]
     AttachToPlugin(AttachToPlugin),
     #[serde(rename = "message")]
@@ -50,7 +57,6 @@ pub(crate) enum JanusRequest {
     TrickleMessage {
         handle_id: HandleId,
         session_id: SessionId,
-        transaction: TransactionId,
         #[serde(flatten)]
         trickle: TrickleMessage,
     },
@@ -59,27 +65,16 @@ pub(crate) enum JanusRequest {
     Detach {
         session_id: SessionId,
         handle_id: HandleId,
-        transaction: TransactionId,
     },
     /// Destroys a session
     #[serde(rename = "destroy")]
-    Destroy {
-        session_id: SessionId,
-        transaction: TransactionId,
-    },
+    Destroy { session_id: SessionId },
 }
 
 /// Keepalive message
 #[derive(Debug, Serialize)]
 pub struct KeepAlive {
     pub session_id: SessionId,
-    pub(crate) transaction: TransactionId,
-}
-
-/// Creates a session
-#[derive(Debug, Serialize)]
-pub struct CreateSession {
-    pub(crate) transaction: TransactionId,
 }
 
 /// Attaches the given session to a plugin
@@ -87,7 +82,6 @@ pub struct CreateSession {
 pub struct AttachToPlugin {
     pub plugin: JanusPlugin,
     pub session_id: SessionId,
-    pub(crate) transaction: TransactionId,
 }
 
 /// Sends a message to a plugin
@@ -95,7 +89,6 @@ pub struct AttachToPlugin {
 pub struct PluginMessage {
     pub handle_id: HandleId,
     pub session_id: SessionId,
-    pub(crate) transaction: TransactionId,
     pub body: PluginBody,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub jsep: Option<Jsep>,
@@ -152,7 +145,6 @@ mod test {
             "janus":"trickle",
             "handle_id":2123,
             "session_id":234,
-            "transaction":"k3k-goes-brr",
             "candidates":[
                 {
                     "sdpMid":"video",
@@ -171,7 +163,6 @@ mod test {
             .map(|s| s.trim_start())
             .collect::<String>();
         let our = JanusRequest::TrickleMessage {
-            transaction: TransactionId::new("k3k-goes-brr".into()),
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             trickle: TrickleMessage::new(&vec![

@@ -491,7 +491,6 @@ mod tests {
             "janus":"message",
             "handle_id":234,
             "session_id":123,
-            "transaction":"k3k-rulez",
             "body":{
                 "request":"create",
                 "description":"TestRoom|StreamType",
@@ -504,7 +503,6 @@ mod tests {
             .map(|s| s.trim_start())
             .collect::<String>();
         let our = JanusRequest::PluginMessage(PluginMessage {
-            transaction: TransactionId::new("k3k-rulez".into()),
             session_id: SessionId::new(123),
             handle_id: HandleId::new(234),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Create(VideoRoomPluginCreate {
@@ -526,7 +524,6 @@ mod tests {
             "janus":"message",
             "handle_id":2123,
             "session_id":234,
-            "transaction":"k3k-goes-brr",
             "body":{
               "request":"configure",
               "audio":true,
@@ -540,7 +537,6 @@ mod tests {
             .map(|s| s.trim_start())
             .collect::<String>();
         let our = JanusRequest::PluginMessage(PluginMessage {
-            transaction: TransactionId::new("k3k-goes-brr".into()),
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Configure(
@@ -566,7 +562,6 @@ mod tests {
             "janus":"message",
             "handle_id":2123,
             "session_id":234,
-            "transaction":"k3k-goes-brr",
             "body":{
               "request":"start"
             },
@@ -577,7 +572,6 @@ mod tests {
             .map(|s| s.trim_start())
             .collect::<String>();
         let our = JanusRequest::PluginMessage(PluginMessage {
-            transaction: TransactionId::new("k3k-goes-brr".into()),
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Start(VideoRoomPluginStart {})),
@@ -596,7 +590,6 @@ mod tests {
             "janus":"message",
             "handle_id":2123,
             "session_id":234,
-            "transaction":"k3k-goes-brr",
             "body":{
               "request":"join",
               "ptype":"subscriber",
@@ -610,7 +603,6 @@ mod tests {
             .map(|s| s.trim_start())
             .collect::<String>();
         let our = JanusRequest::PluginMessage(PluginMessage {
-            transaction: TransactionId::new("k3k-goes-brr".into()),
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Join(
@@ -646,7 +638,6 @@ mod tests {
             "janus":"message",
             "handle_id":2123,
             "session_id":234,
-            "transaction":"k3k-goes-brr",
             "body":{
               "request":"list"
             }
@@ -656,7 +647,6 @@ mod tests {
             .map(|s| s.trim_start())
             .collect::<String>();
         let our = JanusRequest::PluginMessage(PluginMessage {
-            transaction: TransactionId::new("k3k-goes-brr".into()),
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::ListRooms(VideoRoomPluginListRooms)),
@@ -671,7 +661,6 @@ mod tests {
             "janus":"message",
             "handle_id":2123,
             "session_id":234,
-            "transaction":"k3k-goes-brr",
             "body":{
               "request":"join",
               "ptype":"publisher",
@@ -685,7 +674,6 @@ mod tests {
             .map(|s| s.trim_start())
             .collect::<String>();
         let our = JanusRequest::PluginMessage(PluginMessage {
-            transaction: TransactionId::new("k3k-goes-brr".into()),
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Join(VideoRoomPluginJoin::Publisher(
@@ -710,7 +698,6 @@ mod tests {
             "janus":"message",
             "handle_id":2123,
             "session_id":234,
-            "transaction":"k3k-goes-brr",
             "body":{
               "request":"destroy",
               "room":1
@@ -722,7 +709,6 @@ mod tests {
             .map(|s| s.trim_start())
             .collect::<String>();
         let our = JanusRequest::PluginMessage(PluginMessage {
-            transaction: TransactionId::new("k3k-goes-brr".into()),
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Destroy(VideoRoomPluginDestroy {
@@ -746,7 +732,6 @@ mod tests {
             "janus":"message",
             "handle_id":234,
             "session_id":123,
-            "transaction":"k3k-rulez",
             "body":{
                 "request":"create",
                 "description":"TestRoom|StreamType",
@@ -762,7 +747,6 @@ mod tests {
             .map(|s| s.trim_start())
             .collect::<String>();
         let our = JanusRequest::PluginMessage(PluginMessage {
-            transaction: TransactionId::new("k3k-rulez".into()),
             session_id: SessionId::new(123),
             handle_id: HandleId::new(234),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Create(VideoRoomPluginCreate {
