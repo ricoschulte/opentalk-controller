@@ -27,17 +27,17 @@ pub struct RoomParticipantsLock {
 }
 
 #[derive(Display)]
-/// k3k-signaling:room={room}:participant={participant}:attributes
+/// k3k-signaling:room={room}:participants:attributes:{attribute_name}
 #[ignore_extra_doc_attributes]
 /// Key used for the lock over the room participants set
-struct RoomParticipantAttributes {
+struct RoomParticipantAttributes<'s> {
     room: RoomId,
-    participant: ParticipantId,
+    attribute_name: &'s str,
 }
 
 impl_to_redis_args!(RoomParticipants);
 impl_to_redis_args!(RoomParticipantsLock);
-impl_to_redis_args!(RoomParticipantAttributes);
+impl_to_redis_args!(RoomParticipantAttributes<'_>);
 
 /// The participant set mutex parameters are set very high since it is being held while destroying all modules which can take while
 pub fn participant_set_mutex(room: RoomId) -> Mutex<RoomParticipantsLock> {
@@ -144,52 +144,90 @@ pub async fn remove_participant_from_set(
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
-pub async fn remove_all_attributes(
+pub async fn remove_attribute_key(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
-    participant: ParticipantId,
+    name: &str,
 ) -> Result<()> {
     redis_conn
-        .del(RoomParticipantAttributes { room, participant })
+        .del(RoomParticipantAttributes {
+            room,
+            attribute_name: name,
+        })
         .await
-        .context("Failed to remove participant attributes")
+        .with_context(|| format!("Failed to remove participant attribute key, {}", name))
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
-pub async fn set_attribute<K, V>(
+pub async fn set_attribute<V>(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
     participant: ParticipantId,
-    key: K,
+    name: &str,
     value: V,
 ) -> Result<()>
 where
-    K: Debug + ToRedisArgs + Send + Sync + Debug + Copy,
     V: Debug + ToRedisArgs + Send + Sync,
 {
     redis_conn
-        .hset(RoomParticipantAttributes { room, participant }, key, value)
+        .hset(
+            RoomParticipantAttributes {
+                room,
+                attribute_name: name,
+            },
+            participant,
+            value,
+        )
         .await
-        .with_context(|| format!("Failed to set attribute {:?}", key))?;
+        .with_context(|| format!("Failed to set attribute {}", name))?;
 
     Ok(())
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
-pub async fn get_attribute<K, V>(
+pub async fn get_attribute<V>(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
     participant: ParticipantId,
-    key: K,
+    name: &str,
 ) -> Result<V>
 where
-    K: Debug + ToRedisArgs + Send + Sync + Debug + Copy,
     V: FromRedisValue,
 {
     let value = redis_conn
-        .hget(RoomParticipantAttributes { room, participant }, key)
+        .hget(
+            RoomParticipantAttributes {
+                room,
+                attribute_name: name,
+            },
+            participant,
+        )
         .await
-        .with_context(|| format!("Failed to get attribute {:?}", key))?;
+        .with_context(|| format!("Failed to get attribute {}", name))?;
 
     Ok(value)
+}
+
+/// Get attribute values for multiple participants
+///
+/// The index of the attributes in the returned vector is a direct mapping to the provided list of participants.
+pub async fn get_attribute_for_participants<V>(
+    redis_conn: &mut ConnectionManager,
+    room: RoomId,
+    name: &str,
+    participants: &[ParticipantId],
+) -> Result<Vec<Option<V>>>
+where
+    V: FromRedisValue,
+{
+    redis_conn
+        .hget(
+            RoomParticipantAttributes {
+                room,
+                attribute_name: name,
+            },
+            participants,
+        )
+        .await
+        .with_context(|| format!("Failed to get attribute '{}' for all participants ", name))
 }

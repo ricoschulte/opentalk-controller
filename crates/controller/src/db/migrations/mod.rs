@@ -1,5 +1,4 @@
 use crate::settings::Database;
-use actix_web::rt;
 use anyhow::{Context, Result};
 use refinery::include_migration_mods;
 use refinery_core::tokio_postgres::{Config, NoTls};
@@ -19,7 +18,7 @@ async fn migrate(config: Config) -> Result<()> {
 
     let (tx, rx) = oneshot::channel();
 
-    rt::spawn(
+    tokio::spawn(
         async move {
             if let Err(e) = conn.await {
                 log::error!("connection error: {}", e)
@@ -54,6 +53,11 @@ pub async fn migrate_from_settings(db_config: &Database) -> Result<()> {
     migrate(config).await
 }
 
+pub async fn migrate_from_url(url: &str) -> Result<()> {
+    let config = url.parse::<Config>()?;
+    migrate(config).await
+}
+
 #[cfg(test)]
 mod migration_tests {
     use super::*;
@@ -63,15 +67,15 @@ mod migration_tests {
     /// A database url has to be specified via the environment variable DATABASE_URL.
     ///
     /// If no environment variable is provided, the database url will default to:
-    /// ```
+    /// ```text
     /// postgres://postgres:password123@localhost:5432/k3k
     /// ```
-    #[actix_rt::test]
+    #[tokio::test]
     async fn test_migration() -> Result<()> {
         let url = std::env::var("DATABASE_URL")
             .unwrap_or("postgres://postgres:password123@localhost:5432/k3k".to_string());
 
-        migrate(url.parse()?).await.context("Migration failed")?;
+        migrate_from_url(&url).await.context("Migration failed")?;
 
         Ok(())
     }

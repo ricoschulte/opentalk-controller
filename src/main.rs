@@ -12,7 +12,7 @@ async fn run() -> Result<()> {
         ee_chat::register(&mut controller);
         automod::register(&mut controller);
         janus_media::register(&mut controller).await?;
-
+        legal_vote::register(&mut controller);
         controller.run().await?;
     }
 

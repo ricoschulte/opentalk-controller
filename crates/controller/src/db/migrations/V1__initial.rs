@@ -38,5 +38,11 @@ pub fn migration() -> String {
         table.add_column("listen_only", types::boolean().nullable(false));
     });
 
+    migr.create_table("legal_votes", |table| {
+        table.add_column("id", types::uuid().primary(true));
+        table.add_column("initiator", types::custom("BIGINT REFERENCES users(id)"));
+        table.add_column("protocol", types::custom("JSONB"));
+    });
+
     migr.make::<Pg>()
 }

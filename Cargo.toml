@@ -9,6 +9,7 @@ edition = "2018"
 
 [workspace]
 members = [
+    "crates/legal-vote",
     "crates/janus-client",
     "crates/janus-media",
     "crates/automod",
@@ -27,3 +28,4 @@ janus-media = { path = "crates/janus-media", package = "k3k-janus-media" }
 automod = { path = "crates/automod", package = "k3k-automod" }
 ee-chat = { path = "crates/ee-chat", package = "k3k-ee-chat" }
 chat = { path = "crates/chat", package = "k3k-chat" }
+legal-vote = { path = "crates/legal-vote", package = "k3k-legal-vote" }

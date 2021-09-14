@@ -196,6 +196,15 @@ impl Builder {
             )
             .await?;
 
+        storage::set_attribute(
+            &mut self.redis_conn,
+            self.room.uuid,
+            self.id,
+            "user_id",
+            self.user.id,
+        )
+        .await?;
+
         Ok(Runner {
             id: self.id,
             room: self.room,
@@ -395,18 +404,18 @@ impl Runner {
             }
         };
 
-        if let Err(e) =
-            storage::remove_all_attributes(&mut self.redis_conn, self.room.uuid, self.id).await
-        {
-            log::error!("Failed to remove all control attributes, {}", e);
-        }
-
         let ctx = DestroyContext {
             redis_conn: &mut self.redis_conn,
             destroy_room,
         };
 
         self.modules.destroy(ctx).await;
+
+        if destroy_room {
+            if let Err(e) = self.cleanup_attributes().await {
+                log::error!("Failed to remove all control attributes, {}", e);
+            }
+        }
 
         if let Err(e) = set_guard.unlock(&mut self.redis_conn).await {
             log::error!("Failed to unlock set_guard r3dlock, {}", e);
@@ -416,6 +425,12 @@ impl Runner {
             self.rabbitmq_publish_control(None, rabbitmq::Message::Left(self.id))
                 .await;
         }
+    }
+
+    /// Cleanup the participant attributes that were set by the runner
+    async fn cleanup_attributes(&mut self) -> Result<()> {
+        storage::remove_attribute_key(&mut self.redis_conn, self.room.uuid, "display_name").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room.uuid, "user_id").await
     }
 
     /// Runs the runner until the peer closes its websocket connection or a fatal error occurres.

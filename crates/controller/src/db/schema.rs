@@ -5,6 +5,14 @@ table! {
 }
 
 table! {
+    legal_votes (id) {
+        id -> Uuid,
+        initiator -> Int8,
+        protocol -> Jsonb,
+    }
+}
+
+table! {
     refinery_schema_history (version) {
         version -> Int4,
         name -> Nullable<Varchar>,
@@ -45,8 +53,16 @@ table! {
     }
 }
 
+joinable!(legal_votes -> users (initiator));
 joinable!(rooms -> users (owner));
 joinable!(user_groups -> groups (group_id));
 joinable!(user_groups -> users (user_id));
 
-allow_tables_to_appear_in_same_query!(groups, refinery_schema_history, rooms, user_groups, users,);
+allow_tables_to_appear_in_same_query!(
+    groups,
+    legal_votes,
+    refinery_schema_history,
+    rooms,
+    user_groups,
+    users,
+);
