@@ -91,7 +91,26 @@ impl SignalingModule for Chat {
                 *frontend_data =
                     Some(ChatHistory::for_current_room(ctx.redis_conn(), self.room).await?);
             }
-            Event::WsMessage(msg) => {
+            Event::WsMessage(mut msg) => {
+                // Discard empty messages
+                if msg.content.is_empty() {
+                    return Ok(());
+                }
+
+                // Limit message size to 1024 bytes at most
+                if msg.content.len() > 1024 {
+                    let mut last_idx = 0;
+
+                    for (i, _) in msg.content.char_indices() {
+                        if i > 1024 {
+                            break;
+                        }
+                        last_idx = i;
+                    }
+
+                    msg.content.truncate(last_idx);
+                }
+
                 let source = self.id;
                 let timestamp = Utc::now();
 

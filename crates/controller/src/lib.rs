@@ -137,7 +137,7 @@ pub struct Controller {
     oidc: Arc<OidcContext>,
 
     /// RabbitMQ connection, can be used to create channels
-    pub rabbitmq: lapin::Connection,
+    pub rabbitmq: Arc<lapin::Connection>,
 
     /// RabbitMQ channel, can be cloned and used directly.
     ///
@@ -203,12 +203,14 @@ impl Controller {
             .await
             .context("Failed to migrate database")?;
 
-        let rabbitmq = lapin::Connection::connect(
-            &settings.rabbit_mq.url,
-            lapin::ConnectionProperties::default().with_tokio(),
-        )
-        .await
-        .context("failed to connect to rabbitmq")?;
+        let rabbitmq = Arc::new(
+            lapin::Connection::connect(
+                &settings.rabbit_mq.url,
+                lapin::ConnectionProperties::default().with_tokio(),
+            )
+            .await
+            .context("failed to connect to rabbitmq")?,
+        );
 
         let rabbitmq_channel = rabbitmq
             .create_channel()
