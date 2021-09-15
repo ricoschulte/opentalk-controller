@@ -71,6 +71,7 @@ pub mod prelude {
     pub use async_trait;
     pub use chrono;
     pub use displaydoc;
+    pub use futures;
     pub use lapin;
     pub use log;
     pub use r3dlock;

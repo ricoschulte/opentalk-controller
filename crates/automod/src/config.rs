@@ -36,7 +36,12 @@ impl FrontendConfig {
     /// Converts the config into a public config, which is modified to not show the list of
     /// available participants if configured.
     pub fn into_public(mut self) -> PublicConfig {
-        if !self.parameter.show_list {
+        let hide_list_if_requested = matches!(
+            self.parameter.selection_strategy,
+            SelectionStrategy::Playlist | SelectionStrategy::Random
+        );
+
+        if hide_list_if_requested && !self.parameter.show_list {
             self.remaining.clear();
         }
 
@@ -65,14 +70,13 @@ pub struct Parameter {
     #[serde(default)]
     pub time_limit: Option<Duration>,
 
-    /// Time in between selections to leave room for talk or animations
-    #[serde(with = "duration_millis")]
-    #[serde(default)]
-    pub pause_time: Option<Duration>,
-
     /// Depending on the `selection_strategy` this will prevent participants to become
     /// speaker twice in a single automod session
     pub allow_double_selection: bool,
+
+    /// The frontend will play an animation when a random selection
+    /// is being made
+    pub animation_on_random: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -106,7 +110,7 @@ mod duration_millis {
         S: Serializer,
     {
         if let Some(duration) = duration {
-            serializer.serialize_u128(duration.as_millis())
+            serializer.serialize_u64(duration.as_millis() as u64)
         } else {
             serializer.serialize_none()
         }

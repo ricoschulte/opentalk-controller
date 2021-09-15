@@ -21,6 +21,10 @@ pub enum Message {
     /// See [`RemainingUpdate`]
     RemainingUpdated(RemainingUpdated),
 
+    /// Tell the frontend to start the animation for random selection
+    /// The animation must yield the result specified by this message
+    StartAnimation(StartAnimation),
+
     /// An error has occurred
     ///
     /// See [`Error`]
@@ -48,6 +52,11 @@ pub struct SpeakerUpdated {
 
     /// Optional modification of the remaining participants.
     ///
+    /// Remaining participants must be interpreted differently depending on the selection strategy.
+    /// E.g. in the playlist moderation remaining lists the participants left inside the playlist.
+    /// All other strategies will use `remaining` (if at all) to list all participants (if public)
+    /// that are eligible to be selected.
+    ///
     /// This will only be set when using the `playlist` selection_strategy.
     ///
     /// If set the frontend MUST replace its remaining list with the given one.
@@ -61,6 +70,13 @@ pub struct SpeakerUpdated {
 #[derive(Debug, Serialize)]
 pub struct RemainingUpdated {
     pub remaining: Vec<ParticipantId>,
+}
+
+/// Tells the frontend to start a 'random' draw animation (e.g. wheel of names)
+#[derive(Debug, Serialize)]
+pub struct StartAnimation {
+    pub pool: Vec<ParticipantId>,
+    pub result: ParticipantId,
 }
 
 /// A command from the frontend has triggered an error.
@@ -84,7 +100,7 @@ mod test {
 
     #[test]
     fn started_message() {
-        let json_str = r#"{"message":"started","selection_strategy":"none","show_list":true,"consider_hand_raise":false,"time_limit":5000,"pause_time":null,"allow_double_selection":false,"history":["00000000-0000-0000-0000-000000000000"],"remaining":["00000000-0000-0000-0000-000000000000"]}"#;
+        let json_str = r#"{"message":"started","selection_strategy":"none","show_list":true,"consider_hand_raise":false,"time_limit":5000,"allow_double_selection":false,"animation_on_random":true,"history":["00000000-0000-0000-0000-000000000000"],"remaining":["00000000-0000-0000-0000-000000000000"]}"#;
 
         let message = Message::Started(
             FrontendConfig {
@@ -93,8 +109,8 @@ mod test {
                     show_list: true,
                     consider_hand_raise: false,
                     time_limit: Some(Duration::from_secs(5)),
-                    pause_time: None,
                     allow_double_selection: false,
+                    animation_on_random: true,
                 },
                 history: vec![ParticipantId::nil()],
                 remaining: vec![ParticipantId::nil()],

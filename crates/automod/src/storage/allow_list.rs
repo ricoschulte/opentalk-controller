@@ -1,5 +1,4 @@
 //! List of participants used by selection_strategies to help decide who to select.
-//! Empty allow_list will usually mean that every participant can be selected.
 //!
 //! Depending on the selection strategy:
 //!
@@ -55,7 +54,7 @@ pub async fn remove(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
     participant: ParticipantId,
-) -> Result<()> {
+) -> Result<usize> {
     redis_conn
         .srem(RoomAutoModAllowList { room }, participant)
         .await
@@ -74,25 +73,29 @@ pub async fn random(
         .context("Failed to get random member from allow list")
 }
 
-/// Check if the given `participant` is allowed by the `allow_list`. An empty `allow_list` will
-/// always return `true`.
+/// Pop a random `participant` from the allow_list. Will return `None` if the allow_list if empty.
+#[tracing::instrument(skip(redis_conn))]
+pub async fn pop_random(
+    redis_conn: &mut ConnectionManager,
+    room: RoomId,
+) -> Result<Option<ParticipantId>> {
+    redis_conn
+        .spop(RoomAutoModAllowList { room })
+        .await
+        .context("Failed to pop random member from allow list")
+}
+
+/// Check if the given `participant` is allowed by the `allow_list`.
 #[tracing::instrument(skip(redis_conn))]
 pub async fn is_allowed(
     redis_conn: &mut ConnectionManager,
     room: RoomId,
     participant: ParticipantId,
 ) -> Result<bool> {
-    let exists: bool = redis_conn.exists(RoomAutoModAllowList { room }).await?;
-
-    // empty allow list allows anyone
-    if exists {
-        redis_conn
-            .sismember(RoomAutoModAllowList { room }, participant)
-            .await
-            .context("Failed to check if participant is inside allow_list")
-    } else {
-        Ok(true)
-    }
+    redis_conn
+        .sismember(RoomAutoModAllowList { room }, participant)
+        .await
+        .context("Failed to check if participant is inside allow_list")
 }
 
 /// Return all members of the `allow_list`.

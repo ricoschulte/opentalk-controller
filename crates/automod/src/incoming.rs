@@ -69,6 +69,10 @@ pub enum Select {
     /// Select a random speaker
     Random,
 
+    /// Advance the moderation depending on the selection strategy.
+    /// Can just unset the current speaker if selection strategy is nomination
+    Next,
+
     /// Select a specific participant
     Specific(SelectSpecific),
 }
@@ -78,6 +82,9 @@ pub enum Select {
 pub struct SelectSpecific {
     /// The participant to be selected
     pub participant: ParticipantId,
+
+    /// If true the selected participant will not be removed from either the allow- or playlist
+    pub keep_in_remaining: bool,
 }
 
 /// Fields that are provided when issuing the yield message
@@ -102,8 +109,8 @@ mod test {
             "show_list": true,
             "consider_hand_raise": false,
             "time_limit": 10000,
-            "pause_time": null,
             "allow_double_selection": false,
+            "animation_on_random": true,
             "allow_list": ["00000000-0000-0000-0000-000000000000"],
             "playlist": ["00000000-0000-0000-0000-000000000000"]
         }
@@ -118,8 +125,8 @@ mod test {
                     show_list,
                     consider_hand_raise,
                     time_limit,
-                    pause_time,
                     allow_double_selection,
+                    animation_on_random,
                 },
             allow_list,
             playlist,
@@ -129,8 +136,8 @@ mod test {
             assert!(show_list);
             assert!(!consider_hand_raise);
             assert_eq!(time_limit, Some(Duration::from_secs(10)));
-            assert_eq!(pause_time, None);
             assert!(!allow_double_selection);
+            assert!(animation_on_random);
 
             assert_eq!(allow_list, vec![ParticipantId::nil()]);
             assert_eq!(playlist, vec![ParticipantId::nil()]);
@@ -221,14 +228,20 @@ mod test {
         {
             "action": "select",
             "how": "specific",
-            "participant": "00000000-0000-0000-0000-000000000000"
+            "participant": "00000000-0000-0000-0000-000000000000",
+            "keep_in_remaining": true
         }
         "#;
 
         let start: Message = serde_json::from_str(json_str).unwrap();
 
-        if let Message::Select(Select::Specific(SelectSpecific { participant })) = start {
+        if let Message::Select(Select::Specific(SelectSpecific {
+            participant,
+            keep_in_remaining,
+        })) = start
+        {
             assert_eq!(participant, ParticipantId::nil());
+            assert!(keep_in_remaining);
         } else {
             panic!()
         }

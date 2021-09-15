@@ -887,6 +887,7 @@ impl Runner {
             ws_messages: &mut ws_messages,
             rabbitmq_publish: &mut rabbitmq_publish,
             redis_conn: &mut self.redis_conn,
+            events: &mut self.events,
             invalidate_data: &mut invalidate_data,
         };
 
@@ -914,6 +915,7 @@ impl Runner {
             ws_messages: &mut ws_messages,
             rabbitmq_publish: &mut rabbitmq_publish,
             redis_conn: &mut self.redis_conn,
+            events: &mut self.events,
             invalidate_data: &mut invalidate_data,
         };
 

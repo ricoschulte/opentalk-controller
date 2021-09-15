@@ -30,6 +30,18 @@ pub enum Error {
     Fatal(#[from] anyhow::Error),
 }
 
+#[derive(Debug, PartialEq)]
+pub enum StateMachineOutput {
+    SpeakerUpdate(rabbitmq::SpeakerUpdate),
+    StartAnimation(rabbitmq::StartAnimation),
+}
+
+pub fn map_select_unchecked(
+    output: Result<Option<rabbitmq::SpeakerUpdate>, Error>,
+) -> Result<Option<StateMachineOutput>, Error> {
+    output.map(|opt| opt.map(StateMachineOutput::SpeakerUpdate))
+}
+
 /// Selects the given participant (or None) as the current speaker and generates the appropriate
 /// [`SpeakerUpdate`] if necessary.
 /// Does not check if the participant exists or is even eligible to be speaker.
@@ -68,7 +80,9 @@ pub async fn select_unchecked(
     let history = storage::history::get(redis_conn, room, config.started).await?;
 
     let remaining = match config.parameter.selection_strategy {
-        SelectionStrategy::None | SelectionStrategy::Random | SelectionStrategy::Nomination => None,
+        SelectionStrategy::None | SelectionStrategy::Random | SelectionStrategy::Nomination => {
+            Some(storage::allow_list::get_all(redis_conn, room).await?)
+        }
         SelectionStrategy::Playlist => Some(storage::playlist::get_all(redis_conn, room).await?),
     };
 

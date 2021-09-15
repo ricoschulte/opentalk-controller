@@ -1,4 +1,4 @@
-use super::Error;
+use super::{Error, StateMachineOutput};
 use crate::config::{Parameter, SelectionStrategy, StorageConfig};
 use crate::{rabbitmq, storage};
 use anyhow::Result;
@@ -15,33 +15,32 @@ pub async fn select_random<R: Rng>(
     room: RoomId,
     config: &StorageConfig,
     rng: &mut R,
-) -> Result<Option<rabbitmq::SpeakerUpdate>, Error> {
+) -> Result<Option<StateMachineOutput>, Error> {
     let participant = match &config.parameter {
         Parameter {
             selection_strategy:
                 SelectionStrategy::None | SelectionStrategy::Random | SelectionStrategy::Nomination,
-            allow_double_selection: false,
+            allow_double_selection,
             ..
         } => {
-            // GET RANDOM MEMBER FROM (ALLOW_LIST - HISTORY)
-            let allow_list = storage::allow_list::get_all(redis_conn, room).await?;
-            let history = storage::history::get(redis_conn, room, config.started).await?;
+            if config.parameter.animation_on_random {
+                let pool = storage::allow_list::get_all(redis_conn, room).await?;
+                let selection = pool.choose(rng).copied();
 
-            let available: Vec<_> = allow_list
-                .into_iter()
-                .filter(|p| !history.contains(p))
-                .collect();
-
-            available.choose(rng).copied()
-        }
-        Parameter {
-            selection_strategy:
-                SelectionStrategy::None | SelectionStrategy::Random | SelectionStrategy::Nomination,
-            allow_double_selection: true,
-            ..
-        } => {
-            // GET RANDOM MEMBER FROM ALLOW_LIST
-            storage::allow_list::random(redis_conn, room).await?
+                if let Some(result) = selection {
+                    return Ok(Some(StateMachineOutput::StartAnimation(
+                        rabbitmq::StartAnimation { pool, result },
+                    )));
+                } else {
+                    None
+                }
+            } else if *allow_double_selection {
+                // GET RANDOM MEMBER FROM ALLOW_LIST
+                storage::allow_list::random(redis_conn, room).await?
+            } else {
+                // POP RANDOM MEMBER FROM ALLOW_LIST
+                storage::allow_list::pop_random(redis_conn, room).await?
+            }
         }
         Parameter {
             selection_strategy: SelectionStrategy::Playlist,
@@ -60,13 +59,16 @@ pub async fn select_random<R: Rng>(
         }
     };
 
-    super::select_unchecked(redis_conn, room, config, participant).await
+    super::map_select_unchecked(
+        super::select_unchecked(redis_conn, room, config, participant).await,
+    )
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
     use crate::state_machine::test::{rng, setup, unix_epoch, ROOM};
+    use crate::state_machine::StateMachineOutput;
     use serial_test::serial;
     use storage::history::{Entry, EntryKind};
 
@@ -171,15 +173,18 @@ mod test {
                 show_list: false,
                 consider_hand_raise: false,
                 time_limit: None,
-                pause_time: None,
                 allow_double_selection: false,
+                animation_on_random: false,
             },
         };
 
         // === SELECT FIRST
-        select_random(&mut redis_conn, ROOM, &config, &mut rng)
-            .await
-            .unwrap();
+        assert!(matches!(
+            select_random(&mut redis_conn, ROOM, &config, &mut rng)
+                .await
+                .unwrap(),
+            Some(StateMachineOutput::SpeakerUpdate(_))
+        ));
 
         let first = storage::speaker::get(&mut redis_conn, ROOM)
             .await
@@ -233,6 +238,41 @@ mod test {
         );
     }
 
+    /// Tests that random selection returns a StartAnimation response when animation_on_random is true
+    #[tokio::test]
+    #[serial]
+    async fn start_animation() {
+        let mut redis_conn = setup().await;
+        let mut rng = rng();
+
+        let p1 = ParticipantId::new_test(1);
+        let p2 = ParticipantId::new_test(2);
+        let p3 = ParticipantId::new_test(3);
+
+        storage::allow_list::set(&mut redis_conn, ROOM, &[p1, p2, p3])
+            .await
+            .unwrap();
+
+        let config = StorageConfig {
+            started: unix_epoch(0),
+            parameter: Parameter {
+                selection_strategy: SelectionStrategy::None,
+                show_list: false,
+                consider_hand_raise: false,
+                time_limit: None,
+                allow_double_selection: false,
+                animation_on_random: true,
+            },
+        };
+
+        assert!(matches!(
+            select_random(&mut redis_conn, ROOM, &config, &mut rng)
+                .await
+                .unwrap(),
+            Some(StateMachineOutput::StartAnimation(_))
+        ));
+    }
+
     /// Test random selection when selection_strategy is None and double selection is forbidden
     /// 3 entries are added to the allow_list, two entries are added to the history.
     /// Assert that the third entry is returned by select_random
@@ -250,54 +290,6 @@ mod test {
             .await
             .unwrap();
 
-        storage::history::add(
-            &mut redis_conn,
-            ROOM,
-            &Entry {
-                timestamp: unix_epoch(1),
-                participant: p1,
-                kind: EntryKind::Start,
-            },
-        )
-        .await
-        .unwrap();
-
-        storage::history::add(
-            &mut redis_conn,
-            ROOM,
-            &Entry {
-                timestamp: unix_epoch(2),
-                participant: p1,
-                kind: EntryKind::Stop,
-            },
-        )
-        .await
-        .unwrap();
-
-        storage::history::add(
-            &mut redis_conn,
-            ROOM,
-            &Entry {
-                timestamp: unix_epoch(3),
-                participant: p3,
-                kind: EntryKind::Start,
-            },
-        )
-        .await
-        .unwrap();
-
-        storage::history::add(
-            &mut redis_conn,
-            ROOM,
-            &Entry {
-                timestamp: unix_epoch(4),
-                participant: p3,
-                kind: EntryKind::Stop,
-            },
-        )
-        .await
-        .unwrap();
-
         let config = StorageConfig {
             started: unix_epoch(0),
             parameter: Parameter {
@@ -305,8 +297,8 @@ mod test {
                 show_list: false,
                 consider_hand_raise: false,
                 time_limit: None,
-                pause_time: None,
                 allow_double_selection: false,
+                animation_on_random: false,
             },
         };
 
@@ -319,7 +311,7 @@ mod test {
             .unwrap()
             .unwrap();
 
-        assert_eq!(speaker, p2);
+        assert!([p1, p2, p3].contains(&speaker));
     }
 
     /// Test random selection when selection_strategy is Playlist
@@ -370,8 +362,8 @@ mod test {
                 show_list: false,
                 consider_hand_raise: false,
                 time_limit: None,
-                pause_time: None,
                 allow_double_selection: false,
+                animation_on_random: false,
             },
         };
 
@@ -487,8 +479,8 @@ mod test {
                 show_list: false,
                 consider_hand_raise: false,
                 time_limit: None,
-                pause_time: None,
                 allow_double_selection: true,
+                animation_on_random: false,
             },
         };
 
