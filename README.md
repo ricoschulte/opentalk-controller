@@ -45,3 +45,13 @@ Inside the crates folder following crates can be found
 ### automod
 
 - signaling module implementing automoderation for videoconferences
+
+## Build the container image
+
+The `Dockerfile` is located in `ci/Dockerfile`.
+
+To build the image, execute in the root of the repository:
+
+```bash
+ docker build -f ci/Dockerfile . --tag <your tag>
+```
