@@ -40,6 +40,10 @@ pub enum Message {
     /// SDP request offer
     #[serde(rename = "subscribe")]
     Subscribe(Target),
+
+    /// SDP request to configure subscription
+    #[serde(rename = "configure")]
+    Configure(TargetConfigure),
 }
 
 #[derive(Debug, Deserialize)]
@@ -79,13 +83,37 @@ pub struct TargetedCandidate {
 
 #[derive(Debug, Deserialize)]
 pub struct Target {
-    /// The target of this SDP message.
+    /// The target of this message.
     ///
     /// If the own ID is specified it is used to negotiate the publish stream.
     pub target: ParticipantId,
 
     /// The type of stream
     pub media_session_type: MediaSessionType,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TargetConfigure {
+    /// The target of this message.
+    ///
+    /// If the own ID is specified it is used to configure the publish stream.
+    pub target: ParticipantId,
+
+    /// The type of stream
+    pub media_session_type: MediaSessionType,
+
+    /// New Configuration
+    ///
+    /// Contains the configuration changes/settings to be applied.
+    pub configuration: SubscriberConfiguration,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SubscriberConfiguration {
+    /// Substream
+    ///
+    /// If enabled, the selected substream of the three (0-2) available
+    pub substream: Option<u8>,
 }
 
 #[cfg(test)]

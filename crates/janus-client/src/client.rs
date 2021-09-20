@@ -745,7 +745,11 @@ async fn event_handling_loop_inner(
             }
         }
         Err(e) => {
-            log::error!("Got invalid json from rabbitmq, {}", e);
+            log::error!(
+                "Got invalid json from rabbitmq, {} (raw message: {})",
+                e,
+                msg
+            );
             Err(e.into())
         }
     }

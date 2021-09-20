@@ -1,7 +1,9 @@
+use crate::incoming::SubscriberConfiguration;
 use crate::settings;
 use anyhow::{bail, Context, Result};
 use controller::prelude::*;
 use controller::settings::SharedSettings;
+use janus_client::outgoing::VideoRoomPluginConfigureSubscriber;
 use janus_client::types::{SdpAnswer, SdpOffer};
 use janus_client::{ClientId, JanusMessage, JsepType, RoomId as JanusRoomId, TrickleCandidate};
 use redis::aio::ConnectionManager;
@@ -818,6 +820,13 @@ impl JanusSubscriber {
 
                 Ok(Response::None)
             }
+            Request::Configure(configuration) => {
+                self.configure_subscriber(configuration)
+                    .await
+                    .context("Failed to configure subscriber")?;
+
+                Ok(Response::None)
+            }
             _ => panic!("Invalid request passed to JanusSubscriber::send_message"),
         }
     }
@@ -837,32 +846,43 @@ impl JanusSubscriber {
 
     /// Joins the room of the publisher this [JanusSubscriber](JanusSubscriber) is subscriber to
     async fn join_room(&self) -> Result<janus_client::Jsep> {
-        let join_response = self
-            .handle
-            .send(janus_client::outgoing::VideoRoomPluginJoinSubscriber {
-                room: self.room_id,
-                feed: janus_client::FeedId::new(self.media_session_key.1.into()),
-                private_id: None,
-                close_pc: None,
-                audio: None,
-                video: None,
-                data: None,
-                offer_audio: None,
-                offer_video: None,
-                offer_data: None,
-                substream: None,
-                temporal_layer: None,
-                spatial_layer: None,
-                temporal: None,
-            })
-            .await;
+        let feed = janus_client::FeedId::new(self.media_session_key.1.into());
+        let join_request =
+            janus_client::outgoing::VideoRoomPluginJoinSubscriber::builder(self.room_id, feed)
+                .build();
+
+        let join_response = self.handle.send(join_request).await;
 
         match join_response {
             Ok((janus_client::incoming::VideoRoomPluginDataAttached { .. }, Some(jsep))) => {
+                log::debug!("Join room got Jsep/SDP: {:?}", jsep);
                 Ok(jsep)
             }
-            Ok((_, None)) => bail!("Got invalid response on join_room, missing jsep"),
+            Ok((data, None)) => bail!(
+                "Got invalid response on join_room, missing jsep. Got {:?}",
+                data
+            ),
             Err(e) => bail!("Failed to join room, {}", e),
+        }
+    }
+
+    /// Configure the subscriber
+    async fn configure_subscriber(&self, configuration: SubscriberConfiguration) -> Result<()> {
+        let configure_request = VideoRoomPluginConfigureSubscriber::builder()
+            .substream(configuration.substream)
+            .build();
+
+        match self.handle.send(configure_request).await {
+            Ok((configured_event, Some(jsep))) => {
+                log::debug!("Configure subscriber got Event: {:?}", configured_event);
+                log::debug!("Configure subscriber got Jsep/SDP: {:?}", jsep);
+                Ok(())
+            }
+            Ok((configured_event, None)) => {
+                log::debug!("Configure subscriber got Event: {:?}", configured_event);
+                Ok(())
+            }
+            Err(e) => bail!("Failed to configure subscriber, {}", e),
         }
     }
 
@@ -961,6 +981,12 @@ async fn forward_janus_message(
                     janus_client::incoming::VideoRoomPluginData::SlowLink(_) => {
                         log::trace!(
                             "Participant {}: Got a slow link event for its room",
+                            media_session_key
+                        );
+                    }
+                    janus_client::incoming::VideoRoomPluginData::Event(_) => {
+                        log::trace!(
+                            "Participant {}: Got a plugin event for its room",
                             media_session_key
                         );
                     }

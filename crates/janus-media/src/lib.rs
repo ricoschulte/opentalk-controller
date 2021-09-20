@@ -1,6 +1,7 @@
 use anyhow::{bail, Context, Result};
 use controller::prelude::*;
 use controller::Controller;
+use incoming::TargetConfigure;
 use janus_client::TrickleCandidate;
 use mcu::McuPool;
 use mcu::{
@@ -206,6 +207,14 @@ impl SignalingModule for Media {
                     log::error!("Failed to handle sdp request-offer {:?}, {:?}", target, e);
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process requestOffer",
+                    });
+                }
+            }
+            Event::WsMessage(incoming::Message::Configure(target)) => {
+                if let Err(e) = self.handle_configure(target).await {
+                    log::error!("Failed to handle configure request {:?}", e);
+                    ctx.ws_send(outgoing::Message::Error {
+                        text: "Failed to process configure request",
                     });
                 }
             }
@@ -527,6 +536,22 @@ impl Media {
             Response::SdpAnswer(_) | Response::None => {
                 bail!("Expected McuResponse::SdpOffer(..) got {:?}", response)
             }
+        }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
+    async fn handle_configure(&mut self, target: TargetConfigure) -> Result<()> {
+        if let Some(subscriber) = self
+            .media
+            .get_subscriber(target.target, target.media_session_type)
+        {
+            subscriber
+                .send_message(Request::Configure(target.configuration))
+                .await?;
+        } else {
+            log::info!("Attempt to configure none existing subscriber");
         }
 
         Ok(())

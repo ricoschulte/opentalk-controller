@@ -1,3 +1,4 @@
+use crate::incoming::SubscriberConfiguration;
 use anyhow::anyhow;
 use controller::prelude::*;
 use janus_client::{Jsep, TrickleCandidate};
@@ -12,6 +13,7 @@ pub enum Request {
     SdpAnswer(String),
     Candidate(TrickleCandidate),
     EndOfCandidates,
+    Configure(SubscriberConfiguration),
 }
 
 #[derive(Debug)]
