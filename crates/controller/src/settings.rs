@@ -209,7 +209,7 @@ pub struct RabbitMqConfig {
 }
 
 const fn default_http_port() -> u16 {
-    80
+    11311
 }
 
 const fn internal_http_port() -> u16 {

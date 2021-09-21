@@ -43,8 +43,8 @@ password = "password123"
 
 
 [http]
-# The port to bind the HTTP Server to (defaults to 80).
-port = 8000
+# The port to bind the HTTP Server to (defaults to 11311).
+port = 11311
 # URLs that requests are allowed from. Leave empty to allow all.
 cors.allowed_origin = ["https://localhost:8080"]
 

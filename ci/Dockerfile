@@ -40,4 +40,5 @@ WORKDIR /controller
 COPY --from=Builder /controller/target/x86_64-unknown-linux-musl/release/k3k-controller .
 COPY extra/example.toml config.toml
 
+EXPOSE 11311
 ENTRYPOINT [ "./k3k-controller" ]
