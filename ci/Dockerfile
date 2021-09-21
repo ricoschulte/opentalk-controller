@@ -1,8 +1,8 @@
 FROM rust:alpine AS Builder
 
-RUN apk add gcc musl-dev postgresql-dev
-
 WORKDIR /controller
+
+RUN apk add gcc musl-dev postgresql-dev
 
 RUN rustup target add x86_64-unknown-linux-musl
 RUN rustup update
@@ -26,7 +26,8 @@ RUN touch src/main.rs
 RUN mkdir .cargo
 RUN cargo vendor > .cargo/config
 
-COPY . .
+COPY src src
+COPY crates crates
 
 RUN cargo build --release --target=x86_64-unknown-linux-musl
 
@@ -37,6 +38,6 @@ RUN apk add musl-dev postgresql-dev
 WORKDIR /controller
 
 COPY --from=Builder /controller/target/x86_64-unknown-linux-musl/release/k3k-controller .
-COPY --from=Builder /controller/extra/example.toml config.toml
+COPY extra/example.toml config.toml
 
 ENTRYPOINT [ "./k3k-controller" ]
