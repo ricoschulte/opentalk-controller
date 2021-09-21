@@ -1,11 +1,8 @@
-FROM rust:alpine AS Builder
+FROM rust:slim AS Builder
 
 WORKDIR /controller
 
-RUN apk add gcc musl-dev postgresql-dev
-
-RUN rustup target add x86_64-unknown-linux-musl
-RUN rustup update
+RUN apt-get update && apt-get install -y libpq-dev
 
 COPY ./crates/automod/Cargo.toml ./crates/automod/Cargo.toml
 COPY ./crates/chat/Cargo.toml ./crates/chat/Cargo.toml
@@ -29,15 +26,15 @@ RUN cargo vendor > .cargo/config
 COPY src src
 COPY crates crates
 
-RUN cargo build --release --target=x86_64-unknown-linux-musl
+RUN cargo build --release
 
-FROM alpine
+FROM debian:bullseye-slim
 
-RUN apk add musl-dev postgresql-dev
+RUN apt-get update && apt-get install -y libpq5
 
 WORKDIR /controller
 
-COPY --from=Builder /controller/target/x86_64-unknown-linux-musl/release/k3k-controller .
+COPY --from=Builder /controller/target/release/k3k-controller .
 COPY extra/example.toml config.toml
 
 EXPOSE 11311
