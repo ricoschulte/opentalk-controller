@@ -1,3 +1,5 @@
+use crate::error::{Error, ErrorKind};
+use crate::rabbitmq::{CancelReason, FinalResults, StopKind};
 use crate::VoteOption;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -29,10 +31,6 @@ impl_to_redis_args!(ProtocolKey);
 /// Contains the event that will be logged in the vote protocol with some meta data.
 #[derive(Debug, Serialize, PartialEq, Eq, Deserialize)]
 pub(crate) struct ProtocolEntry {
-    /// The user id of the entry issuer
-    pub(crate) user_id: UserId,
-    /// The participant id if the entry issuer
-    pub(crate) participant_id: ParticipantId,
     /// The time that an entry got created
     pub(crate) timestamp: DateTime<Utc>,
     /// The event of this entry
@@ -44,50 +42,84 @@ impl_from_redis_value_de!(ProtocolEntry);
 
 impl ProtocolEntry {
     /// Create a new protocol entry
-    pub(crate) fn new(user_id: UserId, participant_id: ParticipantId, event: VoteEvent) -> Self {
-        Self::new_with_time(Utc::now(), user_id, participant_id, event)
+    pub(crate) fn new(event: VoteEvent) -> Self {
+        Self::new_with_time(Utc::now(), event)
     }
 
     /// Create a new protocol entry using the provided `timestamp`
-    pub(crate) fn new_with_time(
-        timestamp: DateTime<Utc>,
-        user_id: UserId,
-        participant_id: ParticipantId,
-        event: VoteEvent,
-    ) -> Self {
-        Self {
-            user_id,
-            participant_id,
-            timestamp,
-            event,
-        }
+    pub(crate) fn new_with_time(timestamp: DateTime<Utc>, event: VoteEvent) -> Self {
+        Self { timestamp, event }
     }
 }
 
 /// A event related to an active vote
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "event")]
 pub(crate) enum VoteEvent {
     /// The vote started
-    Start(crate::rabbitmq::Parameters),
+    Start(Start),
     /// A vote has been casted
-    Vote(VoteOption),
+    Vote(Vote),
     /// The vote has been stopped
-    Stop,
+    Stop(StopKind),
+    /// The final vote results
+    FinalResults(FinalResults),
     /// The vote has been canceled
-    Cancel(Reason),
+    Cancel(Cancel),
 }
 
 impl_to_redis_args_se!(VoteEvent);
 
-/// Reason for the cancel
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) enum Reason {
-    /// The room got destroyed and the server canceled the vote
-    RoomDestroyed,
-    /// The initiator left the room and the server canceled the vote
-    InitiatorLeft,
-    /// Custom reason for a cancel
-    Custom(String),
+pub(crate) struct Start {
+    /// User id of the initiator
+    pub(crate) issuer: UserId,
+    /// Vote parameters
+    pub(crate) parameters: crate::rabbitmq::Parameters,
+}
+
+/// A vote entry represents either a public or secret vote entry
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) enum Vote {
+    /// Public vote entry
+    Public(PublicVote),
+    /// Secret vote entry
+    Secret(SecretVote),
+}
+
+impl Vote {
+    pub(crate) fn get_vote_option(&self) -> VoteOption {
+        match self {
+            Vote::Public(public) => public.option,
+            Vote::Secret(secret) => secret.option,
+        }
+    }
+}
+
+/// A public vote entry mapped to a specific user
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct PublicVote {
+    /// The user id of the voting user, `None` when the vote is secret
+    pub(crate) issuer: UserId,
+    /// The users participant id, used when reducing the protocol for the frontend
+    pub(crate) participant_id: ParticipantId,
+    /// The chosen vote option
+    pub(crate) option: VoteOption,
+}
+
+/// A secret vote entry with no mapping to any user
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct SecretVote {
+    /// The chosen vote option
+    pub(crate) option: VoteOption,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct Cancel {
+    /// The user id of the entry issuer
+    pub(crate) issuer: UserId,
+    /// The reason for the cancel
+    pub(crate) reason: CancelReason,
 }
 
 /// Add an entry to the vote protocol of `vote_id`
@@ -119,18 +151,29 @@ pub(crate) async fn get(
         .context("Failed to get vote protocol")
 }
 
-/// Filters the protocol for vote events and returns a map of participants with their chosen vote option
+/// Filters the protocol for vote events and returns a list of [`Vote`] events
 #[tracing::instrument(name = "legalvote_reduce_protocol", skip(protocol))]
-pub(crate) fn reduce_protocol(protocol: Vec<ProtocolEntry>) -> HashMap<ParticipantId, VoteOption> {
+pub(crate) fn reduce_public_protocol(
+    protocol: Vec<ProtocolEntry>,
+) -> Result<HashMap<ParticipantId, VoteOption>, Error> {
     protocol
-        .iter()
+        .into_iter()
         .filter_map(|entry| {
-            if let VoteEvent::Vote(option) = entry.event {
-                Some((entry, option))
+            if let VoteEvent::Vote(vote) = entry.event {
+                Some(vote)
             } else {
                 None
             }
         })
-        .map(|(entry, option)| (entry.participant_id, option))
-        .collect()
+        .map(|vote| {
+            if let Vote::Public(public_vote) = vote {
+                Ok((public_vote.participant_id, public_vote.option))
+            } else {
+                Err(anyhow::Error::msg(
+                    "Unexpected secret vote in public vote protocol",
+                ))
+            }
+        })
+        .collect::<Result<HashMap<ParticipantId, VoteOption>>>()
+        .map_err(|_e| Error::Vote(ErrorKind::Inconsistency))
 }

@@ -1,20 +1,26 @@
+use crate::rabbitmq::CancelReason;
 use anyhow::Context;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use controller::db::legal_votes::VoteId;
 use controller::db::users::UserId;
+use controller::prelude::futures::stream::once;
+use controller::prelude::futures::FutureExt;
 use controller::{db::DbInterface, prelude::*};
 use error::{Error, ErrorKind};
-use incoming::Stop;
 use incoming::VoteMessage;
-use outgoing::VoteResponse;
-use outgoing::{Response, VoteFailed, VoteResults};
-use rabbitmq::{Cancel, Parameters, StopVote};
+use outgoing::{Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess, Votes};
+use rabbitmq::{Cancel, Invalid, Parameters, StopKind};
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use storage::protocol::{reduce_protocol, ProtocolEntry, VoteEvent};
+use std::time::Duration;
+use storage::protocol;
+use storage::protocol::{
+    reduce_public_protocol, ProtocolEntry, PublicVote, SecretVote, Vote, VoteEvent,
+};
 use storage::VoteScriptResult;
+use tokio::time::sleep;
 
 mod error;
 pub mod incoming;
@@ -36,6 +42,11 @@ pub enum VoteOption {
 impl_to_redis_args_se!(VoteOption);
 impl_from_redis_value_de!(VoteOption);
 
+/// A TimerEvent used for the vote expiration feature
+pub struct TimerEvent {
+    vote_id: VoteId,
+}
+
 /// The legal vote [`SignalingModule`]
 ///
 /// Holds a database interface and information about the underlying user & room. Vote information is
@@ -54,7 +65,7 @@ impl SignalingModule for LegalVote {
     type Incoming = incoming::Message;
     type Outgoing = outgoing::Message;
     type RabbitMqMessage = rabbitmq::Event;
-    type ExtEvent = ();
+    type ExtEvent = TimerEvent;
     type FrontendData = ();
     type PeerFrontendData = ();
 
@@ -80,31 +91,69 @@ impl SignalingModule for LegalVote {
             Event::Joined { .. } => match self.handle_joined(ctx.redis_conn()).await {
                 Ok(current_vote_info) => {
                     if let Some((parameters, results)) = current_vote_info {
+                        let vote_id = parameters.vote_id;
+
                         ctx.ws_send(outgoing::Message::Started(parameters));
-                        ctx.ws_send(outgoing::Message::Updated(results));
+                        ctx.ws_send(outgoing::Message::Updated(VoteResults { vote_id, results }));
                     }
                 }
-                Err(error) => self.handle_error(ctx, error)?,
+                Err(error) => self.handle_error(&mut ctx, error)?,
             },
             Event::Leaving => {
                 if let Err(error) = self.handle_leaving(&mut ctx).await {
-                    self.handle_error(ctx, error)?;
+                    self.handle_error(&mut ctx, error)?;
                 }
             }
 
             Event::WsMessage(msg) => {
                 if let Err(error) = self.handle_ws_message(&mut ctx, msg).await {
-                    self.handle_error(ctx, error)?;
+                    self.handle_error(&mut ctx, error)?;
                 }
             }
             Event::RabbitMq(event) => {
                 if let Err(error) = self.handle_rabbitmq_message(&mut ctx, event).await {
-                    self.handle_error(ctx, error)?;
+                    self.handle_error(&mut ctx, error)?;
                 }
             }
+            Event::Ext(timer_event) => {
+                let vote_status =
+                    storage::get_vote_status(ctx.redis_conn(), self.room_id, timer_event.vote_id)
+                        .await?;
+
+                match vote_status {
+                    storage::VoteStatus::Active => {
+                        let stop_kind = StopKind::Expired;
+
+                        let expired_entry =
+                            ProtocolEntry::new(protocol::VoteEvent::Stop(stop_kind));
+
+                        if let Err(error) = self
+                            .end_vote(&mut ctx, timer_event.vote_id, expired_entry, stop_kind)
+                            .await
+                        {
+                            match error {
+                                Error::Vote(kind) => {
+                                    // todo: invald results
+                                    log::error!("Failed to stop expired vote, error: {}", kind)
+                                }
+                                Error::Fatal(fatal) => {
+                                    self.handle_fatal_error(&mut ctx, fatal)?;
+                                }
+                            }
+                        }
+                    }
+                    storage::VoteStatus::Complete => {
+                        // vote got stopped manually already, nothing to do
+                    }
+                    storage::VoteStatus::Unknown => {
+                        log::warn!("Legal vote timer contains an unknown vote id");
+                        // todo: timer event references a unknown vote id
+                    }
+                }
+            }
+
             // ignored events
-            Event::Ext(_)
-            | Event::RaiseHand
+            Event::RaiseHand
             | Event::LowerHand
             | Event::ParticipantJoined(_, _)
             | Event::ParticipantLeft(_)
@@ -123,7 +172,7 @@ impl SignalingModule for LegalVote {
                             .cancel_vote_unchecked(
                                 ctx.redis_conn(),
                                 current_vote_id,
-                                storage::protocol::Reason::RoomDestroyed,
+                                CancelReason::RoomDestroyed,
                             )
                             .await
                         {
@@ -178,6 +227,13 @@ impl LegalVote {
                     .await
                 {
                     Ok(rabbitmq_parameters) => {
+                        if let Some(duration) = rabbitmq_parameters.inner.duration {
+                            ctx.add_event_stream(once(
+                                sleep(Duration::from_secs(duration))
+                                    .map(move |_| TimerEvent { vote_id }),
+                            ));
+                        }
+
                         ctx.rabbitmq_publish(
                             control::rabbitmq::current_room_exchange_name(self.room_id),
                             control::rabbitmq::room_all_routing_key().into(),
@@ -194,17 +250,8 @@ impl LegalVote {
                     }
                 }
             }
-            incoming::Message::Stop(Stop { vote_id }) => {
-                self.stop_vote(ctx.redis_conn(), vote_id).await?;
-
-                self.save_protocol_in_database(ctx.redis_conn(), vote_id)
-                    .await?;
-
-                ctx.rabbitmq_publish(
-                    control::rabbitmq::current_room_exchange_name(self.room_id),
-                    control::rabbitmq::room_all_routing_key().into(),
-                    rabbitmq::Event::Stop(StopVote { vote_id }),
-                );
+            incoming::Message::Stop(incoming::Stop { vote_id }) => {
+                self.stop_vote_routine(ctx, vote_id).await?;
             }
             incoming::Message::Cancel(incoming::Cancel { vote_id, reason }) => {
                 self.cancel_vote(ctx.redis_conn(), vote_id, reason.clone())
@@ -218,25 +265,50 @@ impl LegalVote {
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Event::Cancel(Cancel {
                         vote_id,
-                        reason: rabbitmq::Reason::Custom(reason),
+                        reason: rabbitmq::CancelReason::Custom(reason),
                     }),
                 );
             }
             incoming::Message::Vote(vote_message) => {
-                let vote_response = self.cast_vote(ctx.redis_conn(), vote_message).await?;
+                let (vote_response, auto_stop) = self.cast_vote(ctx, vote_message).await?;
 
-                ctx.ws_send(outgoing::Message::Voted(vote_response));
-
-                if vote_response.response == Response::Success {
+                if let Response::Success(VoteSuccess {
+                    vote_option,
+                    issuer,
+                }) = vote_response.response
+                {
                     let update = rabbitmq::Event::Update(rabbitmq::VoteUpdate {
                         vote_id: vote_message.vote_id,
                     });
+
+                    // Send a vote success message to all participants that have the same user id
+                    ctx.rabbitmq_publish(
+                        control::rabbitmq::current_room_exchange_name(self.room_id),
+                        control::rabbitmq::room_user_routing_key(self.user_id),
+                        rabbitmq::Event::Voted(rabbitmq::VoteSuccess {
+                            vote_id: vote_message.vote_id,
+                            vote_option,
+                            issuer,
+                        }),
+                    );
 
                     ctx.rabbitmq_publish(
                         control::rabbitmq::current_room_exchange_name(self.room_id),
                         control::rabbitmq::room_all_routing_key().into(),
                         update,
                     );
+
+                    if auto_stop {
+                        let stop_kind = StopKind::Auto;
+
+                        let auto_stop_entry =
+                            protocol::ProtocolEntry::new(VoteEvent::Stop(stop_kind));
+
+                        self.end_vote(ctx, vote_message.vote_id, auto_stop_entry, stop_kind)
+                            .await?;
+                    }
+                } else {
+                    ctx.ws_send(outgoing::Message::Voted(vote_response));
                 }
             }
         }
@@ -254,16 +326,58 @@ impl LegalVote {
                 ctx.ws_send(outgoing::Message::Started(parameters));
             }
             rabbitmq::Event::Stop(stop) => {
-                let results = self
-                    .get_vote_results(ctx.redis_conn(), stop.vote_id)
-                    .await?;
+                let parameters =
+                    storage::parameters::get(ctx.redis_conn(), self.room_id, stop.vote_id)
+                        .await?
+                        .ok_or(ErrorKind::InvalidVoteId)?;
 
-                ctx.ws_send(outgoing::Message::Stopped(results));
+                let final_results = match stop.results {
+                    rabbitmq::FinalResults::Valid(votes) => {
+                        if parameters.inner.secret {
+                            outgoing::FinalResults::Valid(outgoing::Results {
+                                votes,
+                                voters: None,
+                            })
+                        } else {
+                            let protocol = storage::protocol::get(
+                                ctx.redis_conn(),
+                                self.room_id,
+                                stop.vote_id,
+                            )
+                            .await?;
+
+                            outgoing::FinalResults::Valid(outgoing::Results {
+                                votes,
+                                voters: Some(reduce_public_protocol(protocol)?),
+                            })
+                        }
+                    }
+                    rabbitmq::FinalResults::Invalid(invalid) => {
+                        outgoing::FinalResults::Invalid(invalid)
+                    }
+                };
+
+                let stop = outgoing::Stop {
+                    vote_id: stop.vote_id,
+                    kind: stop.kind,
+                    results: final_results,
+                };
+
+                ctx.ws_send(outgoing::Message::Stopped(stop));
+            }
+            rabbitmq::Event::Voted(vote_success) => {
+                ctx.ws_send(outgoing::Message::Voted(VoteResponse {
+                    vote_id: vote_success.vote_id,
+                    response: outgoing::Response::Success(outgoing::VoteSuccess {
+                        vote_option: vote_success.vote_option,
+                        issuer: vote_success.issuer,
+                    }),
+                }))
             }
             rabbitmq::Event::Cancel(cancel) => {
                 ctx.ws_send(outgoing::Message::Canceled(outgoing::Canceled {
                     vote_id: cancel.vote_id,
-                    reason: cancel.reason.into(),
+                    reason: cancel.reason,
                 }));
             }
             rabbitmq::Event::Update(update) => {
@@ -271,7 +385,10 @@ impl LegalVote {
                     .get_vote_results(ctx.redis_conn(), update.vote_id)
                     .await?;
 
-                ctx.ws_send(outgoing::Message::Updated(results));
+                ctx.ws_send(outgoing::Message::Updated(VoteResults {
+                    vote_id: update.vote_id,
+                    results,
+                }));
             }
             rabbitmq::Event::FatalServerError => {
                 ctx.ws_send(outgoing::Message::Error(outgoing::ErrorKind::Internal));
@@ -326,9 +443,10 @@ impl LegalVote {
     ) -> Result<()> {
         let start_entry = ProtocolEntry::new_with_time(
             start_time,
-            self.user_id,
-            self.participant_id,
-            VoteEvent::Start(parameters),
+            VoteEvent::Start(protocol::Start {
+                issuer: self.user_id,
+                parameters,
+            }),
         );
 
         storage::protocol::add_entry(redis_conn, self.room_id, vote_id, start_entry).await?;
@@ -342,7 +460,7 @@ impl LegalVote {
         redis_conn: &mut ConnectionManager,
         vote_id: VoteId,
         allowed_participants: &[ParticipantId],
-    ) -> Result<()> {
+    ) -> Result<(), Error> {
         let allowed_users = control::storage::get_attribute_for_participants::<UserId>(
             redis_conn,
             self.room_id,
@@ -351,9 +469,65 @@ impl LegalVote {
         )
         .await?;
 
-        let allowed_users = allowed_users.into_iter().flatten().collect::<Vec<UserId>>();
+        let mut invalid_participants = Vec::new();
+        let mut users = Vec::new();
 
-        storage::allowed_users::set(redis_conn, self.room_id, vote_id, allowed_users).await?;
+        for (index, maybe_user_id) in allowed_users.into_iter().enumerate() {
+            match maybe_user_id {
+                Some(user_id) => {
+                    if !users.contains(&user_id) {
+                        users.push(user_id)
+                    }
+                }
+                None => {
+                    if let Some(participant) = allowed_participants.get(index).copied() {
+                        invalid_participants.push(participant);
+                    } else {
+                        // this should never occur
+                        log::error!(
+                            "Inconsistency in legalvote when checking allowed participants"
+                        );
+                        return Err(Error::Vote(ErrorKind::Inconsistency));
+                    }
+                }
+            }
+        }
+
+        if !invalid_participants.is_empty() {
+            return Err(Error::Vote(ErrorKind::AllowlistContainsGuests(
+                invalid_participants,
+            )));
+        }
+
+        storage::allowed_users::set(redis_conn, self.room_id, vote_id, users).await?;
+
+        Ok(())
+    }
+
+    /// Stop a vote
+    ///
+    /// Checks if the provided `vote_id` is currently active & if the participant is the initiator
+    /// before stopping the vote.
+    /// Fails with `VoteError::InvalidVoteId` when the provided `vote_id` does not match the active vote id.
+    /// Adds a `ProtocolEntry` with `VoteEvent::Stop(Stop::UserStop(<user_id>))` to the vote protocol when successful.
+    async fn stop_vote_routine(
+        &self,
+        ctx: &mut ModuleContext<'_, LegalVote>,
+        vote_id: VoteId,
+    ) -> Result<(), Error> {
+        if !self.is_current_vote_id(ctx.redis_conn(), vote_id).await? {
+            return Err(ErrorKind::InvalidVoteId.into());
+        }
+
+        if !self.is_vote_initiator(ctx.redis_conn(), vote_id).await? {
+            return Err(ErrorKind::Ineligible.into());
+        }
+
+        let stop_kind = StopKind::ByParticipant(self.participant_id);
+
+        let stop_entry = ProtocolEntry::new(VoteEvent::Stop(stop_kind));
+
+        self.end_vote(ctx, vote_id, stop_entry, stop_kind).await?;
 
         Ok(())
     }
@@ -364,62 +538,101 @@ impl LegalVote {
     /// See [`storage::vote`] & [`storage::VOTE_SCRIPT`] for more details on the vote process.
     ///
     /// # Returns
-    /// - Ok([`VoteResponse`]) in case of successfully executing [`storage::vote`], this does not necessarily mean
-    ///   that the vote itself was successful.
-    /// - Err([`Error`]) in case of an redis error or invalid `vote_message` values.
+    /// - Ok([`VoteResponse`], <should_auto_stop>) in case of successfully executing [`storage::vote`].
+    ///   Ok contains a tuple with the VoteResponse and a boolean that indicates that this was the last
+    ///   vote needed and this vote can now be auto stopped. The boolean can only be true when this feature is enabled.
+    /// - Err([`Error`]) in case of an redis error.
     async fn cast_vote(
         &self,
-        redis_conn: &mut ConnectionManager,
+        ctx: &mut ModuleContext<'_, Self>,
         vote_message: VoteMessage,
-    ) -> Result<VoteResponse, Error> {
+    ) -> Result<(VoteResponse, bool), Error> {
+        let redis_conn = ctx.redis_conn();
+
         if !self
             .is_current_vote_id(redis_conn, vote_message.vote_id)
             .await?
         {
-            return Ok(VoteResponse {
-                vote_id: vote_message.vote_id,
-                response: Response::Failed(VoteFailed::InvalidVoteId),
-            });
+            return Ok((
+                VoteResponse {
+                    vote_id: vote_message.vote_id,
+                    response: Response::Failed(VoteFailed::InvalidVoteId),
+                },
+                false,
+            ));
         }
 
         let parameters =
             match storage::parameters::get(redis_conn, self.room_id, vote_message.vote_id).await? {
                 Some(parameters) => parameters,
                 None => {
-                    return Ok(VoteResponse {
-                        vote_id: vote_message.vote_id,
-                        response: Response::Failed(VoteFailed::InvalidVoteId),
-                    });
+                    return Ok((
+                        VoteResponse {
+                            vote_id: vote_message.vote_id,
+                            response: Response::Failed(VoteFailed::InvalidVoteId),
+                        },
+                        false,
+                    ));
                 }
             };
 
         if vote_message.option == VoteOption::Abstain && !parameters.inner.enable_abstain {
-            return Ok(VoteResponse {
-                vote_id: vote_message.vote_id,
-                response: Response::Failed(VoteFailed::InvalidOption),
-            });
+            return Ok((
+                VoteResponse {
+                    vote_id: vote_message.vote_id,
+                    response: Response::Failed(VoteFailed::InvalidOption),
+                },
+                false,
+            ));
         }
+
+        let vote_event = if parameters.inner.secret {
+            Vote::Secret(SecretVote {
+                option: vote_message.option,
+            })
+        } else {
+            Vote::Public(PublicVote {
+                issuer: self.user_id,
+                participant_id: self.participant_id,
+                option: vote_message.option,
+            })
+        };
 
         let vote_result = storage::vote(
             redis_conn,
             self.room_id,
             vote_message.vote_id,
             self.user_id,
-            self.participant_id,
-            vote_message.option,
+            vote_event,
         )
         .await?;
 
-        let response = match vote_result {
-            VoteScriptResult::Success => Response::Success,
-            VoteScriptResult::InvalidVoteId => Response::Failed(VoteFailed::InvalidVoteId),
-            VoteScriptResult::Ineligible => Response::Failed(VoteFailed::Ineligible),
+        let (response, should_auto_stop) = match vote_result {
+            VoteScriptResult::Success => (
+                Response::Success(VoteSuccess {
+                    vote_option: vote_message.option,
+                    issuer: self.participant_id,
+                }),
+                false,
+            ),
+            VoteScriptResult::SuccessAutoStop => (
+                Response::Success(VoteSuccess {
+                    vote_option: vote_message.option,
+                    issuer: self.participant_id,
+                }),
+                parameters.inner.auto_stop,
+            ),
+            VoteScriptResult::InvalidVoteId => (Response::Failed(VoteFailed::InvalidVoteId), false),
+            VoteScriptResult::Ineligible => (Response::Failed(VoteFailed::Ineligible), false),
         };
 
-        Ok(VoteResponse {
-            vote_id: vote_message.vote_id,
-            response,
-        })
+        Ok((
+            VoteResponse {
+                vote_id: vote_message.vote_id,
+                response,
+            },
+            should_auto_stop,
+        ))
     }
 
     /// Check if the provided `vote_id` equals the current active vote id
@@ -468,12 +681,10 @@ impl LegalVote {
         if parameters.initiator_id == self.participant_id {
             //todo: only cancel if the setting indicate it?
 
-            self.cancel_vote_unchecked(
-                redis_conn,
-                current_vote_id,
-                storage::protocol::Reason::InitiatorLeft,
-            )
-            .await?;
+            let reason = CancelReason::InitiatorLeft;
+
+            self.cancel_vote_unchecked(redis_conn, current_vote_id, reason.clone())
+                .await?;
 
             self.save_protocol_in_database(ctx.redis_conn(), current_vote_id)
                 .await?;
@@ -483,7 +694,7 @@ impl LegalVote {
                 control::rabbitmq::room_all_routing_key().into(),
                 rabbitmq::Event::Cancel(rabbitmq::Cancel {
                     vote_id: current_vote_id,
-                    reason: rabbitmq::Reason::InitiatorLeft,
+                    reason,
                 }),
             );
         }
@@ -496,7 +707,7 @@ impl LegalVote {
         &self,
         redis_conn: &mut ConnectionManager,
         vote_id: VoteId,
-    ) -> Result<outgoing::VoteResults, Error> {
+    ) -> Result<outgoing::Results, Error> {
         let parameters = storage::parameters::get(redis_conn, self.room_id, vote_id)
             .await?
             .ok_or(ErrorKind::InvalidVoteId)?;
@@ -509,20 +720,17 @@ impl LegalVote {
         )
         .await?;
 
-        // todo: Do we want to check if the reduced sum is equal to the vote_count? need to write lua script for that as the state can change between redis calls
         if parameters.inner.secret {
-            Ok(outgoing::VoteResults {
-                vote_id,
+            Ok(outgoing::Results {
                 votes,
                 voters: None,
             })
         } else {
             let protocol = storage::protocol::get(redis_conn, self.room_id, vote_id).await?;
 
-            Ok(outgoing::VoteResults {
-                vote_id,
+            Ok(outgoing::Results {
                 votes,
-                voters: Some(reduce_protocol(protocol)),
+                voters: Some(reduce_public_protocol(protocol)?),
             })
         }
     }
@@ -545,12 +753,8 @@ impl LegalVote {
             return Err(ErrorKind::Ineligible.into());
         }
 
-        self.cancel_vote_unchecked(
-            redis_conn,
-            vote_id,
-            storage::protocol::Reason::Custom(reason),
-        )
-        .await
+        self.cancel_vote_unchecked(redis_conn, vote_id, CancelReason::Custom(reason))
+            .await
     }
 
     /// Cancel a vote without checking permissions
@@ -561,10 +765,12 @@ impl LegalVote {
         &self,
         redis_conn: &mut ConnectionManager,
         vote_id: VoteId,
-        reason: storage::protocol::Reason,
+        reason: CancelReason,
     ) -> Result<(), Error> {
-        let cancel_entry =
-            ProtocolEntry::new(self.user_id, self.participant_id, VoteEvent::Cancel(reason));
+        let cancel_entry = ProtocolEntry::new(VoteEvent::Cancel(protocol::Cancel {
+            issuer: self.user_id,
+            reason,
+        }));
 
         if !storage::end_current_vote(redis_conn, self.room_id, vote_id, cancel_entry).await? {
             return Err(ErrorKind::InvalidVoteId.into());
@@ -573,32 +779,94 @@ impl LegalVote {
         Ok(())
     }
 
-    /// Stop a vote
-    ///
-    /// Checks if the provided `vote_id` is currently active & if the participant is the initiator
-    /// before stopping the vote.
-    /// Fails with `VoteError::InvalidVoteId` when the provided `vote_id` does not match the active vote id.
-    /// Adds a `ProtocolEntry` with `VoteEvent::Stop` to the vote protocol when successful.
-    async fn stop_vote(
+    /// End the vote behind `vote_id` using the provided parameters as stop parameters
+    async fn end_vote(
         &self,
-        redis_conn: &mut ConnectionManager,
+        ctx: &mut ModuleContext<'_, Self>,
         vote_id: VoteId,
+        end_entry: ProtocolEntry,
+        stop_kind: StopKind,
     ) -> Result<(), Error> {
-        if !self.is_current_vote_id(redis_conn, vote_id).await? {
+        if !storage::end_current_vote(ctx.redis_conn(), self.room_id, vote_id, end_entry).await? {
             return Err(ErrorKind::InvalidVoteId.into());
         }
 
-        if !self.is_vote_initiator(redis_conn, vote_id).await? {
-            return Err(ErrorKind::Ineligible.into());
-        }
+        let final_results = self.validate_vote_results(ctx, vote_id).await?;
 
-        let stop_entry = ProtocolEntry::new(self.user_id, self.participant_id, VoteEvent::Stop);
+        let result_entry = ProtocolEntry::new(VoteEvent::FinalResults(final_results));
 
-        if !storage::end_current_vote(redis_conn, self.room_id, vote_id, stop_entry).await? {
-            return Err(ErrorKind::InvalidVoteId.into());
-        }
+        protocol::add_entry(ctx.redis_conn(), self.room_id, vote_id, result_entry).await?;
+
+        self.save_protocol_in_database(ctx.redis_conn(), vote_id)
+            .await?;
+
+        ctx.rabbitmq_publish(
+            control::rabbitmq::current_room_exchange_name(self.room_id),
+            control::rabbitmq::room_all_routing_key().into(),
+            rabbitmq::Event::Stop(rabbitmq::Stop {
+                vote_id,
+                kind: stop_kind,
+                results: final_results,
+            }),
+        );
 
         Ok(())
+    }
+
+    /// Checks if the vote results for `vote_id` are equal to the protocols vote entries.
+    async fn validate_vote_results(
+        &self,
+        ctx: &mut ModuleContext<'_, Self>,
+        vote_id: VoteId,
+    ) -> Result<rabbitmq::FinalResults, Error> {
+        let parameters = storage::parameters::get(ctx.redis_conn(), self.room_id, vote_id)
+            .await?
+            .ok_or(ErrorKind::InvalidVoteId)?;
+
+        let protocol = storage::protocol::get(ctx.redis_conn(), self.room_id, vote_id).await?;
+        let voters = reduce_public_protocol(protocol)?;
+
+        let mut protocol_vote_count = Votes {
+            yes: 0,
+            no: 0,
+            abstain: {
+                if parameters.inner.enable_abstain {
+                    Some(0)
+                } else {
+                    None
+                }
+            },
+        };
+
+        for (_, vote_option) in voters {
+            match vote_option {
+                VoteOption::Yes => protocol_vote_count.yes += 1,
+                VoteOption::No => protocol_vote_count.no += 1,
+                VoteOption::Abstain => {
+                    if let Some(abstain) = &mut protocol_vote_count.abstain {
+                        *abstain += 1;
+                    } else {
+                        return Ok(rabbitmq::FinalResults::Invalid(Invalid::AbstainDisabled));
+                    }
+                }
+            }
+        }
+
+        let vote_count = storage::vote_count::get(
+            ctx.redis_conn(),
+            self.room_id,
+            vote_id,
+            parameters.inner.enable_abstain,
+        )
+        .await?;
+
+        if protocol_vote_count == vote_count {
+            Ok(rabbitmq::FinalResults::Valid(vote_count))
+        } else {
+            Ok(rabbitmq::FinalResults::Invalid(
+                Invalid::VoteCountInconsistent,
+            ))
+        }
     }
 
     /// Remove the all vote related redis keys belonging to this room
@@ -659,7 +927,7 @@ impl LegalVote {
     async fn handle_joined(
         &self,
         redis_conn: &mut ConnectionManager,
-    ) -> Result<Option<(Parameters, VoteResults)>, Error> {
+    ) -> Result<Option<(Parameters, outgoing::Results)>, Error> {
         if let Some(current_vote_id) =
             storage::current_vote_id::get(redis_conn, self.room_id).await?
         {
@@ -677,24 +945,39 @@ impl LegalVote {
     }
 
     /// Check the provided `error` and handles the error cases
-    fn handle_error(&self, mut ctx: ModuleContext<'_, Self>, error: Error) -> Result<()> {
+    fn handle_error(&self, ctx: &mut ModuleContext<'_, Self>, error: Error) -> Result<()> {
         match error {
             Error::Vote(error_kind) => {
+                if let ErrorKind::Inconsistency = error_kind {
+                    // todo: handle inconsistency with vote cancel & notify users
+                }
+
                 log::debug!("Error in legal_vote module {:?}", error_kind);
                 ctx.ws_send(outgoing::Message::Error(error_kind.into()));
                 Ok(())
             }
             Error::Fatal(fatal) => {
                 // todo: error handling in case of redis error
-                ctx.rabbitmq_publish(
-                    control::rabbitmq::current_room_exchange_name(self.room_id),
-                    control::rabbitmq::room_all_routing_key().into(),
-                    rabbitmq::Event::FatalServerError,
-                );
-
-                Err(fatal.context("Fatal error in legal_vote module"))
+                self.handle_fatal_error(ctx, fatal)
             }
         }
+    }
+
+    /// Handle a fatal error
+    ///
+    /// Send a `FatalServerError` message to all participants and add context to the error
+    fn handle_fatal_error(
+        &self,
+        ctx: &mut ModuleContext<'_, Self>,
+        fatal: anyhow::Error,
+    ) -> Result<()> {
+        ctx.rabbitmq_publish(
+            control::rabbitmq::current_room_exchange_name(self.room_id),
+            control::rabbitmq::room_all_routing_key().into(),
+            rabbitmq::Event::FatalServerError,
+        );
+
+        Err(fatal.context("Fatal error in legal_vote module"))
     }
 }
 

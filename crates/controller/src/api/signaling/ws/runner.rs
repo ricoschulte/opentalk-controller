@@ -190,6 +190,16 @@ impl Builder {
             )
             .await?;
 
+        self.rabbitmq_channel
+            .queue_bind(
+                queue.name().as_str(),
+                &room_exchange,
+                &rabbitmq::room_user_routing_key(self.user.id),
+                Default::default(),
+                Default::default(),
+            )
+            .await?;
+
         let consumer = self
             .rabbitmq_channel
             .basic_consume(

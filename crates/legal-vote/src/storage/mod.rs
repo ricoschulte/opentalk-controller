@@ -3,8 +3,7 @@
 //! Contains Lua scripts to manipulate multiple redis keys atomically in one request.
 //!
 //! Each key is defined in its own module with its related functions.
-use self::protocol::{ProtocolEntry, VoteEvent};
-use super::VoteOption;
+use self::protocol::{ProtocolEntry, Vote, VoteEvent};
 use allowed_users::AllowedUsersKey;
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
@@ -54,7 +53,7 @@ return 1
 /// to the vote protocol. See [`END_CURRENT_VOTE_SCRIPT`] for details.
 ///
 /// #Returns
-/// `Ok(true)` when the vote_id was successfully moved
+/// `Ok(true)` when the vote_id was successfully moved to the history
 /// `Ok(false)` when there is no current vote active
 /// `Err(anyhow::Error)` when a redis error occurred
 #[tracing::instrument(name = "legalvote_end_current_vote", skip(redis_conn, end_entry))]
@@ -137,6 +136,8 @@ pub(crate) async fn cleanup_vote(
 /// When every check succeeds, the `vote count` for the corresponding vote option will be increased and the provided protocol
 /// entry will be pushed to the `protocol`.
 ///
+/// When the requested user is the last allowed user, the return code differs to indicate a [`protocol::Stop::AutoStop`].
+///
 /// The following parameters have to be provided:
 /// ```text
 /// ARGV[1] = vote id
@@ -151,22 +152,31 @@ pub(crate) async fn cleanup_vote(
 /// ```
 const VOTE_SCRIPT: &str = r#"
 if not (redis.call("get", KEYS[1]) == ARGV[1]) then
-  return 1
+  return 2
 end
 
 if (redis.call("srem", KEYS[2], ARGV[2]) == 1) then
   redis.call("rpush", KEYS[3], ARGV[3])
   redis.call("zincrby", KEYS[4], 1, ARGV[4])
-  return 0
+  if (redis.call("scard", KEYS[2]) == 0) then
+    return 1
+  else 
+    return 0
+  end
 else
-  return 2
+  return 3
 end
 "#;
 
 /// Mapping for codes that are returned by the [`VOTE_SCRIPT`]
 pub(crate) enum VoteScriptResult {
+    // Vote successful
     Success = 0,
+    // Vote successful & no more allowed users
+    SuccessAutoStop,
+    // Provided vote id was not active
     InvalidVoteId,
+    // User is not allowed to vote
     Ineligible,
 }
 
@@ -175,11 +185,13 @@ impl FromRedisValue for VoteScriptResult {
         if let redis::Value::Int(val) = v {
             match val {
                 0 => Ok(VoteScriptResult::Success),
-                1 => Ok(VoteScriptResult::InvalidVoteId),
-                2 => Ok(VoteScriptResult::Ineligible),
+                1 => Ok(VoteScriptResult::SuccessAutoStop),
+                2 => Ok(VoteScriptResult::InvalidVoteId),
+                3 => Ok(VoteScriptResult::Ineligible),
+
                 _ => Err(redis::RedisError::from((
                     redis::ErrorKind::TypeError,
-                    "Vote script must return int value between 0 and 2",
+                    "Vote script must return int value between 0 and 3",
                 ))),
             }
         } else {
@@ -195,19 +207,16 @@ impl FromRedisValue for VoteScriptResult {
 ///
 /// The vote is done atomically on redis with a Lua script.
 /// See [`VOTE_SCRIPT`] for more details.
-#[tracing::instrument(
-    name = "legalvote_cast_vote",
-    skip(redis_conn, user_id, participant_id, vote_option)
-)]
+#[tracing::instrument(name = "legalvote_cast_vote", skip(redis_conn, user_id, vote_event))]
 pub(crate) async fn vote(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
     vote_id: VoteId,
     user_id: UserId,
-    participant_id: ParticipantId,
-    vote_option: VoteOption,
+    vote_event: Vote,
 ) -> Result<VoteScriptResult> {
-    let entry = ProtocolEntry::new(user_id, participant_id, VoteEvent::Vote(vote_option));
+    let vote_option = vote_event.get_vote_option();
+    let entry = ProtocolEntry::new(VoteEvent::Vote(vote_event));
 
     redis::Script::new(VOTE_SCRIPT)
         .key(CurrentVoteIdKey { room_id })
@@ -218,6 +227,70 @@ pub(crate) async fn vote(
         .arg(user_id)
         .arg(entry)
         .arg(vote_option)
+        .invoke_async(redis_conn)
+        .await
+        .context("Failed to cast vote")
+}
+
+/// Check if the provided vote id is either active, complete or unknown.
+///
+/// # Returns
+/// - 0 when the provide vote id is active
+/// - 1 when the provide vote id is complete
+/// - 2 when the provide vote id is unknown
+///
+/// ```text
+/// ARGV[1] = vote id
+///
+/// KEYS[1] = current vote key
+/// KEYS[2] = vote history key
+/// ```
+const VOTE_STATUS_SCRIPT: &str = r#"
+if (redis.call("get", KEYS[1]) == ARGV[1]) then
+  return 0
+elseif (redis.call("SISMEMBER", KEYS[2], ARGV[1]) == 1) then
+  return 1
+else 
+  return 2
+end
+"#;
+
+pub(crate) enum VoteStatus {
+    Active = 0,
+    Complete,
+    Unknown,
+}
+
+impl FromRedisValue for VoteStatus {
+    fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
+        if let redis::Value::Int(val) = v {
+            match val {
+                0 => Ok(VoteStatus::Active),
+                1 => Ok(VoteStatus::Complete),
+                2 => Ok(VoteStatus::Unknown),
+                _ => Err(redis::RedisError::from((
+                    redis::ErrorKind::TypeError,
+                    "Vote status script must return int values between 0 an 2",
+                ))),
+            }
+        } else {
+            Err(redis::RedisError::from((
+                redis::ErrorKind::TypeError,
+                "Vote status script must return int value",
+            )))
+        }
+    }
+}
+
+pub(crate) async fn get_vote_status(
+    redis_conn: &mut ConnectionManager,
+    room_id: SignalingRoomId,
+    vote_id: VoteId,
+) -> Result<VoteStatus> {
+    redis::Script::new(VOTE_STATUS_SCRIPT)
+        .key(CurrentVoteIdKey { room_id })
+        .key(VoteHistoryKey { room_id })
+        .arg(vote_id)
         .invoke_async(redis_conn)
         .await
         .context("Failed to cast vote")

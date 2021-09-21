@@ -14,6 +14,7 @@ use crate::api::signaling::ws::runner::NAMESPACE;
 use crate::api::signaling::{ParticipantId, Role, SignalingRoomId};
 use crate::db::rooms::Room;
 use crate::db::users::User;
+use crate::db::users::UserId;
 use crate::db::DbInterface;
 use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
@@ -283,6 +284,7 @@ where
     room_id: SignalingRoomId,
     room: Room,
     participant_id: ParticipantId,
+    user_id: UserId,
     role: Role,
     control_data: Option<ControlData>,
     module: M,
@@ -333,6 +335,7 @@ where
             room_id: SignalingRoomId(room.uuid, breakout_room),
             room,
             participant_id,
+            user_id: user.id,
             role,
             control_data: Option::<ControlData>::None,
             module,
@@ -648,8 +651,11 @@ where
         let participant_routing_key =
             control::rabbitmq::room_participant_routing_key(self.participant_id);
 
+        let user_routing_key = control::rabbitmq::room_user_routing_key(self.user_id);
+
         if !(rabbitmq_publish.routing_key == "participant.all"
-            || rabbitmq_publish.routing_key == participant_routing_key)
+            || rabbitmq_publish.routing_key == participant_routing_key
+            || rabbitmq_publish.routing_key == user_routing_key)
         {
             return Ok(());
         }

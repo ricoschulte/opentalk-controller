@@ -20,8 +20,12 @@ pub(crate) enum ErrorKind {
     NoVoteActive,
     #[error("The provided vote id is invalid")]
     InvalidVoteId,
-    #[error("The requesting user is ineligible to vote")]
+    #[error("The requesting user is ineligible")]
     Ineligible,
+    #[error("The given allowlist contains guests")]
+    AllowlistContainsGuests(Vec<ParticipantId>),
+    #[error("The vote results are inconsistent")]
+    Inconsistency,
 }
 
 impl From<ErrorKind> for Error {
