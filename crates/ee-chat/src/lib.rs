@@ -72,7 +72,7 @@ impl SignalingModule for Chat {
 
             ctx.add_rabbitmq_binding(
                 group_routing_key(&group.id),
-                rabbitmq::room_exchange_name(ctx.room().uuid),
+                rabbitmq::current_room_exchange_name(ctx.room_id()),
                 Default::default(),
             );
         }
