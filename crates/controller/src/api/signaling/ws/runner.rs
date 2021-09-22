@@ -473,9 +473,11 @@ impl Runner {
                     }
                 }
                 Some((namespace, any)) = self.events.next() => {
-                    self.handle_module_targeted_event(namespace, DynTargetedEvent::Ext(any))
+                    let actions = self.handle_module_targeted_event(namespace, DynTargetedEvent::Ext(any))
                         .await
                         .expect("Should not get events from unknown modules");
+
+                    self.handle_module_requested_actions(actions).await;
                 }
                 _ = self.shutdown_sig.recv() => {
                     self.ws.close(CloseCode::Away).await;
@@ -483,8 +485,11 @@ impl Runner {
             }
         }
 
-        self.handle_module_broadcast_event(DynBroadcastEvent::Leaving, false)
+        let actions = self
+            .handle_module_broadcast_event(DynBroadcastEvent::Leaving, false)
             .await;
+
+        self.handle_module_requested_actions(actions).await;
 
         log::debug!("Stopping ws-runner task for participant {}", self.id);
 
@@ -609,11 +614,16 @@ impl Runner {
 
                 let mut module_data = HashMap::new();
 
-                self.handle_module_broadcast_event(
-                    DynBroadcastEvent::Joined(&control_data, &mut module_data, &mut participants),
-                    false,
-                )
-                .await;
+                let actions = self
+                    .handle_module_broadcast_event(
+                        DynBroadcastEvent::Joined(
+                            &control_data,
+                            &mut module_data,
+                            &mut participants,
+                        ),
+                        false,
+                    )
+                    .await;
 
                 self.control_data = Some(control_data);
 
@@ -634,6 +644,8 @@ impl Runner {
 
                 self.rabbitmq_publish_control(None, rabbitmq::Message::Joined(self.id))
                     .await;
+
+                self.handle_module_requested_actions(actions).await;
             }
             incoming::Message::RaiseHand => {
                 storage::set_attribute(
@@ -645,8 +657,11 @@ impl Runner {
                 )
                 .await?;
 
-                self.handle_module_broadcast_event(DynBroadcastEvent::RaiseHand, true)
+                let actions = self
+                    .handle_module_broadcast_event(DynBroadcastEvent::RaiseHand, true)
                     .await;
+
+                self.handle_module_requested_actions(actions).await;
             }
             incoming::Message::LowerHand => {
                 storage::set_attribute(
@@ -658,8 +673,11 @@ impl Runner {
                 )
                 .await?;
 
-                self.handle_module_broadcast_event(DynBroadcastEvent::LowerHand, true)
+                let actions = self
+                    .handle_module_broadcast_event(DynBroadcastEvent::LowerHand, true)
                     .await;
+
+                self.handle_module_requested_actions(actions).await;
             }
         }
 
@@ -769,11 +787,12 @@ impl Runner {
 
                 let mut participant = self.build_participant(id).await?;
 
-                self.handle_module_broadcast_event(
-                    DynBroadcastEvent::ParticipantJoined(&mut participant),
-                    false,
-                )
-                .await;
+                let actions = self
+                    .handle_module_broadcast_event(
+                        DynBroadcastEvent::ParticipantJoined(&mut participant),
+                        false,
+                    )
+                    .await;
 
                 self.ws
                     .send(Message::Text(
@@ -784,13 +803,16 @@ impl Runner {
                         .to_json(),
                     ))
                     .await;
+
+                self.handle_module_requested_actions(actions).await;
             }
             rabbitmq::Message::Left(id) => {
                 if self.id == id {
                     return Ok(());
                 }
 
-                self.handle_module_broadcast_event(DynBroadcastEvent::ParticipantLeft(id), false)
+                let actions = self
+                    .handle_module_broadcast_event(DynBroadcastEvent::ParticipantLeft(id), false)
                     .await;
 
                 self.ws
@@ -804,6 +826,8 @@ impl Runner {
                         .to_json(),
                     ))
                     .await;
+
+                self.handle_module_requested_actions(actions).await;
             }
             rabbitmq::Message::Update(id) => {
                 if self.id == id {
@@ -812,11 +836,12 @@ impl Runner {
 
                 let mut participant = self.build_participant(id).await?;
 
-                self.handle_module_broadcast_event(
-                    DynBroadcastEvent::ParticipantUpdated(&mut participant),
-                    false,
-                )
-                .await;
+                let actions = self
+                    .handle_module_broadcast_event(
+                        DynBroadcastEvent::ParticipantUpdated(&mut participant),
+                        false,
+                    )
+                    .await;
 
                 self.ws
                     .send(Message::Text(
@@ -827,6 +852,8 @@ impl Runner {
                         .to_json(),
                     ))
                     .await;
+
+                self.handle_module_requested_actions(actions).await;
             }
         }
 
@@ -893,7 +920,7 @@ impl Runner {
         &mut self,
         module: &str,
         dyn_event: DynTargetedEvent,
-    ) -> Result<(), NoSuchModuleError> {
+    ) -> Result<ModuleRequestedActions, NoSuchModuleError> {
         let mut ws_messages = vec![];
         let mut rabbitmq_publish = vec![];
         let mut invalidate_data = false;
@@ -913,10 +940,12 @@ impl Runner {
             .on_event_targeted(ctx, module, dyn_event)
             .await?;
 
-        self.handle_module_requested_actions(ws_messages, rabbitmq_publish, invalidate_data, exit)
-            .await;
-
-        Ok(())
+        Ok(ModuleRequestedActions {
+            ws_messages,
+            rabbitmq_publish,
+            invalidate_data,
+            exit,
+        })
     }
 
     /// Dispatch copyable event to all modules
@@ -924,7 +953,7 @@ impl Runner {
         &mut self,
         dyn_event: DynBroadcastEvent<'_>,
         mut invalidate_data: bool,
-    ) {
+    ) -> ModuleRequestedActions {
         let mut ws_messages = vec![];
         let mut rabbitmq_publish = vec![];
         let mut exit = None;
@@ -941,18 +970,24 @@ impl Runner {
 
         self.modules.on_event_broadcast(ctx, dyn_event).await;
 
-        self.handle_module_requested_actions(ws_messages, rabbitmq_publish, invalidate_data, exit)
-            .await;
+        ModuleRequestedActions {
+            ws_messages,
+            rabbitmq_publish,
+            invalidate_data,
+            exit,
+        }
     }
 
     /// Modules can request certain actions via the module context (e.g send websocket msg)
     /// these are executed here
     async fn handle_module_requested_actions(
         &mut self,
-        ws_messages: Vec<Message>,
-        rabbitmq_publish: Vec<RabbitMqPublish>,
-        invalidate_data: bool,
-        exit: Option<CloseCode>,
+        ModuleRequestedActions {
+            ws_messages,
+            rabbitmq_publish,
+            invalidate_data,
+            exit,
+        }: ModuleRequestedActions,
     ) {
         for ws_message in ws_messages {
             self.ws.send(ws_message).await;
@@ -978,6 +1013,14 @@ impl Runner {
             self.ws.close(exit).await;
         }
     }
+}
+
+#[must_use]
+struct ModuleRequestedActions {
+    ws_messages: Vec<Message>,
+    rabbitmq_publish: Vec<RabbitMqPublish>,
+    invalidate_data: bool,
+    exit: Option<CloseCode>,
 }
 
 fn error(text: &str) -> String {
