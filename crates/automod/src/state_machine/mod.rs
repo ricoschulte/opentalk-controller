@@ -7,7 +7,6 @@ use crate::config::{SelectionStrategy, StorageConfig};
 use crate::rabbitmq;
 use crate::storage;
 use anyhow::Result;
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use redis::aio::ConnectionManager;
 
@@ -47,7 +46,7 @@ pub fn map_select_unchecked(
 /// Does not check if the participant exists or is even eligible to be speaker.
 pub async fn select_unchecked(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     config: &StorageConfig,
     participant: Option<ParticipantId>,
 ) -> Result<Option<rabbitmq::SpeakerUpdate>, Error> {
@@ -103,7 +102,7 @@ mod test {
     use redis::aio::ConnectionManager;
     use std::time::{Duration, SystemTime};
 
-    pub const ROOM: RoomId = RoomId::from(uuid::Uuid::nil());
+    pub const ROOM: SignalingRoomId = SignalingRoomId::new_test(RoomId::from(uuid::Uuid::nil()));
 
     pub async fn setup() -> ConnectionManager {
         let redis_url =

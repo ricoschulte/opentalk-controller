@@ -3,6 +3,7 @@
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar
 //! structs are defined in the Database module [`crate::db`] for database operations.
 
+use crate::api::signaling::prelude::*;
 use crate::api::v1::{ApiError, DefaultApiError};
 use crate::db::rooms::{self as db_rooms, RoomId};
 use crate::db::users::{User, UserId};
@@ -245,6 +246,7 @@ pub async fn get(
 #[derive(Debug, Deserialize)]
 pub struct StartRequest {
     password: Option<String>,
+    breakout_room: Option<BreakoutRoomId>,
 }
 
 #[derive(Display, Validate, Debug, Clone, Serialize)]
@@ -261,10 +263,11 @@ pub struct Ticket {
 impl_to_redis_args!(&Ticket);
 
 /// Data stored behind the [`Ticket`] key.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
 pub struct TicketData {
     pub user: UserId,
     pub room: RoomId,
+    pub breakout_room: Option<BreakoutRoomId>,
 }
 
 impl_from_redis_value_de!(TicketData);
@@ -274,11 +277,13 @@ impl_to_redis_args_se!(&TicketData);
 #[serde(rename_all = "snake_case")]
 pub enum StartRoomError {
     WrongRoomPassword,
+    NoBreakoutRooms,
+    InvalidBreakoutRoomId,
 }
 
 type StartError = ApiError<StartRoomError>;
 
-/// API Endpoint *POST /rooms/{room_uuid}/start*
+/// API Endpoint *POST /rooms/{room_id}/start*
 ///
 /// This endpoint has to be called in order to get a [`Ticket`]. When joining a room, the ticket
 /// must be provided as a `Sec-WebSocket-Protocol` header field when starting the WebSocket
@@ -294,7 +299,7 @@ type StartError = ApiError<StartRoomError>;
 ///
 /// Returns [`StartError::NotFound`](ApiError::NotFound) when the requested room could not be found.
 /// Returns [`StartRoomError::WrongRoomPassword`] when the provided password is wrong.
-#[post("/rooms/{room_uuid}/start")]
+#[post("/rooms/{room_id}/start")]
 pub async fn start(
     db_ctx: Data<DbInterface>,
     redis_ctx: Data<ConnectionManager>,
@@ -329,6 +334,22 @@ pub async fn start(
         }
     }
 
+    let mut redis_conn = (**redis_ctx).clone();
+
+    if let Some(breakout_room) = request.breakout_room {
+        let config = breakout::storage::get_config(&mut redis_conn, room.uuid).await?;
+
+        if let Some(config) = config {
+            if !config.is_valid_id(breakout_room) {
+                return Err(StartError::AuthJson(
+                    StartRoomError::InvalidBreakoutRoomId.into(),
+                ));
+            }
+        } else {
+            return Err(StartError::AuthJson(StartRoomError::NoBreakoutRooms.into()));
+        }
+    }
+
     let ticket = rand::thread_rng()
         .sample_iter(rand::distributions::Alphanumeric)
         .take(64)
@@ -340,9 +361,8 @@ pub async fn start(
     let ticket_data = TicketData {
         user: current_user.id,
         room: room_id,
+        breakout_room: request.breakout_room,
     };
-
-    let mut redis_conn = (**redis_ctx).clone();
 
     // TODO: make the expiration configurable through settings
     // let the ticket expire in 30 seconds

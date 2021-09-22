@@ -1,7 +1,6 @@
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use control::rabbitmq;
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use controller::{impl_from_redis_value_de, impl_to_redis_args_se};
 use redis::aio::ConnectionManager;
@@ -35,7 +34,7 @@ impl_to_redis_args_se!(&Message);
 
 pub struct Chat {
     id: ParticipantId,
-    room: RoomId,
+    room: SignalingRoomId,
 }
 
 #[derive(Debug, Serialize)]
@@ -46,7 +45,7 @@ pub struct ChatHistory {
 impl ChatHistory {
     pub async fn for_current_room(
         redis_conn: &mut ConnectionManager,
-        room: RoomId,
+        room: SignalingRoomId,
     ) -> Result<Self> {
         let room_history = storage::get_room_chat_history(redis_conn, room).await?;
         Ok(Self { room_history })
@@ -74,7 +73,7 @@ impl SignalingModule for Chat {
         _protocol: &'static str,
     ) -> Result<Self> {
         let id = ctx.participant_id();
-        let room = ctx.room().uuid;
+        let room = ctx.room_id();
         Ok(Self { id, room })
     }
 
@@ -85,6 +84,7 @@ impl SignalingModule for Chat {
     ) -> Result<()> {
         match event {
             Event::Joined {
+                control_data: _,
                 frontend_data,
                 participants: _,
             } => {
@@ -124,7 +124,7 @@ impl SignalingModule for Chat {
                     };
 
                     ctx.rabbitmq_publish(
-                        rabbitmq::room_exchange_name(self.room),
+                        rabbitmq::current_room_exchange_name(self.room),
                         rabbitmq::room_participant_routing_key(target),
                         out_message,
                     );
@@ -145,7 +145,7 @@ impl SignalingModule for Chat {
                     .await?;
 
                     ctx.rabbitmq_publish(
-                        rabbitmq::room_exchange_name(self.room),
+                        rabbitmq::current_room_exchange_name(self.room),
                         rabbitmq::room_all_routing_key().into(),
                         out_message,
                     );

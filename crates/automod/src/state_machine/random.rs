@@ -2,7 +2,6 @@ use super::{Error, StateMachineOutput};
 use crate::config::{Parameter, SelectionStrategy, StorageConfig};
 use crate::{rabbitmq, storage};
 use anyhow::Result;
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use rand::seq::SliceRandom;
 use rand::Rng;
@@ -12,7 +11,7 @@ use redis::aio::ConnectionManager;
 /// the selection_strategy ist `random` or a moderator issues a `Select::Random` command.
 pub async fn select_random<R: Rng>(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     config: &StorageConfig,
     rng: &mut R,
 ) -> Result<Option<StateMachineOutput>, Error> {

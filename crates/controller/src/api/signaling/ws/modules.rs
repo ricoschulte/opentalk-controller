@@ -3,8 +3,10 @@ use super::{Event, ModuleContext};
 use crate::api::signaling::ws::runner::Builder;
 use crate::api::signaling::ws::{DestroyContext, InitContext, RabbitMqPublish};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
+use crate::api::signaling::ws_modules::control::ControlData;
 use crate::api::signaling::ParticipantId;
 use anyhow::{Context, Result};
+use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use async_tungstenite::tungstenite::Message;
 use futures::stream::SelectAll;
 use redis::aio::ConnectionManager;
@@ -72,6 +74,7 @@ impl Modules {
                 redis_conn: ctx.redis_conn,
                 events: ctx.events,
                 invalidate_data: ctx.invalidate_data,
+                exit: ctx.exit,
             };
 
             if let Err(e) = module.on_event_broadcast(ctx, &mut dyn_event).await {
@@ -106,6 +109,7 @@ pub enum DynTargetedEvent {
 #[derive(Debug)]
 pub enum DynBroadcastEvent<'evt> {
     Joined(
+        &'evt ControlData,
         &'evt mut HashMap<&'static str, Value>,
         &'evt mut Vec<Participant>,
     ),
@@ -125,6 +129,7 @@ pub(super) struct DynEventCtx<'ctx> {
     pub redis_conn: &'ctx mut ConnectionManager,
     pub events: &'ctx mut SelectAll<AnyStream>,
     pub invalidate_data: &'ctx mut bool,
+    pub exit: &'ctx mut Option<CloseCode>,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -163,6 +168,7 @@ where
             redis_conn: ctx.redis_conn,
             events: ctx.events,
             invalidate_data: ctx.invalidate_data,
+            exit: ctx.exit,
             m: PhantomData::<fn() -> M>,
         };
 
@@ -196,11 +202,12 @@ where
             redis_conn: ctx.redis_conn,
             events: ctx.events,
             invalidate_data: ctx.invalidate_data,
+            exit: ctx.exit,
             m: PhantomData::<fn() -> M>,
         };
 
         match dyn_event {
-            DynBroadcastEvent::Joined(module_data, participants) => {
+            DynBroadcastEvent::Joined(control_data, module_data, participants) => {
                 let mut frontend_data = None;
                 let mut participants_data = participants.iter().map(|p| (p.id, None)).collect();
 
@@ -208,6 +215,7 @@ where
                     .on_event(
                         ctx,
                         Event::Joined {
+                            control_data,
                             frontend_data: &mut frontend_data,
                             participants: &mut participants_data,
                         },
@@ -308,6 +316,7 @@ where
         let ctx = InitContext {
             id: builder.id,
             room: &builder.room,
+            breakout_room: builder.breakout_room,
             user: &builder.user,
             role: builder.role,
             db: &builder.db,

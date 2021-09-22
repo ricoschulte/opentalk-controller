@@ -1,3 +1,5 @@
+use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
+use crate::db::rooms::RoomId;
 use redis::{FromRedisValue, RedisError, RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -61,17 +63,22 @@ macro_rules! impl_to_redis_args_se {
 mod ws;
 mod ws_modules;
 
-pub use ws::ws_service;
+pub(crate) use ws::ws_service;
 
 pub mod prelude {
     pub use super::ws::{
         DestroyContext, Event, InitContext, ModuleContext, SignalingModule, SignalingModules,
         SignalingProtocols,
     };
-    pub use super::ws_modules::control;
-    pub use super::{ParticipantId, Role};
+    pub use super::ws_modules::{breakout, control};
+    pub use super::{ParticipantId, Role, SignalingRoomId};
+    pub use breakout::BreakoutRoomId;
 }
 
+/// Unique id of a participant inside a single room
+///
+/// Generated as soon as the user connects to the websocket and authenticated himself,
+/// it is used to store all participant related data and relations.
 #[derive(Debug, Serialize, Deserialize, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct ParticipantId(Uuid);
 
@@ -119,10 +126,32 @@ impl FromRedisValue for ParticipantId {
 impl_to_redis_args!(ParticipantId);
 
 /// Role of the participant inside a room
-#[derive(Debug, Serialize, Clone, Copy)]
+#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     User,
     Moderator,
-    // TODO Administrator,
+}
+
+/// The complete room id
+///
+/// It consist of the room-id inside the database and an optional
+/// breakout-room-id which is generated when the breakout rooms are created
+#[derive(Debug, Copy, Clone)]
+pub struct SignalingRoomId(RoomId, Option<BreakoutRoomId>);
+
+impl SignalingRoomId {
+    pub const fn new_test(room: RoomId) -> Self {
+        Self(room, None)
+    }
+}
+
+impl fmt::Display for SignalingRoomId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(breakout) = self.1 {
+            write!(f, "{}:{}", self.0, breakout)
+        } else {
+            self.0.fmt(f)
+        }
+    }
 }

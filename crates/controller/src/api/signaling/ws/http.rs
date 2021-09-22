@@ -74,6 +74,7 @@ pub(crate) async fn ws_service(
     let mut builder = Runner::builder(
         id,
         room,
+        ticket_data.breakout_room,
         user,
         protocol,
         db_ctx.into_inner(),
@@ -158,7 +159,7 @@ fn read_request_header(
 
                 return Err(DefaultApiError::auth_bearer_invalid_token(
                     "ticket invalid",
-                    "Please request a new ticket from /v1/rooms/<room_uuid>/start".into(),
+                    "Please request a new ticket from /v1/rooms/<room_id>/start".into(),
                 ));
             }
         },
@@ -166,7 +167,7 @@ fn read_request_header(
             log::debug!("Rejecting websocket request, missing ticket");
             return Err(DefaultApiError::auth_bearer_invalid_request(
                 "missing ticket",
-                "Please request a ticket from /v1/rooms/<room_uuid>/start".into(),
+                "Please request a ticket from /v1/rooms/<room_id>/start".into(),
             ));
         }
     };
@@ -191,7 +192,7 @@ async fn get_ticket_data_from_redis(
     let ticket_data = ticket_data.ok_or_else(|| {
         DefaultApiError::auth_bearer_invalid_token(
             "ticket invalid or expired",
-            "Please request a new ticket from /v1/rooms/<room_uuid>/start".into(),
+            "Please request a new ticket from /v1/rooms/<room_id>/start".into(),
         )
     })?;
 

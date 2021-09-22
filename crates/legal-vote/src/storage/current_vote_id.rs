@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
@@ -17,7 +16,7 @@ use redis::AsyncCommands;
 ///
 /// See [`END_CURRENT_VOTE_SCRIPT`](super::END_CURRENT_VOTE_SCRIPT) for more details.
 pub(super) struct CurrentVoteIdKey {
-    pub(super) room_id: RoomId,
+    pub(super) room_id: SignalingRoomId,
 }
 
 impl_to_redis_args!(CurrentVoteIdKey);
@@ -33,7 +32,7 @@ impl_to_redis_args!(CurrentVoteIdKey);
 #[tracing::instrument(name = "legalvote_set_current_vote_id", skip(redis_conn))]
 pub(crate) async fn set(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
     new_vote_id: VoteId,
 ) -> Result<bool> {
     // set if not exists
@@ -53,7 +52,7 @@ pub(crate) async fn set(
 #[tracing::instrument(name = "legalvote_get_current_vote_id", skip(redis_conn))]
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
 ) -> Result<Option<VoteId>> {
     redis_conn
         .get(CurrentVoteIdKey { room_id })
@@ -63,7 +62,10 @@ pub(crate) async fn get(
 
 /// Delete the current vote id key
 #[tracing::instrument(name = "legalvote_delete_current_vote_id", skip(redis_conn))]
-pub(crate) async fn delete(redis_conn: &mut ConnectionManager, room_id: RoomId) -> Result<()> {
+pub(crate) async fn delete(
+    redis_conn: &mut ConnectionManager,
+    room_id: SignalingRoomId,
+) -> Result<()> {
     redis_conn
         .del(CurrentVoteIdKey { room_id })
         .await

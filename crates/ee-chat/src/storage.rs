@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use displaydoc::Display;
 use r3dlock::{Mutex, MutexGuard};
@@ -13,7 +12,7 @@ use serde::{Deserialize, Serialize};
 #[ignore_extra_doc_attributes]
 /// A set of group members inside a room
 struct RoomGroupParticipants<'s> {
-    room: RoomId,
+    room: SignalingRoomId,
     group: &'s str,
 }
 
@@ -22,7 +21,7 @@ struct RoomGroupParticipants<'s> {
 #[ignore_extra_doc_attributes]
 /// A lock for the set of group members inside a room
 pub struct RoomGroupParticipantsLock<'s> {
-    pub room: RoomId,
+    pub room: SignalingRoomId,
     pub group: &'s str,
 }
 
@@ -31,7 +30,7 @@ pub struct RoomGroupParticipantsLock<'s> {
 #[ignore_extra_doc_attributes]
 /// A lock for the set of group members inside a room
 struct RoomGroupChatHistory<'s> {
-    room: RoomId,
+    room: SignalingRoomId,
     group: &'s str,
 }
 
@@ -41,7 +40,7 @@ impl_to_redis_args!(RoomGroupChatHistory<'_>);
 
 pub async fn add_participant_to_set(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     group: &str,
     participant: ParticipantId,
 ) -> Result<()> {
@@ -68,7 +67,7 @@ pub async fn add_participant_to_set(
 pub async fn remove_participant_from_set(
     _set_guard: &MutexGuard<'_, RoomGroupParticipantsLock<'_>>,
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     group: &str,
     participant: ParticipantId,
 ) -> Result<usize> {
@@ -97,19 +96,19 @@ impl_to_redis_args_se!(&StoredMessage);
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_group_chat_history(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     group: &str,
 ) -> Result<Vec<StoredMessage>> {
     redis_conn
         .lrange(RoomGroupChatHistory { room, group }, 0, -1)
         .await
-        .with_context(|| format!("Failed to get chat history, room={}, group={}", room, group))
+        .with_context(|| format!("Failed to get chat history, {}, group={}", room, group))
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn, message))]
 pub async fn add_message_to_group_chat_history(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     group: &str,
     message: &StoredMessage,
 ) -> Result<()> {
@@ -118,7 +117,7 @@ pub async fn add_message_to_group_chat_history(
         .await
         .with_context(|| {
             format!(
-                "Failed to add message to room chat history, room={}, group={}",
+                "Failed to add message to room chat history, {}, group={}",
                 room, group
             )
         })
@@ -127,7 +126,7 @@ pub async fn add_message_to_group_chat_history(
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn delete_group_chat_history(
     redis_conn: &mut ConnectionManager,
-    room: RoomId,
+    room: SignalingRoomId,
     group: &str,
 ) -> Result<()> {
     redis_conn
@@ -135,7 +134,7 @@ pub async fn delete_group_chat_history(
         .await
         .with_context(|| {
             format!(
-                "Failed to delete room group chat history, room={}, group={}",
+                "Failed to delete room group chat history, {}, group={}",
                 room, group
             )
         })

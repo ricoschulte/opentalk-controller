@@ -1,5 +1,4 @@
 use anyhow::{bail, Context, Result};
-use controller::db::rooms::RoomId;
 use controller::prelude::*;
 use controller::Controller;
 use janus_client::TrickleCandidate;
@@ -25,7 +24,7 @@ mod storage;
 
 pub struct Media {
     id: ParticipantId,
-    room: RoomId,
+    room: SignalingRoomId,
 
     mcu: Arc<McuPool>,
     media: MediaSessions,
@@ -66,7 +65,7 @@ impl SignalingModule for Media {
         let state = HashMap::new();
 
         let id = ctx.participant_id();
-        let room = ctx.room().uuid;
+        let room = ctx.room_id();
 
         storage::set_state(ctx.redis_conn(), room, id, &state).await?;
 
@@ -188,6 +187,18 @@ impl SignalingModule for Media {
                 }
             }
             Event::WsMessage(incoming::Message::Subscribe(target)) => {
+                // Check that the subscribtion target is inside the room
+                if !control::storage::participants_contains(
+                    ctx.redis_conn(),
+                    self.room,
+                    target.target,
+                )
+                .await?
+                {
+                    // just dicard, shouldn't happen often
+                    return Ok(());
+                }
+
                 if let Err(e) = self
                     .handle_sdp_request_offer(&mut ctx, target.target, target.media_session_type)
                     .await
@@ -261,6 +272,8 @@ impl SignalingModule for Media {
                 self.media.remove_subscribers(id).await;
             }
             Event::Joined {
+                control_data: _,
+
                 frontend_data: _,
                 participants,
             } => {

@@ -67,7 +67,6 @@ use anyhow::Context;
 use anyhow::Result;
 use chrono::Utc;
 use config::{FrontendConfig, PublicConfig, SelectionStrategy, StorageConfig};
-use controller::db::rooms::RoomId;
 use controller::prelude::futures::FutureExt;
 use controller::prelude::uuid::Uuid;
 use controller::prelude::*;
@@ -88,7 +87,7 @@ mod storage;
 
 struct AutoMod {
     id: ParticipantId,
-    room: RoomId,
+    room: SignalingRoomId,
     role: Role,
 
     current_expiry_id: Option<ExpiryId>,
@@ -131,7 +130,7 @@ impl SignalingModule for AutoMod {
     ) -> Result<Self> {
         Ok(Self {
             id: ctx.participant_id(),
-            room: ctx.room().uuid,
+            room: ctx.room_id(),
             role: ctx.role(),
             current_expiry_id: None,
             current_animation_id: None,
@@ -145,6 +144,7 @@ impl SignalingModule for AutoMod {
     ) -> Result<()> {
         match event {
             Event::Joined {
+                control_data: _,
                 frontend_data,
                 participants: _,
             } => self.on_joined(ctx, frontend_data).await,
@@ -403,7 +403,7 @@ impl AutoMod {
                 );
 
                 ctx.rabbitmq_publish(
-                    control::rabbitmq::room_exchange_name(self.room),
+                    control::rabbitmq::current_room_exchange_name(self.room),
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Message::Start(rabbitmq::Start {
                         frontend_config: FrontendConfig {
@@ -452,7 +452,7 @@ impl AutoMod {
                     // publish remaining update if remaining changed
                     if let Some(remaining) = remaining {
                         ctx.rabbitmq_publish(
-                            control::rabbitmq::room_exchange_name(self.room),
+                            control::rabbitmq::current_room_exchange_name(self.room),
                             control::rabbitmq::room_all_routing_key().into(),
                             rabbitmq::Message::RemainingUpdate(rabbitmq::RemainingUpdate {
                                 remaining,
@@ -474,7 +474,7 @@ impl AutoMod {
                     try_or_unlock!(storage::playlist::del(ctx.redis_conn(), self.room).await; ctx, guard);
 
                     ctx.rabbitmq_publish(
-                        control::rabbitmq::room_exchange_name(self.room),
+                        control::rabbitmq::current_room_exchange_name(self.room),
                         control::rabbitmq::room_all_routing_key().into(),
                         rabbitmq::Message::Stop,
                     );
@@ -653,7 +653,7 @@ impl AutoMod {
         match result {
             Ok(Some(StateMachineOutput::SpeakerUpdate(update))) => {
                 ctx.rabbitmq_publish(
-                    control::rabbitmq::room_exchange_name(self.room),
+                    control::rabbitmq::current_room_exchange_name(self.room),
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Message::SpeakerUpdate(update),
                 );
@@ -677,14 +677,14 @@ impl AutoMod {
 
                 if let Some(update) = update {
                     ctx.rabbitmq_publish(
-                        control::rabbitmq::room_exchange_name(self.room),
+                        control::rabbitmq::current_room_exchange_name(self.room),
                         control::rabbitmq::room_all_routing_key().into(),
                         rabbitmq::Message::SpeakerUpdate(update),
                     );
                 }
 
                 ctx.rabbitmq_publish(
-                    control::rabbitmq::room_exchange_name(self.room),
+                    control::rabbitmq::current_room_exchange_name(self.room),
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Message::StartAnimation(start_animation),
                 );

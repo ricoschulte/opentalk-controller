@@ -28,6 +28,7 @@ use actix_web::web::Data;
 use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{anyhow, Context, Result};
 use arc_swap::ArcSwap;
+use breakout::BreakoutRooms;
 use db::DbInterface;
 use oidc::OidcContext;
 use prelude::*;
@@ -243,6 +244,11 @@ impl Controller {
         let (shutdown, _) = broadcast::channel::<()>(1);
         let (reload, _) = broadcast::channel::<()>(4);
 
+        let mut signaling = SignalingModules::default();
+
+        // Add default modules
+        signaling.add_module::<BreakoutRooms>(());
+
         Ok(Self {
             startup_settings: settings,
             shared_settings,
@@ -254,7 +260,7 @@ impl Controller {
             redis: redis_conn,
             shutdown,
             reload,
-            signaling: SignalingModules::default(),
+            signaling,
         })
     }
 

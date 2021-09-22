@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
-use controller::db::rooms::RoomId;
 use controller::db::users::UserId;
 use controller::prelude::*;
 use displaydoc::Display;
@@ -18,7 +17,7 @@ use redis::AsyncCommands;
 ///
 /// See [`VOTE_SCRIPT`](super::VOTE_SCRIPT) for more details on the vote process.
 pub(super) struct AllowedUsersKey {
-    pub(super) room_id: RoomId,
+    pub(super) room_id: SignalingRoomId,
     pub(super) vote_id: VoteId,
 }
 
@@ -28,7 +27,7 @@ impl_to_redis_args!(AllowedUsersKey);
 #[tracing::instrument(name = "legalvote_set_allowed_users", skip(redis_conn, allowed_users))]
 pub(crate) async fn set(
     redis_conn: &mut ConnectionManager,
-    room_id: RoomId,
+    room_id: SignalingRoomId,
     vote_id: VoteId,
     allowed_users: Vec<UserId>,
 ) -> Result<()> {
