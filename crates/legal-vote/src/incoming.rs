@@ -34,7 +34,7 @@ pub struct UserParameters {
     /// The vote will automatically stop when every participant voted
     pub auto_stop: bool,
     // todo: not implemented yet
-    /// The vote will stop when the duration (in minutes) has passed
+    /// The vote will stop when the duration (in seconds) has passed
     pub duration: Option<u64>,
 }
 
