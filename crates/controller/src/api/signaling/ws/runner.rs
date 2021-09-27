@@ -539,16 +539,19 @@ impl Runner {
             }
             // Do not handle any other messages than control-join before joined
         } else if self.control_data.is_some() {
-            if let Err(NoSuchModuleError(())) = self
+            match self
                 .handle_module_targeted_event(
                     namespaced.namespace,
                     DynTargetedEvent::WsMessage(namespaced.payload),
                 )
                 .await
             {
-                self.ws
-                    .send(Message::Text(error("unknown namespace")))
-                    .await;
+                Ok(actions) => self.handle_module_requested_actions(actions).await,
+                Err(NoSuchModuleError(())) => {
+                    self.ws
+                        .send(Message::Text(error("unknown namespace")))
+                        .await;
+                }
             }
         }
     }
@@ -744,14 +747,17 @@ impl Runner {
                     log::error!("Failed to handle incoming rabbitmq control msg, {}", e);
                     return;
                 }
-            } else if let Err(NoSuchModuleError(())) = self
-                .handle_module_targeted_event(
-                    namespaced.namespace,
-                    DynTargetedEvent::RabbitMqMessage(namespaced.payload),
-                )
-                .await
-            {
-                log::warn!("Got invalid rabbit-mq message");
+            } else {
+                match self
+                    .handle_module_targeted_event(
+                        namespaced.namespace,
+                        DynTargetedEvent::RabbitMqMessage(namespaced.payload),
+                    )
+                    .await
+                {
+                    Ok(actions) => self.handle_module_requested_actions(actions).await,
+                    Err(NoSuchModuleError(())) => log::warn!("Got invalid rabbit-mq message"),
+                }
             }
         } else if delivery.routing_key.as_str() == user_update::routing_key(self.user.id) {
             let user_update::Message { groups } = match serde_json::from_slice(&delivery.data) {
