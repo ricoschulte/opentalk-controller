@@ -1,5 +1,5 @@
-use super::SignalingModule;
 use super::{Event, ModuleContext};
+use super::{SignalingModule, Timestamp};
 use crate::api::signaling::ws::runner::Builder;
 use crate::api::signaling::ws::{DestroyContext, InitContext, RabbitMqPublish};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
@@ -74,6 +74,7 @@ impl Modules {
                 redis_conn: ctx.redis_conn,
                 events: ctx.events,
                 invalidate_data: ctx.invalidate_data,
+                timestamp: ctx.timestamp,
                 exit: ctx.exit,
             };
 
@@ -124,6 +125,7 @@ pub enum DynBroadcastEvent<'evt> {
 /// Untyped version of a ModuleContext which is used in `on_event`
 pub(super) struct DynEventCtx<'ctx> {
     pub id: ParticipantId,
+    pub timestamp: Timestamp,
     pub ws_messages: &'ctx mut Vec<Message>,
     pub rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
     pub redis_conn: &'ctx mut ConnectionManager,
@@ -167,6 +169,7 @@ where
             events: ctx.events,
             invalidate_data: ctx.invalidate_data,
             exit: ctx.exit,
+            timestamp: ctx.timestamp,
             m: PhantomData::<fn() -> M>,
         };
 
@@ -202,6 +205,7 @@ where
             events: ctx.events,
             invalidate_data: ctx.invalidate_data,
             exit: ctx.exit,
+            timestamp: ctx.timestamp,
             m: PhantomData::<fn() -> M>,
         };
 
@@ -299,6 +303,7 @@ where
         let mut ws_messages = vec![];
 
         let ctx = ModuleContext {
+            timestamp: dyn_ctx.timestamp,
             ws_messages: &mut ws_messages,
             rabbitmq_publish: dyn_ctx.rabbitmq_publish,
             redis_conn: dyn_ctx.redis_conn,
@@ -329,6 +334,7 @@ where
         let mut ws_messages = vec![];
 
         let ctx = ModuleContext {
+            timestamp: dyn_ctx.timestamp,
             ws_messages: &mut ws_messages,
             rabbitmq_publish: dyn_ctx.rabbitmq_publish,
             redis_conn: dyn_ctx.redis_conn,

@@ -6,12 +6,14 @@
 //!
 //! The idea is to simulate a frontend websocket connection. See the LegalVote integration tests for examples.
 use super::modules::AnyStream;
-use super::{DestroyContext, Event, Namespaced, RabbitMqPublish, SignalingModule};
+use super::{
+    DestroyContext, Event, Namespaced, NamespacedOutgoing, RabbitMqPublish, SignalingModule,
+};
 use crate::api::signaling::prelude::control::incoming::Join;
 use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlData};
 use crate::api::signaling::prelude::{BreakoutRoomId, InitContext, ModuleContext};
 use crate::api::signaling::ws::runner::NAMESPACE;
-use crate::api::signaling::{ParticipantId, Role, SignalingRoomId};
+use crate::api::signaling::{ParticipantId, Role, SignalingRoomId, Timestamp};
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::users::UserId;
@@ -358,6 +360,7 @@ where
             let mut exit = None;
 
             let ctx = ModuleContext {
+                timestamp: Timestamp::now(),
                 ws_messages: &mut ws_messages,
                 rabbitmq_publish: &mut rabbitmq_publish,
                 redis_conn: &mut self.redis_conn.clone(),
@@ -428,6 +431,26 @@ where
                 .await
                 .context("Failed to set display_name")?;
 
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.participant_id,
+                    "joined_at",
+                    ctx.timestamp,
+                )
+                .await
+                .context("Failed to set joined timestamp")?;
+
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.participant_id,
+                    "hand_updated_at",
+                    ctx.timestamp,
+                )
+                .await
+                .context("Failed to set joined timestamp")?;
+
                 let participant_set =
                     storage::get_all_participants(&mut self.redis_conn, self.room_id)
                         .await
@@ -455,6 +478,9 @@ where
                 let mut control_data = ControlData {
                     display_name: join.display_name,
                     hand_is_up: false,
+                    joined_at: ctx.timestamp,
+                    left_at: None,
+                    hand_updated_at: ctx.timestamp,
                 };
 
                 self.module
@@ -515,6 +541,14 @@ where
                     true,
                 )
                 .await?;
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.participant_id,
+                    "hand_updated_at",
+                    ctx.timestamp,
+                )
+                .await?;
 
                 ctx.invalidate_data();
 
@@ -529,6 +563,14 @@ where
                     self.participant_id,
                     "hand_is_up",
                     false,
+                )
+                .await?;
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.participant_id,
+                    "hand_updated_at",
+                    ctx.timestamp,
                 )
                 .await?;
 
@@ -690,7 +732,7 @@ where
 
     async fn handle_module_requested_actions(
         &mut self,
-        ws_messages: Vec<Namespaced<'_, M::Outgoing>>,
+        ws_messages: Vec<NamespacedOutgoing<'_, M::Outgoing>>,
         rabbitmq_publish: Vec<RabbitMqPublish>,
         invalidate_data: bool,
         events: SelectAll<AnyStream>,
@@ -733,6 +775,7 @@ where
         let mut exit = None;
 
         let ctx = ModuleContext {
+            timestamp: Timestamp::now(),
             ws_messages: &mut ws_messages,
             rabbitmq_publish: &mut rabbitmq_publish,
             redis_conn: &mut self.redis_conn,
@@ -767,15 +810,23 @@ where
 
         let display_name: String =
             storage::get_attribute(&mut self.redis_conn, self.room_id, id, "display_name").await?;
+        let joined_at: Timestamp =
+            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "joined_at").await?;
 
         let hand_is_up: bool =
             storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_is_up").await?;
+        let hand_updated_at: Timestamp =
+            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_updated_at")
+                .await?;
 
         participant.module_data.insert(
             NAMESPACE,
             serde_json::to_value(ControlData {
                 display_name,
                 hand_is_up,
+                joined_at,
+                hand_updated_at,
+                left_at: None,
             })
             .expect("Failed to convert ControlData to serde_json::Value"),
         );

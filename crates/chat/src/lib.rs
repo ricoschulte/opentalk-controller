@@ -14,7 +14,7 @@ pub struct IncomingWsMessage {
     pub content: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Scope {
     Global,
@@ -24,13 +24,33 @@ pub enum Scope {
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Message {
     pub source: ParticipantId,
+    pub content: String,
+    // todo The timestamp is now included in the Namespaced struct. Once the frontend adopted this change, remove the timestamp from Message
+    pub timestamp: DateTime<Utc>,
+    pub scope: Scope,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TimedMessage {
+    pub source: ParticipantId,
     pub timestamp: DateTime<Utc>,
     pub content: String,
     pub scope: Scope,
 }
 
-impl_from_redis_value_de!(Message);
-impl_to_redis_args_se!(&Message);
+impl Message {
+    fn with_timestamp(&self, timestamp: &Timestamp) -> TimedMessage {
+        TimedMessage {
+            source: self.source,
+            content: self.content.clone(),
+            scope: self.scope,
+            timestamp: **timestamp,
+        }
+    }
+}
+
+impl_from_redis_value_de!(TimedMessage);
+impl_to_redis_args_se!(&TimedMessage);
 
 pub struct Chat {
     id: ParticipantId,
@@ -39,7 +59,7 @@ pub struct Chat {
 
 #[derive(Debug, Serialize)]
 pub struct ChatHistory {
-    room_history: Vec<Message>,
+    room_history: Vec<TimedMessage>,
 }
 
 impl ChatHistory {
@@ -82,6 +102,7 @@ impl SignalingModule for Chat {
         mut ctx: ModuleContext<'_, Self>,
         event: Event<'_, Self>,
     ) -> Result<()> {
+        let timestamp = ctx.timestamp();
         match event {
             Event::Joined {
                 control_data: _,
@@ -112,14 +133,13 @@ impl SignalingModule for Chat {
                 }
 
                 let source = self.id;
-                let timestamp = Utc::now();
 
                 //TODO: moderation check - mute, bad words etc., rate limit
                 if let Some(target) = msg.target {
                     let out_message = Message {
                         source,
-                        timestamp,
                         content: msg.content,
+                        timestamp: *timestamp,
                         scope: Scope::Private,
                     };
 
@@ -131,8 +151,8 @@ impl SignalingModule for Chat {
                 } else {
                     let out_message = Message {
                         source,
-                        timestamp,
                         content: msg.content,
+                        timestamp: *timestamp,
                         scope: Scope::Global,
                     };
 
@@ -140,7 +160,7 @@ impl SignalingModule for Chat {
                     storage::add_message_to_room_chat_history(
                         ctx.redis_conn(),
                         self.room,
-                        &out_message,
+                        &out_message.with_timestamp(&timestamp),
                     )
                     .await?;
 
@@ -216,7 +236,7 @@ mod test {
     #[test]
     fn server_message() {
         let expected = r#"{"source":"00000000-0000-0000-0000-000000000000","timestamp":"2021-06-24T14:00:11.873753715Z","content":"Hello All!","scope":"global"}"#;
-        let produced = serde_json::to_string(&Message {
+        let produced = serde_json::to_string(&TimedMessage {
             source: ParticipantId::nil(),
             timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z").unwrap(),
             content: "Hello All!".to_string(),

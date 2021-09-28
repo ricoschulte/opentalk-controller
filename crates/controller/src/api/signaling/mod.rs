@@ -1,8 +1,10 @@
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::db::rooms::RoomId;
+use chrono::TimeZone;
 use redis::{FromRedisValue, RedisError, RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::ops::Deref;
 use std::str::{from_utf8, FromStr};
 use uuid::Uuid;
 
@@ -72,7 +74,7 @@ pub mod prelude {
         SignalingProtocols,
     };
     pub use super::ws_modules::{breakout, control};
-    pub use super::{ParticipantId, Role, SignalingRoomId};
+    pub use super::{ParticipantId, Role, SignalingRoomId, Timestamp};
     pub use breakout::BreakoutRoomId;
 }
 
@@ -154,5 +156,49 @@ impl fmt::Display for SignalingRoomId {
         } else {
             self.0.fmt(f)
         }
+    }
+}
+
+/// A UTC DateTime wrapper that implements ToRedisArgs and FromRedisValue.
+///
+/// The values are stores as unix timestamps in redis.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+pub struct Timestamp(chrono::DateTime<chrono::Utc>);
+impl Timestamp {
+    fn now() -> Timestamp {
+        Timestamp(chrono::Utc::now())
+    }
+}
+impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
+    fn from(value: chrono::DateTime<chrono::Utc>) -> Self {
+        Timestamp(value)
+    }
+}
+impl redis::ToRedisArgs for Timestamp {
+    fn write_redis_args<W>(&self, out: &mut W)
+    where
+        W: ?Sized + redis::RedisWrite,
+    {
+        self.0.timestamp().write_redis_args(out)
+    }
+
+    fn describe_numeric_behavior(&self) -> redis::NumericBehavior {
+        redis::NumericBehavior::NumberIsInteger
+    }
+}
+
+impl redis::FromRedisValue for Timestamp {
+    fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Timestamp> {
+        Ok(Timestamp(
+            chrono::Utc.timestamp(i64::from_redis_value(v)?, 0),
+        ))
+    }
+}
+
+impl Deref for Timestamp {
+    type Target = chrono::DateTime<chrono::Utc>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }

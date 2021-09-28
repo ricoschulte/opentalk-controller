@@ -22,6 +22,7 @@ pub struct IncomingWsMessage {
 pub struct Message {
     source: ParticipantId,
     group: String,
+    // todo The timestamp is now included in the Namespaced struct. Once the frontends adopted this change, remove the timestamp from Message
     timestamp: DateTime<Utc>,
     content: String,
 }
@@ -89,6 +90,7 @@ impl SignalingModule for Chat {
         mut ctx: ModuleContext<'_, Self>,
         event: Event<'_, Self>,
     ) -> Result<()> {
+        let timestamp = ctx.timestamp();
         match event {
             Event::Joined {
                 control_data: _,
@@ -143,7 +145,7 @@ impl SignalingModule for Chat {
                 if self.is_in_group(&msg.group) {
                     let stored_msg = StoredMessage {
                         source: self.id,
-                        timestamp: Utc::now(),
+                        timestamp: *timestamp,
                         content: msg.content,
                     };
 
@@ -161,7 +163,7 @@ impl SignalingModule for Chat {
                         Message {
                             source: self.id,
                             group: msg.group,
-                            timestamp: Utc::now(),
+                            timestamp: *timestamp,
                             content: stored_msg.content,
                         },
                     )
