@@ -219,6 +219,8 @@ pub enum VideoRoomPluginEvent {
     Configured(VideoRoomPluginEventConfigured),
     Leaving(VideoRoomPluginEventLeaving),
     Started(VideoRoomPluginEventStarted),
+    /// Has to be the last option to parse correctly
+    Notification(VideoRoomPluginEventNotification),
     /// Errors returned for a specific plugin.
     /// E.g. No Such Feed errors
     Error(JanusPluginError),
@@ -230,7 +232,6 @@ pub struct VideoRoomPluginEventConfigured {
     room: RoomId,
     audio_codec: Option<AudioCodec>,
     video_codec: Option<VideoCodec>,
-    // Here might be more missing, depending on what we configured
 }
 
 impl TryFrom<PluginData> for VideoRoomPluginEventConfigured {
@@ -240,6 +241,28 @@ impl TryFrom<PluginData> for VideoRoomPluginEventConfigured {
         match value {
             PluginData::VideoRoom(VideoRoomPluginData::Event(
                 VideoRoomPluginEvent::Configured(e),
+            )) => Ok(e),
+            _ => Err(error::Error::InvalidResponse),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct VideoRoomPluginEventNotification {
+    room: RoomId,
+    substream: Option<u8>,
+    temporal: Option<u8>,
+    spatial_layer: Option<u8>,
+    temporal_layer: Option<u8>,
+}
+
+impl TryFrom<PluginData> for VideoRoomPluginEventNotification {
+    type Error = error::Error;
+
+    fn try_from(value: PluginData) -> Result<Self, Self::Error> {
+        match value {
+            PluginData::VideoRoom(VideoRoomPluginData::Event(
+                VideoRoomPluginEvent::Notification(e),
             )) => Ok(e),
             _ => Err(error::Error::InvalidResponse),
         }
@@ -707,6 +730,55 @@ mod test {
                 assert_eq!(current_bitrate, Some(64000));
             }
             _ => assert!(false, "Got no Videoroom SlowLink Event"),
+        }
+    }
+
+    #[test]
+    fn notification_event() {
+        let json = r#"{
+            "janus": "event",
+            "session_id": 4443437001466895,
+            "sender": 7236719492151772,
+            "plugindata": {
+               "plugin": "janus.plugin.videoroom",
+               "data": {
+                  "videoroom": "event",
+                  "room": 8116517334944108,
+                  "substream": 1,
+                  "temporal_layer": 2
+               }
+            }
+        }"#;
+        println!("{}", json);
+
+        let parsed_result: JanusMessage = serde_json::from_str(json).unwrap();
+        dbg!(&parsed_result);
+
+        match parsed_result {
+            JanusMessage::Event(Event {
+                session_id,
+                sender,
+                plugindata:
+                    PluginData::VideoRoom(VideoRoomPluginData::Event(
+                        VideoRoomPluginEvent::Notification(VideoRoomPluginEventNotification {
+                            room,
+                            substream,
+                            temporal,
+                            spatial_layer,
+                            temporal_layer,
+                        }),
+                    )),
+                ..
+            }) => {
+                assert_eq!(session_id, SessionId::new(4443437001466895));
+                assert_eq!(sender, HandleId::new(7236719492151772));
+                assert_eq!(room, RoomId::new(8116517334944108));
+                assert_eq!(substream, Some(1));
+                assert_eq!(temporal, None);
+                assert_eq!(spatial_layer, None);
+                assert_eq!(temporal_layer, Some(2));
+            }
+            _ => assert!(false, "Got no Videoroom Info Event"),
         }
     }
 

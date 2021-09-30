@@ -7,6 +7,7 @@ use crate::{
     FeedId, PluginRequest,
 };
 use serde::{self, Serialize, Serializer};
+use std::cmp;
 use std::fmt::Write;
 use std::path::PathBuf;
 
@@ -189,7 +190,7 @@ pub struct VideoRoomPluginConfigureSubscriber {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fallback: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub spatial_layer: Option<bool>,
+    pub spatial_layer: Option<u8>,
     /// spatial layer to receive (0-2), in case VP9-SVC is enabled; optional
     #[serde(skip_serializing_if = "Option::is_none")]
     pub temporal_layer: Option<u8>,
@@ -209,6 +210,112 @@ impl From<VideoRoomPluginConfigureSubscriber> for PluginBody {
         PluginBody::VideoRoom(VideoRoomPluginBody::Configure(
             VideoRoomPluginConfigure::Subscriber(value),
         ))
+    }
+}
+
+impl VideoRoomPluginConfigureSubscriber {
+    /// Returns a new VideoRoomPluginConfigureSubscriber
+    ///
+    /// Every optional value is initially set to None.
+    pub fn new() -> VideoRoomPluginConfigureSubscriber {
+        Self {
+            audio: None,
+            video: None,
+            data: None,
+            substream: None,
+            temporal: None,
+            fallback: None,
+            temporal_layer: None,
+            spatial_layer: None,
+            audio_active_packets: None,
+            audio_level_average: None,
+        }
+    }
+
+    /// Returns a new Builder for VideoRoomPluginJoinSubscriber
+    ///
+    /// Every optional value is initially set to None.
+    pub fn builder() -> VideoRoomPluginConfigureSubscriberBuilder {
+        VideoRoomPluginConfigureSubscriberBuilder(Self::new())
+    }
+}
+
+/// Builder for VideoRoomPluginConfigureSubscriber
+pub struct VideoRoomPluginConfigureSubscriberBuilder(VideoRoomPluginConfigureSubscriber);
+
+impl VideoRoomPluginConfigureSubscriberBuilder {
+    pub fn audio(self, enabled: Option<bool>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber {
+            audio: enabled,
+            ..self.0
+        })
+    }
+
+    pub fn video(self, enabled: Option<bool>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber {
+            video: enabled,
+            ..self.0
+        })
+    }
+
+    pub fn data(self, enabled: Option<bool>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber {
+            data: enabled,
+            ..self.0
+        })
+    }
+
+    pub fn substream(self, substream_index: Option<u8>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber {
+            substream: substream_index.map(|index| cmp::min(index, 2)),
+            ..self.0
+        })
+    }
+
+    pub fn temporal(self, temporal_layer_index: Option<u8>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber {
+            temporal: temporal_layer_index.map(|index| cmp::min(index, 2)),
+            ..self.0
+        })
+    }
+
+    pub fn fallback(self, fallback_in_microseconds: Option<u64>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber {
+            fallback: fallback_in_microseconds,
+            ..self.0
+        })
+    }
+
+    pub fn spatial_layer(self, spatial_layer_index: Option<u8>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber {
+            spatial_layer: spatial_layer_index.map(|index| cmp::min(index, 2)),
+            ..self.0
+        })
+    }
+
+    pub fn temporal_layer(self, temporal_layer_index: Option<u8>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber {
+            temporal_layer: temporal_layer_index.map(|index| cmp::min(index, 2)),
+            ..self.0
+        })
+    }
+
+    pub fn audio_active_packets(self, number_of_packets: Option<u64>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber {
+            audio_active_packets: number_of_packets,
+            ..self.0
+        })
+    }
+
+    pub fn audio_level_average(self, audio_level: Option<u64>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber {
+            audio_level_average: audio_level,
+            ..self.0
+        })
+    }
+
+    pub fn build(self) -> VideoRoomPluginConfigureSubscriber {
+        self.0
     }
 }
 
@@ -309,7 +416,6 @@ impl From<VideoRoomPluginCreate> for PluginBody {
 ///
 /// See [Janus Videoroom Plugin Docs for subscribing](https://janus.conf.meetecho.com/docs/videoroom.html#vroomsub) for more information
 // todo figure out how to make this better regarding defaults.
-// Add a Builder for this Requests that have some mandatory fields but a lot of optional?
 #[derive(Debug, Clone, Serialize)]
 pub struct VideoRoomPluginJoinSubscriber {
     /// unique ID of the room to subscribe in; mandatory
@@ -352,7 +458,7 @@ pub struct VideoRoomPluginJoinSubscriber {
     pub spatial_layer: Option<u8>,
     /// spatial layer to receive (0-2), in case VP9-SVC is enabled; optional
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub temporal: Option<u64>,
+    pub temporal: Option<u8>,
 }
 
 impl PluginRequest for VideoRoomPluginJoinSubscriber {
@@ -365,6 +471,130 @@ impl From<VideoRoomPluginJoinSubscriber> for PluginBody {
         PluginBody::VideoRoom(VideoRoomPluginBody::Join(VideoRoomPluginJoin::Subscriber(
             value,
         )))
+    }
+}
+
+impl VideoRoomPluginJoinSubscriber {
+    /// Returns a new VideoRoomPluginJoinSubscriber
+    ///
+    /// Every optional value is initially set to None.
+    pub fn new(room: RoomId, feed: FeedId) -> VideoRoomPluginJoinSubscriber {
+        Self {
+            room,
+            feed,
+            private_id: None,
+            close_pc: None,
+            audio: None,
+            video: None,
+            data: None,
+            offer_audio: None,
+            offer_video: None,
+            offer_data: None,
+            substream: None,
+            temporal_layer: None,
+            spatial_layer: None,
+            temporal: None,
+        }
+    }
+
+    /// Returns a new Builder for VideoRoomPluginJoinSubscriber
+    ///
+    /// Every optional value is initially set to None.
+    pub fn builder(room: RoomId, feed: FeedId) -> VideoRoomPluginJoinSubscriberBuilder {
+        VideoRoomPluginJoinSubscriberBuilder(Self::new(room, feed))
+    }
+}
+
+/// Builder for VideoRoomPluginJoinSubscriber
+pub struct VideoRoomPluginJoinSubscriberBuilder(VideoRoomPluginJoinSubscriber);
+
+impl VideoRoomPluginJoinSubscriberBuilder {
+    pub fn private_id(self, id: Option<u64>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            private_id: id,
+            ..self.0
+        })
+    }
+
+    pub fn close_pc(self, close: Option<bool>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            close_pc: close,
+            ..self.0
+        })
+    }
+
+    pub fn audio(self, enabled: Option<bool>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            audio: enabled,
+            ..self.0
+        })
+    }
+
+    pub fn video(self, enabled: Option<bool>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            video: enabled,
+            ..self.0
+        })
+    }
+
+    pub fn data(self, enabled: Option<bool>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            data: enabled,
+            ..self.0
+        })
+    }
+
+    pub fn offer_audio(self, offer: Option<bool>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            offer_audio: offer,
+            ..self.0
+        })
+    }
+
+    pub fn offer_video(self, offer: Option<bool>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            offer_video: offer,
+            ..self.0
+        })
+    }
+
+    pub fn offer_data(self, offer: Option<bool>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            offer_data: offer,
+            ..self.0
+        })
+    }
+
+    pub fn substream(self, substream_index: Option<u8>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            substream: substream_index.map(|index| cmp::min(index, 2)),
+            ..self.0
+        })
+    }
+
+    pub fn temporal_layer(self, temporal_layer_index: Option<u8>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            temporal_layer: temporal_layer_index.map(|index| cmp::min(index, 2)),
+            ..self.0
+        })
+    }
+
+    pub fn spatial_layer(self, spatial_layer_index: Option<u8>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            spatial_layer: spatial_layer_index.map(|index| cmp::min(index, 2)),
+            ..self.0
+        })
+    }
+
+    pub fn temporal(self, temporal_layer_index: Option<u8>) -> Self {
+        Self(VideoRoomPluginJoinSubscriber {
+            temporal: temporal_layer_index.map(|index| cmp::min(index, 2)),
+            ..self.0
+        })
+    }
+
+    pub fn build(self) -> VideoRoomPluginJoinSubscriber {
+        self.0
     }
 }
 
@@ -480,7 +710,7 @@ mod tests {
     use super::*;
     use crate::types::{
         outgoing::{JanusRequest, PluginBody, PluginMessage},
-        HandleId, Jsep, JsepType, SessionId, TransactionId, VideoCodec,
+        HandleId, Jsep, JsepType, SessionId, VideoCodec,
     };
     use pretty_assertions::assert_eq;
 
@@ -528,7 +758,7 @@ mod tests {
               "request":"configure",
               "audio":true,
               "video":true,
-               "data":true
+              "data":true
             },
             "jsep":{"type":"offer","sdp":"v=0"}
           }"#;
@@ -540,12 +770,13 @@ mod tests {
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Configure(
-                VideoRoomPluginConfigure::Subscriber(VideoRoomPluginConfigureSubscriber {
-                    audio: Some(true),
-                    video: Some(true),
-                    data: Some(true),
-                    ..Default::default()
-                }),
+                VideoRoomPluginConfigure::Subscriber(
+                    VideoRoomPluginConfigureSubscriber::builder()
+                        .audio(Some(true))
+                        .video(Some(true))
+                        .data(Some(true))
+                        .build(),
+                ),
             )),
             jsep: Some(Jsep {
                 kind: JsepType::Offer,
@@ -554,6 +785,33 @@ mod tests {
             }),
         });
         assert_eq!(reference, serde_json::to_string(&our).unwrap());
+    }
+
+    #[test]
+    fn test_video_room_plugin_configure_subscriber_builder() {
+        let request = VideoRoomPluginConfigureSubscriber::builder()
+            .audio(Some(true))
+            .video(Some(true))
+            .data(Some(false))
+            .substream(Some(4))
+            .temporal(Some(4))
+            .fallback(Some(42))
+            .spatial_layer(Some(4))
+            .temporal_layer(Some(4))
+            .audio_active_packets(Some(42))
+            .audio_level_average(Some(42))
+            .build();
+
+        assert_eq!(request.audio, Some(true));
+        assert_eq!(request.video, Some(true));
+        assert_eq!(request.data, Some(false));
+        assert_eq!(request.substream, Some(2));
+        assert_eq!(request.temporal, Some(2));
+        assert_eq!(request.fallback, Some(42));
+        assert_eq!(request.spatial_layer, Some(2));
+        assert_eq!(request.temporal_layer, Some(2));
+        assert_eq!(request.audio_active_packets, Some(42));
+        assert_eq!(request.audio_level_average, Some(42));
     }
 
     #[test]
@@ -606,22 +864,9 @@ mod tests {
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Join(
-                VideoRoomPluginJoin::Subscriber(VideoRoomPluginJoinSubscriber {
-                    room: 5.into(),
-                    feed: 1.into(),
-                    private_id: None,
-                    close_pc: None,
-                    audio: None,
-                    video: None,
-                    data: None,
-                    offer_audio: None,
-                    offer_video: None,
-                    offer_data: None,
-                    substream: None,
-                    temporal_layer: None,
-                    spatial_layer: None,
-                    temporal: None,
-                }),
+                VideoRoomPluginJoin::Subscriber(
+                    VideoRoomPluginJoinSubscriber::builder(5.into(), 1.into()).build(),
+                ),
             )),
             jsep: Some(Jsep {
                 kind: JsepType::Offer,
@@ -630,6 +875,37 @@ mod tests {
             }),
         });
         assert_eq!(reference, serde_json::to_string(&our).unwrap());
+    }
+
+    #[test]
+    fn test_video_room_plugin_join_subscriber_builder() {
+        let request = VideoRoomPluginJoinSubscriber::builder(5.into(), 1.into())
+            .private_id(Some(42))
+            .close_pc(Some(true))
+            .audio(Some(true))
+            .video(Some(true))
+            .data(Some(false))
+            .offer_audio(Some(true))
+            .offer_video(Some(true))
+            .offer_data(Some(false))
+            .substream(Some(4))
+            .temporal_layer(Some(4))
+            .spatial_layer(Some(4))
+            .temporal(Some(4))
+            .build();
+
+        assert_eq!(request.private_id, Some(42));
+        assert_eq!(request.close_pc, Some(true));
+        assert_eq!(request.audio, Some(true));
+        assert_eq!(request.video, Some(true));
+        assert_eq!(request.data, Some(false));
+        assert_eq!(request.offer_audio, Some(true));
+        assert_eq!(request.offer_video, Some(true));
+        assert_eq!(request.offer_data, Some(false));
+        assert_eq!(request.substream, Some(2));
+        assert_eq!(request.temporal_layer, Some(2));
+        assert_eq!(request.spatial_layer, Some(2));
+        assert_eq!(request.temporal, Some(2));
     }
 
     #[test]

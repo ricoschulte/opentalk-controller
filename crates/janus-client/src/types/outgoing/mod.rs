@@ -136,7 +136,7 @@ pub enum PluginBody {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::types::{outgoing::JanusRequest, HandleId, SessionId, TransactionId};
+    use crate::types::{outgoing::JanusRequest, HandleId, SessionId};
     use pretty_assertions::assert_eq;
 
     #[test]

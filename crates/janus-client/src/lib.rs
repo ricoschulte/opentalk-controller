@@ -35,7 +35,7 @@
 //! Furtermore you can wrap the API and build upon that similar to spreed
 //! ```should_panic
 //! # use janus_client::{Client, Handle, JanusPlugin, RabbitMqConfig};
-//! # use janus_client::types::{TrickleCandidate, RoomId};
+//! # use janus_client::types::{TrickleCandidate, RoomId, FeedId};
 //! # use janus_client::types::outgoing::{TrickleMessage, PluginBody, VideoRoomPluginJoin, VideoRoomPluginJoinSubscriber};
 //! # use tokio::sync::{broadcast, mpsc};
 //! # use janus_client::ClientId;
@@ -44,13 +44,9 @@
 //! impl SubscriberClient {
 //!     /// Joins a Room
 //!     pub async fn join_room(&self, candidate: String ) {
-//!         let room_id = 2.into();
-//!         let request =
-//!           VideoRoomPluginJoinSubscriber{
-//!             room: room_id,
-//!             feed: 1.into(),
-//! #           audio: None, video:None, data: None, close_pc: None, private_id: None, offer_audio: None, offer_video: None, offer_data: None, spatial_layer: None, temporal_layer: None, substream: None, temporal: None
-//!           };
+//!         let room_id: RoomId = 2.into();
+//!         let feed_id: FeedId = 1.into();
+//!         let request = VideoRoomPluginJoinSubscriber::new(room_id, feed_id);
 //!         self.0.send(request).await;
 //!     }
 //! }
