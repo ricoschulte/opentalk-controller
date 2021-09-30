@@ -1,8 +1,8 @@
 use anyhow::Result;
-use controller::db::rooms::{Room, RoomId};
+use controller::db::migrations::migrate_from_url;
+use controller::db::rooms::{NewRoom, Room, RoomId};
 use controller::db::users::{NewUser, NewUserWithGroups, User, UserId};
 use controller::db::DbInterface;
-use controller::db::{migrations::migrate_from_url, rooms::NewRoom};
 use controller::prelude::anyhow::Context;
 use controller::prelude::*;
 use diesel::{Connection, PgConnection, RunQueryDsl};
@@ -14,21 +14,23 @@ pub struct DatabaseContext {
     pub base_url: String,
     pub db_name: String,
     pub db_conn: Arc<DbInterface>,
+    /// DatabaseContext will DROP the database inside postgres when dropped
+    pub drop_db_on_drop: bool,
 }
 
 impl DatabaseContext {
     /// Create a new [`DatabaseContext`]
     ///
-    /// Uses the environment variable `TEST_DB_BASE_URL` to connect to postgres. Defaults to `postgres://postgres:password123@localhost:5432`
-    /// when the environment variable is not set. The same goes for `TEST_DB_NAME` where the default is `k3k_test`.
+    /// Uses the environment variable `POSTGRES_BASE_URL` to connect to postgres. Defaults to `postgres://postgres:password123@localhost:5432`
+    /// when the environment variable is not set. The same goes for `DATABASE_NAME` where the default is `k3k_test`.
     ///
-    /// Once connected, the database with `TEST_DB_NAME` gets dropped and re-created to guarantee a clean state, then the
+    /// Once connected, the database with `DATABASE_NAME` gets dropped and re-created to guarantee a clean state, then the
     /// k3k controller migration is applied.
-    pub async fn new() -> Self {
-        let base_url = std::env::var("TEST_DB_BASE_URL")
+    pub async fn new(drop_db_on_drop: bool) -> Self {
+        let base_url = std::env::var("POSTGRES_BASE_URL")
             .unwrap_or_else(|_| "postgres://postgres:password123@localhost:5432".to_owned());
 
-        let db_name = std::env::var("TEST_DB_NAME").unwrap_or_else(|_| "k3k_test".to_owned());
+        let db_name = std::env::var("DATABASE_NAME").unwrap_or_else(|_| "k3k_test".to_owned());
 
         let postgres_url = format!("{}/postgres", base_url);
         let conn =
@@ -55,6 +57,7 @@ impl DatabaseContext {
             base_url: base_url.to_string(),
             db_name: db_name.to_string(),
             db_conn,
+            drop_db_on_drop,
         }
     }
 
@@ -100,11 +103,13 @@ impl DatabaseContext {
 
 impl Drop for DatabaseContext {
     fn drop(&mut self) {
-        let postgres_url = format!("{}/postgres", self.base_url);
-        let conn =
-            PgConnection::establish(&postgres_url).expect("Cannot connect to postgres database.");
+        if self.drop_db_on_drop {
+            let postgres_url = format!("{}/postgres", self.base_url);
+            let conn = PgConnection::establish(&postgres_url)
+                .expect("Cannot connect to postgres database.");
 
-        drop_database(&conn, &self.db_name).unwrap();
+            drop_database(&conn, &self.db_name).unwrap();
+        }
     }
 }
 

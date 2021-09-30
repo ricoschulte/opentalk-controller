@@ -17,14 +17,8 @@
 #service_name = "k3k-controller"
 
 [database]
-# Database server address.
-server = "localhost"
-
-# Database server port.
-port = 5432
-
-# Database name.
-name = "k3k"
+# URL used to connect to a postgres.
+url = "postgres://postgres:password123@localhost:5432/k3k"
 
 # Maximum number of connections allowed to the server.
 # Defaults to 100 which is the default of postgres.
@@ -35,11 +29,6 @@ name = "k3k"
 # Defaults to 10
 #min_idle_connections = 10
 
-# Database user.
-user = "postgres"
-
-# Database user password.
-password = "password123"
 
 
 [http]

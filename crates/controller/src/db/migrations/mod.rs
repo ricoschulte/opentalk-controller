@@ -1,4 +1,3 @@
-use crate::settings::Database;
 use anyhow::{Context, Result};
 use refinery::include_migration_mods;
 use refinery_core::tokio_postgres::{Config, NoTls};
@@ -40,19 +39,6 @@ async fn migrate(config: Config) -> Result<()> {
     Ok(())
 }
 
-pub async fn migrate_from_settings(db_config: &Database) -> Result<()> {
-    let mut config = Config::new();
-
-    config
-        .dbname(&db_config.name)
-        .user(&db_config.user)
-        .password(&db_config.password)
-        .host(&db_config.server)
-        .port(db_config.port);
-
-    migrate(config).await
-}
-
 pub async fn migrate_from_url(url: &str) -> Result<()> {
     let config = url.parse::<Config>()?;
     migrate(config).await
@@ -60,22 +46,16 @@ pub async fn migrate_from_url(url: &str) -> Result<()> {
 
 #[cfg(test)]
 mod migration_tests {
-    use super::*;
-    use anyhow::{Context, Result};
+    use anyhow::Result;
 
     /// Tests the refinery database migration.
-    /// A database url has to be specified via the environment variable DATABASE_URL.
-    ///
-    /// If no environment variable is provided, the database url will default to:
-    /// ```text
-    /// postgres://postgres:password123@localhost:5432/k3k
-    /// ```
+    /// A database config has to be specified via the environment variables
+    /// * POSTGRES_BASE_URL (default: `postgres://postgres:password123@localhost:5432`) - url to the postgres database without the database name specifier
+    /// * DATABASE_NAME (default: `k3k_test`) - the database name inside postgres
     #[tokio::test]
     async fn test_migration() -> Result<()> {
-        let url = std::env::var("DATABASE_URL")
-            .unwrap_or("postgres://postgres:password123@localhost:5432/k3k".to_string());
-
-        migrate_from_url(&url).await.context("Migration failed")?;
+        // This will create a database and migrate it
+        test_util::database::DatabaseContext::new(false).await;
 
         Ok(())
     }

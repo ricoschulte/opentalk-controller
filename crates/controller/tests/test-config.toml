@@ -2,60 +2,24 @@
 level = "INFO"
 
 [database]
-# Database server address
-server = "localhost"
-
-# Database server port
-port = 5432
-
-# Database name
-name = "k3k"
-
-# Maximum number of connections allowed to the server.
-# Defaults to 100 which is the default of postgres.
-# max_connections = 100
-
-# Minimum number of connections that are at least open.
-# If load increases the controller will open new connection, at most max_connections many.
-# Defaults to 10
-# min_idle_connections = 10
-
-# Database user
-user = "postgres"
-
-# Database user password
-password = "password123"
+url = "overridden"
 
 [[room_server.connections]]
-# Connection settings for the channel used to talk to the room server.
-# Currently these should be equal to the settings in janus.transport.rabbitmq.jcfg
 to_janus_routing_key = "to-janus"
 janus_exchange = "janus-exchange"
 from_janus_routing_key = "from-janus"
 
 [http]
-# The port to bind the HTTP Server to (defaults to 11311)
 port = 11311
-# URLs that requests are allowed from. Leave empty to allow all.
 cors.allowed_origin = ["https://localhost:8080"]
 
 [oidc.provider]
-# OIDC Issuer URL according to RFC8414
 issuer = "http://localhost:8080/auth/realms/K3K"
-
-# OIDC Client ID
 client_id = "Controller"
-
-# OIDC Client secret (application requires confidential client)
 client_secret = "180a89c9-a802-4799-ab54-652777d88160"
 
 [room_server]
-# Maximum bitrate allowed for media sessions that will be used to transmit webcam video/audio
-# Example: 64kB/s
 max_video_bitrate = "64000"
-
-# Maximum bitrate allowed for media sessions used for screen share
-# Example: 1MB/s
 max_screen_bitrate = "8000000"
 
 [rabbit_mq]

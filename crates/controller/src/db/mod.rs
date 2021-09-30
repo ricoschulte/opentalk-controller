@@ -128,10 +128,8 @@ impl DbInterface {
     /// Creates a new DbInterface instance from the specified database settings.
     #[tracing::instrument(skip(db_settings))]
     pub fn connect(db_settings: &settings::Database) -> Result<Self> {
-        let con_url = pg_connection_uri(db_settings);
-
         Self::connect_url(
-            &con_url,
+            &db_settings.url,
             db_settings.max_connections,
             Some(db_settings.min_idle_connections),
         )
@@ -172,11 +170,4 @@ impl DbInterface {
             }
         }
     }
-}
-
-fn pg_connection_uri(cfg: &settings::Database) -> String {
-    format!(
-        "postgres://{}:{}@{}:{}/{}",
-        cfg.user, cfg.password, cfg.server, cfg.port, cfg.name
-    )
 }

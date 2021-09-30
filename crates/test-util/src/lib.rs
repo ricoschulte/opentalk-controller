@@ -45,7 +45,7 @@ impl TestContext {
         let _ = setup_logging();
 
         TestContext {
-            db_ctx: database::DatabaseContext::new().await,
+            db_ctx: database::DatabaseContext::new(true).await,
             redis_conn: redis::setup().await,
         }
     }

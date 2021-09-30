@@ -57,9 +57,8 @@ test:cargo_test:
     RABBITMQ_PORT: '5672'
     JANUS_EXCHANGE_TYPE: topic
     # Used for integration tests
-    DATABASE_URL: postgres://postgres:password123@postgres:5432/k3k
-    TEST_DB_BASE_URL: postgres://postgres:password123@postgres:5432
-    TEST_DB_NAME: k3k_test
+    POSTGRES_BASE_URL: postgres://postgres:password123@postgres:5432
+    DATABASE_NAME: k3k
     AMQP_ADDR: amqp://guest:guest@rabbitmq:5672
     REDIS_ADDR: redis://redis:6379/
   services:
@@ -76,7 +75,12 @@ test:cargo_test:
     - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"
   script:
     - cargo test --workspace --locked
-    - ./.cargo/bin/diesel print-schema | /usr/local/cargo/bin/rustfmt | diff crates/controller/src/db/schema.rs -
+    # Run the migration test which creates a valid database layout to test validity of schema.rs
+    - cargo test -p k3k-controller-core --lib -- db::migrations::migration_tests::test_migration --exact
+    - >
+      ./.cargo/bin/diesel --database-url="${POSTGRES_BASE_URL}/${DATABASE_NAME}" print-schema |
+      /usr/local/cargo/bin/rustfmt |
+      diff crates/controller/src/db/schema.rs -
 
 build:container:
   rules:

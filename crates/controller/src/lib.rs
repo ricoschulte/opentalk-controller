@@ -201,7 +201,7 @@ impl Controller {
         let settings = Arc::new(settings);
         let shared_settings: SharedSettings = Arc::new(ArcSwap::from(settings.clone()));
 
-        db::migrations::migrate_from_settings(&settings.database)
+        db::migrations::migrate_from_url(&settings.database.url)
             .await
             .context("Failed to migrate database")?;
 
