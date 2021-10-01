@@ -13,6 +13,7 @@ COPY ./crates/janus-client/Cargo.toml ./crates/janus-client/Cargo.toml
 COPY ./crates/janus-media/Cargo.toml ./crates/janus-media/Cargo.toml
 COPY ./crates/r3dlock/Cargo.toml ./crates/r3dlock/Cargo.toml
 COPY ./crates/legal-vote/Cargo.toml ./crates/legal-vote/Cargo.toml
+COPY ./crates/test-util/Cargo.toml ./crates/test-util/Cargo.toml
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
 
