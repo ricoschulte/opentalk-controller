@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// Rabbitmq event to inform participants
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) enum Event {
+pub enum Event {
     /// A new vote has started
     Start(Parameters),
     /// A vote has been stopped
@@ -21,16 +21,16 @@ pub(crate) enum Event {
 
 /// Wraps the [`UserParameters`] with additional server side information
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize)]
-pub(crate) struct Parameters {
+pub struct Parameters {
     /// The participant id of the vote initiator
-    pub(crate) initiator_id: ParticipantId,
+    pub initiator_id: ParticipantId,
     /// The unique id of this vote
-    pub(crate) vote_id: VoteId,
+    pub vote_id: VoteId,
     /// The time the vote got started
-    pub(crate) start_time: DateTime<Utc>,
+    pub start_time: DateTime<Utc>,
     /// Parameters set by the initiator
     #[serde(flatten)]
-    pub(crate) inner: UserParameters,
+    pub inner: UserParameters,
 }
 
 impl_to_redis_args_se!(&Parameters);
@@ -38,23 +38,23 @@ impl_from_redis_value_de!(Parameters);
 
 /// The specified vote has been stopped
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct StopVote {
+pub struct StopVote {
     /// The id of the stopped vote
-    pub(crate) vote_id: VoteId,
+    pub vote_id: VoteId,
 }
 
 /// The specified vote has been canceled
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct Cancel {
+pub struct Cancel {
     /// The id of the canceled vote
-    pub(crate) vote_id: VoteId,
+    pub vote_id: VoteId,
     /// The Reason for the cancel
-    pub(crate) reason: Reason,
+    pub reason: Reason,
 }
 
 /// The reason for the cancel
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) enum Reason {
+pub enum Reason {
     /// The room got destroyed and the server canceled the vote
     RoomDestroyed,
     /// The initiator left the room and the server canceled the vote
@@ -65,7 +65,7 @@ pub(crate) enum Reason {
 
 /// The results for a vote have changed
 #[derive(Debug, Serialize, Deserialize)]
-pub(crate) struct VoteUpdate {
+pub struct VoteUpdate {
     /// The id of the affected vote
-    pub(crate) vote_id: VoteId,
+    pub vote_id: VoteId,
 }

@@ -2,7 +2,7 @@ use super::{AssocParticipantInOtherRoom, BreakoutRoom, BreakoutRoomId, Participa
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
     Started(Started),
@@ -15,14 +15,14 @@ pub enum Message {
     Error(Error),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct Started {
     pub rooms: Vec<BreakoutRoom>,
     pub expires: Option<DateTime<Utc>>,
     pub assignment: Option<BreakoutRoomId>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(tag = "error", rename_all = "snake_case")]
 pub enum Error {
     InvalidAssignment,

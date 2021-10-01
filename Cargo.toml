@@ -16,6 +16,7 @@ members = [
     "crates/ee-chat",
     "crates/chat",
     "crates/controller",
+    "crates/test-util",
     "crates/client",
     "crates/r3dlock",
 ]

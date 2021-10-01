@@ -151,15 +151,13 @@ struct ModuleCallerImpl<M> {
     pub module: M,
 }
 
-#[async_trait::async_trait(?Send)]
-impl<M> ModuleCaller for ModuleCallerImpl<M>
+impl<M> ModuleCallerImpl<M>
 where
     M: SignalingModule,
 {
-    #[tracing::instrument(skip(self, ctx, dyn_event), fields(module = %M::NAMESPACE))]
-    async fn on_event_targeted(
+    async fn handle_dyn_targeted_event(
         &mut self,
-        ctx: DynEventCtx<'_>,
+        ctx: ModuleContext<'_, M>,
         dyn_event: DynTargetedEvent,
     ) -> Result<()> {
         let ctx = ModuleContext {
@@ -175,25 +173,26 @@ where
         match dyn_event {
             DynTargetedEvent::WsMessage(msg) => {
                 let msg = serde_json::from_value(msg).context("Failed to parse WS message")?;
-                self.module.on_event(ctx, Event::WsMessage(msg)).await
+                self.module.on_event(ctx, Event::WsMessage(msg)).await?;
             }
             DynTargetedEvent::RabbitMqMessage(msg) => {
                 let msg =
                     serde_json::from_value(msg).context("Failed to parse RabbitMq message")?;
-                self.module.on_event(ctx, Event::RabbitMq(msg)).await
+                self.module.on_event(ctx, Event::RabbitMq(msg)).await?;
             }
             DynTargetedEvent::Ext(ext) => {
                 self.module
                     .on_event(ctx, Event::Ext(*ext.downcast().expect("invalid ext type")))
-                    .await
+                    .await?;
             }
         }
+
+        Ok(())
     }
 
-    #[tracing::instrument(skip(self, ctx, dyn_event), fields(module = %M::NAMESPACE))]
-    async fn on_event_broadcast(
+    async fn handle_dyn_broadcast_event(
         &mut self,
-        ctx: DynEventCtx<'_>,
+        ctx: ModuleContext<'_, M>,
         dyn_event: &mut DynBroadcastEvent<'_>,
     ) -> Result<()> {
         let ctx = ModuleContext {
@@ -282,8 +281,73 @@ where
                 }
             }
         }
-
         Ok(())
+    }
+}
+
+#[async_trait::async_trait(?Send)]
+impl<M> ModuleCaller for ModuleCallerImpl<M>
+where
+    M: SignalingModule,
+{
+    #[tracing::instrument(skip(self, dyn_ctx, dyn_event), fields(module = %M::NAMESPACE))]
+    async fn on_event_targeted(
+        &mut self,
+        dyn_ctx: DynEventCtx<'_>,
+        dyn_event: DynTargetedEvent,
+    ) -> Result<()> {
+        let mut ws_messages = vec![];
+
+        let ctx = ModuleContext {
+            ws_messages: &mut ws_messages,
+            rabbitmq_publish: dyn_ctx.rabbitmq_publish,
+            redis_conn: dyn_ctx.redis_conn,
+            events: dyn_ctx.events,
+            invalidate_data: dyn_ctx.invalidate_data,
+            exit: dyn_ctx.exit,
+            m: PhantomData::<fn() -> M>,
+        };
+
+        let result = self.handle_dyn_targeted_event(ctx, dyn_event).await;
+
+        let mut ws_messages_serialized = ws_messages
+            .into_iter()
+            .map(|message| Message::Text(message.to_json()))
+            .collect();
+
+        dyn_ctx.ws_messages.append(&mut ws_messages_serialized);
+
+        result
+    }
+
+    #[tracing::instrument(skip(self, dyn_ctx, dyn_event), fields(module = %M::NAMESPACE))]
+    async fn on_event_broadcast(
+        &mut self,
+        dyn_ctx: DynEventCtx<'_>,
+        dyn_event: &mut DynBroadcastEvent<'_>,
+    ) -> Result<()> {
+        let mut ws_messages = vec![];
+
+        let ctx = ModuleContext {
+            ws_messages: &mut ws_messages,
+            rabbitmq_publish: dyn_ctx.rabbitmq_publish,
+            redis_conn: dyn_ctx.redis_conn,
+            events: dyn_ctx.events,
+            invalidate_data: dyn_ctx.invalidate_data,
+            exit: dyn_ctx.exit,
+            m: PhantomData::<fn() -> M>,
+        };
+
+        let result = self.handle_dyn_broadcast_event(ctx, dyn_event).await;
+
+        let mut ws_messages_serialized = ws_messages
+            .into_iter()
+            .map(|message| Message::Text(message.to_json()))
+            .collect();
+
+        dyn_ctx.ws_messages.append(&mut ws_messages_serialized);
+
+        result
     }
 
     #[tracing::instrument(name = "module_destroy", skip(self, ctx), fields(module = %M::NAMESPACE))]

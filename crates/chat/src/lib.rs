@@ -14,14 +14,14 @@ pub struct IncomingWsMessage {
     pub content: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum Scope {
     Global,
     Private,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Message {
     pub source: ParticipantId,
     pub timestamp: DateTime<Utc>,

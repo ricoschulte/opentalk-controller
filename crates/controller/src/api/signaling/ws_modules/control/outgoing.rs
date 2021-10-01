@@ -2,7 +2,7 @@ use crate::api::signaling::{ParticipantId, Role};
 use serde::Serialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(tag = "message")]
 pub enum Message {
     #[serde(rename = "join_success")]
@@ -22,7 +22,7 @@ pub enum Message {
     Error { text: &'static str },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct JoinSuccess {
     pub id: ParticipantId,
 
@@ -34,12 +34,12 @@ pub struct JoinSuccess {
     pub participants: Vec<Participant>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct AssociatedParticipant {
     pub id: ParticipantId,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 pub struct Participant {
     pub id: ParticipantId,
 

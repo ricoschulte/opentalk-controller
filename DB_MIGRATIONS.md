@@ -18,6 +18,4 @@ pub fn migration() -> String {
 }
 ```
 
-* set the environment variable `DATABASE_URL=postgres://postgres:password123@localhost/k3k`
-* run the migration via `cargo test`
 * run the `generate_schema.sh` in crate root to generate a new diesel schema in `src/db/schema.rs`

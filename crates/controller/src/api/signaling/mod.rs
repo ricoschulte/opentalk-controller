@@ -66,6 +66,7 @@ mod ws_modules;
 pub(crate) use ws::ws_service;
 
 pub mod prelude {
+    pub use super::ws::module_tester::*;
     pub use super::ws::{
         DestroyContext, Event, InitContext, ModuleContext, SignalingModule, SignalingModules,
         SignalingProtocols,

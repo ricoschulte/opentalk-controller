@@ -18,7 +18,7 @@ pub struct IncomingWsMessage {
 }
 
 /// Message sent via websocket and rabbitmq
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Message {
     source: ParticipantId,
     group: String,

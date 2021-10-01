@@ -36,7 +36,7 @@ use tokio_stream::StreamExt;
 
 const WS_TIMEOUT: Duration = Duration::from_secs(20);
 
-const NAMESPACE: &str = "control";
+pub(super) const NAMESPACE: &str = "control";
 
 /// Builder to the runner type.
 ///

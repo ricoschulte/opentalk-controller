@@ -9,7 +9,9 @@ mod common;
 #[ignore]
 async fn introspect() -> Result<()> {
     common::setup_logging()?;
-    common::cleanup_database().await?;
+
+    // database will clean up when this gets dropped
+    let _db_ctx = test_util::database::DatabaseContext::new(true).await;
 
     let mut controller = common::run_controller().await?;
     let session = common::setup_client("test", "test").await?;

@@ -12,7 +12,7 @@ diesel_newtype!(RoomId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_type
 /// Diesel room struct
 ///
 /// Is used as a result in various queries. Represents a room column
-#[derive(Debug, Queryable, Identifiable)]
+#[derive(Debug, Clone, Queryable, Identifiable)]
 pub struct Room {
     pub id: i64,
     pub uuid: RoomId,

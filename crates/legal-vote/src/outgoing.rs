@@ -5,9 +5,9 @@ use serde::Serialize;
 use std::collections::HashMap;
 
 /// A message to the participant, send via a websocket connection
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case", tag = "message")]
-pub(crate) enum Message {
+pub enum Message {
     /// Vote has started
     Start(super::rabbitmq::Parameters),
     /// Direct response to a previous vote request (see [`Vote`](super::incoming::Message::Vote))
@@ -25,7 +25,7 @@ pub(crate) enum Message {
 /// The direct response to an issued vote request
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "response")]
-pub(crate) enum VoteResponse {
+pub enum VoteResponse {
     Success,
     Failed(VoteFailed),
 }
@@ -33,7 +33,7 @@ pub(crate) enum VoteResponse {
 /// Reasons for a failed vote request
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "reason")]
-pub(crate) enum VoteFailed {
+pub enum VoteFailed {
     /// The given vote id is not active or does not exist
     InvalidVoteId,
     /// The requesting user already voted or is ineligible to vote
@@ -43,17 +43,17 @@ pub(crate) enum VoteFailed {
 }
 
 /// The results for a vote
-#[derive(Debug, Serialize)]
-pub(crate) struct VoteResults {
+#[derive(Debug, Serialize, PartialEq)]
+pub struct VoteResults {
     /// The vote id
-    pub(crate) vote_id: VoteId,
+    pub vote_id: VoteId,
     /// The vote results
-    pub(crate) results: Results,
+    pub results: Results,
 }
 
 /// The results may be public or secret depending on the vote parameters
-#[derive(Debug, Serialize)]
-pub(crate) enum Results {
+#[derive(Debug, Serialize, PartialEq)]
+pub enum Results {
     /// Public results can be mapped to a participant
     Public(PublicResults),
     /// Secret results contain only a vote count
@@ -61,34 +61,34 @@ pub(crate) enum Results {
 }
 
 /// Public vote results
-#[derive(Debug, Serialize)]
-pub(crate) struct PublicResults {
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct PublicResults {
     /// A map of [`VoteOption`] with their respective vote count
-    pub(crate) votes: HashMap<VoteOption, u64>,
+    pub votes: HashMap<VoteOption, u64>,
     /// A map of participants with their chosen vote option
-    pub(crate) voters: HashMap<ParticipantId, VoteOption>,
+    pub voters: HashMap<ParticipantId, VoteOption>,
 }
 
 /// Secret vote results
-#[derive(Debug, Serialize)]
-pub(crate) struct SecretResults {
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SecretResults {
     /// A map of [`VoteOption`] with their respective vote count
-    pub(crate) votes: HashMap<VoteOption, u64>,
+    pub votes: HashMap<VoteOption, u64>,
 }
 
 /// A cancel message
-#[derive(Debug, Serialize)]
-pub(crate) struct Cancel {
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Cancel {
     /// The vote that has been canceled
-    pub(crate) vote_id: VoteId,
+    pub vote_id: VoteId,
     /// The reason for the cancel
-    pub(crate) reason: Reason,
+    pub reason: Reason,
 }
 
 /// The reason for the cancel
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum Reason {
+pub enum Reason {
     /// The room got destroyed and the server canceled the vote
     RoomDestroyed,
     /// The initiator left the room and the server canceled the vote
@@ -110,7 +110,7 @@ impl From<super::rabbitmq::Reason> for Reason {
 /// The error kind sent to the user
 #[derive(Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "kind")]
-pub(crate) enum ErrorKind {
+pub enum ErrorKind {
     /// A vote is already active
     VoteAlreadyActive,
     /// No vote is currently taking place

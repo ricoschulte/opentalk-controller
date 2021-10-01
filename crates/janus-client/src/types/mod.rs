@@ -252,7 +252,7 @@ impl From<u64> for StreamTypes {
 }
 
 /// A candidate for ICE/SDP trickle
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct TrickleCandidate {
     // Todo It can be Either sdpMid or sdpMLineIndex. Making both mandatory for now.
     // We also can find beter field names for this. sdp_medium_id or something?

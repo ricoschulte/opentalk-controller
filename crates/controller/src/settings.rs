@@ -45,22 +45,22 @@ pub fn load_settings(args: &Args) -> Result<Settings, ConfigError> {
 ///
 /// The application settings are set with a TOML config file. Settings specified in the config file
 /// can be overwritten by environment variables. To do so, set an environment variable
-/// with the prefix `K3K_CTRL__` followed by the field names you want to set. Fields are separated by two underscores `__`.
+/// with the prefix `K3K_CTRL_` followed by the field names you want to set. Fields are separated by two underscores `__`.
 /// ```sh
-/// K3K_CTRL__<field>__<field-of-field>...
+/// K3K_CTRL_<field>__<field-of-field>...
 /// ```
 ///
 /// # Example
 ///
 /// set the `database.server` field:
 /// ```sh
-/// K3K_CTRL__DATABASE__SERVER=localhost
+/// K3K_CTRL_DATABASE__SERVER=localhost
 /// ```
 ///
 /// However, the field names in the environment variables are not allowed to have underscores.
 /// So the field 'database.max_connections' would resolve to:
 /// ```sh
-/// K3K_CTRL__DATABASE__MAX_CONNECTIONS=5
+/// K3K_CTRL_DATABASE__MAX_CONNECTIONS=5
 /// ```
 /// # Note
 /// Fields set via environment variables do not affect the underlying config file.
@@ -97,15 +97,11 @@ impl Settings {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Database {
-    pub server: String,
-    pub port: u16,
-    pub name: String,
+    pub url: String,
     #[serde(default = "default_max_connections")]
     pub max_connections: u32,
     #[serde(default = "default_min_idle_connections")]
     pub min_idle_connections: u32,
-    pub user: String,
-    pub password: String,
 }
 
 /// Settings for OpenID Connect protocol which is used for user management.
