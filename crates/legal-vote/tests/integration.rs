@@ -1,7 +1,7 @@
 use controller::prelude::serde_json::Value;
 use controller::prelude::WsMessageOutgoing;
 use k3k_legal_vote::incoming::{Stop, UserParameters, VoteMessage};
-use k3k_legal_vote::outgoing::{PublicResults, Results, VoteResponse, VoteResults};
+use k3k_legal_vote::outgoing::{Response, VoteResponse, VoteResults, Votes};
 use k3k_legal_vote::{incoming, outgoing, VoteOption};
 use serial_test::serial;
 use std::collections::HashMap;
@@ -34,7 +34,7 @@ async fn basic_vote() {
         .unwrap();
 
     // Expect Start response in websocket for user1
-    let vote_id = if let WsMessageOutgoing::Module(outgoing::Message::Start(parameters)) =
+    let vote_id = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
         module_tester
             .receive_ws_message(&USER_1.participant_id)
             .await
@@ -49,7 +49,7 @@ async fn basic_vote() {
     };
 
     // Expect Start response in websocket for user2
-    if let WsMessageOutgoing::Module(outgoing::Message::Start(parameters)) = module_tester
+    if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
         .receive_ws_message(&USER_2.participant_id)
         .await
         .unwrap()
@@ -75,8 +75,10 @@ async fn basic_vote() {
 
     // Start casting votes
 
-    let vote_success =
-        WsMessageOutgoing::Module(outgoing::Message::VoteResponse(VoteResponse::Success));
+    let vote_success = WsMessageOutgoing::Module(outgoing::Message::Voted(VoteResponse {
+        vote_id,
+        response: Response::Success,
+    }));
 
     // Vote 'Yes' with user1
     let vote_yes = incoming::Message::Vote(VoteMessage {
@@ -97,16 +99,17 @@ async fn basic_vote() {
     assert_eq!(vote_success, vote_response);
 
     // Expect a vote Update message on all participants
-    let mut votes = HashMap::new();
-    votes.insert(VoteOption::Yes, 1);
-
     let mut voters = HashMap::new();
     voters.insert(USER_1.participant_id, VoteOption::Yes);
-    let mut public_results = PublicResults { votes, voters };
 
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Update(VoteResults {
+    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
         vote_id,
-        results: Results::Public(public_results.clone()),
+        votes: Votes {
+            yes: 1,
+            no: 0,
+            abstain: None,
+        },
+        voters: Some(voters.clone()),
     }));
 
     for user in USERS {
@@ -137,14 +140,16 @@ async fn basic_vote() {
     assert_eq!(vote_success, vote_response);
 
     // Expect a vote Update message on all participants
-    public_results.votes.insert(VoteOption::No, 1);
-    public_results
-        .voters
-        .insert(USER_2.participant_id, VoteOption::No);
+    voters.insert(USER_2.participant_id, VoteOption::No);
 
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Update(VoteResults {
+    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
         vote_id,
-        results: Results::Public(public_results.clone()),
+        votes: Votes {
+            yes: 1,
+            no: 1,
+            abstain: None,
+        },
+        voters: Some(voters.clone()),
     }));
 
     for user in USERS {
@@ -163,10 +168,16 @@ async fn basic_vote() {
         .send_ws_message(&USER_1.participant_id, stop_vote)
         .unwrap();
 
-    let expected_stop_message = WsMessageOutgoing::Module(outgoing::Message::Stop(VoteResults {
-        vote_id,
-        results: Results::Public(public_results),
-    }));
+    let expected_stop_message =
+        WsMessageOutgoing::Module(outgoing::Message::Stopped(VoteResults {
+            vote_id,
+            votes: Votes {
+                yes: 1,
+                no: 1,
+                abstain: None,
+            },
+            voters: Some(voters),
+        }));
 
     // expect stop messages for all users
     for user in USERS {

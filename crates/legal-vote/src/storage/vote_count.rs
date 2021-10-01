@@ -1,3 +1,4 @@
+use crate::outgoing::Votes;
 use crate::VoteOption;
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
@@ -27,8 +28,9 @@ pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
     vote_id: VoteId,
-) -> Result<HashMap<VoteOption, u64>> {
-    redis_conn
+    enable_abstain: bool,
+) -> Result<Votes> {
+    let vote_count: HashMap<VoteOption, u64> = redis_conn
         .zrange_withscores(VoteCountKey { room_id, vote_id }, 0, -1)
         .await
         .with_context(|| {
@@ -36,5 +38,17 @@ pub(crate) async fn get(
                 "Failed to get the vote count for room_id:{} vote_id:{}",
                 room_id, vote_id
             )
-        })
+        })?;
+
+    Ok(Votes {
+        yes: *vote_count.get(&VoteOption::Yes).unwrap_or(&0),
+        no: *vote_count.get(&VoteOption::No).unwrap_or(&0),
+        abstain: {
+            if enable_abstain {
+                Some(*vote_count.get(&VoteOption::Abstain).unwrap_or(&0))
+            } else {
+                None
+            }
+        },
+    })
 }
