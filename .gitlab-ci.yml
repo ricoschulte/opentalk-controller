@@ -130,7 +130,7 @@ test:container:
       --dockerfile $CI_PROJECT_DIR/ci/Dockerfile
       --cache=true
       --cache-ttl=730h
-      --cache-repo git.heinlein-video.de:5050/heinlein-video/k3k-controller
+      --cache-repo $CI_REGISTRY_IMAGE
       --no-push
       --force
 
