@@ -5,6 +5,8 @@ use controller::prelude::*;
 use controller::{impl_from_redis_value_de, impl_to_redis_args_se};
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
+use std::fmt;
+use std::str::{from_utf8, FromStr};
 
 mod storage;
 
@@ -20,9 +22,55 @@ pub enum Scope {
     Global,
     Private,
 }
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
+pub struct MessageId(uuid::Uuid);
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+impl MessageId {
+    pub fn new() -> Self {
+        MessageId(uuid::Uuid::new_v4())
+    }
+    #[cfg(test)]
+    pub fn nil() -> Self {
+        MessageId(uuid::Uuid::nil())
+    }
+}
+
+impl Default for MessageId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl fmt::Display for MessageId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl redis::FromRedisValue for MessageId {
+    fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Self> {
+        match v {
+            redis::Value::Data(bytes) => uuid::Uuid::from_str(from_utf8(bytes)?)
+                .map(MessageId)
+                .map_err(|_| {
+                    redis::RedisError::from((
+                        redis::ErrorKind::TypeError,
+                        "invalid data for MessageId",
+                    ))
+                }),
+            _ => redis::RedisResult::Err(redis::RedisError::from((
+                redis::ErrorKind::TypeError,
+                "invalid data type for MessageId",
+            ))),
+        }
+    }
+}
+
+impl_to_redis_args!(MessageId);
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct Message {
+    pub id: MessageId,
     pub source: ParticipantId,
     pub content: String,
     // todo The timestamp is now included in the Namespaced struct. Once the frontend adopted this change, remove the timestamp from Message
@@ -32,6 +80,7 @@ pub struct Message {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TimedMessage {
+    pub id: MessageId,
     pub source: ParticipantId,
     pub timestamp: DateTime<Utc>,
     pub content: String,
@@ -41,6 +90,7 @@ pub struct TimedMessage {
 impl Message {
     fn with_timestamp(&self, timestamp: &Timestamp) -> TimedMessage {
         TimedMessage {
+            id: self.id,
             source: self.source,
             content: self.content.clone(),
             scope: self.scope,
@@ -137,6 +187,7 @@ impl SignalingModule for Chat {
                 //TODO: moderation check - mute, bad words etc., rate limit
                 if let Some(target) = msg.target {
                     let out_message = Message {
+                        id: MessageId::new(),
                         source,
                         content: msg.content,
                         timestamp: *timestamp,
@@ -146,10 +197,12 @@ impl SignalingModule for Chat {
                     ctx.rabbitmq_publish(
                         rabbitmq::current_room_exchange_name(self.room),
                         rabbitmq::room_participant_routing_key(target),
-                        out_message,
+                        out_message.clone(),
                     );
+                    ctx.ws_send(out_message);
                 } else {
                     let out_message = Message {
+                        id: MessageId::new(),
                         source,
                         content: msg.content,
                         timestamp: *timestamp,
@@ -235,8 +288,9 @@ mod test {
 
     #[test]
     fn server_message() {
-        let expected = r#"{"source":"00000000-0000-0000-0000-000000000000","timestamp":"2021-06-24T14:00:11.873753715Z","content":"Hello All!","scope":"global"}"#;
+        let expected = r#"{"id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","timestamp":"2021-06-24T14:00:11.873753715Z","content":"Hello All!","scope":"global"}"#;
         let produced = serde_json::to_string(&TimedMessage {
+            id: MessageId::nil(),
             source: ParticipantId::nil(),
             timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z").unwrap(),
             content: "Hello All!".to_string(),

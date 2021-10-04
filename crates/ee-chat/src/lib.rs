@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chat::MessageId;
 use chrono::{DateTime, Utc};
 use control::rabbitmq;
 use controller::db::groups::Group;
@@ -20,6 +21,7 @@ pub struct IncomingWsMessage {
 /// Message sent via websocket and rabbitmq
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub struct Message {
+    id: MessageId,
     source: ParticipantId,
     group: String,
     // todo The timestamp is now included in the Namespaced struct. Once the frontends adopted this change, remove the timestamp from Message
@@ -143,7 +145,10 @@ impl SignalingModule for Chat {
                 }
 
                 if self.is_in_group(&msg.group) {
+                    let id = MessageId::new();
+
                     let stored_msg = StoredMessage {
+                        id,
                         source: self.id,
                         timestamp: *timestamp,
                         content: msg.content,
@@ -161,6 +166,7 @@ impl SignalingModule for Chat {
                         rabbitmq::current_room_exchange_name(self.room),
                         group_routing_key(&msg.group),
                         Message {
+                            id,
                             source: self.id,
                             group: msg.group,
                             timestamp: *timestamp,

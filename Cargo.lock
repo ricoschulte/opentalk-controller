@@ -1435,6 +1435,7 @@ dependencies = [
 name = "k3k-ee-chat"
 version = "0.1.0"
 dependencies = [
+ "k3k-chat",
  "k3k-controller-core",
  "serde",
 ]

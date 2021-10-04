@@ -5,4 +5,5 @@ edition = "2018"
 
 [dependencies]
 controller = { path = "../controller", package = "k3k-controller-core" }
+chat = { path = "../chat", package = "k3k-chat" }
 serde = { version = "1", features = ["derive"] }
