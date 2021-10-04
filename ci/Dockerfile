@@ -19,14 +19,16 @@ COPY ./Cargo.lock ./Cargo.lock
 
 RUN find crates -maxdepth 1 -type d -exec mkdir {}/src \; -exec touch {}/src/lib.rs \;
 RUN mkdir src
-RUN touch src/main.rs
+# We need a proper main.rs to make the first cargo build run
+RUN echo 'fn main() {println!("Hello World!");}' > src/main.rs
+# As we haven't copied any source files yet, this will only compile the dependencies
+RUN cargo build --release
 
-RUN mkdir .cargo
-RUN cargo vendor > .cargo/config
-
+# Now copy the real source over
 COPY src src
 COPY crates crates
-
+# Cargo detects changes only by mtime
+RUN touch src/main.rs && find crates -iname lib.rs -exec touch {} \;
 RUN cargo build --release
 
 FROM debian:bullseye-slim
