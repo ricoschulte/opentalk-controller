@@ -1,5 +1,4 @@
 use crate::api::signaling::{ParticipantId, SignalingRoomId};
-use crate::db::rooms::RoomId;
 use crate::db::users::UserId;
 use serde::{Deserialize, Serialize};
 
@@ -10,14 +9,6 @@ pub enum Message {
     Joined(ParticipantId),
     Left(ParticipantId),
     Update(ParticipantId),
-}
-
-/// Returns the name of the RabbitMQ topic exchange used to communicate inside a room.
-///
-/// Note that this exchange is used to communicate across breakout-room boundaries and
-/// should only be used in special circumstances where that behavior is intended.
-pub fn room_exchange_name(room: RoomId) -> String {
-    format!("k3k-signaling.room={}", room.into_inner())
 }
 
 /// Returns the name of the RabbitMQ topic exchange used inside the current room.

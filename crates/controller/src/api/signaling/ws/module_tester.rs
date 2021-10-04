@@ -673,7 +673,9 @@ where
         })?;
 
         let rabbitmq_publish = RabbitMqPublish {
-            exchange: control::rabbitmq::room_exchange_name(self.room.uuid),
+            exchange: control::rabbitmq::current_room_exchange_name(SignalingRoomId::new_test(
+                self.room.uuid,
+            )),
             routing_key: control::rabbitmq::room_all_routing_key().into(),
             message,
         };
