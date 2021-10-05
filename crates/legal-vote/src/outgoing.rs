@@ -1,7 +1,8 @@
 use super::VoteOption;
+use crate::rabbitmq::{CancelReason, Invalid, Parameters, StopKind};
 use controller::db::legal_votes::VoteId;
 use controller::prelude::*;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// A message to the participant, send via a websocket connection
@@ -9,31 +10,44 @@ use std::collections::HashMap;
 #[serde(rename_all = "snake_case", tag = "message")]
 pub enum Message {
     /// Vote has started
-    Started(super::rabbitmq::Parameters),
+    Started(Parameters),
     /// Direct response to a previous vote request (see [`Vote`](super::incoming::Message::Vote))
     Voted(VoteResponse),
     /// The results of a specific vote have changed
     Updated(VoteResults),
     /// A vote has been stopped
-    Stopped(VoteResults),
+    Stopped(Stop),
     /// A vote has been canceled
     Canceled(Canceled),
     /// A error message caused by invalid requests or internal errors
     Error(ErrorKind),
 }
 
+/// The direct response to an issued vote request
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct VoteResponse {
+    /// The vote id of the requested vote
     pub vote_id: VoteId,
+    /// The response to the vote request
+    #[serde(flatten)]
     pub response: Response,
 }
 
-/// The direct response to an issued vote request
+/// Vote request response
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case", tag = "response")]
+pub enum Response {
+    /// Response for a successful vote request
+    Success(VoteSuccess),
+    /// Response for a failed vote request
+    Failed(VoteFailed),
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub enum Response {
-    Success,
-    Failed(VoteFailed),
+pub struct VoteSuccess {
+    pub vote_option: VoteOption,
+    pub issuer: ParticipantId,
 }
 
 /// Reasons for a failed vote request
@@ -42,14 +56,14 @@ pub enum Response {
 pub enum VoteFailed {
     /// The given vote id is not active or does not exist
     InvalidVoteId,
-    /// The requesting user already voted or is ineligible to vote
+    /// The requesting user already voted or is ineligible to vote. (requires the vote parameter `auto_stop` to be true)
     Ineligible,
     /// Invalid vote option
     InvalidOption,
 }
 
 /// The vote options with their respective vote count
-#[derive(Debug, Clone, Copy, Serialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Votes {
     /// Vote count for yes
     pub yes: u64,
@@ -60,15 +74,46 @@ pub struct Votes {
     pub abstain: Option<u64>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct Results {
+    /// The vote options with their respective vote count
+    #[serde(flatten)]
+    pub votes: Votes,
+    /// A map of participants with their chosen vote option. None when vote is secret.
+    pub voters: Option<HashMap<ParticipantId, VoteOption>>,
+}
+
 /// The results for a vote
 #[derive(Debug, Serialize, PartialEq)]
 pub struct VoteResults {
     /// The vote id
     pub vote_id: VoteId,
-    /// The vote options with their respective vote count
-    pub votes: Votes,
-    /// A map of participants with their chosen vote option. None when vote is secret.
-    pub voters: Option<HashMap<ParticipantId, VoteOption>>,
+    /// The vote results
+    #[serde(flatten)]
+    pub results: Results,
+}
+
+/// A stop message
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Stop {
+    /// The vote id
+    pub vote_id: VoteId,
+    /// Specifies the reason for the stop
+    #[serde(flatten)]
+    pub kind: StopKind,
+    /// The final vote results
+    #[serde(flatten)]
+    pub results: FinalResults,
+}
+
+/// The final results for a vote
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case", tag = "results")]
+pub enum FinalResults {
+    /// Valid final results
+    Valid(Results),
+    /// Invalid final results
+    Invalid(Invalid),
 }
 
 /// A cancel message
@@ -77,29 +122,7 @@ pub struct Canceled {
     /// The vote that has been canceled
     pub vote_id: VoteId,
     /// The reason for the cancel
-    pub reason: Reason,
-}
-
-/// The reason for the cancel
-#[derive(Debug, Serialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum Reason {
-    /// The room got destroyed and the server canceled the vote
-    RoomDestroyed,
-    /// The initiator left the room and the server canceled the vote
-    InitiatorLeft,
-    /// Custom reason for a cancel
-    Custom(String),
-}
-
-impl From<super::rabbitmq::Reason> for Reason {
-    fn from(reason: super::rabbitmq::Reason) -> Self {
-        match reason {
-            crate::rabbitmq::Reason::RoomDestroyed => Self::RoomDestroyed,
-            crate::rabbitmq::Reason::InitiatorLeft => Self::InitiatorLeft,
-            crate::rabbitmq::Reason::Custom(custom) => Self::Custom(custom),
-        }
-    }
+    pub reason: CancelReason,
 }
 
 /// The error kind sent to the user
@@ -112,12 +135,21 @@ pub enum ErrorKind {
     NoVoteActive,
     /// The provided vote id is invalid in the requested context
     InvalidVoteId,
-    /// The requesting user is ineligible to vote
+    /// The requesting user is ineligible
     Ineligible,
+    /// The provided allow list contains guest participants
+    AllowlistContainsGuests(GuestParticipants),
+    /// A inconsistency occurred while handling a request
+    Inconsistency,
     /// A internal server error occurred
     ///
     /// This means the legal-vote module is broken, the source of this is event are unrecoverable backend errors.
     Internal,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct GuestParticipants {
+    guests: Vec<ParticipantId>,
 }
 
 impl From<super::error::ErrorKind> for ErrorKind {
@@ -127,6 +159,10 @@ impl From<super::error::ErrorKind> for ErrorKind {
             crate::error::ErrorKind::NoVoteActive => Self::NoVoteActive,
             crate::error::ErrorKind::InvalidVoteId => Self::InvalidVoteId,
             crate::error::ErrorKind::Ineligible => Self::Ineligible,
+            crate::error::ErrorKind::Inconsistency => Self::Inconsistency,
+            crate::error::ErrorKind::AllowlistContainsGuests(guests) => {
+                Self::AllowlistContainsGuests(GuestParticipants { guests })
+            }
         }
     }
 }
@@ -134,7 +170,10 @@ impl From<super::error::ErrorKind> for ErrorKind {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{incoming, rabbitmq};
+    use crate::{
+        incoming,
+        rabbitmq::{self, CancelReason},
+    };
     use chrono::prelude::*;
     use uuid::Uuid;
 
@@ -164,11 +203,14 @@ mod test {
 
     #[test]
     fn vote_success_message() {
-        let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":"success"}"#;
+        let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":"success","vote_option":"yes","issuer":"00000000-0000-0000-0000-000000000000"}"#;
 
         let message = Message::Voted(VoteResponse {
             vote_id: VoteId::from(Uuid::nil()),
-            response: Response::Success,
+            response: Response::Success(VoteSuccess {
+                vote_option: VoteOption::Yes,
+                issuer: ParticipantId::nil(),
+            }),
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -178,7 +220,7 @@ mod test {
 
     #[test]
     fn vote_failed_invalid_vote_id_message() {
-        let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":{"failed":{"reason":"invalid_vote_id"}}}"#;
+        let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":"failed","reason":"invalid_vote_id"}"#;
 
         let message = Message::Voted(VoteResponse {
             vote_id: VoteId::from(Uuid::nil()),
@@ -192,7 +234,7 @@ mod test {
 
     #[test]
     fn vote_failed_ineligible_message() {
-        let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":{"failed":{"reason":"ineligible"}}}"#;
+        let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":"failed","reason":"ineligible"}"#;
 
         let message = Message::Voted(VoteResponse {
             vote_id: VoteId::from(Uuid::nil()),
@@ -206,7 +248,7 @@ mod test {
 
     #[test]
     fn vote_failed_invalid_option_message() {
-        let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":{"failed":{"reason":"invalid_option"}}}"#;
+        let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":"failed","reason":"invalid_option"}"#;
 
         let message = Message::Voted(VoteResponse {
             vote_id: VoteId::from(Uuid::nil()),
@@ -220,7 +262,7 @@ mod test {
 
     #[test]
     fn public_update_message() {
-        let json_str = r#"{"message":"updated","vote_id":"00000000-0000-0000-0000-000000000000","votes":{"yes":1,"no":0},"voters":{"00000000-0000-0000-0000-000000000001":"yes"}}"#;
+        let json_str = r#"{"message":"updated","vote_id":"00000000-0000-0000-0000-000000000000","yes":1,"no":0,"voters":{"00000000-0000-0000-0000-000000000001":"yes"}}"#;
 
         let votes = Votes {
             yes: 1,
@@ -233,8 +275,10 @@ mod test {
 
         let message = Message::Updated(VoteResults {
             vote_id: VoteId::from(Uuid::nil()),
-            votes,
-            voters: Some(voters),
+            results: Results {
+                votes,
+                voters: Some(voters),
+            },
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -244,7 +288,7 @@ mod test {
 
     #[test]
     fn secret_update_message() {
-        let json_str = r#"{"message":"updated","vote_id":"00000000-0000-0000-0000-000000000000","votes":{"yes":1,"no":0},"voters":null}"#;
+        let json_str = r#"{"message":"updated","vote_id":"00000000-0000-0000-0000-000000000000","yes":1,"no":0,"voters":null}"#;
 
         let votes = Votes {
             yes: 1,
@@ -254,8 +298,10 @@ mod test {
 
         let message = Message::Updated(VoteResults {
             vote_id: VoteId::from(Uuid::nil()),
-            votes,
-            voters: None,
+            results: Results {
+                votes,
+                voters: None,
+            },
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -265,7 +311,7 @@ mod test {
 
     #[test]
     fn public_stop_message() {
-        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","votes":{"yes":1,"no":0},"voters":{"00000000-0000-0000-0000-000000000001":"yes"}}"#;
+        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"by_participant","issuer":"00000000-0000-0000-0000-000000000000","results":"valid","yes":1,"no":0,"voters":{"00000000-0000-0000-0000-000000000001":"yes"}}"#;
 
         let votes = Votes {
             yes: 1,
@@ -276,10 +322,13 @@ mod test {
         let mut voters = HashMap::new();
         voters.insert(ParticipantId::new_test(1), VoteOption::Yes);
 
-        let message = Message::Stopped(VoteResults {
+        let message = Message::Stopped(Stop {
             vote_id: VoteId::from(Uuid::nil()),
-            votes,
-            voters: Some(voters),
+            kind: rabbitmq::StopKind::ByParticipant(ParticipantId::nil()),
+            results: FinalResults::Valid(Results {
+                votes,
+                voters: Some(voters),
+            }),
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -289,7 +338,55 @@ mod test {
 
     #[test]
     fn secret_stop_message() {
-        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","votes":{"yes":0,"no":1,"abstain":2},"voters":null}"#;
+        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"by_participant","issuer":"00000000-0000-0000-0000-000000000000","results":"valid","yes":1,"no":0,"voters":null}"#;
+
+        let votes = Votes {
+            yes: 1,
+            no: 0,
+            abstain: None,
+        };
+
+        let message = Message::Stopped(Stop {
+            vote_id: VoteId::from(Uuid::nil()),
+            kind: rabbitmq::StopKind::ByParticipant(ParticipantId::nil()),
+            results: FinalResults::Valid(Results {
+                votes,
+                voters: None,
+            }),
+        });
+
+        let string = serde_json::to_string(&message).unwrap();
+
+        assert_eq!(string, json_str)
+    }
+
+    #[test]
+    fn auto_stop_message() {
+        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"auto","results":"valid","yes":1,"no":0,"voters":null}"#;
+
+        let votes = Votes {
+            yes: 1,
+            no: 0,
+            abstain: None,
+        };
+
+        let message = Message::Stopped(Stop {
+            vote_id: VoteId::from(Uuid::nil()),
+            kind: rabbitmq::StopKind::Auto,
+            results: FinalResults::Valid(Results {
+                votes,
+                voters: None,
+            }),
+        });
+
+        let string = serde_json::to_string(&message).unwrap();
+
+        assert_eq!(string, json_str)
+    }
+
+    #[test]
+    fn expired_stop_message() {
+        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"expired","results":"valid","yes":0,"no":1,"abstain":2,"voters":null}"#;
 
         let votes = Votes {
             yes: 0,
@@ -297,10 +394,28 @@ mod test {
             abstain: Some(2),
         };
 
-        let message = Message::Stopped(VoteResults {
+        let message = Message::Stopped(Stop {
             vote_id: VoteId::from(Uuid::nil()),
-            votes,
-            voters: None,
+            kind: rabbitmq::StopKind::Expired,
+            results: FinalResults::Valid(Results {
+                votes,
+                voters: None,
+            }),
+        });
+
+        let string = serde_json::to_string(&message).unwrap();
+
+        assert_eq!(string, json_str)
+    }
+
+    #[test]
+    fn invalid_stop_message() {
+        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"by_participant","issuer":"00000000-0000-0000-0000-000000000000","results":"invalid","reason":"vote_count_inconsistent"}"#;
+
+        let message = Message::Stopped(Stop {
+            vote_id: VoteId::from(Uuid::nil()),
+            kind: rabbitmq::StopKind::ByParticipant(ParticipantId::nil()),
+            results: FinalResults::Invalid(Invalid::VoteCountInconsistent),
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -314,7 +429,7 @@ mod test {
 
         let message = Message::Canceled(Canceled {
             vote_id: VoteId::from(Uuid::nil()),
-            reason: Reason::RoomDestroyed,
+            reason: CancelReason::RoomDestroyed,
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -328,7 +443,7 @@ mod test {
 
         let message = Message::Canceled(Canceled {
             vote_id: VoteId::from(Uuid::nil()),
-            reason: Reason::InitiatorLeft,
+            reason: CancelReason::InitiatorLeft,
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -342,7 +457,7 @@ mod test {
 
         let message = Message::Canceled(Canceled {
             vote_id: VoteId::from(Uuid::nil()),
-            reason: Reason::Custom("A custom reason".into()),
+            reason: CancelReason::Custom("A custom reason".into()),
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -388,6 +503,19 @@ mod test {
         let json_str = r#"{"message":"error","error":"vote_already_active"}"#;
 
         let message = Message::Error(ErrorKind::VoteAlreadyActive);
+
+        let string = serde_json::to_string(&message).unwrap();
+
+        assert_eq!(string, json_str);
+    }
+
+    #[test]
+    fn allowlist_contains_guests_error_message() {
+        let json_str = r#"{"message":"error","error":"allowlist_contains_guests","guests":["00000000-0000-0000-0000-000000000000","00000000-0000-0000-0000-000000000001"]}"#;
+
+        let message = Message::Error(ErrorKind::AllowlistContainsGuests(GuestParticipants {
+            guests: vec![ParticipantId::new_test(0), ParticipantId::new_test(1)],
+        }));
 
         let string = serde_json::to_string(&message).unwrap();
 
