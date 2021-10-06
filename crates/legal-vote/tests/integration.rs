@@ -763,3 +763,30 @@ async fn auto_stop_vote() {
 
     module_tester.shutdown().await.unwrap();
 }
+
+#[actix_rt::test]
+#[serial]
+async fn start_with_one_participant() {
+    let test_ctx = TestContext::new().await;
+    let module_tester = common::setup_users(&test_ctx).await;
+
+    // Start legal vote as user 1
+    let start_parameters = UserParameters {
+        name: "TestVote".into(),
+        topic: "Does the test work?".into(),
+        allowed_participants: vec![USER_1.participant_id],
+        enable_abstain: false,
+        secret: false,
+        auto_stop: false,
+        duration: None,
+    };
+
+    module_tester
+        .send_ws_message(
+            &USER_1.participant_id,
+            incoming::Message::Start(start_parameters.clone()),
+        )
+        .unwrap();
+
+    module_tester.shutdown().await.unwrap()
+}
