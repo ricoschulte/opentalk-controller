@@ -79,8 +79,8 @@ pub struct Results {
     /// The vote options with their respective vote count
     #[serde(flatten)]
     pub votes: Votes,
-    /// A map of participants with their chosen vote option. None when vote is secret.
-    pub voters: Option<HashMap<ParticipantId, VoteOption>>,
+    /// A map of participants with their chosen vote option
+    pub voters: HashMap<ParticipantId, VoteOption>,
 }
 
 /// The results for a vote
@@ -122,6 +122,7 @@ pub struct Canceled {
     /// The vote that has been canceled
     pub vote_id: VoteId,
     /// The reason for the cancel
+    #[serde(flatten)]
     pub reason: CancelReason,
 }
 
@@ -143,7 +144,7 @@ pub enum ErrorKind {
     Inconsistency,
     /// A internal server error occurred
     ///
-    /// This means the legal-vote module is broken, the source of this is event are unrecoverable backend errors.
+    /// This means the legal-vote module is broken, the source of this event are unrecoverable backend errors.
     Internal,
 }
 
@@ -179,7 +180,7 @@ mod test {
 
     #[test]
     fn start_message() {
-        let json_str = r#"{"message":"started","initiator_id":"00000000-0000-0000-0000-000000000000","vote_id":"00000000-0000-0000-0000-000000000000","start_time":"1970-01-01T00:00:00Z","name":"TestVote","topic":"Yes or No?","allowed_participants":["00000000-0000-0000-0000-000000000001","00000000-0000-0000-0000-000000000002"],"enable_abstain":false,"secret":false,"auto_stop":false,"duration":null}"#;
+        let json_str = r#"{"message":"started","initiator_id":"00000000-0000-0000-0000-000000000000","vote_id":"00000000-0000-0000-0000-000000000000","start_time":"1970-01-01T00:00:00Z","name":"TestVote","topic":"Yes or No?","allowed_participants":["00000000-0000-0000-0000-000000000001","00000000-0000-0000-0000-000000000002"],"enable_abstain":false,"auto_stop":false,"duration":null}"#;
 
         let message = Message::Started(rabbitmq::Parameters {
             initiator_id: ParticipantId::nil(),
@@ -190,7 +191,6 @@ mod test {
                 topic: "Yes or No?".into(),
                 allowed_participants: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
                 enable_abstain: false,
-                secret: false,
                 auto_stop: false,
                 duration: None,
             },
@@ -261,7 +261,7 @@ mod test {
     }
 
     #[test]
-    fn public_update_message() {
+    fn update_message() {
         let json_str = r#"{"message":"updated","vote_id":"00000000-0000-0000-0000-000000000000","yes":1,"no":0,"voters":{"00000000-0000-0000-0000-000000000001":"yes"}}"#;
 
         let votes = Votes {
@@ -277,7 +277,7 @@ mod test {
             vote_id: VoteId::from(Uuid::nil()),
             results: Results {
                 votes,
-                voters: Some(voters),
+                voters: voters,
             },
         });
 
@@ -287,30 +287,7 @@ mod test {
     }
 
     #[test]
-    fn secret_update_message() {
-        let json_str = r#"{"message":"updated","vote_id":"00000000-0000-0000-0000-000000000000","yes":1,"no":0,"voters":null}"#;
-
-        let votes = Votes {
-            yes: 1,
-            no: 0,
-            abstain: None,
-        };
-
-        let message = Message::Updated(VoteResults {
-            vote_id: VoteId::from(Uuid::nil()),
-            results: Results {
-                votes,
-                voters: None,
-            },
-        });
-
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
-    }
-
-    #[test]
-    fn public_stop_message() {
+    fn stop_message() {
         let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"by_participant","issuer":"00000000-0000-0000-0000-000000000000","results":"valid","yes":1,"no":0,"voters":{"00000000-0000-0000-0000-000000000001":"yes"}}"#;
 
         let votes = Votes {
@@ -327,31 +304,7 @@ mod test {
             kind: rabbitmq::StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Valid(Results {
                 votes,
-                voters: Some(voters),
-            }),
-        });
-
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
-    }
-
-    #[test]
-    fn secret_stop_message() {
-        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"by_participant","issuer":"00000000-0000-0000-0000-000000000000","results":"valid","yes":1,"no":0,"voters":null}"#;
-
-        let votes = Votes {
-            yes: 1,
-            no: 0,
-            abstain: None,
-        };
-
-        let message = Message::Stopped(Stop {
-            vote_id: VoteId::from(Uuid::nil()),
-            kind: rabbitmq::StopKind::ByParticipant(ParticipantId::nil()),
-            results: FinalResults::Valid(Results {
-                votes,
-                voters: None,
+                voters: voters,
             }),
         });
 
@@ -362,7 +315,7 @@ mod test {
 
     #[test]
     fn auto_stop_message() {
-        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"auto","results":"valid","yes":1,"no":0,"voters":null}"#;
+        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"auto","results":"valid","yes":1,"no":0,"voters":{"00000000-0000-0000-0000-000000000001":"yes"}}"#;
 
         let votes = Votes {
             yes: 1,
@@ -370,13 +323,13 @@ mod test {
             abstain: None,
         };
 
+        let mut voters = HashMap::new();
+        voters.insert(ParticipantId::new_test(1), VoteOption::Yes);
+
         let message = Message::Stopped(Stop {
             vote_id: VoteId::from(Uuid::nil()),
             kind: rabbitmq::StopKind::Auto,
-            results: FinalResults::Valid(Results {
-                votes,
-                voters: None,
-            }),
+            results: FinalResults::Valid(Results { votes, voters }),
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -386,21 +339,21 @@ mod test {
 
     #[test]
     fn expired_stop_message() {
-        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"expired","results":"valid","yes":0,"no":1,"abstain":2,"voters":null}"#;
+        let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"expired","results":"valid","yes":0,"no":0,"abstain":1,"voters":{"00000000-0000-0000-0000-000000000001":"abstain"}}"#;
 
         let votes = Votes {
             yes: 0,
-            no: 1,
-            abstain: Some(2),
+            no: 0,
+            abstain: Some(1),
         };
+
+        let mut voters = HashMap::new();
+        voters.insert(ParticipantId::new_test(1), VoteOption::Abstain);
 
         let message = Message::Stopped(Stop {
             vote_id: VoteId::from(Uuid::nil()),
             kind: rabbitmq::StopKind::Expired,
-            results: FinalResults::Valid(Results {
-                votes,
-                voters: None,
-            }),
+            results: FinalResults::Valid(Results { votes, voters }),
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -453,7 +406,7 @@ mod test {
 
     #[test]
     fn custom_cancel_message() {
-        let json_str = r#"{"message":"canceled","vote_id":"00000000-0000-0000-0000-000000000000","reason":{"custom":"A custom reason"}}"#;
+        let json_str = r#"{"message":"canceled","vote_id":"00000000-0000-0000-0000-000000000000","reason":"custom","custom":"A custom reason"}"#;
 
         let message = Message::Canceled(Canceled {
             vote_id: VoteId::from(Uuid::nil()),

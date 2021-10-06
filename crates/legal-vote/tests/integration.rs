@@ -23,7 +23,6 @@ async fn basic_vote() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
-        secret: false,
         auto_stop: false,
         duration: None,
     };
@@ -116,7 +115,7 @@ async fn basic_vote() {
                 no: 0,
                 abstain: None,
             },
-            voters: Some(voters.clone()),
+            voters: voters.clone(),
         },
     }));
 
@@ -167,7 +166,7 @@ async fn basic_vote() {
                 no: 1,
                 abstain: None,
             },
-            voters: Some(voters.clone()),
+            voters: voters.clone(),
         },
     }));
 
@@ -197,7 +196,7 @@ async fn basic_vote() {
                     no: 1,
                     abstain: None,
                 },
-                voters: Some(voters.clone()),
+                voters: voters.clone(),
             }),
         }));
 
@@ -238,7 +237,6 @@ async fn basic_vote_abstain_enabled() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: true,
-        secret: false,
         auto_stop: false,
         duration: None,
     };
@@ -331,7 +329,7 @@ async fn basic_vote_abstain_enabled() {
                 no: 0,
                 abstain: Some(1),
             },
-            voters: Some(voters.clone()),
+            voters: voters.clone(),
         },
     }));
 
@@ -382,7 +380,7 @@ async fn basic_vote_abstain_enabled() {
                 no: 1,
                 abstain: Some(1),
             },
-            voters: Some(voters.clone()),
+            voters: voters.clone(),
         },
     }));
 
@@ -412,7 +410,7 @@ async fn basic_vote_abstain_enabled() {
                     no: 1,
                     abstain: Some(1),
                 },
-                voters: Some(voters.clone()),
+                voters: voters.clone(),
             }),
         }));
 
@@ -453,7 +451,6 @@ async fn expired_vote() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
-        secret: false,
         auto_stop: false,
         duration: Some(5),
     };
@@ -515,7 +512,7 @@ async fn expired_vote() {
                     no: 0,
                     abstain: None,
                 },
-                voters: Some(HashMap::new()),
+                voters: HashMap::new(),
             }),
         }));
 
@@ -562,7 +559,6 @@ async fn auto_stop_vote() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
-        secret: false,
         auto_stop: true,
         duration: None,
     };
@@ -653,14 +649,14 @@ async fn auto_stop_vote() {
     let mut voters = HashMap::new();
     voters.insert(USER_1.participant_id, VoteOption::Yes);
 
-    let public_results = outgoing::Results {
+    let results = outgoing::Results {
         votes,
-        voters: Some(voters.clone()),
+        voters: voters.clone(),
     };
 
     let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
         vote_id,
-        results: public_results,
+        results: results,
     }));
 
     for user in USERS {
@@ -709,14 +705,14 @@ async fn auto_stop_vote() {
 
     voters.insert(USER_2.participant_id, VoteOption::No);
 
-    let public_results = outgoing::Results {
+    let results = outgoing::Results {
         votes,
-        voters: Some(voters.clone()),
+        voters: voters.clone(),
     };
 
     let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
         vote_id,
-        results: public_results.clone(),
+        results: results.clone(),
     }));
 
     for user in USERS {
@@ -728,7 +724,7 @@ async fn auto_stop_vote() {
         assert_eq!(expected_update, update);
     }
 
-    let final_results = outgoing::FinalResults::Valid(public_results);
+    let final_results = outgoing::FinalResults::Valid(results);
 
     let expected_stop_message =
         WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stop {
@@ -776,7 +772,6 @@ async fn start_with_one_participant() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id],
         enable_abstain: false,
-        secret: false,
         auto_stop: false,
         duration: None,
     };
