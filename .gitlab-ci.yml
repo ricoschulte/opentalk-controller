@@ -130,7 +130,7 @@ test:container:
       --dockerfile $CI_PROJECT_DIR/ci/Dockerfile
       --cache=true
       --cache-ttl=730h
-      --cache-repo $CI_REGISTRY_IMAGE
+      --cache-repo $CI_REGISTRY_IMAGE/cache
       --no-push
       --force
 
