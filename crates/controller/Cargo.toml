@@ -27,7 +27,7 @@ thiserror = "1.0"
 validator = { version = "0.14", features = ["derive"] }
 
 ### Database ORM
-diesel = { version = "1.4.6", features = ["postgres", "uuid", "uuidv07", "r2d2", "serde_json"] }
+diesel = { version = "1.4.6", features = ["postgres", "uuid", "uuidv07", "r2d2", "serde_json", "chrono"] }
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
 
 ### Database migrations

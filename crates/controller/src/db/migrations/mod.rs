@@ -43,7 +43,26 @@ pub async fn migrate_from_url(url: &str) -> Result<()> {
     let config = url.parse::<Config>()?;
     migrate(config).await
 }
+mod type_polyfills {
+    use barrel::types::{BaseType, Type};
 
+    /// An SQL datetime type
+    ///
+    /// Barrel 0.6.5 is missing datetime and 0.6.6 is not out yet, furthermore 0.6.6 only support TIMESTAMP which is without any timezone information
+    /// TODO(r.floren): Remove once 0.6.6 gets released
+    pub fn datetime() -> Type {
+        Type {
+            nullable: false,
+            unique: false,
+            increments: false,
+            indexed: false,
+            primary: false,
+            default: None,
+            size: None,
+            inner: BaseType::Custom("TIMESTAMPTZ"),
+        }
+    }
+}
 #[cfg(test)]
 mod migration_tests {
     use anyhow::Result;

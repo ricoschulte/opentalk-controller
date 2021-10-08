@@ -89,6 +89,7 @@ macro_rules! diesel_newtype {
 }
 
 pub mod groups;
+pub mod invites;
 pub mod legal_votes;
 pub mod migrations;
 pub mod rooms;
