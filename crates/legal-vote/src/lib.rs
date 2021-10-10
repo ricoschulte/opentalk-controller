@@ -16,9 +16,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use storage::protocol;
-use storage::protocol::{
-    reduce_public_protocol, ProtocolEntry, PublicVote, SecretVote, Vote, VoteEvent,
-};
+use storage::protocol::{reduce_protocol, ProtocolEntry, Vote, VoteEvent};
 use storage::VoteScriptResult;
 use tokio::time::sleep;
 
@@ -133,7 +131,6 @@ impl SignalingModule for LegalVote {
                         {
                             match error {
                                 Error::Vote(kind) => {
-                                    // todo: invald results
                                     log::error!("Failed to stop expired vote, error: {}", kind)
                                 }
                                 Error::Fatal(fatal) => {
@@ -147,7 +144,6 @@ impl SignalingModule for LegalVote {
                     }
                     storage::VoteStatus::Unknown => {
                         log::warn!("Legal vote timer contains an unknown vote id");
-                        // todo: timer event references a unknown vote id
                     }
                 }
             }
@@ -326,31 +322,16 @@ impl LegalVote {
                 ctx.ws_send(outgoing::Message::Started(parameters));
             }
             rabbitmq::Event::Stop(stop) => {
-                let parameters =
-                    storage::parameters::get(ctx.redis_conn(), self.room_id, stop.vote_id)
-                        .await?
-                        .ok_or(ErrorKind::InvalidVoteId)?;
-
                 let final_results = match stop.results {
                     rabbitmq::FinalResults::Valid(votes) => {
-                        if parameters.inner.secret {
-                            outgoing::FinalResults::Valid(outgoing::Results {
-                                votes,
-                                voters: None,
-                            })
-                        } else {
-                            let protocol = storage::protocol::get(
-                                ctx.redis_conn(),
-                                self.room_id,
-                                stop.vote_id,
-                            )
-                            .await?;
+                        let protocol =
+                            storage::protocol::get(ctx.redis_conn(), self.room_id, stop.vote_id)
+                                .await?;
 
-                            outgoing::FinalResults::Valid(outgoing::Results {
-                                votes,
-                                voters: Some(reduce_public_protocol(protocol)?),
-                            })
-                        }
+                        outgoing::FinalResults::Valid(outgoing::Results {
+                            votes,
+                            voters: reduce_protocol(protocol),
+                        })
                     }
                     rabbitmq::FinalResults::Invalid(invalid) => {
                         outgoing::FinalResults::Invalid(invalid)
@@ -392,7 +373,6 @@ impl LegalVote {
             }
             rabbitmq::Event::FatalServerError => {
                 ctx.ws_send(outgoing::Message::Error(outgoing::ErrorKind::Internal));
-                // todo: set module state to 'broken' & deny further requests until redis is back?
             }
         }
         Ok(())
@@ -586,16 +566,10 @@ impl LegalVote {
             ));
         }
 
-        let vote_event = if parameters.inner.secret {
-            Vote::Secret(SecretVote {
-                option: vote_message.option,
-            })
-        } else {
-            Vote::Public(PublicVote {
-                issuer: self.user_id,
-                participant_id: self.participant_id,
-                option: vote_message.option,
-            })
+        let vote_event = Vote {
+            issuer: self.user_id,
+            participant_id: self.participant_id,
+            option: vote_message.option,
         };
 
         let vote_result = storage::vote(
@@ -679,8 +653,6 @@ impl LegalVote {
             .ok_or(ErrorKind::InvalidVoteId)?;
 
         if parameters.initiator_id == self.participant_id {
-            //todo: only cancel if the setting indicate it?
-
             let reason = CancelReason::InitiatorLeft;
 
             self.cancel_vote_unchecked(redis_conn, current_vote_id, reason.clone())
@@ -720,19 +692,12 @@ impl LegalVote {
         )
         .await?;
 
-        if parameters.inner.secret {
-            Ok(outgoing::Results {
-                votes,
-                voters: None,
-            })
-        } else {
-            let protocol = storage::protocol::get(redis_conn, self.room_id, vote_id).await?;
+        let protocol = storage::protocol::get(redis_conn, self.room_id, vote_id).await?;
 
-            Ok(outgoing::Results {
-                votes,
-                voters: Some(reduce_public_protocol(protocol)?),
-            })
-        }
+        Ok(outgoing::Results {
+            votes,
+            voters: reduce_protocol(protocol),
+        })
     }
 
     /// Cancel a vote
@@ -824,7 +789,7 @@ impl LegalVote {
             .ok_or(ErrorKind::InvalidVoteId)?;
 
         let protocol = storage::protocol::get(ctx.redis_conn(), self.room_id, vote_id).await?;
-        let voters = reduce_public_protocol(protocol)?;
+        let voters = reduce_protocol(protocol);
 
         let mut protocol_vote_count = Votes {
             yes: 0,
@@ -948,16 +913,12 @@ impl LegalVote {
     fn handle_error(&self, ctx: &mut ModuleContext<'_, Self>, error: Error) -> Result<()> {
         match error {
             Error::Vote(error_kind) => {
-                if let ErrorKind::Inconsistency = error_kind {
-                    // todo: handle inconsistency with vote cancel & notify users
-                }
-
                 log::debug!("Error in legal_vote module {:?}", error_kind);
                 ctx.ws_send(outgoing::Message::Error(error_kind.into()));
                 Ok(())
             }
             Error::Fatal(fatal) => {
-                // todo: error handling in case of redis error
+                // todo: redis errors should be handled by the controller and not this module
                 self.handle_fatal_error(ctx, fatal)
             }
         }

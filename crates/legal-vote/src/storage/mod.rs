@@ -215,7 +215,7 @@ pub(crate) async fn vote(
     user_id: UserId,
     vote_event: Vote,
 ) -> Result<VoteScriptResult> {
-    let vote_option = vote_event.get_vote_option();
+    let vote_option = vote_event.option;
     let entry = ProtocolEntry::new(VoteEvent::Vote(vote_event));
 
     redis::Script::new(VOTE_SCRIPT)

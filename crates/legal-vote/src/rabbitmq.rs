@@ -103,12 +103,13 @@ pub struct Cancel {
     /// The id of the canceled vote
     pub vote_id: VoteId,
     /// The reason for the cancel
+    #[serde(flatten)]
     pub reason: CancelReason,
 }
 
 /// The reason for the cancel
 #[derive(Debug, Clone, Eq, PartialOrd, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "reason", content = "custom")]
 pub enum CancelReason {
     /// The room got destroyed and the server canceled the vote
     RoomDestroyed,

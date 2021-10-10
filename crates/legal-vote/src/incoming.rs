@@ -28,12 +28,8 @@ pub struct UserParameters {
     pub allowed_participants: Vec<ParticipantId>,
     /// Indicates that the `Abstain` vote option is enabled
     pub enable_abstain: bool,
-    /// Hide the users ids & names on results, show only the vote count
-    pub secret: bool,
-    // todo: not implemented yet
     /// The vote will automatically stop when every participant voted
     pub auto_stop: bool,
-    // todo: not implemented yet
     /// The vote will stop when the duration (in seconds) has passed
     pub duration: Option<u64>,
 }
@@ -80,7 +76,6 @@ mod test {
             "topic": "Yes or No?",
             "allowed_participants": ["00000000-0000-0000-0000-000000000000"],
             "enable_abstain": false,
-            "secret": false,
             "auto_stop": false,
             "duration": 60 
         }
@@ -93,7 +88,6 @@ mod test {
             topic,
             allowed_participants,
             enable_abstain,
-            secret,
             auto_stop,
             duration: time_in_sec,
         }) = start
@@ -102,7 +96,6 @@ mod test {
             assert_eq!("Yes or No?", topic);
             assert_eq!(allowed_participants, vec![ParticipantId::nil()]);
             assert!(!enable_abstain);
-            assert!(!secret);
             assert!(!auto_stop);
             assert_eq!(time_in_sec, Some(60));
         } else {

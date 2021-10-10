@@ -1,4 +1,3 @@
-use crate::error::{Error, ErrorKind};
 use crate::rabbitmq::{CancelReason, FinalResults, StopKind};
 use crate::VoteOption;
 use anyhow::{Context, Result};
@@ -6,7 +5,6 @@ use chrono::{DateTime, Utc};
 use controller::db::legal_votes::VoteId;
 use controller::db::users::UserId;
 use controller::prelude::*;
-
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
@@ -78,38 +76,13 @@ pub(crate) struct Start {
     pub(crate) parameters: crate::rabbitmq::Parameters,
 }
 
-/// A vote entry represents either a public or secret vote entry
+/// A vote entry mapped to a specific user
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) enum Vote {
-    /// Public vote entry
-    Public(PublicVote),
-    /// Secret vote entry
-    Secret(SecretVote),
-}
-
-impl Vote {
-    pub(crate) fn get_vote_option(&self) -> VoteOption {
-        match self {
-            Vote::Public(public) => public.option,
-            Vote::Secret(secret) => secret.option,
-        }
-    }
-}
-
-/// A public vote entry mapped to a specific user
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct PublicVote {
-    /// The user id of the voting user, `None` when the vote is secret
+pub(crate) struct Vote {
+    /// The user id of the voting user
     pub(crate) issuer: UserId,
     /// The users participant id, used when reducing the protocol for the frontend
     pub(crate) participant_id: ParticipantId,
-    /// The chosen vote option
-    pub(crate) option: VoteOption,
-}
-
-/// A secret vote entry with no mapping to any user
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub(crate) struct SecretVote {
     /// The chosen vote option
     pub(crate) option: VoteOption,
 }
@@ -119,6 +92,7 @@ pub(crate) struct Cancel {
     /// The user id of the entry issuer
     pub(crate) issuer: UserId,
     /// The reason for the cancel
+    #[serde(flatten)]
     pub(crate) reason: CancelReason,
 }
 
@@ -153,9 +127,7 @@ pub(crate) async fn get(
 
 /// Filters the protocol for vote events and returns a list of [`Vote`] events
 #[tracing::instrument(name = "legalvote_reduce_protocol", skip(protocol))]
-pub(crate) fn reduce_public_protocol(
-    protocol: Vec<ProtocolEntry>,
-) -> Result<HashMap<ParticipantId, VoteOption>, Error> {
+pub(crate) fn reduce_protocol(protocol: Vec<ProtocolEntry>) -> HashMap<ParticipantId, VoteOption> {
     protocol
         .into_iter()
         .filter_map(|entry| {
@@ -165,15 +137,6 @@ pub(crate) fn reduce_public_protocol(
                 None
             }
         })
-        .map(|vote| {
-            if let Vote::Public(public_vote) = vote {
-                Ok((public_vote.participant_id, public_vote.option))
-            } else {
-                Err(anyhow::Error::msg(
-                    "Unexpected secret vote in public vote protocol",
-                ))
-            }
-        })
-        .collect::<Result<HashMap<ParticipantId, VoteOption>>>()
-        .map_err(|_e| Error::Vote(ErrorKind::Inconsistency))
+        .map(|vote| (vote.participant_id, vote.option))
+        .collect::<HashMap<ParticipantId, VoteOption>>()
 }
