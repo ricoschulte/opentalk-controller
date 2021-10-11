@@ -2,7 +2,8 @@ use super::modules::{
     AnyStream, DynBroadcastEvent, DynEventCtx, DynTargetedEvent, Modules, NoSuchModuleError,
 };
 use super::{
-    DestroyContext, Namespaced, RabbitMqBinding, RabbitMqExchange, RabbitMqPublish, WebSocket,
+    DestroyContext, Namespaced, NamespacedOutgoing, RabbitMqBinding, RabbitMqExchange,
+    RabbitMqPublish, Timestamp, WebSocket,
 };
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
@@ -18,11 +19,12 @@ use anyhow::{bail, Context, Result};
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use async_tungstenite::tungstenite::protocol::CloseFrame;
 use async_tungstenite::tungstenite::Message;
+use chrono::TimeZone;
 use futures::stream::SelectAll;
 use futures::SinkExt;
 use lapin::message::DeliveryResult;
 use lapin::options::QueueDeclareOptions;
-use lapin::ExchangeKind;
+use lapin::{BasicProperties, ExchangeKind};
 use redis::aio::ConnectionManager;
 use serde_json::Value;
 use std::borrow::Cow;
@@ -440,7 +442,7 @@ impl Runner {
         }
 
         if self.control_data.is_some() {
-            self.rabbitmq_publish_control(None, rabbitmq::Message::Left(self.id))
+            self.rabbitmq_publish_control(Timestamp::now(), None, rabbitmq::Message::Left(self.id))
                 .await;
         }
     }
@@ -483,23 +485,25 @@ impl Runner {
                     }
                 }
                 Some((namespace, any)) = self.events.next() => {
-                    let actions = self.handle_module_targeted_event(namespace, DynTargetedEvent::Ext(any))
+                    let timestamp = Timestamp::now();
+                    let actions = self.handle_module_targeted_event(namespace, timestamp, DynTargetedEvent::Ext(any))
                         .await
                         .expect("Should not get events from unknown modules");
 
-                    self.handle_module_requested_actions(actions).await;
+                    self.handle_module_requested_actions(timestamp, actions).await;
                 }
                 _ = self.shutdown_sig.recv() => {
                     self.ws.close(CloseCode::Away).await;
                 }
             }
         }
-
+        let timestamp = Timestamp::now();
         let actions = self
-            .handle_module_broadcast_event(DynBroadcastEvent::Leaving, false)
+            .handle_module_broadcast_event(timestamp, DynBroadcastEvent::Leaving, false)
             .await;
 
-        self.handle_module_requested_actions(actions).await;
+        self.handle_module_requested_actions(timestamp, actions)
+            .await;
 
         log::debug!("Stopping ws-runner task for participant {}", self.id);
 
@@ -530,11 +534,12 @@ impl Runner {
                 return;
             }
         };
+        let timestamp = Timestamp::now();
 
         if namespaced.namespace == NAMESPACE {
             match serde_json::from_value(namespaced.payload) {
                 Ok(msg) => {
-                    if let Err(e) = self.handle_control_msg(msg).await {
+                    if let Err(e) = self.handle_control_msg(timestamp, msg).await {
                         log::error!("Failed to handle control msg, {}", e);
                         self.exit = true;
                     }
@@ -552,11 +557,15 @@ impl Runner {
             match self
                 .handle_module_targeted_event(
                     namespaced.namespace,
+                    timestamp,
                     DynTargetedEvent::WsMessage(namespaced.payload),
                 )
                 .await
             {
-                Ok(actions) => self.handle_module_requested_actions(actions).await,
+                Ok(actions) => {
+                    self.handle_module_requested_actions(timestamp, actions)
+                        .await
+                }
                 Err(NoSuchModuleError(())) => {
                     self.ws
                         .send(Message::Text(error("unknown namespace")))
@@ -566,7 +575,11 @@ impl Runner {
         }
     }
 
-    async fn handle_control_msg(&mut self, msg: incoming::Message) -> Result<()> {
+    async fn handle_control_msg(
+        &mut self,
+        timestamp: Timestamp,
+        msg: incoming::Message,
+    ) -> Result<()> {
         match msg {
             incoming::Message::Join(join) => {
                 if join.display_name.is_empty() {
@@ -595,6 +608,16 @@ impl Runner {
                 .await
                 .context("Failed to set display_name")?;
 
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.id,
+                    "joined_at",
+                    timestamp,
+                )
+                .await
+                .context("Failed to set joined timestamp")?;
+
                 let participant_set =
                     storage::get_all_participants(&mut self.redis_conn, self.room_id)
                         .await
@@ -622,13 +645,17 @@ impl Runner {
 
                 let control_data = ControlData {
                     display_name: join.display_name,
+                    joined_at: timestamp,
                     hand_is_up: false,
+                    hand_updated_at: timestamp,
+                    left_at: None,
                 };
 
                 let mut module_data = HashMap::new();
 
                 let actions = self
                     .handle_module_broadcast_event(
+                        timestamp,
                         DynBroadcastEvent::Joined(
                             &control_data,
                             &mut module_data,
@@ -655,10 +682,11 @@ impl Runner {
                     ))
                     .await;
 
-                self.rabbitmq_publish_control(None, rabbitmq::Message::Joined(self.id))
+                self.rabbitmq_publish_control(timestamp, None, rabbitmq::Message::Joined(self.id))
                     .await;
 
-                self.handle_module_requested_actions(actions).await;
+                self.handle_module_requested_actions(timestamp, actions)
+                    .await;
             }
             incoming::Message::RaiseHand => {
                 storage::set_attribute(
@@ -669,12 +697,21 @@ impl Runner {
                     true,
                 )
                 .await?;
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.id,
+                    "hand_updated_at",
+                    timestamp,
+                )
+                .await?;
 
                 let actions = self
-                    .handle_module_broadcast_event(DynBroadcastEvent::RaiseHand, true)
+                    .handle_module_broadcast_event(timestamp, DynBroadcastEvent::RaiseHand, true)
                     .await;
 
-                self.handle_module_requested_actions(actions).await;
+                self.handle_module_requested_actions(timestamp, actions)
+                    .await;
             }
             incoming::Message::LowerHand => {
                 storage::set_attribute(
@@ -685,12 +722,21 @@ impl Runner {
                     false,
                 )
                 .await?;
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.id,
+                    "hand_updated",
+                    timestamp,
+                )
+                .await?;
 
                 let actions = self
-                    .handle_module_broadcast_event(DynBroadcastEvent::LowerHand, true)
+                    .handle_module_broadcast_event(timestamp, DynBroadcastEvent::LowerHand, true)
                     .await;
 
-                self.handle_module_requested_actions(actions).await;
+                self.handle_module_requested_actions(timestamp, actions)
+                    .await;
             }
         }
 
@@ -705,15 +751,23 @@ impl Runner {
 
         let display_name: String =
             storage::get_attribute(&mut self.redis_conn, self.room_id, id, "display_name").await?;
+        let joined_at: Timestamp =
+            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "joined_at").await?;
 
         let hand_is_up: bool =
             storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_is_up").await?;
+        let hand_updated_at: Timestamp =
+            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_updated_at")
+                .await?;
 
         participant.module_data.insert(
             NAMESPACE,
             serde_json::to_value(ControlData {
                 display_name,
                 hand_is_up,
+                hand_updated_at,
+                joined_at,
+                left_at: None,
             })
             .expect("Failed to convert ControlData to serde_json::Value"),
         );
@@ -735,6 +789,11 @@ impl Runner {
             if self.control_data.is_none() {
                 return;
             }
+            let timestamp: Timestamp = delivery.properties.timestamp().map(|value| chrono::Utc.timestamp(value as i64, 0)).unwrap_or_else(|| {
+                log::warn!("Got RabbitMQ message without timestamp. Creating current timestamp as fallback.");
+                chrono::Utc::now()
+            }
+            ).into();
 
             let namespaced = match serde_json::from_slice::<Namespaced<Value>>(&delivery.data) {
                 Ok(namespaced) => namespaced,
@@ -753,7 +812,7 @@ impl Runner {
                     }
                 };
 
-                if let Err(e) = self.handle_rabbitmq_control_msg(msg).await {
+                if let Err(e) = self.handle_rabbitmq_control_msg(timestamp, msg).await {
                     log::error!("Failed to handle incoming rabbitmq control msg, {}", e);
                     return;
                 }
@@ -761,11 +820,15 @@ impl Runner {
                 match self
                     .handle_module_targeted_event(
                         namespaced.namespace,
+                        timestamp,
                         DynTargetedEvent::RabbitMqMessage(namespaced.payload),
                     )
                     .await
                 {
-                    Ok(actions) => self.handle_module_requested_actions(actions).await,
+                    Ok(actions) => {
+                        self.handle_module_requested_actions(timestamp, actions)
+                            .await
+                    }
                     Err(NoSuchModuleError(())) => log::warn!("Got invalid rabbit-mq message"),
                 }
             }
@@ -792,7 +855,11 @@ impl Runner {
         }
     }
 
-    async fn handle_rabbitmq_control_msg(&mut self, msg: rabbitmq::Message) -> Result<()> {
+    async fn handle_rabbitmq_control_msg(
+        &mut self,
+        timestamp: Timestamp,
+        msg: rabbitmq::Message,
+    ) -> Result<()> {
         log::debug!("Received RabbitMQ control message {:?}", msg);
 
         match msg {
@@ -805,6 +872,7 @@ impl Runner {
 
                 let actions = self
                     .handle_module_broadcast_event(
+                        timestamp,
                         DynBroadcastEvent::ParticipantJoined(&mut participant),
                         false,
                     )
@@ -820,7 +888,8 @@ impl Runner {
                     ))
                     .await;
 
-                self.handle_module_requested_actions(actions).await;
+                self.handle_module_requested_actions(timestamp, actions)
+                    .await;
             }
             rabbitmq::Message::Left(id) => {
                 if self.id == id {
@@ -828,7 +897,11 @@ impl Runner {
                 }
 
                 let actions = self
-                    .handle_module_broadcast_event(DynBroadcastEvent::ParticipantLeft(id), false)
+                    .handle_module_broadcast_event(
+                        timestamp,
+                        DynBroadcastEvent::ParticipantLeft(id),
+                        false,
+                    )
                     .await;
 
                 self.ws
@@ -843,7 +916,8 @@ impl Runner {
                     ))
                     .await;
 
-                self.handle_module_requested_actions(actions).await;
+                self.handle_module_requested_actions(timestamp, actions)
+                    .await;
             }
             rabbitmq::Message::Update(id) => {
                 if self.id == id {
@@ -854,6 +928,7 @@ impl Runner {
 
                 let actions = self
                     .handle_module_broadcast_event(
+                        timestamp,
                         DynBroadcastEvent::ParticipantUpdated(&mut participant),
                         false,
                     )
@@ -869,7 +944,8 @@ impl Runner {
                     ))
                     .await;
 
-                self.handle_module_requested_actions(actions).await;
+                self.handle_module_requested_actions(timestamp, actions)
+                    .await;
             }
         }
 
@@ -881,6 +957,7 @@ impl Runner {
     /// If recipient is `None` the message is sent to all inside the room
     async fn rabbitmq_publish_control(
         &mut self,
+        timestamp: Timestamp,
         recipient: Option<ParticipantId>,
         message: rabbitmq::Message,
     ) {
@@ -895,7 +972,7 @@ impl Runner {
             Cow::Borrowed(rabbitmq::room_all_routing_key())
         };
 
-        self.rabbitmq_publish(None, &routing_key, message.to_json())
+        self.rabbitmq_publish(timestamp, None, &routing_key, message.to_json())
             .await;
     }
 
@@ -908,12 +985,13 @@ impl Runner {
     )]
     async fn rabbitmq_publish(
         &mut self,
+        timestamp: Timestamp,
         exchange: Option<&str>,
         routing_key: &str,
         message: String,
     ) {
         log::trace!("publish {}", message);
-
+        let properties = BasicProperties::default().with_timestamp(timestamp.timestamp() as u64);
         if let Err(e) = self
             .rabbit_mq_channel
             .basic_publish(
@@ -921,7 +999,7 @@ impl Runner {
                 routing_key,
                 Default::default(),
                 message.into_bytes(),
-                Default::default(),
+                properties,
             )
             .await
         {
@@ -935,6 +1013,7 @@ impl Runner {
     async fn handle_module_targeted_event(
         &mut self,
         module: &str,
+        timestamp: Timestamp,
         dyn_event: DynTargetedEvent,
     ) -> Result<ModuleRequestedActions, NoSuchModuleError> {
         let mut ws_messages = vec![];
@@ -944,6 +1023,7 @@ impl Runner {
 
         let ctx = DynEventCtx {
             id: self.id,
+            timestamp,
             ws_messages: &mut ws_messages,
             rabbitmq_publish: &mut rabbitmq_publish,
             redis_conn: &mut self.redis_conn,
@@ -967,6 +1047,7 @@ impl Runner {
     /// Dispatch copyable event to all modules
     async fn handle_module_broadcast_event(
         &mut self,
+        timestamp: Timestamp,
         dyn_event: DynBroadcastEvent<'_>,
         mut invalidate_data: bool,
     ) -> ModuleRequestedActions {
@@ -976,6 +1057,7 @@ impl Runner {
 
         let ctx = DynEventCtx {
             id: self.id,
+            timestamp,
             ws_messages: &mut ws_messages,
             rabbitmq_publish: &mut rabbitmq_publish,
             redis_conn: &mut self.redis_conn,
@@ -998,6 +1080,7 @@ impl Runner {
     /// these are executed here
     async fn handle_module_requested_actions(
         &mut self,
+        timestamp: Timestamp,
         ModuleRequestedActions {
             ws_messages,
             rabbitmq_publish,
@@ -1011,6 +1094,7 @@ impl Runner {
 
         for publish in rabbitmq_publish {
             self.rabbitmq_publish(
+                timestamp,
                 Some(&publish.exchange),
                 &publish.routing_key,
                 publish.message,
@@ -1019,7 +1103,7 @@ impl Runner {
         }
 
         if invalidate_data {
-            self.rabbitmq_publish_control(None, rabbitmq::Message::Update(self.id))
+            self.rabbitmq_publish_control(timestamp, None, rabbitmq::Message::Update(self.id))
                 .await;
         }
 
@@ -1040,8 +1124,9 @@ struct ModuleRequestedActions {
 }
 
 fn error(text: &str) -> String {
-    Namespaced {
+    NamespacedOutgoing {
         namespace: "error",
+        timestamp: Timestamp::now(),
         payload: text,
     }
     .to_json()

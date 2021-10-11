@@ -1,6 +1,6 @@
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::ControlData;
-use crate::api::signaling::{ParticipantId, Role, SignalingRoomId};
+use crate::api::signaling::{ParticipantId, Role, SignalingRoomId, Timestamp};
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::DbInterface;
@@ -213,7 +213,8 @@ pub struct ModuleContext<'ctx, M>
 where
     M: SignalingModule,
 {
-    ws_messages: &'ctx mut Vec<Namespaced<'static, M::Outgoing>>,
+    ws_messages: &'ctx mut Vec<NamespacedOutgoing<'static, M::Outgoing>>,
+    timestamp: Timestamp,
     rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
     redis_conn: &'ctx mut ConnectionManager,
     events: &'ctx mut SelectAll<AnyStream>,
@@ -236,8 +237,14 @@ where
     /// Queue a outgoing message to be sent via the websocket
     /// after exiting the `on_event` function
     pub fn ws_send(&mut self, message: M::Outgoing) {
-        self.ws_messages.push(Namespaced {
+        self.ws_send_overwrite_timestamp(message, self.timestamp)
+    }
+
+    /// Similar to `ws_send` but sets an explicit timestamp
+    pub fn ws_send_overwrite_timestamp(&mut self, message: M::Outgoing, timestamp: Timestamp) {
+        self.ws_messages.push(NamespacedOutgoing {
             namespace: M::NAMESPACE,
+            timestamp,
             payload: message,
         });
     }
@@ -280,6 +287,11 @@ where
 
     pub fn exit(&mut self, code: Option<CloseCode>) {
         *self.exit = Some(code.unwrap_or(CloseCode::Normal));
+    }
+
+    /// Returns the Timestamp of the event which triggered the `on_event` handler.
+    pub fn timestamp(&self) -> Timestamp {
+        self.timestamp
     }
 }
 
@@ -355,7 +367,10 @@ pub trait SignalingModule: Sized + 'static {
     async fn on_destroy(self, ctx: DestroyContext<'_>);
 }
 
-/// The root of all websocket messages
+/// An envelope of module messages annotated with their respective module name.
+///
+/// This is used for incoming WebSocket messages and rabbitMQ messages.
+/// The Namespace is used to route the message to appropriate [`SignalingModule`]
 #[derive(Deserialize, Serialize)]
 pub(super) struct Namespaced<'n, O> {
     pub namespace: &'n str,
@@ -363,6 +378,24 @@ pub(super) struct Namespaced<'n, O> {
 }
 
 impl<'n, O> Namespaced<'n, O>
+where
+    O: Serialize,
+{
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).expect("Failed to convert namespaced to json")
+    }
+}
+/// The root of all outgoing websocket messages.
+///
+/// This is similar to [`Namespaced`] but includes a timestamp field.
+#[derive(Deserialize, Serialize)]
+pub(super) struct NamespacedOutgoing<'n, O> {
+    pub namespace: &'n str,
+    pub timestamp: Timestamp,
+    pub payload: O,
+}
+
+impl<'n, O> NamespacedOutgoing<'n, O>
 where
     O: Serialize,
 {

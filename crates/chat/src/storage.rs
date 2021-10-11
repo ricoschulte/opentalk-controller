@@ -1,4 +1,4 @@
-use super::Message;
+use super::TimedMessage;
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use displaydoc::Display;
@@ -19,7 +19,7 @@ impl_to_redis_args!(RoomChatHistory);
 pub async fn get_room_chat_history(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
-) -> Result<Vec<Message>> {
+) -> Result<Vec<TimedMessage>> {
     let messages = redis_conn
         .lrange(RoomChatHistory { room }, 0, -1)
         .await
@@ -32,7 +32,7 @@ pub async fn get_room_chat_history(
 pub async fn add_message_to_room_chat_history(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
-    message: &Message,
+    message: &TimedMessage,
 ) -> Result<()> {
     redis_conn
         .lpush(RoomChatHistory { room }, message)

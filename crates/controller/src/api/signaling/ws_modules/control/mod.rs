@@ -1,3 +1,4 @@
+use crate::Timestamp;
 use serde::Serialize;
 
 pub mod incoming;
@@ -11,4 +12,7 @@ pub mod storage;
 pub struct ControlData {
     pub display_name: String,
     pub hand_is_up: bool,
+    pub joined_at: Timestamp,
+    pub left_at: Option<Timestamp>,
+    pub hand_updated_at: Timestamp,
 }
