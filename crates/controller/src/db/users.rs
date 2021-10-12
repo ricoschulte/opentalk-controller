@@ -10,7 +10,7 @@ use diesel::{
 };
 use uuid::Uuid;
 
-diesel_newtype!(UserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt");
+diesel_newtype!(#[derive(Copy)] UserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt");
 
 impl_to_redis_args_se!(UserId);
 impl_from_redis_value_de!(UserId);
@@ -18,7 +18,7 @@ impl_from_redis_value_de!(UserId);
 /// Diesel user struct
 ///
 /// Is used as a result in various queries. Represents a user column
-#[derive(Clone, Queryable, Identifiable)]
+#[derive(Debug, Clone, Queryable, Identifiable)]
 pub struct User {
     pub id: UserId,
     pub oidc_uuid: Uuid,

@@ -8,7 +8,7 @@ use diesel::{ExpressionMethods, Identifiable, QueryDsl, QueryResult, Queryable, 
 use serde::Serialize;
 use uuid::Uuid;
 
-diesel_newtype!(VoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid");
+diesel_newtype!(#[derive(Copy)] VoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid");
 
 impl_to_redis_args_se!(VoteId);
 impl_from_redis_value_de!(VoteId);

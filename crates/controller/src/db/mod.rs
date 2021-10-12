@@ -14,7 +14,7 @@ use std::time::Duration;
 /// Defines the type and implements a variety of traits for it to be usable with diesel.
 /// See https://stackoverflow.com/a/59948116 for more information.
 macro_rules! diesel_newtype {
-    ($($name:ident($to_wrap:ty) => $sql_type:ty, $sql_type_lit:literal),+) => {
+    ($($(#[$meta:meta])* $name:ident($to_wrap:ty) => $sql_type:ty, $sql_type_lit:literal ),+) => {
         $(
             pub use __newtype_impl::$name;
         )+
@@ -33,7 +33,6 @@ macro_rules! diesel_newtype {
             #[derive(
                 Debug,
                 Clone,
-                Copy,
                 PartialEq,
                 Eq,
                 PartialOrd,
@@ -44,6 +43,7 @@ macro_rules! diesel_newtype {
                 AsExpression,
                 FromSqlRow,
             )]
+            $(#[$meta])*
             #[sql_type = $sql_type_lit]
             pub struct $name($to_wrap);
 

@@ -7,7 +7,7 @@ use crate::diesel::RunQueryDsl;
 use diesel::{ExpressionMethods, QueryDsl, QueryResult};
 use diesel::{Identifiable, Queryable};
 
-diesel_newtype!(RoomId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid");
+diesel_newtype!(#[derive(Copy)] RoomId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid");
 
 /// Diesel room struct
 ///
