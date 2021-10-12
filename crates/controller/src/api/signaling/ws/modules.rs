@@ -387,7 +387,7 @@ where
             id: builder.id,
             room: &builder.room,
             breakout_room: builder.breakout_room,
-            user: &builder.user,
+            participant: &builder.participant,
             role: builder.role,
             db: &builder.db,
             rabbitmq_exchanges: &mut builder.rabbitmq_exchanges,
@@ -397,9 +397,9 @@ where
             m: PhantomData::<fn() -> M>,
         };
 
-        let module = M::init(ctx, &self.params, builder.protocol).await?;
-
-        builder.modules.add_module(module).await;
+        if let Some(module) = M::init(ctx, &self.params, builder.protocol).await? {
+            builder.modules.add_module(module).await;
+        }
 
         Ok(())
     }

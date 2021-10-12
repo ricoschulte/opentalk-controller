@@ -87,14 +87,14 @@ impl SignalingModule for BreakoutRooms {
         ctx: InitContext<'_, Self>,
         _params: &Self::Params,
         _protocol: &'static str,
-    ) -> Result<Self> {
-        Ok(Self {
+    ) -> Result<Option<Self>> {
+        Ok(Some(Self {
             id: ctx.participant_id(),
             role: ctx.role(),
             parent: ctx.room().uuid,
             room: ctx.room_id(),
             breakout_room: ctx.breakout_room(),
-        })
+        }))
     }
 
     async fn on_event(

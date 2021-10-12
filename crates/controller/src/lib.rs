@@ -64,6 +64,7 @@ extern crate diesel;
 
 pub mod prelude {
     pub use crate::api::signaling::prelude::*;
+    pub use crate::api::Participant;
     pub use crate::{impl_from_redis_value_de, impl_to_redis_args, impl_to_redis_args_se};
 
     // re-export commonly used crates to reduce dependency management in module-crates

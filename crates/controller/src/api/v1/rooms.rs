@@ -5,6 +5,7 @@
 
 use crate::api::signaling::prelude::*;
 use crate::api::v1::{ApiError, DefaultApiError};
+use crate::api::Participant;
 use crate::db::rooms::{self as db_rooms, RoomId};
 use crate::db::users::{User, UserId};
 use crate::db::DbInterface;
@@ -263,9 +264,9 @@ pub struct Ticket {
 impl_to_redis_args!(&Ticket);
 
 /// Data stored behind the [`Ticket`] key.
-#[derive(Debug, Copy, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 pub struct TicketData {
-    pub user: UserId,
+    pub participant: Participant<UserId>,
     pub room: RoomId,
     pub breakout_room: Option<BreakoutRoomId>,
 }
@@ -359,7 +360,7 @@ pub async fn start(
     let ticket = Ticket { ticket };
 
     let ticket_data = TicketData {
-        user: current_user.id,
+        participant: current_user.id.into(),
         room: room_id,
         breakout_room: request.breakout_room,
     };

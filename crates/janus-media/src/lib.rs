@@ -65,7 +65,7 @@ impl SignalingModule for Media {
         mut ctx: InitContext<'_, Self>,
         mcu: &Self::Params,
         _protocol: &'static str,
-    ) -> Result<Self> {
+    ) -> Result<Option<Self>> {
         let (media_sender, janus_events) = mpsc::channel(12);
 
         let state = HashMap::new();
@@ -77,13 +77,13 @@ impl SignalingModule for Media {
 
         ctx.add_event_stream(ReceiverStream::new(janus_events));
 
-        Ok(Self {
+        Ok(Some(Self {
             id,
             room,
             mcu: mcu.clone(),
             media: MediaSessions::new(ctx.participant_id(), media_sender),
             state,
-        })
+        }))
     }
 
     async fn on_event(

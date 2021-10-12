@@ -1,6 +1,7 @@
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::ControlData;
 use crate::api::signaling::{ParticipantId, Role, SignalingRoomId, Timestamp};
+use crate::api::Participant;
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::DbInterface;
@@ -99,7 +100,7 @@ where
     id: ParticipantId,
     room: &'ctx Room,
     breakout_room: Option<BreakoutRoomId>,
-    user: &'ctx User,
+    participant: &'ctx Participant<User>,
     role: Role,
     db: &'ctx Arc<DbInterface>,
     rabbitmq_exchanges: &'ctx mut Vec<RabbitMqExchange>,
@@ -150,8 +151,8 @@ where
     }
 
     /// Returns the user associated with the participant
-    pub fn user(&self) -> &User {
-        self.user
+    pub fn participant(&self) -> &Participant<User> {
+        self.participant
     }
 
     /// Returns the role of participant inside the room
@@ -349,11 +350,13 @@ pub trait SignalingModule: Sized + 'static {
     /// Constructor of the module
     ///
     /// Provided with the websocket context the modules params and the negotiated protocol
+    /// The module can decide to no initiate based on the protocol and passed ctx and params.
+    /// E.g. when the user is a bot or guest.
     async fn init(
         ctx: InitContext<'_, Self>,
         params: &Self::Params,
         protocol: &'static str,
-    ) -> Result<Self>;
+    ) -> Result<Option<Self>>;
 
     /// Events related to this module will be passed into this function together with [`ModuleContext`]
     /// which gives access to the websocket and other related information.
