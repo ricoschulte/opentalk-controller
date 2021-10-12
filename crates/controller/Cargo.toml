@@ -49,6 +49,7 @@ futures = "0.3"
 bytes = "1"
 serde_json = "1"
 parking_lot = "0.11"
+mime = "0.3.16"
 
 ### RabbitMQ
 lapin = { version = "1.7", default-features = false }
@@ -75,6 +76,7 @@ rustls = "0.19"
 
 ### QoL
 displaydoc = "0.2"
+either = "1.6.1"
 
 # Random Distributions etc. Used for RR
 rand = "0.8.3"

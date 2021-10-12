@@ -1,6 +1,6 @@
 //! TURN related API structs and Endpoints
 use super::DefaultApiError;
-use super::NoContent;
+use crate::api::v1::response::NoContent;
 use crate::db::users::User;
 use crate::settings;
 use crate::settings::{Settings, TurnServer};

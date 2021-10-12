@@ -1,8 +1,12 @@
 //! Contains the database interface, ORM and database migrations
 use crate::settings;
+use diesel::pg::Pg;
+use diesel::query_builder::{AstPass, Query, QueryFragment};
+use diesel::query_dsl::LoadQuery;
 use diesel::r2d2::ConnectionManager;
 use diesel::result::Error;
-use diesel::{r2d2, PgConnection};
+use diesel::sql_types::BigInt;
+use diesel::{r2d2, PgConnection, QueryResult, RunQueryDsl};
 use std::time::Duration;
 
 /// Allows to create one or more typed ids
@@ -169,5 +173,74 @@ impl DbInterface {
                 Err(DatabaseError::R2D2Error(msg))
             }
         }
+    }
+}
+
+pub trait Paginate: Sized {
+    fn paginate(self, page: i64) -> Paginated<Self>;
+    fn paginate_by(self, per_page: i64, page: i64) -> Paginated<Self>;
+}
+
+impl<T> Paginate for T {
+    fn paginate(self, page: i64) -> Paginated<Self> {
+        Paginated {
+            query: self,
+            per_page: DEFAULT_PER_PAGE,
+            page,
+        }
+    }
+    fn paginate_by(self, per_page: i64, page: i64) -> Paginated<Self> {
+        Paginated {
+            query: self,
+            per_page,
+            page,
+        }
+    }
+}
+
+const DEFAULT_PER_PAGE: i64 = 10;
+
+#[derive(Debug, Clone, Copy, QueryId)]
+pub struct Paginated<T> {
+    query: T,
+    page: i64,
+    per_page: i64,
+}
+
+impl<T> Paginated<T> {
+    pub fn per_page(self, per_page: i64) -> Self {
+        Paginated { per_page, ..self }
+    }
+
+    pub fn load_and_count<U, Conn>(self, conn: &Conn) -> QueryResult<(Vec<U>, i64)>
+    where
+        Self: LoadQuery<Conn, (U, i64)>,
+    {
+        let results = self.load::<(U, i64)>(conn)?;
+        let total = results.get(0).map(|x| x.1).unwrap_or(0);
+        let records = results.into_iter().map(|x| x.0).collect();
+        Ok((records, total))
+    }
+}
+
+impl<T: Query> Query for Paginated<T> {
+    type SqlType = (T::SqlType, BigInt);
+}
+
+impl<T> RunQueryDsl<PgConnection> for Paginated<T> {}
+
+impl<T> QueryFragment<Pg> for Paginated<T>
+where
+    T: QueryFragment<Pg>,
+{
+    fn walk_ast(&self, mut out: AstPass<Pg>) -> QueryResult<()> {
+        out.push_sql("SELECT *, COUNT(*) OVER () FROM (");
+        self.query.walk_ast(out.reborrow())?;
+        out.push_sql(") t LIMIT ");
+        out.push_bind_param::<BigInt, _>(&self.per_page)?;
+        out.push_sql(" OFFSET ");
+        let offset = (self.page - 1) * self.per_page;
+        out.push_bind_param::<BigInt, _>(&offset)?;
+        Ok(())
     }
 }

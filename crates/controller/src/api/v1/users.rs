@@ -144,7 +144,7 @@ pub async fn set_current_user_profile(
 
 /// API Endpoint *GET /users/me*
 ///
-/// Returns the ['UserProfile'] of the requesting user.
+/// Returns the [`UserProfile`] of the requesting user.
 #[get("/users/me")]
 pub async fn current_user_profile(
     current_user: ReqData<User>,
@@ -166,7 +166,7 @@ pub async fn current_user_profile(
 
 /// API Endpoint *GET /users/{user_id}*
 ///
-/// Returns ['UserDetails'] of the specified user
+/// Returns [`UserDetails`] of the specified user
 #[get("/users/{user_id}")]
 pub async fn user_details(
     db_ctx: Data<DbInterface>,
