@@ -4,8 +4,9 @@
 //! structs are defined in the Database module [`crate::db`] for database operations.
 
 use crate::api::signaling::prelude::*;
-use crate::api::v1::{ApiError, DefaultApiError};
+use crate::api::v1::{ApiError, ApiResponse, DefaultApiError};
 use crate::api::Participant;
+use crate::db::invites::InviteCodeUuid;
 use crate::db::rooms::{self as db_rooms, RoomId};
 use crate::db::users::{User, UserId};
 use crate::db::DbInterface;
@@ -16,6 +17,7 @@ use rand::Rng;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
+use std::str::FromStr;
 use validator::{Validate, ValidationError};
 
 /// A Room
@@ -277,6 +279,7 @@ impl_to_redis_args_se!(&TicketData);
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StartRoomError {
+    InvalidInvite,
     WrongRoomPassword,
     NoBreakoutRooms,
     InvalidBreakoutRoomId,
@@ -376,4 +379,103 @@ pub async fn start(
         })?;
 
     Ok(Json(ticket))
+}
+
+/// The JSON body expected when making a *POST /rooms/{room_uuid}/start_invited*
+#[derive(Debug, Deserialize)]
+pub struct InvitedStartRequest {
+    password: Option<String>,
+    invite_code: String,
+    breakout_room: Option<BreakoutRoomId>,
+}
+
+/// API Endpoint *POST /rooms/{room_id}/start_invited*
+///
+/// See [`start`]
+#[post("/rooms/{room_id}/start_invited")]
+pub async fn start_invited(
+    db_ctx: Data<DbInterface>,
+    redis_ctx: Data<ConnectionManager>,
+    room_id: Path<RoomId>,
+    request: Json<InvitedStartRequest>,
+) -> Result<ApiResponse<Ticket>, StartError> {
+    let room_id = room_id.into_inner();
+    let invite_code_as_uuid = uuid::Uuid::from_str(&request.invite_code)
+        .map_err(|_| StartError::BadRequest("bad invite_code format".to_string()))?;
+
+    let room = crate::block(move || -> Result<db_rooms::Room, StartError> {
+        let invite = db_ctx.get_invite(&InviteCodeUuid::from(invite_code_as_uuid))?;
+        if !invite.active {
+            return Err(StartError::AuthJson(StartRoomError::InvalidInvite.into()));
+        }
+        if invite.room != room_id {
+            return Err(StartError::BadRequest("RoomId mismatch".to_string()));
+        }
+        let room = db_ctx.get_room(invite.room)?.ok_or(StartError::NotFound)?;
+
+        Ok(room)
+    })
+    .await
+    .map_err(|e| {
+        log::error!("BlockingError on GET /rooms/{{room_uuid}}/start - {}", e);
+        StartError::Internal
+    })??;
+
+    if !room.password.is_empty() {
+        if let Some(pw) = &request.password {
+            if pw != &room.password {
+                return Err(StartError::AuthJson(
+                    StartRoomError::WrongRoomPassword.into(),
+                ));
+            }
+        } else {
+            return Err(StartError::AuthJson(
+                StartRoomError::WrongRoomPassword.into(),
+            ));
+        }
+    }
+
+    let mut redis_conn = (**redis_ctx).clone();
+
+    if let Some(breakout_room) = request.breakout_room {
+        let config = breakout::storage::get_config(&mut redis_conn, room.uuid).await?;
+
+        if let Some(config) = config {
+            if !config.is_valid_id(breakout_room) {
+                return Err(StartError::AuthJson(
+                    StartRoomError::InvalidBreakoutRoomId.into(),
+                ));
+            }
+        } else {
+            return Err(StartError::AuthJson(StartRoomError::NoBreakoutRooms.into()));
+        }
+    }
+
+    let ticket = rand::thread_rng()
+        .sample_iter(rand::distributions::Alphanumeric)
+        .take(64)
+        .map(char::from)
+        .collect::<String>();
+
+    let ticket = Ticket { ticket };
+
+    let ticket_data = TicketData {
+        participant: Participant::Guest,
+        room: room_id,
+        breakout_room: request.breakout_room,
+    };
+
+    // TODO: make the expiration configurable through settings
+    // let the ticket expire in 30 seconds
+    redis_conn
+        .set_ex(&ticket, &ticket_data, 30)
+        .await
+        .map_err(|e| {
+            log::error!("Unable to store ticket in redis, {}", e);
+            StartError::Internal
+        })?;
+
+    // TODO(r.floren): create session resumption token for guests
+
+    Ok(ApiResponse::new(ticket))
 }

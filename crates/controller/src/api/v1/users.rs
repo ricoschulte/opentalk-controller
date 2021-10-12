@@ -24,6 +24,18 @@ pub struct UserDetails {
     pub lastname: String,
 }
 
+impl From<db_users::User> for UserDetails {
+    fn from(user: db_users::User) -> Self {
+        UserDetails {
+            id: user.id,
+            email: user.email,
+            title: user.title,
+            firstname: user.firstname,
+            lastname: user.lastname,
+        }
+    }
+}
+
 /// Private user profile.
 ///
 /// Similar to [`UserDetails`], but contains additional "private" information about a user.
