@@ -19,6 +19,7 @@ members = [
     "crates/test-util",
     "crates/client",
     "crates/r3dlock",
+    "crates/room-provisioner",
 ]
 
 [dependencies]
