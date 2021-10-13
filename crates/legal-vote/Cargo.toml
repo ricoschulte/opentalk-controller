@@ -6,6 +6,7 @@ edition = "2018"
 [dependencies]
 controller = { path = "../controller", package = "k3k-controller-core" }
 serde = { version = "1", features = ["derive"] }
+validator = { version = "0.14", features = ["derive"] }
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util" }
