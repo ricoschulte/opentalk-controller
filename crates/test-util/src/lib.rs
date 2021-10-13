@@ -7,6 +7,7 @@ use controller::prelude::*;
 use database::DatabaseContext;
 use uuid::Uuid;
 
+pub mod common;
 pub mod database;
 pub mod redis;
 

@@ -1,11 +1,12 @@
+use super::*;
 use control::outgoing::{JoinSuccess, Message};
-use controller::prelude::*;
-use k3k_legal_vote::LegalVote;
 use std::collections::HashMap;
-use test_util::*;
 
 /// Creates a new [`ModuleTester`] with two users
-pub async fn setup_users(test_ctx: &TestContext) -> ModuleTester<LegalVote> {
+pub async fn setup_users<M: SignalingModule>(
+    test_ctx: &TestContext,
+    params: M::Params,
+) -> ModuleTester<M> {
     let user1 = test_ctx.db_ctx.create_test_user(USER_1.user_id).unwrap();
     let user2 = test_ctx.db_ctx.create_test_user(USER_2.user_id).unwrap();
 
@@ -27,7 +28,7 @@ pub async fn setup_users(test_ctx: &TestContext) -> ModuleTester<LegalVote> {
             user1,
             Role::Moderator,
             USER_1.name,
-            (),
+            params.clone(),
         )
         .await
         .unwrap();
@@ -50,7 +51,13 @@ pub async fn setup_users(test_ctx: &TestContext) -> ModuleTester<LegalVote> {
 
     // Join with user2
     module_tester
-        .join_user(USER_2.participant_id, user2, Role::User, USER_2.name, ())
+        .join_user(
+            USER_2.participant_id,
+            user2,
+            Role::User,
+            USER_2.name,
+            params.clone(),
+        )
         .await
         .unwrap();
 

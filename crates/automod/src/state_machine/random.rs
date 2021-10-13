@@ -25,7 +25,7 @@ pub async fn select_random<R: Rng>(
             if config.parameter.animation_on_random {
                 let pool = storage::allow_list::get_all(redis_conn, room).await?;
 
-                // Special case a single participant, just send the speaker-update directly
+                // Special case: only one participant in pool -> skip animation
                 if let [participant_id] = pool[..] {
                     // if double selection is disabled remove the last participant
                     // in theory this could also be just a DEL

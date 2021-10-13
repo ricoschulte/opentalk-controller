@@ -78,14 +78,14 @@ use state_machine::StateMachineOutput;
 use std::time::Duration;
 use tokio::time::sleep;
 
-mod config;
-mod incoming;
-mod outgoing;
+pub mod config;
+pub mod incoming;
+pub mod outgoing;
 mod rabbitmq;
 mod state_machine;
 mod storage;
 
-struct AutoMod {
+pub struct AutoMod {
     id: ParticipantId,
     room: SignalingRoomId,
     role: Role,
@@ -95,19 +95,19 @@ struct AutoMod {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct ExpiryId(Uuid);
+pub struct ExpiryId(Uuid);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct AnimationId(Uuid);
+pub struct AnimationId(Uuid);
 
-enum TimerEvent {
+pub enum TimerEvent {
     AnimationEnd(AnimationId, ParticipantId),
     Expiry(ExpiryId),
 }
 
 /// Data sent to the frontend on `join_success`, when automod is active.
 #[derive(Debug, Serialize)]
-struct FrontendData {
+pub struct FrontendData {
     config: PublicConfig,
     speaker: Option<ParticipantId>,
 }
