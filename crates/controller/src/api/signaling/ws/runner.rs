@@ -253,6 +253,15 @@ impl Builder {
         )
         .await?;
 
+        storage::set_attribute(
+            &mut self.redis_conn,
+            room_id,
+            self.id,
+            "hand_updated_at",
+            Timestamp::now(),
+        )
+        .await?;
+
         Ok(Runner {
             id: self.id,
             room_id,
