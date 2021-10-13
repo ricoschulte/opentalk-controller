@@ -209,7 +209,7 @@ where
     ///
     /// # Panics
     /// When the participants runner panicked
-    async fn leave(&mut self, participant_id: &ParticipantId) -> Result<()> {
+    pub async fn leave(&mut self, participant_id: &ParticipantId) -> Result<()> {
         let (interface, handle) = self.get_runner(participant_id)?;
 
         interface.ws.send(WsMessageIncoming::CloseWs)?;
