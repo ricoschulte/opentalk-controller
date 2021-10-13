@@ -134,7 +134,7 @@ impl SignalingModule for BreakoutRooms {
                     }
 
                     ctx.rabbitmq_publish(
-                        control::rabbitmq::room_exchange_name(self.parent),
+                        rabbitmq::global_exchange_name(self.parent),
                         control::rabbitmq::room_all_routing_key().into(),
                         rabbitmq::Message::Joined(ParticipantInOtherRoom {
                             breakout_room: self.breakout_room,
@@ -200,7 +200,7 @@ impl SignalingModule for BreakoutRooms {
 
                 if config.is_some() || self.breakout_room.is_some() {
                     ctx.rabbitmq_publish(
-                        control::rabbitmq::room_exchange_name(self.parent),
+                        rabbitmq::global_exchange_name(self.parent),
                         control::rabbitmq::room_all_routing_key().into(),
                         rabbitmq::Message::Left(AssocParticipantInOtherRoom {
                             breakout_room: self.breakout_room,
@@ -308,7 +308,7 @@ impl BreakoutRooms {
                 storage::set_config(ctx.redis_conn(), self.parent, &config).await?;
 
                 ctx.rabbitmq_publish(
-                    control::rabbitmq::room_exchange_name(self.parent),
+                    rabbitmq::global_exchange_name(self.parent),
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Message::Start(rabbitmq::Start {
                         ws_start: start,
@@ -320,7 +320,7 @@ impl BreakoutRooms {
                 storage::del_config(ctx.redis_conn(), self.parent).await?;
 
                 ctx.rabbitmq_publish(
-                    control::rabbitmq::room_exchange_name(self.parent),
+                    rabbitmq::global_exchange_name(self.parent),
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Message::Stop,
                 );

@@ -5,6 +5,7 @@ use super::{
     DestroyContext, Namespaced, NamespacedOutgoing, RabbitMqBinding, RabbitMqExchange,
     RabbitMqPublish, Timestamp, WebSocket,
 };
+use crate::api::signaling::prelude::*;
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::{
@@ -23,7 +24,7 @@ use chrono::TimeZone;
 use futures::stream::SelectAll;
 use futures::SinkExt;
 use lapin::message::DeliveryResult;
-use lapin::options::QueueDeclareOptions;
+use lapin::options::{ExchangeDeclareOptions, QueueDeclareOptions};
 use lapin::{BasicProperties, ExchangeKind};
 use redis::aio::ConnectionManager;
 use serde_json::Value;
@@ -105,9 +106,39 @@ impl Builder {
 
         // Add binding to messages directed to all participants
         self.rabbitmq_bindings.push(RabbitMqBinding {
-            // routing keys in global exchanges are ignored
             routing_key: all_routing_key.into(),
             exchange: room_exchange.clone(),
+            options: Default::default(),
+        });
+
+        // Bind ourself to global exchange to communicate across breakout boundaries
+        self.rabbitmq_exchanges.insert(
+            1,
+            RabbitMqExchange {
+                name: breakout::rabbitmq::global_exchange_name(self.room.uuid),
+                kind: ExchangeKind::Topic,
+                options: ExchangeDeclareOptions {
+                    auto_delete: true,
+                    ..Default::default()
+                },
+            },
+        );
+
+        self.rabbitmq_bindings.push(RabbitMqBinding {
+            routing_key: all_routing_key.into(),
+            exchange: breakout::rabbitmq::global_exchange_name(self.room.uuid),
+            options: Default::default(),
+        });
+
+        self.rabbitmq_bindings.push(RabbitMqBinding {
+            routing_key: all_routing_key.into(),
+            exchange: rabbitmq::room_participant_routing_key(self.id),
+            options: Default::default(),
+        });
+
+        self.rabbitmq_bindings.push(RabbitMqBinding {
+            routing_key: all_routing_key.into(),
+            exchange: rabbitmq::room_user_routing_key(self.user.id),
             options: Default::default(),
         });
 
