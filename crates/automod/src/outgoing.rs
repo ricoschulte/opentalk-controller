@@ -85,7 +85,7 @@ pub struct StartAnimation {
 pub enum Error {
     /// The selection made by the frontend was invalid.
     ///
-    /// Can originate from the `yield` or `select` command.
+    /// Can originate from the `start`, `yield` or `select` command.
     InvalidSelection,
 
     /// The issued command can only be issued by a moderator, but the issuer isn't one.

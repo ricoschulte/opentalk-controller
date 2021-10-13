@@ -353,6 +353,56 @@ impl AutoMod {
         Ok(())
     }
 
+    async fn validate_lists_are_valid(
+        &self,
+        ctx: &mut ModuleContext<'_, Self>,
+        parameter: &config::Parameter,
+        allow_list: Option<&[ParticipantId]>,
+        playlist: Option<&[ParticipantId]>,
+    ) -> Result<bool> {
+        let mut allow_list_valid = true;
+        let mut playlist_valid = true;
+
+        match parameter.selection_strategy {
+            SelectionStrategy::None | SelectionStrategy::Random | SelectionStrategy::Nomination => {
+                if let Some(allow_list) = allow_list {
+                    if allow_list.is_empty() {
+                        allow_list_valid = false;
+                    } else {
+                        allow_list_valid = control::storage::check_participants_exist(
+                            ctx.redis_conn(),
+                            self.room,
+                            allow_list,
+                        )
+                        .await?;
+                    }
+                }
+            }
+            SelectionStrategy::Playlist => {
+                if let Some(playlist) = playlist {
+                    // TODO whenever hand raise is considered this must be updated to also check the allowlist
+                    if playlist.is_empty() {
+                        playlist_valid = false;
+                    } else {
+                        playlist_valid = control::storage::check_participants_exist(
+                            ctx.redis_conn(),
+                            self.room,
+                            playlist,
+                        )
+                        .await?;
+                    }
+                }
+            }
+        }
+
+        if !(allow_list_valid && playlist_valid) {
+            ctx.ws_send(outgoing::Message::Error(outgoing::Error::InvalidSelection));
+            Ok(false)
+        } else {
+            Ok(true)
+        }
+    }
+
     #[tracing::instrument(name = "automod_on_ws_message", skip(self, ctx, msg))]
     async fn on_ws_message(
         &mut self,
@@ -378,6 +428,18 @@ impl AutoMod {
                 allow_list,
                 playlist,
             }) => {
+                if !self
+                    .validate_lists_are_valid(
+                        &mut ctx,
+                        &parameter,
+                        Some(&allow_list),
+                        Some(&playlist),
+                    )
+                    .await?
+                {
+                    return Ok(());
+                }
+
                 let guard = mutex.lock(ctx.redis_conn()).await?;
 
                 let started = Utc::now();
@@ -423,6 +485,19 @@ impl AutoMod {
 
                 // only edit if automod is active
                 if let Some(config) = config {
+                    if !try_or_unlock!(self
+                        .validate_lists_are_valid(
+                            &mut ctx,
+                            &config.parameter,
+                            edit.allow_list.as_deref(),
+                            edit.playlist.as_deref(),
+                        )
+                        .await; ctx, guard)
+                    {
+                        try_unlock!(ctx, guard);
+                        return Ok(());
+                    }
+
                     // set playlist if requested
                     if let Some(playlist) = &edit.playlist {
                         try_or_unlock!(

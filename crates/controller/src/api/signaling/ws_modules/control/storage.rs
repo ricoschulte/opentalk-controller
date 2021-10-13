@@ -4,6 +4,7 @@ use displaydoc::Display;
 use r3dlock::{Mutex, MutexGuard};
 use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
+use std::convert::identity;
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -71,6 +72,22 @@ pub async fn participants_contains(
         .sismember(RoomParticipants { room }, participant)
         .await
         .context("Failed to check if participants contains participant")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn check_participants_exist(
+    redis_conn: &mut ConnectionManager,
+    room: SignalingRoomId,
+    participants: &[ParticipantId],
+) -> Result<bool> {
+    let bools: Vec<bool> = redis::cmd("SMISMEMBER")
+        .arg(RoomParticipants { room })
+        .arg(participants)
+        .query_async(redis_conn)
+        .await
+        .context("Failed to check if participants contains participant")?;
+
+    Ok(bools.into_iter().all(identity))
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
