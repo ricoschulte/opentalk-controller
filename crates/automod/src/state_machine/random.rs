@@ -24,14 +24,26 @@ pub async fn select_random<R: Rng>(
         } => {
             if config.parameter.animation_on_random {
                 let pool = storage::allow_list::get_all(redis_conn, room).await?;
-                let selection = pool.choose(rng).copied();
 
-                if let Some(result) = selection {
-                    return Ok(Some(StateMachineOutput::StartAnimation(
-                        rabbitmq::StartAnimation { pool, result },
-                    )));
+                // Special case a single participant, just send the speaker-update directly
+                if let [participant_id] = pool[..] {
+                    // if double selection is disabled remove the last participant
+                    // in theory this could also be just a DEL
+                    if !allow_double_selection {
+                        storage::allow_list::remove(redis_conn, room, participant_id).await?;
+                    }
+
+                    Some(participant_id)
                 } else {
-                    None
+                    let selection = pool.choose(rng).copied();
+
+                    if let Some(result) = selection {
+                        return Ok(Some(StateMachineOutput::StartAnimation(
+                            rabbitmq::StartAnimation { pool, result },
+                        )));
+                    } else {
+                        None
+                    }
                 }
             } else if *allow_double_selection {
                 // GET RANDOM MEMBER FROM ALLOW_LIST

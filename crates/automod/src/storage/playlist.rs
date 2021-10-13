@@ -89,7 +89,7 @@ pub async fn remove_first(
     level = "debug",
     skip(redis_conn)
 )]
-pub async fn remove_all_occurences(
+pub async fn remove_all_occurrences(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
     participant: ParticipantId,

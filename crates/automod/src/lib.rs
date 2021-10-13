@@ -52,11 +52,11 @@
 //! `selection_strategy`, will the automod continue running until finished or stopped.
 //!
 //! Once the active speaker yields or it's time runs out, its automod module is responsible to
-//! select the next speaker (if the `selection_strategy` requires it). This behaviour MUST only
+//! select the next speaker (if the `selection_strategy` requires it). This behavior MUST only
 //! be executed after ensuring that this participant is in fact still the speaker.
 //!
 //! If the participant leaves while being speaker, its automod-module must execute the same
-//! behaviour as if the participants simply yielded without selecting the next one (which would be
+//! behavior as if the participants simply yielded without selecting the next one (which would be
 //! required for the `nominate` `selection_strategy`. A moderator has to intervene in this
 //! situation).
 //!
@@ -287,7 +287,7 @@ impl AutoMod {
             try_or_unlock!(storage::config::get(ctx.redis_conn(), self.room).await; ctx, guard);
 
         if let Some(config) = config {
-            try_or_unlock!(storage::playlist::remove_all_occurences(ctx.redis_conn(), self.room, self.id).await; ctx, guard);
+            try_or_unlock!(storage::playlist::remove_all_occurrences(ctx.redis_conn(), self.room, self.id).await; ctx, guard);
             try_or_unlock!(storage::allow_list::remove(ctx.redis_conn(), self.room, self.id).await; ctx, guard);
 
             let speaker = try_or_unlock!(storage::speaker::get(ctx.redis_conn(), self.room).await; ctx, guard);
@@ -305,7 +305,7 @@ impl AutoMod {
     /// Called when the speaking time of the participant ends.
     ///
     /// Checks if automod is still active (by getting the config), and if this participant is even still speaker.
-    /// If those things are true, state_mashine's select_next gets called without a nomination.
+    /// If those things are true, state_machine's select_next gets called without a nomination.
     #[tracing::instrument(name = "automod_on_expired", skip(self, ctx))]
     async fn on_expired_event(&mut self, mut ctx: ModuleContext<'_, Self>) -> Result<()> {
         let mut mutex = storage::lock::new(self.room);
@@ -327,7 +327,7 @@ impl AutoMod {
         Ok(())
     }
 
-    /// Called whenenver the timer for the current animation ends
+    /// Called whenever the timer for the current animation ends
     #[tracing::instrument(name = "automod_on_expired", skip(self, ctx))]
     async fn on_animation_end(
         &mut self,
