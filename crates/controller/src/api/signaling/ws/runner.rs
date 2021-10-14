@@ -87,11 +87,19 @@ impl Builder {
         // The name of the room exchange
         let room_exchange = rabbitmq::current_room_exchange_name(room_id);
 
+        // The name of the room's global exchange
+        let global_room_exchange = breakout::rabbitmq::global_exchange_name(self.room.uuid);
+
         // Routing key to receive messages directed to all participants
         let all_routing_key = rabbitmq::room_all_routing_key();
 
         // Routing key which is needed to receive messages to this participant
         let self_routing_key = rabbitmq::room_participant_routing_key(self.id);
+
+        // Routing key which is needed to receive messages to this participant
+        let self_user_routing_key = rabbitmq::room_user_routing_key(self.user.id);
+
+        // ==== ROOM EXCHANGE BINDINGS
 
         // Create a topic exchange for global messages inside the room
         // Insert at beginning to ensure that later bindings reference an existing exchange
@@ -111,6 +119,15 @@ impl Builder {
             options: Default::default(),
         });
 
+        // Add binding to messages directed to self_key (the participant)
+        self.rabbitmq_bindings.push(RabbitMqBinding {
+            routing_key: self_routing_key.clone(),
+            exchange: room_exchange.clone(),
+            options: Default::default(),
+        });
+
+        // ==== GLOBAL ROOM EXCHANGE BINDINGS
+
         // Bind ourself to global exchange to communicate across breakout boundaries
         self.rabbitmq_exchanges.insert(
             1,
@@ -126,31 +143,15 @@ impl Builder {
 
         self.rabbitmq_bindings.push(RabbitMqBinding {
             routing_key: all_routing_key.into(),
-            exchange: breakout::rabbitmq::global_exchange_name(self.room.uuid),
+            exchange: global_room_exchange.clone(),
             options: Default::default(),
         });
 
         self.rabbitmq_bindings.push(RabbitMqBinding {
-            routing_key: all_routing_key.into(),
-            exchange: rabbitmq::room_participant_routing_key(self.id),
+            routing_key: self_routing_key.clone(),
+            exchange: global_room_exchange.clone(),
             options: Default::default(),
         });
-
-        self.rabbitmq_bindings.push(RabbitMqBinding {
-            routing_key: all_routing_key.into(),
-            exchange: rabbitmq::room_user_routing_key(self.user.id),
-            options: Default::default(),
-        });
-
-        // Add binding to messages directed to self_key (the participant)
-        self.rabbitmq_bindings.insert(
-            0,
-            RabbitMqBinding {
-                routing_key: self_routing_key.clone(),
-                exchange: room_exchange.clone(),
-                options: Default::default(),
-            },
-        );
 
         // ==== BEGIN GENERIC SETUP ====
 
@@ -227,7 +228,17 @@ impl Builder {
             .queue_bind(
                 queue.name().as_str(),
                 &room_exchange,
-                &rabbitmq::room_user_routing_key(self.user.id),
+                &self_user_routing_key,
+                Default::default(),
+                Default::default(),
+            )
+            .await?;
+
+        self.rabbitmq_channel
+            .queue_bind(
+                queue.name().as_str(),
+                &global_room_exchange,
+                &self_user_routing_key,
                 Default::default(),
                 Default::default(),
             )
