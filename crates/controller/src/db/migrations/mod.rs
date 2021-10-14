@@ -49,7 +49,6 @@ mod type_polyfills {
     /// An SQL datetime type
     ///
     /// Barrel 0.6.5 is missing datetime and 0.6.6 is not out yet, furthermore 0.6.6 only support TIMESTAMP which is without any timezone information
-    /// TODO(r.floren): Remove once 0.6.6 gets released
     pub fn datetime() -> Type {
         Type {
             nullable: false,

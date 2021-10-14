@@ -18,7 +18,7 @@ impl_from_redis_value_de!(UserId);
 /// Diesel user struct
 ///
 /// Is used as a result in various queries. Represents a user column
-#[derive(Debug, Clone, Queryable, Identifiable)]
+#[derive(Clone, Queryable, Identifiable)]
 pub struct User {
     pub id: UserId,
     pub oidc_uuid: Uuid,
