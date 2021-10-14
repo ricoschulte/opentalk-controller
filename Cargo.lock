@@ -1438,9 +1438,12 @@ dependencies = [
 name = "k3k-ee-chat"
 version = "0.1.0"
 dependencies = [
+ "actix-rt",
  "k3k-chat",
  "k3k-controller-core",
+ "k3k-test-util",
  "serde",
+ "serial_test",
 ]
 
 [[package]]

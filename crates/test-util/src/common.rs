@@ -7,8 +7,14 @@ pub async fn setup_users<M: SignalingModule>(
     test_ctx: &TestContext,
     params: M::Params,
 ) -> ModuleTester<M> {
-    let user1 = test_ctx.db_ctx.create_test_user(USER_1.user_id).unwrap();
-    let user2 = test_ctx.db_ctx.create_test_user(USER_2.user_id).unwrap();
+    let user1 = test_ctx
+        .db_ctx
+        .create_test_user(USER_1.user_id, vec![])
+        .unwrap();
+    let user2 = test_ctx
+        .db_ctx
+        .create_test_user(USER_2.user_id, vec![])
+        .unwrap();
 
     let room = test_ctx
         .db_ctx

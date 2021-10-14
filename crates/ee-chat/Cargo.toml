@@ -7,3 +7,8 @@ edition = "2018"
 controller = { path = "../controller", package = "k3k-controller-core" }
 chat = { path = "../chat", package = "k3k-chat" }
 serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+test-util = { path = "../test-util", package = "k3k-test-util" }
+serial_test = "0.5"
+actix-rt = "2.2"

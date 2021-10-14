@@ -98,6 +98,7 @@ impl SignalingModule for Chat {
             Ok(Some(Self {
                 id: ctx.participant_id(),
                 room: ctx.room_id(),
+                db: ctx.db().clone(),
                 groups,
             }))
         } else {
