@@ -1,21 +1,34 @@
 //! TURN related API structs and Endpoints
 use super::DefaultApiError;
+use crate::api::v1::middleware::oidc_auth::check_access_token;
 use crate::api::v1::response::NoContent;
+use crate::api::v1::INVALID_ACCESS_TOKEN;
+use crate::db::invites::Invite;
+use crate::db::invites::InviteCodeUuid;
 use crate::db::users::User;
+use crate::db::DatabaseError;
+use crate::db::DbInterface;
+use crate::oidc::OidcContext;
 use crate::settings;
 use crate::settings::{Settings, TurnServer};
 use actix_web::get;
+use actix_web::http::header::Header;
 use actix_web::web::Data;
 use actix_web::web::Json;
-use actix_web::web::ReqData;
-use actix_web::Either;
+use actix_web::Either as AWEither;
+use actix_web::HttpRequest;
+use actix_web_httpauth::headers::authorization::Authorization;
+use actix_web_httpauth::headers::authorization::Bearer;
 use arc_swap::ArcSwap;
+use either::Either;
+use openidconnect::AccessToken;
 use rand::distributions::{Distribution, Uniform};
 use rand::prelude::SliceRandom;
 use rand::CryptoRng;
 use rand::Rng;
 use ring::hmac;
 use serde::Serialize;
+use std::str::FromStr;
 
 /// TURN access credentials for users.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -53,20 +66,33 @@ pub enum IceServer {
 #[get("/turn")]
 pub async fn get(
     settings: Data<arc_swap::ArcSwap<settings::Settings>>,
-    current_user: ReqData<User>,
-) -> Result<Either<Json<Vec<IceServer>>, NoContent>, DefaultApiError> {
+    db_ctx: Data<DbInterface>,
+    oidc_ctx: Data<OidcContext>,
+    req: HttpRequest,
+) -> Result<AWEither<Json<Vec<IceServer>>, NoContent>, DefaultApiError> {
     let settings: &ArcSwap<Settings> = &**settings;
     let settings = settings.load();
 
-    let turn_servers = &settings.turn;
+    let turn_servers = settings.turn.clone();
     let stun_servers = &settings.stun;
 
-    log::trace!(
-        "Generating new turn credentials for user {} and servers {:?}",
-        current_user.oidc_uuid,
-        turn_servers
-    );
-
+    // This is a omniauth endpoint. AccessTokens and InviteCodes are allowed as Bearer tokens
+    match check_access_token_or_invite(&req, db_ctx, oidc_ctx).await? {
+        Either::Right(invite) => {
+            log::trace!(
+                "Generating new turn credentials for invite {} and servers {:?}",
+                invite.uuid,
+                &turn_servers
+            );
+        }
+        Either::Left(user) => {
+            log::trace!(
+                "Generating new turn credentials for user {} and servers {:?}",
+                user.oidc_uuid,
+                &turn_servers
+            );
+        }
+    }
     let mut ice_servers = match turn_servers {
         Some(turn_config) => {
             let expires = (chrono::Utc::now() + turn_config.lifetime).timestamp();
@@ -83,10 +109,10 @@ pub async fn get(
     }
 
     if ice_servers.is_empty() {
-        return Ok(Either::Right(NoContent {}));
+        return Ok(AWEither::Right(NoContent {}));
     }
 
-    Ok(Either::Left(Json(ice_servers)))
+    Ok(AWEither::Left(Json(ice_servers)))
 }
 
 fn create_credentials<T: Rng + CryptoRng>(
@@ -158,6 +184,64 @@ fn rr_servers<T: Rng + CryptoRng>(
                 }
             })
             .collect::<Result<Vec<_>, DefaultApiError>>(),
+    }
+}
+/// Checks for a valid access_token similar to the OIDC Middleware, but also allows invite_tokens as a valid bearer token.
+pub async fn check_access_token_or_invite(
+    req: &HttpRequest,
+    db_ctx: Data<DbInterface>,
+    oidc_ctx: Data<OidcContext>,
+) -> Result<Either<User, Invite>, DefaultApiError> {
+    let auth = Authorization::<Bearer>::parse(req).map_err(|e| {
+        log::warn!("Unable to parse access token, {}", e);
+        DefaultApiError::auth_bearer_invalid_token(
+            INVALID_ACCESS_TOKEN,
+            "Unable to parse access token".into(),
+        )
+    })?;
+
+    let access_token = auth.into_scheme().token().to_string();
+    let current_user = check_access_token(
+        db_ctx.clone(),
+        oidc_ctx,
+        AccessToken::new(access_token.clone()),
+    )
+    .await;
+    match current_user {
+        Ok(user) => Ok(Either::Left(user)),
+        Err(DefaultApiError::Auth(_, _)) => {
+            // Needed as long as we use uuid as invite-codes
+            let invite_uuid = uuid::Uuid::from_str(&access_token).map_err(|_| {
+                DefaultApiError::auth_bearer_invalid_token(
+                    INVALID_ACCESS_TOKEN,
+                    "Invalid Bearer token".into(),
+                )
+            })?;
+
+            crate::block(
+                move || match db_ctx.get_invite(&InviteCodeUuid::from(invite_uuid)) {
+                    Ok(invite) => Ok(invite),
+                    Err(DatabaseError::NotFound) => {
+                        log::warn!("The requesting user could not be found in the database");
+                        Err(DefaultApiError::auth_bearer_invalid_token(
+                            INVALID_ACCESS_TOKEN,
+                            "Invalid Bearer token".into(),
+                        ))
+                    }
+                    Err(_) => {
+                        log::warn!("The requesting user could not be found in the database");
+                        Err(DefaultApiError::Internal)
+                    }
+                },
+            )
+            .await
+            .map_err(|e| {
+                log::error!("crate::block failed, {}", e);
+                DefaultApiError::Internal
+            })?
+            .map(Either::Right)
+        }
+        Err(e) => Err(e),
     }
 }
 

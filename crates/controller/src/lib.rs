@@ -446,6 +446,7 @@ fn v1_scope(db_ctx: Data<DbInterface>, oidc_ctx: Data<OidcContext>) -> Scope {
         .service(api::v1::auth::oidc_provider)
         .service(api::v1::rooms::start_invited)
         .service(api::v1::invites::verify_invite_code)
+        .service(api::v1::turn::get)
         .service(
             // empty scope to differentiate between auth endpoints
             web::scope("")
