@@ -1,3 +1,9 @@
+//! # Chat Module
+//!
+//! ## Functionality
+//!
+//! Issues timestamp and messageIds to incoming chat messages and forwards them to other participants in the room.
+//! For this the rabbitmq room exchange is used.
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use control::rabbitmq;

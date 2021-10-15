@@ -1,3 +1,9 @@
+//! # EE Chat Module
+//!
+//! ## Functionality
+//!
+//! Issues timestamp and messageIds to incoming chat messages and forwards them to other participants in a group.
+//! For this the rabbitmq target group exchange is used.
 use anyhow::{Context, Result};
 use chat::MessageId;
 use chrono::{DateTime, Utc};

@@ -1,4 +1,4 @@
-//! # Auto-Moderation module
+//! # Auto-Moderation Module
 //!
 //! ## Functionality
 //!

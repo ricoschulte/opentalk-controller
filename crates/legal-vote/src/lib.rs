@@ -1,3 +1,9 @@
+//! # Legal Vote Module
+//!
+//! ## Functionality
+//!
+//! Offers full legal vote features including live voting with high safety guards (atomic changes, audit log).
+//! Stores the result for further archival storage in postgres.
 use crate::rabbitmq::CancelReason;
 use anyhow::Context;
 use anyhow::Result;

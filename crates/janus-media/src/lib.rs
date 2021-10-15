@@ -1,3 +1,8 @@
+//! # Media Module
+//!
+//! ## Functionality
+//!
+//! Handles media related messages and manages their respective forwarding to janus-gateway via rabbitmq.
 use anyhow::{bail, Context, Result};
 use controller::prelude::*;
 use controller::Controller;
