@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use chat::MessageId;
 use chrono::{DateTime, Utc};
 use controller::prelude::*;
 use displaydoc::Display;
@@ -85,6 +86,7 @@ pub async fn remove_participant_from_set(
 /// Message stored inside redis and sent to frontend on `join_success`
 #[derive(Debug, Deserialize, Serialize)]
 pub struct StoredMessage {
+    pub id: MessageId,
     pub source: ParticipantId,
     pub timestamp: DateTime<Utc>,
     pub content: String,
