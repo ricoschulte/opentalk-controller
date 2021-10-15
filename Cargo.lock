@@ -1319,8 +1319,10 @@ dependencies = [
 name = "k3k-automod"
 version = "0.1.0"
 dependencies = [
+ "actix-rt",
  "chrono",
  "k3k-controller-core",
+ "k3k-test-util",
  "rand 0.8.4",
  "serde",
  "serial_test",

@@ -52,11 +52,11 @@
 //! `selection_strategy`, will the automod continue running until finished or stopped.
 //!
 //! Once the active speaker yields or it's time runs out, its automod module is responsible to
-//! select the next speaker (if the `selection_strategy` requires it). This behaviour MUST only
+//! select the next speaker (if the `selection_strategy` requires it). This behavior MUST only
 //! be executed after ensuring that this participant is in fact still the speaker.
 //!
 //! If the participant leaves while being speaker, its automod-module must execute the same
-//! behaviour as if the participants simply yielded without selecting the next one (which would be
+//! behavior as if the participants simply yielded without selecting the next one (which would be
 //! required for the `nominate` `selection_strategy`. A moderator has to intervene in this
 //! situation).
 //!
@@ -78,14 +78,14 @@ use state_machine::StateMachineOutput;
 use std::time::Duration;
 use tokio::time::sleep;
 
-mod config;
-mod incoming;
-mod outgoing;
+pub mod config;
+pub mod incoming;
+pub mod outgoing;
 mod rabbitmq;
 mod state_machine;
 mod storage;
 
-struct AutoMod {
+pub struct AutoMod {
     id: ParticipantId,
     room: SignalingRoomId,
     role: Role,
@@ -95,19 +95,19 @@ struct AutoMod {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct ExpiryId(Uuid);
+pub struct ExpiryId(Uuid);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct AnimationId(Uuid);
+pub struct AnimationId(Uuid);
 
-enum TimerEvent {
+pub enum TimerEvent {
     AnimationEnd(AnimationId, ParticipantId),
     Expiry(ExpiryId),
 }
 
 /// Data sent to the frontend on `join_success`, when automod is active.
 #[derive(Debug, Serialize)]
-struct FrontendData {
+pub struct FrontendData {
     config: PublicConfig,
     speaker: Option<ParticipantId>,
 }
@@ -287,7 +287,7 @@ impl AutoMod {
             try_or_unlock!(storage::config::get(ctx.redis_conn(), self.room).await; ctx, guard);
 
         if let Some(config) = config {
-            try_or_unlock!(storage::playlist::remove_all_occurences(ctx.redis_conn(), self.room, self.id).await; ctx, guard);
+            try_or_unlock!(storage::playlist::remove_all_occurrences(ctx.redis_conn(), self.room, self.id).await; ctx, guard);
             try_or_unlock!(storage::allow_list::remove(ctx.redis_conn(), self.room, self.id).await; ctx, guard);
 
             let speaker = try_or_unlock!(storage::speaker::get(ctx.redis_conn(), self.room).await; ctx, guard);
@@ -305,7 +305,7 @@ impl AutoMod {
     /// Called when the speaking time of the participant ends.
     ///
     /// Checks if automod is still active (by getting the config), and if this participant is even still speaker.
-    /// If those things are true, state_mashine's select_next gets called without a nomination.
+    /// If those things are true, state_machine's select_next gets called without a nomination.
     #[tracing::instrument(name = "automod_on_expired", skip(self, ctx))]
     async fn on_expired_event(&mut self, mut ctx: ModuleContext<'_, Self>) -> Result<()> {
         let mut mutex = storage::lock::new(self.room);
@@ -327,7 +327,7 @@ impl AutoMod {
         Ok(())
     }
 
-    /// Called whenenver the timer for the current animation ends
+    /// Called whenever the timer for the current animation ends
     #[tracing::instrument(name = "automod_on_expired", skip(self, ctx))]
     async fn on_animation_end(
         &mut self,
@@ -351,6 +351,56 @@ impl AutoMod {
         try_unlock!(ctx, guard);
 
         Ok(())
+    }
+
+    async fn validate_lists_are_valid(
+        &self,
+        ctx: &mut ModuleContext<'_, Self>,
+        parameter: &config::Parameter,
+        allow_list: Option<&[ParticipantId]>,
+        playlist: Option<&[ParticipantId]>,
+    ) -> Result<bool> {
+        let mut allow_list_valid = true;
+        let mut playlist_valid = true;
+
+        match parameter.selection_strategy {
+            SelectionStrategy::None | SelectionStrategy::Random | SelectionStrategy::Nomination => {
+                if let Some(allow_list) = allow_list {
+                    if allow_list.is_empty() {
+                        allow_list_valid = false;
+                    } else {
+                        allow_list_valid = control::storage::check_participants_exist(
+                            ctx.redis_conn(),
+                            self.room,
+                            allow_list,
+                        )
+                        .await?;
+                    }
+                }
+            }
+            SelectionStrategy::Playlist => {
+                if let Some(playlist) = playlist {
+                    // TODO whenever hand raise is considered this must be updated to also check the allowlist
+                    if playlist.is_empty() {
+                        playlist_valid = false;
+                    } else {
+                        playlist_valid = control::storage::check_participants_exist(
+                            ctx.redis_conn(),
+                            self.room,
+                            playlist,
+                        )
+                        .await?;
+                    }
+                }
+            }
+        }
+
+        if !(allow_list_valid && playlist_valid) {
+            ctx.ws_send(outgoing::Message::Error(outgoing::Error::InvalidSelection));
+            Ok(false)
+        } else {
+            Ok(true)
+        }
     }
 
     #[tracing::instrument(name = "automod_on_ws_message", skip(self, ctx, msg))]
@@ -378,6 +428,18 @@ impl AutoMod {
                 allow_list,
                 playlist,
             }) => {
+                if !self
+                    .validate_lists_are_valid(
+                        &mut ctx,
+                        &parameter,
+                        Some(&allow_list),
+                        Some(&playlist),
+                    )
+                    .await?
+                {
+                    return Ok(());
+                }
+
                 let guard = mutex.lock(ctx.redis_conn()).await?;
 
                 let started = Utc::now();
@@ -423,6 +485,19 @@ impl AutoMod {
 
                 // only edit if automod is active
                 if let Some(config) = config {
+                    if !try_or_unlock!(self
+                        .validate_lists_are_valid(
+                            &mut ctx,
+                            &config.parameter,
+                            edit.allow_list.as_deref(),
+                            edit.playlist.as_deref(),
+                        )
+                        .await; ctx, guard)
+                    {
+                        try_unlock!(ctx, guard);
+                        return Ok(());
+                    }
+
                     // set playlist if requested
                     if let Some(playlist) = &edit.playlist {
                         try_or_unlock!(

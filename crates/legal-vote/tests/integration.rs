@@ -2,20 +2,18 @@ use controller::prelude::serde_json::Value;
 use controller::prelude::WsMessageOutgoing;
 use k3k_legal_vote::incoming::{Stop, UserParameters, VoteMessage};
 use k3k_legal_vote::outgoing::{Response, VoteResponse, VoteResults, VoteSuccess, Votes};
-use k3k_legal_vote::rabbitmq;
 use k3k_legal_vote::{incoming, outgoing, VoteOption};
+use k3k_legal_vote::{rabbitmq, LegalVote};
 use serial_test::serial;
 use std::collections::HashMap;
 use std::time::Duration;
 use test_util::*;
 
-mod common;
-
 #[actix_rt::test]
 #[serial]
 async fn basic_vote() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users(&test_ctx).await;
+    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -229,7 +227,7 @@ async fn basic_vote() {
 #[serial]
 async fn basic_vote_abstain_enabled() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users(&test_ctx).await;
+    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -443,7 +441,7 @@ async fn basic_vote_abstain_enabled() {
 #[serial]
 async fn expired_vote() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users(&test_ctx).await;
+    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -551,7 +549,7 @@ async fn expired_vote() {
 #[serial]
 async fn auto_stop_vote() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users(&test_ctx).await;
+    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -764,7 +762,7 @@ async fn auto_stop_vote() {
 #[serial]
 async fn start_with_one_participant() {
     let test_ctx = TestContext::new().await;
-    let module_tester = common::setup_users(&test_ctx).await;
+    let module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
