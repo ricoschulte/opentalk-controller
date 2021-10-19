@@ -314,6 +314,10 @@ impl McuPool {
             videoorient_ext: Some(false),
             bitrate: Some(bitrate),
             bitrate_cap: Some(true),
+            audiolevel_event: Some(true),
+            audiolevel_ext: Some(true),
+            audio_active_packets: Some(50),
+            audio_level_average: Some(50),
             ..Default::default()
         };
 
