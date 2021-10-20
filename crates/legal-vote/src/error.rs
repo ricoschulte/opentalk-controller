@@ -1,4 +1,5 @@
 use controller::prelude::*;
+use validator::ValidationErrors;
 
 /// A legal vote error
 #[derive(Debug, thiserror::Error)]
@@ -26,10 +27,24 @@ pub(crate) enum ErrorKind {
     AllowlistContainsGuests(Vec<ParticipantId>),
     #[error("The vote results are inconsistent")]
     Inconsistency,
+    #[error("Failed to validate request. Invalid fields: {0:?}")]
+    BadRequest(Vec<String>),
 }
 
 impl From<ErrorKind> for Error {
     fn from(e: ErrorKind) -> Self {
         Self::Vote(e)
+    }
+}
+
+impl From<ValidationErrors> for Error {
+    fn from(errors: ValidationErrors) -> Self {
+        let errors = errors
+            .errors()
+            .iter()
+            .map(|(field, ..)| field.to_string())
+            .collect();
+
+        Self::Vote(ErrorKind::BadRequest(errors))
     }
 }

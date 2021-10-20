@@ -1459,6 +1459,7 @@ dependencies = [
  "k3k-test-util",
  "serde",
  "serial_test",
+ "validator",
 ]
 
 [[package]]

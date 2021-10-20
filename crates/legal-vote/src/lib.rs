@@ -25,6 +25,7 @@ use storage::protocol;
 use storage::protocol::{reduce_protocol, ProtocolEntry, Vote, VoteEvent};
 use storage::VoteScriptResult;
 use tokio::time::sleep;
+use validator::Validate;
 
 mod error;
 pub mod incoming;
@@ -215,6 +216,8 @@ impl LegalVote {
         ctx: &mut ModuleContext<'_, Self>,
         msg: incoming::Message,
     ) -> Result<(), Error> {
+        msg.validate()?;
+
         match msg {
             incoming::Message::Start(incoming_parameters) => {
                 // todo: check permissions
@@ -344,7 +347,7 @@ impl LegalVote {
                     }
                 };
 
-                let stop = outgoing::Stop {
+                let stop = outgoing::Stopped {
                     vote_id: stop.vote_id,
                     kind: stop.kind,
                     results: final_results,
@@ -535,17 +538,34 @@ impl LegalVote {
     ) -> Result<(VoteResponse, bool), Error> {
         let redis_conn = ctx.redis_conn();
 
-        if !self
+        match self
             .is_current_vote_id(redis_conn, vote_message.vote_id)
-            .await?
+            .await
         {
-            return Ok((
-                VoteResponse {
-                    vote_id: vote_message.vote_id,
-                    response: Response::Failed(VoteFailed::InvalidVoteId),
-                },
-                false,
-            ));
+            Ok(is_current) => {
+                if !is_current {
+                    return Ok((
+                        VoteResponse {
+                            vote_id: vote_message.vote_id,
+                            response: Response::Failed(VoteFailed::InvalidVoteId),
+                        },
+                        false,
+                    ));
+                }
+            }
+            Err(error) => {
+                if let Error::Vote(_) = error {
+                    return Ok((
+                        VoteResponse {
+                            vote_id: vote_message.vote_id,
+                            response: Response::Failed(VoteFailed::InvalidVoteId),
+                        },
+                        false,
+                    ));
+                } else {
+                    return Err(error);
+                }
+            }
         }
 
         let parameters =

@@ -16,7 +16,7 @@ pub enum Message {
     /// The results of a specific vote have changed
     Updated(VoteResults),
     /// A vote has been stopped
-    Stopped(Stop),
+    Stopped(Stopped),
     /// A vote has been canceled
     Canceled(Canceled),
     /// A error message caused by invalid requests or internal errors
@@ -95,7 +95,7 @@ pub struct VoteResults {
 
 /// A stop message
 #[derive(Debug, Serialize, PartialEq)]
-pub struct Stop {
+pub struct Stopped {
     /// The vote id
     pub vote_id: VoteId,
     /// Specifies the reason for the stop
@@ -142,15 +142,23 @@ pub enum ErrorKind {
     AllowlistContainsGuests(GuestParticipants),
     /// A inconsistency occurred while handling a request
     Inconsistency,
+    /// The provided parameters of a request are invalid
+    BadRequest(InvalidFields),
     /// A internal server error occurred
     ///
     /// This means the legal-vote module is broken, the source of this event are unrecoverable backend errors.
     Internal,
 }
 
+/// The list of provided guest participants.
 #[derive(Debug, PartialEq, Serialize)]
 pub struct GuestParticipants {
-    guests: Vec<ParticipantId>,
+    pub guests: Vec<ParticipantId>,
+}
+
+#[derive(Debug, PartialEq, Serialize)]
+pub struct InvalidFields {
+    pub fields: Vec<String>,
 }
 
 impl From<super::error::ErrorKind> for ErrorKind {
@@ -163,6 +171,9 @@ impl From<super::error::ErrorKind> for ErrorKind {
             crate::error::ErrorKind::Inconsistency => Self::Inconsistency,
             crate::error::ErrorKind::AllowlistContainsGuests(guests) => {
                 Self::AllowlistContainsGuests(GuestParticipants { guests })
+            }
+            crate::error::ErrorKind::BadRequest(fields) => {
+                Self::BadRequest(InvalidFields { fields })
             }
         }
     }
@@ -299,7 +310,7 @@ mod test {
         let mut voters = HashMap::new();
         voters.insert(ParticipantId::new_test(1), VoteOption::Yes);
 
-        let message = Message::Stopped(Stop {
+        let message = Message::Stopped(Stopped {
             vote_id: VoteId::from(Uuid::nil()),
             kind: rabbitmq::StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Valid(Results {
@@ -326,7 +337,7 @@ mod test {
         let mut voters = HashMap::new();
         voters.insert(ParticipantId::new_test(1), VoteOption::Yes);
 
-        let message = Message::Stopped(Stop {
+        let message = Message::Stopped(Stopped {
             vote_id: VoteId::from(Uuid::nil()),
             kind: rabbitmq::StopKind::Auto,
             results: FinalResults::Valid(Results { votes, voters }),
@@ -350,7 +361,7 @@ mod test {
         let mut voters = HashMap::new();
         voters.insert(ParticipantId::new_test(1), VoteOption::Abstain);
 
-        let message = Message::Stopped(Stop {
+        let message = Message::Stopped(Stopped {
             vote_id: VoteId::from(Uuid::nil()),
             kind: rabbitmq::StopKind::Expired,
             results: FinalResults::Valid(Results { votes, voters }),
@@ -365,7 +376,7 @@ mod test {
     fn invalid_stop_message() {
         let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"by_participant","issuer":"00000000-0000-0000-0000-000000000000","results":"invalid","reason":"vote_count_inconsistent"}"#;
 
-        let message = Message::Stopped(Stop {
+        let message = Message::Stopped(Stopped {
             vote_id: VoteId::from(Uuid::nil()),
             kind: rabbitmq::StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Invalid(Invalid::VoteCountInconsistent),
@@ -468,6 +479,19 @@ mod test {
 
         let message = Message::Error(ErrorKind::AllowlistContainsGuests(GuestParticipants {
             guests: vec![ParticipantId::new_test(0), ParticipantId::new_test(1)],
+        }));
+
+        let string = serde_json::to_string(&message).unwrap();
+
+        assert_eq!(string, json_str);
+    }
+
+    #[test]
+    fn bad_request_error_message() {
+        let json_str = r#"{"message":"error","error":"bad_request","fields":["name","duration"]}"#;
+
+        let message = Message::Error(ErrorKind::BadRequest(InvalidFields {
+            fields: vec!["name".into(), "duration".into()],
         }));
 
         let string = serde_json::to_string(&message).unwrap();
