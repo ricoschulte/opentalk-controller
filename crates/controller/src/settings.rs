@@ -45,19 +45,18 @@ pub fn load_settings(args: &Args) -> Result<Settings, ConfigError> {
 ///
 /// The application settings are set with a TOML config file. Settings specified in the config file
 /// can be overwritten by environment variables. To do so, set an environment variable
-/// with the prefix `K3K_CTRL_` followed by the field names you want to set. Fields are separated by two underscores `__`.
+/// with the prefix `K3K_CTRL_` followed by the field names you want to set. Nested fields are separated by two underscores `__`.
 /// ```sh
 /// K3K_CTRL_<field>__<field-of-field>...
 /// ```
 ///
 /// # Example
 ///
-/// set the `database.server` field:
+/// set the `database.url` field:
 /// ```sh
-/// K3K_CTRL_DATABASE__SERVER=localhost
+/// K3K_CTRL_DATABASE__URL=postgres://postgres:password123@localhost:5432/k3k
 /// ```
 ///
-/// However, the field names in the environment variables are not allowed to have underscores.
 /// So the field 'database.max_connections' would resolve to:
 /// ```sh
 /// K3K_CTRL_DATABASE__MAX_CONNECTIONS=5

@@ -55,3 +55,34 @@ To build the image, execute in the root of the repository:
 ```bash
  docker build -f ci/Dockerfile . --tag <your tag>
 ```
+
+
+## Configuration
+
+k3k-controller looks for a config file at ./config.toml.
+There is an example config file in extra/example.toml
+You can specify a different config file using the `-c` argument.
+
+```sh
+k3k-controller -c other_config.toml
+```
+
+Settings specified in the config file can be overwritten by environment variables.
+To do so, set an environment variable with the prefix `K3K_CTRL_` followed by the field names you want to set.
+nested fields are separated by two underscores `__`.
+```sh
+K3K_CTRL_<field>__<field-of-field>...
+```
+### Example
+
+set the `database.url` field:
+```sh
+K3K_CTRL_DATABASE__URL=postgres://k3k:s3cur3_p4ssw0rd@localhost:5432/k3k
+```
+
+So the field 'database.max_connections' would resolve to:
+```sh
+K3K_CTRL_DATABASE__MAX_CONNECTIONS=5
+```
+### Note
+Fields set via environment variables do not affect the underlying config file.
