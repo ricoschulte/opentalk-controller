@@ -6,6 +6,7 @@
 use anyhow::{bail, Context, Result};
 use controller::prelude::*;
 use controller::Controller;
+use focus::FocusDetection;
 use incoming::TargetConfigure;
 use janus_client::TrickleCandidate;
 use mcu::McuPool;
@@ -21,9 +22,11 @@ use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 
+mod focus;
 mod incoming;
 mod mcu;
 mod outgoing;
+mod rabbitmq;
 mod sessions;
 mod settings;
 mod storage;
@@ -36,6 +39,8 @@ pub struct Media {
     media: MediaSessions,
 
     state: State,
+
+    focus_detection: FocusDetection,
 }
 
 type State = HashMap<MediaSessionType, MediaSessionState>;
@@ -54,7 +59,7 @@ impl SignalingModule for Media {
 
     type Incoming = incoming::Message;
     type Outgoing = outgoing::Message;
-    type RabbitMqMessage = ();
+    type RabbitMqMessage = rabbitmq::Message;
 
     type ExtEvent = (MediaSessionKey, WebRtcEvent);
 
@@ -83,6 +88,7 @@ impl SignalingModule for Media {
             mcu: mcu.clone(),
             media: MediaSessions::new(ctx.participant_id(), media_sender),
             state,
+            focus_detection: Default::default(),
         }))
     }
 
@@ -249,7 +255,6 @@ impl SignalingModule for Media {
                         source: media_session_key.into(),
                     }))
                 }
-
                 WebRtcEvent::Trickle(trickle_msg) => {
                     match trickle_msg {
                         TrickleMessage::Completed => {
@@ -264,8 +269,31 @@ impl SignalingModule for Media {
                         }
                     }
                 }
+                WebRtcEvent::StartedTalking => ctx.rabbitmq_publish(
+                    control::rabbitmq::current_room_exchange_name(self.room),
+                    control::rabbitmq::room_all_routing_key().into(),
+                    rabbitmq::Message::StartedTalking(media_session_key.0),
+                ),
+                WebRtcEvent::StoppedTalking => ctx.rabbitmq_publish(
+                    control::rabbitmq::current_room_exchange_name(self.room),
+                    control::rabbitmq::room_all_routing_key().into(),
+                    rabbitmq::Message::StoppedTalking(media_session_key.0),
+                ),
             },
-            Event::RabbitMq(_) => {}
+            Event::RabbitMq(rabbitmq::Message::StartedTalking(id)) => {
+                if let Some(focus) = self.focus_detection.on_started_talking(id) {
+                    ctx.ws_send(outgoing::Message::FocusUpdate(outgoing::FocusUpdate {
+                        focus,
+                    }));
+                }
+            }
+            Event::RabbitMq(rabbitmq::Message::StoppedTalking(id)) => {
+                if let Some(focus) = self.focus_detection.on_stopped_talking(id) {
+                    ctx.ws_send(outgoing::Message::FocusUpdate(outgoing::FocusUpdate {
+                        focus,
+                    }));
+                }
+            }
             Event::ParticipantJoined(id, evt_state) => {
                 *evt_state = Some(
                     storage::get_state(ctx.redis_conn(), self.room, id)
@@ -284,6 +312,13 @@ impl SignalingModule for Media {
             }
             Event::ParticipantLeft(id) => {
                 self.media.remove_subscribers(id).await;
+
+                // Unfocus leaving participants
+                if let Some(focus) = self.focus_detection.on_stopped_talking(id) {
+                    ctx.ws_send(outgoing::Message::FocusUpdate(outgoing::FocusUpdate {
+                        focus,
+                    }));
+                }
             }
             Event::Joined {
                 control_data: _,
@@ -389,7 +424,7 @@ impl Media {
         offer: String,
     ) -> Result<()> {
         if target == self.id {
-            // Get the publisher and create if it doesnt exists
+            // Get the publisher and create if it doesn't exists
             let publisher = if let Some(publisher) = self.media.get_publisher(media_session_type) {
                 publisher
             } else {

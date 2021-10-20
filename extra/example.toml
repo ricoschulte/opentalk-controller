@@ -56,6 +56,20 @@ max_video_bitrate = "1500000"
 # Example: 1MB/s
 max_screen_bitrate = "8000000"
 
+
+# Number of packets with with given `speaker_focus_level`
+# needed to detect a speaking participant. 
+# 
+# Default: 50 packets (1 second of audio)
+#speaker_focus_packets = "50"
+
+# Average value of audio level needed per packet.
+# 
+# min: 127 (muted)  
+# max: 0   (loud)  
+# default: 50  
+#speaker_focus_level = "50"
+
 # Connection settings for the channel used to talk to the room server.
 # Currently these should be equal to the settings in janus.transport.rabbitmq.jcfg
 # of the respective janus instance.
