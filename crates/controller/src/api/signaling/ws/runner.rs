@@ -512,6 +512,11 @@ impl Runner {
     /// Cleanup the participant attributes that were set by the runner
     async fn cleanup_attributes(&mut self) -> Result<()> {
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "display_name").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "joined_at").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "hand_is_up").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "hand_updated_at")
+            .await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "kind").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "user_id").await
     }
 

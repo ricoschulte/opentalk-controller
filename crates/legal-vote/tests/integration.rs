@@ -1,6 +1,7 @@
 use controller::db::legal_votes::VoteId;
 use controller::prelude::serde_json::Value;
 use controller::prelude::uuid::Uuid;
+use controller::prelude::*;
 use controller::prelude::{ModuleTester, ParticipantId, WsMessageOutgoing};
 use k3k_legal_vote::incoming::{Cancel, Stop, UserParameters, VoteMessage};
 use k3k_legal_vote::outgoing::{
@@ -1210,6 +1211,32 @@ async fn ineligible_cancel() {
 
     assert_eq!(expected_error_message, message);
 
+    module_tester.shutdown().await.unwrap()
+}
+
+#[actix_rt::test]
+#[serial]
+async fn join_as_guest() {
+    let test_ctx = TestContext::new().await;
+    let user1 = test_ctx.db_ctx.create_test_user(USER_1.user_id).unwrap();
+    let guest = ParticipantId::new_test(11311);
+
+    let room = test_ctx
+        .db_ctx
+        .create_test_room(ROOM_ID, USER_1.user_id)
+        .unwrap();
+
+    let mut module_tester = ModuleTester::<LegalVote>::new(
+        test_ctx.db_ctx.db_conn.clone(),
+        test_ctx.redis_conn.clone(),
+        room,
+    );
+
+    // Join with guest
+    let module = module_tester.join_guest(guest, "Guest", ()).await;
+    if let Err(e) = module {
+        assert!(e.is::<NoInitError>(), "Module initialized with guest");
+    }
     module_tester.shutdown().await.unwrap()
 }
 
