@@ -22,14 +22,14 @@ RUN mkdir src
 # We need a proper main.rs to make the first cargo build run
 RUN echo 'fn main() {println!("Hello World!");}' > src/main.rs
 # As we haven't copied any source files yet, this will only compile the dependencies
-RUN cargo build --release
+RUN cargo build --release --locked
 
 # Now copy the real source over
 COPY src src
 COPY crates crates
 # Cargo detects changes only by mtime
 RUN touch src/main.rs && find crates -iname lib.rs -exec touch {} \;
-RUN cargo build --release
+RUN cargo build --release --locked
 
 FROM debian:bullseye-slim
 
