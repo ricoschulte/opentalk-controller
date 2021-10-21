@@ -37,14 +37,13 @@ lint:clippy:
   script: cargo clippy --all-features -- --deny warnings
 
 lint:dependency_check:
+  image: git.heinlein-video.de:5050/heinlein-video/cargo-deny:latest
   rules:
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
     - if: $CI_PIPELINE_SOURCE == 'schedule'
     - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   stage: lint
-  before_script:
-    - cargo install --locked cargo-deny
-  script: cargo deny check
+  script: cargo-deny check
 
 lint:yaml:
   rules:
