@@ -435,24 +435,20 @@ mod test {
             JanusMessage::Success(Success::Plugin(PluginSuccess {
                 sender,
                 transaction,
-                plugindata,
+                plugindata:
+                    PluginData::VideoRoom(VideoRoomPluginData::Created(
+                        VideoRoomPluginDataCreated::Ok { room, permanent },
+                    )),
                 jsep: None,
                 session_id,
             })) => {
                 assert!(sender.unwrap() == HandleId::new(7519437590873898));
                 assert!(session_id.unwrap() == SessionId::new(1181318522471683));
                 assert!(transaction == TransactionId("2".into()));
-                if let PluginData::VideoRoom(VideoRoomPluginData::Created(
-                    VideoRoomPluginDataCreated::Ok { room, permanent },
-                )) = plugindata
-                {
-                    assert!(room == 4720732281562341.into());
-                    assert!(permanent == false);
-                } else {
-                    assert!(false)
-                }
+                assert!(room == 4720732281562341.into());
+                assert!(!permanent);
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -487,7 +483,7 @@ mod test {
                 assert!(session_id == SessionId::new(1181318522471683));
                 assert!(transaction == None);
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -526,7 +522,7 @@ mod test {
                 assert!(session_id == SessionId::new(3736408189546184));
                 assert!(transaction == Some(16.into()));
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
     #[test]
@@ -564,7 +560,7 @@ mod test {
                 assert!(e.error_code() == error::JanusInternalError::VideoroomErrorNoSuchFeed);
                 assert!(e.reason() == "No such feed (1)");
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
     #[test]
@@ -614,7 +610,7 @@ mod test {
                 assert!(configured == OkEnum::Ok);
                 assert!(video_codec == Some(VideoCodec::Vp8))
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
     #[test]
@@ -669,7 +665,7 @@ mod test {
                 assert!(sender == Some(HandleId::new(7265638106357492)));
                 assert!(room == 2987623648982456.into());
             }
-            _ => assert!(false, "Got no Destroyed response"),
+            _ => panic!("Got no Destroyed response"),
         }
         let parsed_result: JanusMessage = serde_json::from_str(json2).unwrap();
         dbg!(&parsed_result);
@@ -691,7 +687,7 @@ mod test {
                     "RoomId wrong for Destroyed Event"
                 );
             }
-            _ => assert!(false, "Got no Destroyed Event"),
+            _ => panic!("Got no Destroyed Event"),
         }
     }
 
@@ -729,7 +725,7 @@ mod test {
                 assert_eq!(session_id, SessionId::new(8647349919335784));
                 assert_eq!(current_bitrate, Some(64000));
             }
-            _ => assert!(false, "Got no Videoroom SlowLink Event"),
+            _ => panic!("Got no Videoroom SlowLink Event"),
         }
     }
 
@@ -778,7 +774,7 @@ mod test {
                 assert_eq!(spatial_layer, None);
                 assert_eq!(temporal_layer, Some(2));
             }
-            _ => assert!(false, "Got no Videoroom Info Event"),
+            _ => panic!("Got no Videoroom Info Event"),
         }
     }
 
@@ -861,7 +857,7 @@ mod test {
                 assert!(list.len() == 2);
                 assert!(list[0].id == 7610511204322687.into());
                 assert!(list[1].id == 5678.into());
-                assert!(list[1].video_svc == true);
+                assert!(list[1].video_svc);
             } else {
                 panic!()
             }

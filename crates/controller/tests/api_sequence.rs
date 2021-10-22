@@ -87,8 +87,8 @@ async fn basic_sequence() -> Result<()> {
     log::info!("created room: {:#?}", room);
     assert_eq!(room.owner, current_user.id);
     assert_eq!(room.password, "password123");
-    assert_eq!(room.wait_for_moderator, false);
-    assert_eq!(room.listen_only, false);
+    assert!(!room.wait_for_moderator);
+    assert!(!room.listen_only);
 
     // Test room details
     log::info!("get room by uuid...");
@@ -96,8 +96,8 @@ async fn basic_sequence() -> Result<()> {
     log::info!("created room details: {:#?}", room_details);
     assert_eq!(room_details.uuid, room.uuid);
     assert_eq!(room_details.owner, current_user.id);
-    assert_eq!(room_details.wait_for_moderator, false);
-    assert_eq!(room_details.listen_only, false);
+    assert!(!room_details.wait_for_moderator);
+    assert!(!room_details.listen_only);
 
     // Test modify room
     log::info!("modifying room...");
@@ -112,8 +112,8 @@ async fn basic_sequence() -> Result<()> {
     assert_eq!(modified_room.uuid, room.uuid);
     assert_eq!(modified_room.owner, current_user.id);
     assert_eq!(modified_room.password, "admin123");
-    assert_eq!(modified_room.wait_for_moderator, true);
-    assert_eq!(modified_room.listen_only, false);
+    assert!(!modified_room.wait_for_moderator);
+    assert!(!modified_room.listen_only);
 
     // Test owned rooms
     log::info!("get owned rooms...");

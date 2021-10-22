@@ -240,7 +240,7 @@ mod test {
 
         let start: Message = serde_json::from_str(&json_str).unwrap();
 
-        if let Err(validation_errors) = start.validate().into() {
+        if let Err(validation_errors) = start.validate() {
             let errors = validation_errors.errors();
 
             assert!(errors.contains_key("name"));
@@ -271,7 +271,7 @@ mod test {
 
         let cancel: Message = serde_json::from_str(&json_str).unwrap();
 
-        if let Err(validation_errors) = cancel.validate().into() {
+        if let Err(validation_errors) = cancel.validate() {
             let errors = validation_errors.errors();
 
             assert!(errors.contains_key("reason"));

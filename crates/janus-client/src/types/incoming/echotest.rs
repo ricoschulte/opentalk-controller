@@ -98,28 +98,17 @@ mod test {
             JanusMessage::Event(Event {
                 sender,
                 transaction,
-                plugindata,
+                plugindata:
+                    PluginData::EchoTest(EchoPluginData::Event(EchoPluginDataEvent::Ok { result })),
                 jsep: None,
                 session_id,
             }) => {
                 assert_eq!(sender, HandleId::new(1815153248));
                 assert_eq!(transaction.unwrap(), TransactionId("sBJNyUhH6Vc6".into()));
                 assert_eq!(session_id, SessionId::new(1234));
-                match plugindata {
-                    PluginData::EchoTest(data) => match data {
-                        EchoPluginData::Event(EchoPluginDataEvent::Ok { result }) => {
-                            assert!(result == "ok");
-                        }
-                        _ => {
-                            assert!(false)
-                        }
-                    },
-                    _ => {
-                        assert!(false)
-                    }
-                }
+                assert_eq!(result, "ok");
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 
@@ -145,31 +134,20 @@ mod test {
             JanusMessage::Event(Event {
                 sender,
                 transaction,
-                plugindata,
+                plugindata:
+                    PluginData::EchoTest(EchoPluginData::Event(EchoPluginDataEvent::Error(error))),
                 jsep: None,
                 session_id,
             }) => {
                 assert_eq!(sender, HandleId::new(1739642080530886));
                 assert_eq!(session_id, SessionId::new(280835257881068));
                 assert_eq!(transaction.unwrap(), TransactionId("2".into()));
-                match plugindata {
-                    PluginData::EchoTest(data) => match data {
-                        EchoPluginData::Event(EchoPluginDataEvent::Error(error)) => {
-                            assert_eq!(
-                                error.error_code(),
-                                JanusInternalError::EchotestErrorInvalidElement
-                            );
-                        }
-                        _ => {
-                            assert!(false)
-                        }
-                    },
-                    _ => {
-                        assert!(false)
-                    }
-                }
+                assert_eq!(
+                    error.error_code(),
+                    JanusInternalError::EchotestErrorInvalidElement
+                );
             }
-            _ => assert!(false),
+            _ => panic!(),
         }
     }
 }

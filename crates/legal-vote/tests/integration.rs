@@ -657,10 +657,8 @@ async fn auto_stop_vote() {
         voters: voters.clone(),
     };
 
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
-        vote_id,
-        results: results,
-    }));
+    let expected_update =
+        WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults { vote_id, results }));
 
     for user in USERS {
         let update = module_tester
