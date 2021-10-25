@@ -1,5 +1,5 @@
 ---
-image: git.heinlein-video.de:5050/heinlein-video/rust:1.55
+image: git.heinlein-video.de:5050/heinlein-video/rust:1.56
 
 stages:
   - lint
@@ -51,16 +51,6 @@ lint:yaml:
   before_script:
     - pacman -Syy --noconfirm yamllint
   script: yamllint .
-
-test:cargo_check:
-  rules:
-    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
-    - if: $CI_PIPELINE_SOURCE == 'schedule'
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
-  stage: test
-  variables:
-    RUSTFLAGS: -D warnings
-  script: cargo check --tests --all-features
 
 test:cargo_test:
   rules:
