@@ -141,8 +141,8 @@ mod test {
         }) = msg
         {
             assert_eq!(media_session_type, MediaSessionType::Video);
-            assert_eq!(media_session_state.audio, false);
-            assert_eq!(media_session_state.video, false);
+            assert!(!media_session_state.audio);
+            assert!(!media_session_state.video);
         } else {
             panic!()
         }
@@ -187,8 +187,8 @@ mod test {
         }) = msg
         {
             assert_eq!(media_session_type, MediaSessionType::Video);
-            assert_eq!(media_session_state.audio, true);
-            assert_eq!(media_session_state.video, false);
+            assert!(media_session_state.audio);
+            assert!(!media_session_state.video);
         } else {
             panic!()
         }

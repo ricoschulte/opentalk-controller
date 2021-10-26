@@ -865,7 +865,6 @@ impl Runner {
 
                 if let Err(e) = self.handle_rabbitmq_control_msg(timestamp, msg).await {
                     log::error!("Failed to handle incoming rabbitmq control msg, {}", e);
-                    return;
                 }
             } else {
                 match self
@@ -1056,7 +1055,6 @@ impl Runner {
         {
             log::error!("Failed to send message over rabbitmq, {}", e);
             self.exit = true;
-            return;
         }
     }
 

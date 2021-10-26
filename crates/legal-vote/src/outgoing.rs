@@ -286,10 +286,7 @@ mod test {
 
         let message = Message::Updated(VoteResults {
             vote_id: VoteId::from(Uuid::nil()),
-            results: Results {
-                votes,
-                voters: voters,
-            },
+            results: Results { votes, voters },
         });
 
         let string = serde_json::to_string(&message).unwrap();
@@ -313,10 +310,7 @@ mod test {
         let message = Message::Stopped(Stopped {
             vote_id: VoteId::from(Uuid::nil()),
             kind: rabbitmq::StopKind::ByParticipant(ParticipantId::nil()),
-            results: FinalResults::Valid(Results {
-                votes,
-                voters: voters,
-            }),
+            results: FinalResults::Valid(Results { votes, voters }),
         });
 
         let string = serde_json::to_string(&message).unwrap();

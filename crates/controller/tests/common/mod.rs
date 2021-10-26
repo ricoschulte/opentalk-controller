@@ -26,16 +26,17 @@ use tokio::process::{self, Child};
 pub async fn setup_client(user: &str, password: &str) -> Result<K3KSession> {
     let k3k_url = Url::parse(
         std::env::var("K3K_CLIENT__K3K_URL")
-            .unwrap_or("http://localhost:11311".to_string())
+            .unwrap_or_else(|_| "http://localhost:11311".to_string())
             .as_str(),
     )
     .context("Unable to parse k3k url")?;
 
-    let client_id = std::env::var("K3K_CLIENT__CLIENT_ID").unwrap_or("Frontend".to_string());
+    let client_id =
+        std::env::var("K3K_CLIENT__CLIENT_ID").unwrap_or_else(|_| "Frontend".to_string());
 
     let redirect_url = Url::parse(
         std::env::var("K3K_CLIENT__REDIRECT_URL")
-            .unwrap_or("http://localhost:8081/auth/keycloak/sso".to_string())
+            .unwrap_or_else(|_| "http://localhost:8081/auth/keycloak/sso".to_string())
             .as_str(),
     )
     .context("Unable to parse redirect url")?;
@@ -61,9 +62,9 @@ pub async fn setup_client(user: &str, password: &str) -> Result<K3KSession> {
 /// Returns the the process handle of the controller.
 pub async fn run_controller() -> Result<Child> {
     let postgres_base_url = std::env::var("POSTGRES_BASE_URL")
-        .unwrap_or("postgres://postgres:password123@localhost:5432".to_string());
+        .unwrap_or_else(|_| "postgres://postgres:password123@localhost:5432".to_string());
 
-    let database_name = std::env::var("DATABASE_NAME").unwrap_or("k3k_test".to_string());
+    let database_name = std::env::var("DATABASE_NAME").unwrap_or_else(|_| "k3k_test".to_string());
 
     let mut controller_proc = process::Command::new("../../target/debug/k3k-controller")
         .env(

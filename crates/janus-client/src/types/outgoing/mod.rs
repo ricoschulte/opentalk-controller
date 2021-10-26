@@ -165,7 +165,7 @@ mod test {
         let our = JanusRequest::TrickleMessage {
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
-            trickle: TrickleMessage::new(&vec![
+            trickle: TrickleMessage::new(&[
                 TrickleCandidate {
                     sdp_m_id: "video".to_owned(),
                     sdp_m_line_index: 1,

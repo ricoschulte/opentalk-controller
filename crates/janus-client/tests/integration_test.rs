@@ -94,7 +94,7 @@ async fn create_and_list_rooms() {
     let room1 = match room1.0 {
         incoming::VideoRoomPluginDataCreated::Ok { room, permanent } => {
             assert!(Into::<u64>::into(room) > 0);
-            assert!(permanent == false);
+            assert!(!permanent);
             room
         }
         _ => panic!(),
@@ -111,7 +111,7 @@ async fn create_and_list_rooms() {
     let room2 = match room2.0 {
         incoming::VideoRoomPluginDataCreated::Ok { room, permanent } => {
             assert!(Into::<u64>::into(room) > 0);
-            assert!(permanent == false);
+            assert!(!permanent);
             room
         }
         _ => panic!(),
@@ -126,12 +126,8 @@ async fn create_and_list_rooms() {
         incoming::VideoRoomPluginDataSuccess::List { list } => {
             // We should see at least our two test rooms here
             assert!(list.len() >= 2);
-            assert!(list
-                .iter()
-                .any(|s| *s.description() == "Testroom1".to_owned()));
-            assert!(list
-                .iter()
-                .any(|s| *s.description() == "Testroom2".to_owned()));
+            assert!(list.iter().any(|s| *s.description() == "Testroom1"));
+            assert!(list.iter().any(|s| *s.description() == "Testroom2"));
         }
     }
 
@@ -215,7 +211,7 @@ async fn send_offer() {
         incoming::VideoRoomPluginDataSuccess::List { list } => {
             assert!(list
                 .iter()
-                .any(|s| *s.description() == "SendOfferTestroom1".to_owned()));
+                .any(|s| *s.description() == "SendOfferTestroom1"));
         }
     }
     publisher_handle

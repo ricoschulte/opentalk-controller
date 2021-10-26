@@ -788,8 +788,6 @@ async fn route_message(
                                 e
                             );
                         }
-                        // Early return
-                        return;
                     }
                     Err(e) => {
                         log::trace!(
@@ -841,8 +839,6 @@ async fn route_message(
                                 e
                             );
                         }
-                        // Early return
-                        return;
                     }
                     Err(e) => {
                         if reason == "Close PC" || reason == "DTLS alert" {

@@ -247,7 +247,7 @@ mod test {
             },
         ];
         assert_eq!(
-            rr_servers(&mut rng, &&three_servers, 1200).unwrap(),
+            rr_servers(&mut rng, &three_servers, 1200).unwrap(),
             vec![
                 IceServer::Turn(Turn {
                     username: "1200:turn_random_for_privacy_nSpZc9GXSw9gMxaV0GDahQ==".to_owned(),
@@ -269,7 +269,7 @@ mod test {
         let mut second = 0;
         let mut third = 0;
         for _ in 1..5000 {
-            rr_servers(&mut rng, &&three_servers, 1200)
+            rr_servers(&mut rng, &three_servers, 1200)
                 .unwrap()
                 .iter()
                 .filter_map(|e| match e {

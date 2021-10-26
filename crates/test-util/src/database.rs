@@ -40,10 +40,10 @@ impl DatabaseContext {
         drop_database(&conn, &db_name).expect("Database initialization cleanup failed");
 
         // Create a new database for the test
-        let query = diesel::sql_query(format!("CREATE DATABASE {}", db_name).as_str());
+        let query = diesel::sql_query(format!("CREATE DATABASE {}", db_name));
         query
             .execute(&conn)
-            .expect(format!("Could not create database {}", db_name).as_str());
+            .unwrap_or_else(|_| panic!("Could not create database {}", db_name));
 
         let db_url = format!("{}/{}", base_url, db_name);
 
