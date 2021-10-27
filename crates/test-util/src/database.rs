@@ -61,7 +61,7 @@ impl DatabaseContext {
         }
     }
 
-    pub fn create_test_user(&self, id: UserId) -> Result<User> {
+    pub fn create_test_user(&self, id: UserId, groups: Vec<String>) -> Result<User> {
         let user_uuid = Uuid::from_u128(id.into_inner() as u128);
 
         let new_user = NewUser {
@@ -75,10 +75,7 @@ impl DatabaseContext {
             language: "en".into(),
         };
 
-        let new_user_with_groups = NewUserWithGroups {
-            new_user,
-            groups: vec![],
-        };
+        let new_user_with_groups = NewUserWithGroups { new_user, groups };
 
         self.db_conn.create_user(new_user_with_groups)?;
 

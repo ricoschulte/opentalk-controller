@@ -207,14 +207,19 @@ pub async fn get_attribute_for_participants<V>(
 where
     V: FromRedisValue,
 {
-    // need manual HMGET command as the HGET command wont work with single value vector input
-    redis::cmd("HMGET")
-        .arg(RoomParticipantAttributes {
-            room,
-            attribute_name: name,
-        })
-        .arg(participants)
-        .query_async(redis_conn)
-        .await
-        .with_context(|| format!("Failed to get attribute '{}' for all participants ", name))
+    // Special case: HMGET cannot handle empty arrays (missing arguments)
+    if participants.is_empty() {
+        Ok(vec![])
+    } else {
+        // need manual HMGET command as the HGET command wont work with single value vector input
+        redis::cmd("HMGET")
+            .arg(RoomParticipantAttributes {
+                room,
+                attribute_name: name,
+            })
+            .arg(participants)
+            .query_async(redis_conn)
+            .await
+            .with_context(|| format!("Failed to get attribute '{}' for all participants ", name))
+    }
 }

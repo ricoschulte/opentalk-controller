@@ -5,7 +5,7 @@ use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use std::borrow::Borrow;
 use std::collections::HashSet;
 
-#[derive(Debug, PartialEq, Eq, Hash, Queryable, Insertable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Queryable, Insertable)]
 #[table_name = "groups"]
 pub struct Group {
     pub id: String,
