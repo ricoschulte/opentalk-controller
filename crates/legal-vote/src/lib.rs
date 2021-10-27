@@ -78,13 +78,17 @@ impl SignalingModule for LegalVote {
         ctx: InitContext<'_, Self>,
         _params: &Self::Params,
         _protocol: &'static str,
-    ) -> anyhow::Result<Self> {
-        Ok(Self {
-            db_ctx: ctx.db().clone(),
-            participant_id: ctx.participant_id(),
-            user_id: ctx.user().id,
-            room_id: ctx.room_id(),
-        })
+    ) -> anyhow::Result<Option<Self>> {
+        if let Participant::User(user) = ctx.participant() {
+            Ok(Some(Self {
+                db_ctx: ctx.db().clone(),
+                participant_id: ctx.participant_id(),
+                user_id: user.id,
+                room_id: ctx.room_id(),
+            }))
+        } else {
+            Ok(None)
+        }
     }
 
     async fn on_event(

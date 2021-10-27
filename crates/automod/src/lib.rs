@@ -127,14 +127,14 @@ impl SignalingModule for AutoMod {
         ctx: InitContext<'_, Self>,
         _params: &Self::Params,
         _protocol: &'static str,
-    ) -> Result<Self> {
-        Ok(Self {
+    ) -> Result<Option<Self>> {
+        Ok(Some(Self {
             id: ctx.participant_id(),
             room: ctx.room_id(),
             role: ctx.role(),
             current_expiry_id: None,
             current_animation_id: None,
-        })
+        }))
     }
 
     async fn on_event(

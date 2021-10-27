@@ -10,7 +10,7 @@ use diesel::{
 };
 use uuid::Uuid;
 
-diesel_newtype!(UserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt");
+diesel_newtype!(#[derive(Copy)] UserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt");
 
 impl_to_redis_args_se!(UserId);
 impl_from_redis_value_de!(UserId);

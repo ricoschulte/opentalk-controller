@@ -14,6 +14,7 @@ use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlDa
 use crate::api::signaling::prelude::{BreakoutRoomId, InitContext, ModuleContext};
 use crate::api::signaling::ws::runner::NAMESPACE;
 use crate::api::signaling::{ParticipantId, Role, SignalingRoomId, Timestamp};
+use crate::api::Participant;
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::users::UserId;
@@ -81,6 +82,73 @@ where
         }
     }
 
+    async fn join_internal(
+        &mut self,
+        participant_id: ParticipantId,
+        participant: Participant<User>,
+        role: Role,
+        display_name: &str,
+        params: M::Params,
+    ) -> Result<()> {
+        let (client_interface, runner_interface) = create_interfaces::<M>().await;
+
+        let runner = MockRunner::<M>::new(
+            participant_id,
+            self.room.clone(),
+            self.breakout_room,
+            participant.clone(),
+            role,
+            self.db_ctx.clone(),
+            self.redis_conn.clone(),
+            params,
+            client_interface,
+            self.rabbitmq_sender.clone(),
+        )
+        .await?;
+
+        if let Participant::User(user) = &participant {
+            storage::set_attribute(
+                &mut self.redis_conn,
+                runner.room_id,
+                participant_id,
+                "kind",
+                "user",
+            )
+            .await?;
+
+            storage::set_attribute(
+                &mut self.redis_conn,
+                runner.room_id,
+                participant_id,
+                "user_id",
+                user.id,
+            )
+            .await?;
+        } else {
+            storage::set_attribute(
+                &mut self.redis_conn,
+                runner.room_id,
+                participant_id,
+                "kind",
+                "guest",
+            )
+            .await?;
+        }
+
+        let runner_handle = task::spawn_local(runner.run());
+
+        runner_interface.ws.send(WsMessageIncoming::Control(
+            control::incoming::Message::Join(Join {
+                display_name: display_name.into(),
+            }),
+        ))?;
+
+        self.runner_interfaces
+            .insert(participant_id, (runner_interface, runner_handle));
+
+        Ok(())
+    }
+
     /// Join the ModuleTester as the specified user
     ///
     /// This is the equivalent of joining a room in the real controller. Spawns a underlying runner task that
@@ -93,43 +161,35 @@ where
         display_name: &str,
         params: M::Params,
     ) -> Result<()> {
-        let (client_interface, runner_interface) = create_interfaces::<M>().await;
-
-        let user_id = user.id;
-
-        let runner = MockRunner::<M>::new(
+        self.join_internal(
             participant_id,
-            self.room.clone(),
-            self.breakout_room,
-            user,
+            Participant::User(user),
             role,
-            self.db_ctx.clone(),
-            self.redis_conn.clone(),
+            display_name,
             params,
-            client_interface,
-            self.rabbitmq_sender.clone(),
         )
         .await?;
+        Ok(())
+    }
 
-        storage::set_attribute(
-            &mut self.redis_conn,
-            runner.room_id,
+    /// Join the ModuleTester as the specified user
+    ///
+    /// This is the equivalent of joining a room in the real controller. Spawns a underlying runner task that
+    /// can send and receive WebSocket messages.
+    pub async fn join_guest(
+        &mut self,
+        participant_id: ParticipantId,
+        display_name: &str,
+        params: M::Params,
+    ) -> Result<()> {
+        self.join_internal(
             participant_id,
-            "user_id",
-            user_id,
+            Participant::Guest,
+            Role::Guest,
+            display_name,
+            params,
         )
         .await?;
-
-        let runner_handle = task::spawn_local(runner.run());
-
-        runner_interface.ws.send(WsMessageIncoming::Control(
-            control::incoming::Message::Join(Join {
-                display_name: display_name.into(),
-            }),
-        ))?;
-
-        self.runner_interfaces
-            .insert(participant_id, (runner_interface, runner_handle));
 
         Ok(())
     }
@@ -190,7 +250,6 @@ where
     /// Send a [`RaiseHand`](control::incoming::Message::RaiseHand) control message to the module/runner.
     pub fn raise_hand(&mut self, participant_id: &ParticipantId) -> Result<()> {
         let interface = self.get_runner_interface(participant_id)?;
-
         interface.ws.send(WsMessageIncoming::Control(
             control::incoming::Message::RaiseHand,
         ))
@@ -277,6 +336,10 @@ where
     }
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("Module did not initialize")]
+pub struct NoInitError;
+
 /// Acts like a [Runner](super::runner::Runner) for a single specific module.
 struct MockRunner<M>
 where
@@ -286,7 +349,7 @@ where
     room_id: SignalingRoomId,
     room: Room,
     participant_id: ParticipantId,
-    user_id: UserId,
+    participant: Participant<UserId>,
     role: Role,
     control_data: Option<ControlData>,
     module: M,
@@ -306,7 +369,7 @@ where
         participant_id: ParticipantId,
         mut room: Room,
         breakout_room: Option<BreakoutRoomId>,
-        mut user: User,
+        mut participant: Participant<User>,
         role: Role,
         db_ctx: Arc<DbInterface>,
         mut redis_conn: ConnectionManager,
@@ -320,7 +383,7 @@ where
             id: participant_id,
             room: &mut room,
             breakout_room,
-            user: &mut user,
+            participant: &mut participant,
             role,
             db: &db_ctx,
             rabbitmq_exchanges: &mut vec![],
@@ -330,14 +393,21 @@ where
             m: PhantomData::<fn() -> M>,
         };
 
-        let module = M::init(init_context, &params, "").await?;
+        let module = M::init(init_context, &params, "")
+            .await
+            .expect("Module failed to initialize with the passed parameters")
+            .ok_or(NoInitError)?;
+        let participant = match participant {
+            Participant::User(user) => Participant::User(user.id),
+            Participant::Guest => Participant::Guest,
+        };
 
         Ok(Self {
             redis_conn,
             room_id: SignalingRoomId(room.uuid, breakout_room),
             room,
             participant_id,
-            user_id: user.id,
+            participant,
             role,
             control_data: Option::<ControlData>::None,
             module,
@@ -694,14 +764,24 @@ where
     ) -> Result<()> {
         let participant_routing_key =
             control::rabbitmq::room_participant_routing_key(self.participant_id);
+        match self.participant {
+            Participant::User(user) => {
+                let user_routing_key = control::rabbitmq::room_user_routing_key(user);
 
-        let user_routing_key = control::rabbitmq::room_user_routing_key(self.user_id);
-
-        if !(rabbitmq_publish.routing_key == "participant.all"
-            || rabbitmq_publish.routing_key == participant_routing_key
-            || rabbitmq_publish.routing_key == user_routing_key)
-        {
-            return Ok(());
+                if !(rabbitmq_publish.routing_key == "participant.all"
+                    || rabbitmq_publish.routing_key == participant_routing_key
+                    || rabbitmq_publish.routing_key == user_routing_key)
+                {
+                    return Ok(());
+                }
+            }
+            Participant::Guest => {
+                if !(rabbitmq_publish.routing_key == "participant.all"
+                    || rabbitmq_publish.routing_key == participant_routing_key)
+                {
+                    return Ok(());
+                }
+            }
         }
 
         let namespaced = serde_json::from_str::<Namespaced<Value>>(&rabbitmq_publish.message)
@@ -865,6 +945,12 @@ where
 
         if destroy_room {
             storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "display_name")
+                .await?;
+            storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "kind").await?;
+            storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "joined_at").await?;
+
+            storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "hand_is_up").await?;
+            storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "hand_updated_at")
                 .await?;
 
             storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "user_id").await?;

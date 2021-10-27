@@ -14,7 +14,6 @@ use r3dlock::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use storage::StoredMessage;
-
 mod storage;
 
 /// Message received from websocket
@@ -67,30 +66,34 @@ impl SignalingModule for Chat {
         mut ctx: InitContext<'_, Self>,
         _params: &Self::Params,
         _protocol: &'static str,
-    ) -> Result<Self> {
-        let user_id = ctx.user().id;
-        let db = ctx.db().clone();
+    ) -> Result<Option<Self>> {
+        if let Participant::User(user) = ctx.participant() {
+            let user_id = user.id;
+            let db = ctx.db().clone();
 
-        let groups = controller::block(move || db.get_groups_for_user(user_id))
-            .await
-            .context("controller::block failed")?
-            .context("Failed to retrieve groups for user")?;
+            let groups = controller::block(move || db.get_groups_for_user(user_id))
+                .await
+                .context("controller::block failed")?
+                .context("Failed to retrieve groups for user")?;
 
-        for group in &groups {
-            log::debug!("Group: {}", group.id);
+            for group in &groups {
+                log::debug!("Group: {}", group.id);
 
-            ctx.add_rabbitmq_binding(
-                group_routing_key(&group.id),
-                rabbitmq::current_room_exchange_name(ctx.room_id()),
-                Default::default(),
-            );
+                ctx.add_rabbitmq_binding(
+                    group_routing_key(&group.id),
+                    rabbitmq::current_room_exchange_name(ctx.room_id()),
+                    Default::default(),
+                );
+            }
+
+            Ok(Some(Self {
+                id: ctx.participant_id(),
+                room: ctx.room_id(),
+                groups,
+            }))
+        } else {
+            Ok(None)
         }
-
-        Ok(Self {
-            id: ctx.participant_id(),
-            room: ctx.room_id(),
-            groups,
-        })
     }
 
     async fn on_event(

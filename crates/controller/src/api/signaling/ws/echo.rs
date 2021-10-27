@@ -18,8 +18,12 @@ impl SignalingModule for Echo {
     type FrontendData = ();
     type PeerFrontendData = ();
 
-    async fn init(_: InitContext<'_, Self>, _: &Self::Params, _: &'static str) -> Result<Self> {
-        Ok(Self)
+    async fn init(
+        _: InitContext<'_, Self>,
+        _: &Self::Params,
+        _: &'static str,
+    ) -> Result<Option<Self>> {
+        Ok(Some(Self))
     }
 
     async fn on_event(

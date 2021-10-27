@@ -5,6 +5,7 @@ use super::ParticipantId;
 use super::SignalingModule;
 use crate::api::v1::rooms::{Ticket, TicketData};
 use crate::api::v1::{ApiError, DefaultApiError};
+use crate::api::Participant;
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::DbInterface;
@@ -62,7 +63,7 @@ pub(crate) async fn ws_service(
 
     let ticket_data = get_ticket_data_from_redis(&mut redis_conn, &ticket).await?;
 
-    let (user, room) = get_user_and_room_from_ticket(db_ctx.clone(), ticket_data).await?;
+    let (participant, room) = get_user_and_room_from_ticket(db_ctx.clone(), ticket_data).await?;
 
     let mut response = ws::handshake(&request)?;
 
@@ -75,7 +76,7 @@ pub(crate) async fn ws_service(
         id,
         room,
         ticket_data.breakout_room,
-        user,
+        participant,
         protocol,
         db_ctx.into_inner(),
         redis_conn,
@@ -202,22 +203,30 @@ async fn get_ticket_data_from_redis(
 async fn get_user_and_room_from_ticket(
     db_ctx: Data<DbInterface>,
     ticket_data: TicketData,
-) -> Result<(User, Room), ApiError> {
-    crate::block(move || -> Result<(User, Room), DefaultApiError> {
-        let user = db_ctx
-            .get_user_by_id(ticket_data.user)
-            .map_err(DefaultApiError::from)?;
+) -> Result<(Participant<User>, Room), ApiError> {
+    crate::block(
+        move || -> Result<(Participant<User>, Room), DefaultApiError> {
+            let participant = match ticket_data.participant {
+                Participant::User(user_id) => {
+                    let user = db_ctx
+                        .get_user_by_id(user_id)
+                        .map_err(DefaultApiError::from)?;
 
-        let user = user.ok_or(DefaultApiError::Internal)?;
+                    let user = user.ok_or(DefaultApiError::Internal)?;
+                    Participant::User(user)
+                }
+                Participant::Guest => Participant::Guest,
+            };
 
-        let room = db_ctx
-            .get_room(ticket_data.room)
-            .map_err(DefaultApiError::from)?;
+            let room = db_ctx
+                .get_room(ticket_data.room)
+                .map_err(DefaultApiError::from)?;
 
-        let room = room.ok_or(DefaultApiError::NotFound)?;
+            let room = room.ok_or(DefaultApiError::NotFound)?;
 
-        Ok((user, room))
-    })
+            Ok((participant, room))
+        },
+    )
     .await
     .map_err(|e| {
         log::error!("BlockingError on ws_service - {}", e);

@@ -132,6 +132,7 @@ impl_to_redis_args!(ParticipantId);
 #[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
+    Guest,
     User,
     Moderator,
 }

@@ -5,6 +5,20 @@ table! {
 }
 
 table! {
+    invites (id) {
+        id -> Int8,
+        uuid -> Uuid,
+        created -> Timestamptz,
+        created_by -> Int8,
+        updated -> Timestamptz,
+        updated_by -> Int8,
+        room -> Uuid,
+        active -> Bool,
+        expiration -> Nullable<Timestamptz>,
+    }
+}
+
+table! {
     legal_votes (id) {
         id -> Uuid,
         initiator -> Int8,
@@ -60,6 +74,7 @@ joinable!(user_groups -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
     groups,
+    invites,
     legal_votes,
     refinery_schema_history,
     rooms,

@@ -764,6 +764,7 @@ checksum = "bba51ca66f57261fd17cadf8b73e4775cc307d0521d855de3f5de91a8f074e0e"
 dependencies = [
  "bitflags",
  "byteorder",
+ "chrono",
  "diesel_derives",
  "pq-sys",
  "r2d2",
@@ -1390,6 +1391,7 @@ dependencies = [
  "diesel",
  "diesel_migrations",
  "displaydoc",
+ "either",
  "fern",
  "futures",
  "futures-util",
@@ -1398,6 +1400,7 @@ dependencies = [
  "k3k-test-util",
  "lapin",
  "log",
+ "mime",
  "nix",
  "openidconnect",
  "opentelemetry",

@@ -147,10 +147,10 @@ impl SignalingModule for Chat {
         ctx: InitContext<'_, Self>,
         _params: &Self::Params,
         _protocol: &'static str,
-    ) -> Result<Self> {
+    ) -> Result<Option<Self>> {
         let id = ctx.participant_id();
         let room = ctx.room_id();
-        Ok(Self { id, room })
+        Ok(Some(Self { id, room }))
     }
 
     async fn on_event(

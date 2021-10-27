@@ -5,6 +5,7 @@ use super::{
     DestroyContext, Namespaced, NamespacedOutgoing, RabbitMqBinding, RabbitMqExchange,
     RabbitMqPublish, Timestamp, WebSocket,
 };
+use crate::api;
 use crate::api::signaling::prelude::*;
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
@@ -48,7 +49,7 @@ pub struct Builder {
     pub(super) id: ParticipantId,
     pub(super) room: Room,
     pub(super) breakout_room: Option<BreakoutRoomId>,
-    pub(super) user: User,
+    pub(super) participant: api::Participant<User>,
     pub(super) role: Role,
     pub(super) protocol: &'static str,
     pub(super) modules: Modules,
@@ -95,9 +96,6 @@ impl Builder {
 
         // Routing key which is needed to receive messages to this participant
         let self_routing_key = rabbitmq::room_participant_routing_key(self.id);
-
-        // Routing key which is needed to receive messages to this participant
-        let self_user_routing_key = rabbitmq::room_user_routing_key(self.user.id);
 
         // ==== ROOM EXCHANGE BINDINGS
 
@@ -211,38 +209,42 @@ impl Builder {
                 )
                 .await?;
         }
+        if let api::Participant::User(user) = &self.participant {
+            // Routing key which is needed to receive messages to this participant
+            let self_user_routing_key = rabbitmq::room_user_routing_key(user.id);
 
-        // Binding outside the loop since the routing key contains the user-id
-        // and thus should not appear in the logs
-        self.rabbitmq_channel
-            .queue_bind(
-                queue.name().as_str(),
-                user_update::EXCHANGE,
-                &user_update::routing_key(self.user.id),
-                Default::default(),
-                Default::default(),
-            )
-            .await?;
+            // Binding outside the loop since the routing key contains the user-id
+            // and thus should not appear in the logs
+            self.rabbitmq_channel
+                .queue_bind(
+                    queue.name().as_str(),
+                    user_update::EXCHANGE,
+                    &user_update::routing_key(user.id),
+                    Default::default(),
+                    Default::default(),
+                )
+                .await?;
 
-        self.rabbitmq_channel
-            .queue_bind(
-                queue.name().as_str(),
-                &room_exchange,
-                &self_user_routing_key,
-                Default::default(),
-                Default::default(),
-            )
-            .await?;
+            self.rabbitmq_channel
+                .queue_bind(
+                    queue.name().as_str(),
+                    &room_exchange,
+                    &self_user_routing_key,
+                    Default::default(),
+                    Default::default(),
+                )
+                .await?;
 
-        self.rabbitmq_channel
-            .queue_bind(
-                queue.name().as_str(),
-                &global_room_exchange,
-                &self_user_routing_key,
-                Default::default(),
-                Default::default(),
-            )
-            .await?;
+            self.rabbitmq_channel
+                .queue_bind(
+                    queue.name().as_str(),
+                    &global_room_exchange,
+                    &self_user_routing_key,
+                    Default::default(),
+                    Default::default(),
+                )
+                .await?;
+        }
 
         let consumer = self
             .rabbitmq_channel
@@ -254,15 +256,18 @@ impl Builder {
                 Default::default(),
             )
             .await?;
-
-        storage::set_attribute(
-            &mut self.redis_conn,
-            room_id,
-            self.id,
-            "user_id",
-            self.user.id,
-        )
-        .await?;
+        match &self.participant {
+            api::Participant::User(ref user) => {
+                storage::set_attribute(&mut self.redis_conn, room_id, self.id, "kind", "user")
+                    .await?;
+                storage::set_attribute(&mut self.redis_conn, room_id, self.id, "user_id", user.id)
+                    .await?;
+            }
+            api::Participant::Guest => {
+                storage::set_attribute(&mut self.redis_conn, room_id, self.id, "kind", "guest")
+                    .await?;
+            }
+        }
 
         storage::set_attribute(
             &mut self.redis_conn,
@@ -276,7 +281,7 @@ impl Builder {
         Ok(Runner {
             id: self.id,
             room_id,
-            user: self.user,
+            participant: self.participant,
             role: self.role,
             control_data: None,
             ws: Ws {
@@ -311,8 +316,8 @@ pub struct Runner {
     // Full signaling room id
     room_id: SignalingRoomId,
 
-    // User behind the participant
-    user: User,
+    // User behind the participant or Guest
+    participant: api::Participant<User>,
 
     // The role of the participant inside the room
     role: Role,
@@ -366,23 +371,29 @@ impl Runner {
         id: ParticipantId,
         room: Room,
         breakout_room: Option<BreakoutRoomId>,
-        user: User,
+        participant: api::Participant<User>,
         protocol: &'static str,
         db: Arc<DbInterface>,
         redis_conn: ConnectionManager,
         rabbitmq_channel: lapin::Channel,
     ) -> Builder {
-        let role = if user.id == room.owner {
-            Role::Moderator
-        } else {
-            Role::User
+        // TODO(r.floren) Change this when the permissions system gets introduced
+        let role = match &participant {
+            api::Participant::User(user) => {
+                if user.id == room.owner {
+                    Role::Moderator
+                } else {
+                    Role::User
+                }
+            }
+            api::Participant::Guest => Role::Guest,
         };
 
         Builder {
             id,
             room,
             breakout_room,
-            user,
+            participant,
             role,
             protocol,
             modules: Default::default(),
@@ -501,6 +512,11 @@ impl Runner {
     /// Cleanup the participant attributes that were set by the runner
     async fn cleanup_attributes(&mut self) -> Result<()> {
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "display_name").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "joined_at").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "hand_is_up").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "hand_updated_at")
+            .await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "kind").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "user_id").await
     }
 
@@ -882,7 +898,9 @@ impl Runner {
                     Err(NoSuchModuleError(())) => log::warn!("Got invalid rabbit-mq message"),
                 }
             }
-        } else if delivery.routing_key.as_str() == user_update::routing_key(self.user.id) {
+        } else if matches!(self.participant, api::Participant::User(ref user)
+            if delivery.routing_key.as_str() == user_update::routing_key(user.id)
+        ) {
             let user_update::Message { groups } = match serde_json::from_slice(&delivery.data) {
                 Ok(message) => message,
                 Err(e) => {
