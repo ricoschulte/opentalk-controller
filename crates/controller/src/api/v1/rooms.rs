@@ -8,6 +8,7 @@ use crate::api::v1::{ApiError, ApiResponse, DefaultApiError};
 use crate::api::Participant;
 use crate::db::invites::InviteCodeUuid;
 use crate::db::rooms::{self as db_rooms, RoomId};
+use crate::db::sip_configs::{SipConfigParams, SipId, SipPassword};
 use crate::db::users::{User, UserId};
 use crate::db::DbInterface;
 use actix_web::web::{Data, Json, Path, ReqData};
@@ -51,6 +52,9 @@ pub struct NewRoom {
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
+    /// Enable/Disable sip for this room; defaults to false when not set
+    #[serde(default)]
+    pub enable_sip: bool,
 }
 
 /// API request parameters to modify a room.
@@ -116,11 +120,11 @@ pub async fn owned(
 pub async fn new(
     db_ctx: Data<DbInterface>,
     current_user: ReqData<User>,
-    new_room: Json<NewRoom>,
+    room_parameters: Json<NewRoom>,
 ) -> Result<Json<Room>, DefaultApiError> {
-    let new_room = new_room.into_inner();
+    let room_parameters = room_parameters.into_inner();
 
-    if let Err(e) = new_room.validate() {
+    if let Err(e) = room_parameters.validate() {
         log::warn!("API new room validation error {}", e);
         return Err(DefaultApiError::ValidationFailed);
     }
@@ -129,12 +133,20 @@ pub async fn new(
         let new_room = db_rooms::NewRoom {
             uuid: RoomId::from(uuid::Uuid::new_v4()),
             owner: current_user.id,
-            password: new_room.password,
-            wait_for_moderator: new_room.wait_for_moderator,
-            listen_only: new_room.listen_only,
+            password: room_parameters.password,
+            wait_for_moderator: room_parameters.wait_for_moderator,
+            listen_only: room_parameters.listen_only,
         };
 
-        Ok(db_ctx.new_room(new_room)?)
+        let room = db_ctx.new_room(new_room)?;
+
+        if room_parameters.enable_sip {
+            let sip_params = SipConfigParams::generate_new(room.uuid);
+
+            db_ctx.new_sip_config(sip_params)?;
+        }
+
+        Ok(room)
     })
     .await
     .map_err(|e| {
@@ -281,6 +293,7 @@ impl_to_redis_args_se!(&TicketData);
 pub enum StartRoomError {
     InvalidInvite,
     WrongRoomPassword,
+    InvalidCredentials,
     NoBreakoutRooms,
     InvalidBreakoutRoomId,
 }
@@ -320,7 +333,7 @@ pub async fn start(
     })
     .await
     .map_err(|e| {
-        log::error!("BlockingError on GET /rooms/{{room_uuid}}/start - {}", e);
+        log::error!("BlockingError on POST /rooms/{{room_uuid}}/start - {}", e);
         StartError::Internal
     })??;
 
@@ -354,29 +367,13 @@ pub async fn start(
         }
     }
 
-    let ticket = rand::thread_rng()
-        .sample_iter(rand::distributions::Alphanumeric)
-        .take(64)
-        .map(char::from)
-        .collect::<String>();
-
-    let ticket = Ticket { ticket };
-
     let ticket_data = TicketData {
         participant: current_user.id.into(),
         room: room_id,
         breakout_room: request.breakout_room,
     };
 
-    // TODO: make the expiration configurable through settings
-    // let the ticket expire in 30 seconds
-    redis_conn
-        .set_ex(&ticket, &ticket_data, 30)
-        .await
-        .map_err(|e| {
-            log::error!("Unable to store ticket in redis, {}", e);
-            StartError::Internal
-        })?;
+    let ticket = generate_ticket(&mut redis_conn, &ticket_data).await?;
 
     Ok(Json(ticket))
 }
@@ -417,7 +414,7 @@ pub async fn start_invited(
     })
     .await
     .map_err(|e| {
-        log::error!("BlockingError on GET /rooms/{{room_uuid}}/start - {}", e);
+        log::error!("BlockingError on POST /rooms/{{room_uuid}}/start - {}", e);
         StartError::Internal
     })??;
 
@@ -451,18 +448,100 @@ pub async fn start_invited(
         }
     }
 
-    let ticket = rand::thread_rng()
-        .sample_iter(rand::distributions::Alphanumeric)
-        .take(64)
-        .map(char::from)
-        .collect::<String>();
-
-    let ticket = Ticket { ticket };
-
     let ticket_data = TicketData {
         participant: Participant::Guest,
         room: room_id,
         breakout_room: request.breakout_room,
+    };
+
+    let ticket = generate_ticket(&mut redis_conn, &ticket_data).await?;
+
+    // TODO(r.floren): create session resumption token for guests
+
+    Ok(ApiResponse::new(ticket))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SipStartRequest {
+    sip_id: SipId,
+    password: SipPassword,
+}
+
+/// API Endpoint *POST /rooms/sip/start*
+///
+/// Get a [`Ticket`] for a new sip connection to a room. The requester has to provide
+/// a valid [`SipId`] & [`SipPassword`] via the [`SipStartRequest`]
+///
+/// Returns [`StartError::NotFound`](ApiError::NotFound) when the requested room could not be found.
+#[post("/rooms/sip/start")]
+pub async fn sip_start(
+    db_ctx: Data<DbInterface>,
+    redis_ctx: Data<ConnectionManager>,
+    request: Json<SipStartRequest>,
+) -> Result<ApiResponse<Ticket>, StartError> {
+    let mut redis_conn = (**redis_ctx).clone();
+    let request = request.into_inner();
+
+    request
+        .sip_id
+        .validate()
+        .map_err(|_| StartError::BadRequest("bad sip_id format".to_string()))?;
+
+    request
+        .password
+        .validate()
+        .map_err(|_| StartError::BadRequest("bad sip_password format".to_string()))?;
+
+    let ticket_data = crate::block(move || -> Result<TicketData, StartError> {
+        if let Some(sip_config) = db_ctx.get_sip_config_by_sip_id(request.sip_id)? {
+            if sip_config.password == request.password {
+                let room = db_ctx
+                    .get_room(sip_config.room)?
+                    .ok_or(StartError::Internal)?;
+
+                Ok(TicketData {
+                    participant: Participant::Sip,
+                    room: room.uuid,
+                    breakout_room: None,
+                })
+            } else {
+                Err(StartError::AuthJson(
+                    StartRoomError::InvalidCredentials.into(),
+                ))
+            }
+        } else {
+            Err(StartError::AuthJson(
+                StartRoomError::InvalidCredentials.into(),
+            ))
+        }
+    })
+    .await
+    .map_err(|e| {
+        log::error!("BlockingError on POST /rooms/sip/start - {}", e);
+        StartError::Internal
+    })??;
+
+    let ticket = generate_ticket(&mut redis_conn, &ticket_data).await?;
+
+    Ok(ApiResponse::new(ticket))
+}
+
+/// Generates a new ticket
+///
+/// Stores the generated ticket in redis together with its ticket data. The redis
+/// key expires after 30 seconds.
+///
+/// Returns the new ticket or an Error when the redis command fails
+async fn generate_ticket(
+    redis_conn: &mut ConnectionManager,
+    ticket_data: &TicketData,
+) -> Result<Ticket, StartError> {
+    let ticket = Ticket {
+        ticket: rand::thread_rng()
+            .sample_iter(rand::distributions::Alphanumeric)
+            .take(64)
+            .map(char::from)
+            .collect::<String>(),
     };
 
     // TODO: make the expiration configurable through settings
@@ -475,7 +554,5 @@ pub async fn start_invited(
             StartError::Internal
         })?;
 
-    // TODO(r.floren): create session resumption token for guests
-
-    Ok(ApiResponse::new(ticket))
+    Ok(ticket)
 }

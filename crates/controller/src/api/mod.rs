@@ -12,6 +12,7 @@ pub mod v1;
 pub enum Participant<U> {
     User(U),
     Guest,
+    Sip,
 }
 
 impl From<UserId> for Participant<UserId> {
@@ -32,6 +33,7 @@ impl Participant<User> {
         match self {
             Participant::User(user) => Some(user.id),
             Participant::Guest => None,
+            Participant::Sip => None,
         }
     }
 }

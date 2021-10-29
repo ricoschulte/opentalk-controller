@@ -47,6 +47,16 @@ table! {
 }
 
 table! {
+    sip_configs (id) {
+        id -> Int8,
+        room -> Uuid,
+        sip_id -> Varchar,
+        password -> Varchar,
+        enable_lobby -> Bool,
+    }
+}
+
+table! {
     user_groups (user_id, group_id) {
         user_id -> Int8,
         group_id -> Varchar,
@@ -78,6 +88,7 @@ allow_tables_to_appear_in_same_query!(
     legal_votes,
     refinery_schema_history,
     rooms,
+    sip_configs,
     user_groups,
     users,
 );

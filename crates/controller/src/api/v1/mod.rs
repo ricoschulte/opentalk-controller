@@ -21,6 +21,7 @@ pub mod middleware;
 mod request;
 mod response;
 pub mod rooms;
+pub mod sip_configs;
 pub mod turn;
 pub mod users;
 

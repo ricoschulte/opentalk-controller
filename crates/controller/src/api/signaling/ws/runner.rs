@@ -267,6 +267,10 @@ impl Builder {
                 storage::set_attribute(&mut self.redis_conn, room_id, self.id, "kind", "guest")
                     .await?;
             }
+            api::Participant::Sip => {
+                storage::set_attribute(&mut self.redis_conn, room_id, self.id, "kind", "sip")
+                    .await?;
+            }
         }
 
         storage::set_attribute(
@@ -386,7 +390,7 @@ impl Runner {
                     Role::User
                 }
             }
-            api::Participant::Guest => Role::Guest,
+            api::Participant::Guest | api::Participant::Sip => Role::Guest,
         };
 
         Builder {
