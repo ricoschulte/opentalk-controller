@@ -1218,7 +1218,10 @@ async fn ineligible_cancel() {
 #[serial]
 async fn join_as_guest() {
     let test_ctx = TestContext::new().await;
-    let user1 = test_ctx.db_ctx.create_test_user(USER_1.user_id).unwrap();
+    test_ctx
+        .db_ctx
+        .create_test_user(USER_1.user_id, Vec::new())
+        .unwrap();
     let guest = ParticipantId::new_test(11311);
 
     let room = test_ctx
