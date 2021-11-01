@@ -41,8 +41,8 @@ pub struct Connection {
 }
 
 const fn default_max_video_bitrate() -> u64 {
-    // 8kB/s
-    64000
+    // 1.5 Mbit/s
+    1_500_000
 }
 
 const fn default_max_screen_bitrate() -> u64 {
