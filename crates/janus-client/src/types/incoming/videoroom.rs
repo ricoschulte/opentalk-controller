@@ -39,6 +39,10 @@ pub enum VideoRoomPluginData {
     Attached(VideoRoomPluginDataAttached),
     #[serde(rename = "slow_link")]
     SlowLink(VideoRoomPluginDataSlowLink),
+    #[serde(rename = "talking")]
+    Talking(VideoRoomPluginDataTalking),
+    #[serde(rename = "stopped-talking")]
+    StoppedTalking(VideoRoomPluginDataTalking),
 }
 
 /// A room
@@ -402,6 +406,14 @@ where
 
     let visitor = CommaSeparated(Phantom, Phantom);
     deserializer.deserialize_str(visitor)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct VideoRoomPluginDataTalking {
+    pub room: RoomId,
+    pub id: u64,
+    #[serde(rename = "audio-level-dBov-avg")]
+    pub audio_level_avg: f64,
 }
 
 #[cfg(test)]

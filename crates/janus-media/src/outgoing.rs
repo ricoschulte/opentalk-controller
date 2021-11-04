@@ -30,6 +30,9 @@ pub enum Message {
     #[serde(rename = "webrtc_slow")]
     WebRtcSlow(Link),
 
+    #[serde(rename = "focus_update")]
+    FocusUpdate(FocusUpdate),
+
     /// Contains human readable error message about what request failed
     #[serde(rename = "error")]
     Error { text: &'static str },
@@ -83,6 +86,11 @@ pub struct Link {
     pub direction: LinkDirection,
     #[serde(flatten)]
     pub source: Source,
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct FocusUpdate {
+    pub focus: Option<ParticipantId>,
 }
 
 #[cfg(test)]

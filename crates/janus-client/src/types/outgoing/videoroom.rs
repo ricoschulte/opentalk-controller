@@ -400,6 +400,9 @@ pub struct VideoRoomPluginCreate {
     /// number of packets with audio level, default is 100, 2 seconds if not set
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_active_packets: Option<i64>,
+    /// average value of audio level, 127=muted, 0='too loud', default=25 if not set
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_level_average: Option<i64>,
 }
 
 impl PluginRequest for VideoRoomPluginCreate {
@@ -430,18 +433,17 @@ pub struct VideoRoomPluginJoinSubscriber {
     pub close_pc: Option<bool>,
     /// true|false, depending on whether or not audio should be relayed; true by default
     #[serde(skip_serializing_if = "Option::is_none")]
-    /// true|false, depending on whether or not video should be relayed; true by default
     pub audio: Option<bool>,
-    /// true|false, depending on whether or not data should be relayed; true by default
+    /// true|false, depending on whether or not video should be relayed; true by default
     #[serde(skip_serializing_if = "Option::is_none")]
     pub video: Option<bool>,
-    /// true|false; whether or not audio should be negotiated; true by default if the publisher has audio
+    /// true|false, depending on whether or not data should be relayed; true by default
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<bool>,
-    /// true|false; whether or not video should be negotiated; true by default if the publisher has video
+    /// true|false; whether or not audio should be negotiated; true by default if the publisher has audio
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offer_audio: Option<bool>,
-    /// true|false; whether or not datachannels should be negotiated; true by default if the publisher has datachannels
+    /// true|false; whether or not video should be negotiated; true by default if the publisher has video
     #[serde(skip_serializing_if = "Option::is_none")]
     pub offer_video: Option<bool>,
     /// true|false; whether or not datachannels should be negotiated; true by default if the publisher has datachannels

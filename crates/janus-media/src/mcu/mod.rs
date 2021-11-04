@@ -314,6 +314,10 @@ impl McuPool {
             videoorient_ext: Some(false),
             bitrate: Some(bitrate),
             bitrate_cap: Some(true),
+            audiolevel_event: Some(true),
+            audiolevel_ext: Some(true),
+            audio_active_packets: Some(settings.speaker_focus_packets),
+            audio_level_average: Some(settings.speaker_focus_level),
             ..Default::default()
         };
 
@@ -989,6 +993,18 @@ async fn forward_janus_message(
                             "Participant {}: Got a plugin event for its room",
                             media_session_key
                         );
+                    }
+                    janus_client::incoming::VideoRoomPluginData::Talking(_) => {
+                        event_sink
+                            .send((media_session_key, WebRtcEvent::StartedTalking))
+                            .await?;
+                        return Ok(());
+                    }
+                    janus_client::incoming::VideoRoomPluginData::StoppedTalking(_) => {
+                        event_sink
+                            .send((media_session_key, WebRtcEvent::StoppedTalking))
+                            .await?;
+                        return Ok(());
                     }
                     _ => log::warn!(
                         "Invalid handle event for participant {}: {:?}",
