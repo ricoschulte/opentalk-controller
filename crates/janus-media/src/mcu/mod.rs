@@ -797,9 +797,11 @@ pub struct JanusSubscriber {
 impl JanusSubscriber {
     pub async fn send_message(&self, request: Request) -> Result<Response> {
         match request {
-            Request::RequestOffer => {
-                let response: janus_client::Jsep =
-                    self.join_room().await.context("Failed to join room")?;
+            Request::RequestOffer { without_video } => {
+                let response: janus_client::Jsep = self
+                    .join_room(without_video)
+                    .await
+                    .context("Failed to join room")?;
 
                 Ok(Response::SdpOffer(response))
             }
@@ -849,10 +851,11 @@ impl JanusSubscriber {
     }
 
     /// Joins the room of the publisher this [JanusSubscriber](JanusSubscriber) is subscriber to
-    async fn join_room(&self) -> Result<janus_client::Jsep> {
+    async fn join_room(&self, without_video: bool) -> Result<janus_client::Jsep> {
         let feed = janus_client::FeedId::new(self.media_session_key.1.into());
         let join_request =
             janus_client::outgoing::VideoRoomPluginJoinSubscriber::builder(self.room_id, feed)
+                .offer_video(if without_video { Some(false) } else { None })
                 .build();
 
         let join_response = self.handle.send(join_request).await;
@@ -949,7 +952,6 @@ impl From<janus_client::incoming::TrickleMessage> for TrickleMessage {
             Self::Completed
         } else {
             Self::Candidate(TrickleCandidate {
-                sdp_m_id: value.candidate.sdp_m_id,
                 sdp_m_line_index: value.candidate.sdp_m_line_index,
                 candidate: value.candidate.candidate,
             })
@@ -1071,9 +1073,6 @@ async fn send_offer(handle: &janus_client::Handle, offer: SdpOffer) -> Result<Sd
     match handle
         .send_with_jsep(
             janus_client::outgoing::VideoRoomPluginConfigurePublisher {
-                audio: Some(true),
-                video: Some(true),
-                data: Some(true),
                 ..Default::default()
             },
             offer.into(),

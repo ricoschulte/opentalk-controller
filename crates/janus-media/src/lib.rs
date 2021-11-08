@@ -198,24 +198,25 @@ impl SignalingModule for Media {
                     });
                 }
             }
-            Event::WsMessage(incoming::Message::Subscribe(target)) => {
-                // Check that the subscribtion target is inside the room
+            Event::WsMessage(incoming::Message::Subscribe(subscribe)) => {
+                // Check that the subscription target is inside the room
                 if !control::storage::participants_contains(
                     ctx.redis_conn(),
                     self.room,
-                    target.target,
+                    subscribe.target.target,
                 )
                 .await?
                 {
-                    // just dicard, shouldn't happen often
+                    // just discard, shouldn't happen often
                     return Ok(());
                 }
 
-                if let Err(e) = self
-                    .handle_sdp_request_offer(&mut ctx, target.target, target.media_session_type)
-                    .await
-                {
-                    log::error!("Failed to handle sdp request-offer {:?}, {:?}", target, e);
+                if let Err(e) = self.handle_sdp_request_offer(&mut ctx, subscribe).await {
+                    log::error!(
+                        "Failed to handle sdp request-offer {:?}, {:?}",
+                        subscribe,
+                        e
+                    );
                     ctx.ws_send(outgoing::Message::Error {
                         text: "failed to process requestOffer",
                     });
@@ -465,7 +466,7 @@ impl Media {
         answer: String,
     ) -> Result<()> {
         if target == self.id {
-            // Get the publisher and create if it doesnt exists
+            // Get the publisher and create if it doesn't exists
             let publisher = self
                 .media
                 .get_publisher(media_session_type)
@@ -542,10 +543,12 @@ impl Media {
     async fn handle_sdp_request_offer(
         &mut self,
         ctx: &mut ModuleContext<'_, Self>,
-        target: ParticipantId,
-        media_session_type: MediaSessionType,
+        subscribe: incoming::TargetSubscribe,
     ) -> Result<()> {
-        if self.id == target {
+        let target = subscribe.target.target;
+        let media_session_type = subscribe.target.media_session_type;
+
+        if self.id == subscribe.target.target {
             // Usually subscribing to self should be possible but cannot be realized with the
             // current messaging model. The frontend wouldn't know if a sdp-offer is an update
             // to the publish or a response to the requestOffer (subscribe)
@@ -561,7 +564,11 @@ impl Media {
                     .await?
             };
 
-        let response = subscriber.send_message(Request::RequestOffer).await?;
+        let response = subscriber
+            .send_message(Request::RequestOffer {
+                without_video: subscribe.without_video,
+            })
+            .await?;
 
         match response {
             Response::SdpOffer(offer) => {
@@ -582,13 +589,13 @@ impl Media {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
-    async fn handle_configure(&mut self, target: TargetConfigure) -> Result<()> {
+    async fn handle_configure(&mut self, configure: TargetConfigure) -> Result<()> {
         if let Some(subscriber) = self
             .media
-            .get_subscriber(target.target, target.media_session_type)
+            .get_subscriber(configure.target.target, configure.target.media_session_type)
         {
             subscriber
-                .send_message(Request::Configure(target.configuration))
+                .send_message(Request::Configure(configure.configuration))
                 .await?;
         } else {
             log::info!("Attempt to configure none existing subscriber");

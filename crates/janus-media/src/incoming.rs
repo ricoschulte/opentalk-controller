@@ -39,7 +39,7 @@ pub enum Message {
 
     /// SDP request offer
     #[serde(rename = "subscribe")]
-    Subscribe(Target),
+    Subscribe(TargetSubscribe),
 
     /// SDP request to configure subscription
     #[serde(rename = "configure")]
@@ -81,7 +81,7 @@ pub struct TargetedCandidate {
     pub target: Target,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone, Copy)]
 pub struct Target {
     /// The target of this message.
     ///
@@ -92,15 +92,23 @@ pub struct Target {
     pub media_session_type: MediaSessionType,
 }
 
+#[derive(Debug, Deserialize, Clone, Copy)]
+pub struct TargetSubscribe {
+    /// The target of the subscription
+    #[serde(flatten)]
+    pub target: Target,
+
+    /// Do not subscribe to the video stream.
+    /// Primarily used for SIP.
+    #[serde(default)]
+    pub without_video: bool,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct TargetConfigure {
-    /// The target of this message.
-    ///
-    /// If the own ID is specified it is used to configure the publish stream.
-    pub target: ParticipantId,
-
-    /// The type of stream
-    pub media_session_type: MediaSessionType,
+    /// The target of this configure
+    #[serde(flatten)]
+    pub target: Target,
 
     /// New Configuration
     ///
@@ -261,7 +269,6 @@ mod test {
             "action": "sdp_candidate",
             "candidate": {
                 "candidate": "candidate:4 1 UDP 123456 192.168.178.1 123456 typ host",
-                "sdpMid": "1",
                 "sdpMLineIndex": 1
             },
             "target": "00000000-0000-0000-0000-000000000000",
@@ -274,7 +281,6 @@ mod test {
         if let Message::SdpCandidate(TargetedCandidate {
             candidate:
                 TrickleCandidate {
-                    sdp_m_id,
                     sdp_m_line_index,
                     candidate,
                 },
@@ -285,7 +291,6 @@ mod test {
                 },
         }) = msg
         {
-            assert_eq!(sdp_m_id, "1");
             assert_eq!(sdp_m_line_index, 1);
             assert_eq!(
                 candidate,
@@ -334,13 +339,18 @@ mod test {
 
         let msg: Message = serde_json::from_str(json).unwrap();
 
-        if let Message::Subscribe(Target {
-            target,
-            media_session_type,
+        if let Message::Subscribe(TargetSubscribe {
+            target:
+                Target {
+                    target,
+                    media_session_type,
+                },
+            without_video,
         }) = msg
         {
             assert_eq!(target, ParticipantId::nil());
             assert_eq!(media_session_type, MediaSessionType::Video);
+            assert!(!without_video);
         } else {
             panic!()
         }
