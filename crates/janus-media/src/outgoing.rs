@@ -33,9 +33,8 @@ pub enum Message {
     #[serde(rename = "focus_update")]
     FocusUpdate(FocusUpdate),
 
-    /// Contains human readable error message about what request failed
-    #[serde(rename = "error")]
-    Error { text: &'static str },
+    /// Contains a error about what request failed. See [`Error`]
+    Error(Error),
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -91,6 +90,18 @@ pub struct Link {
 #[derive(Debug, Serialize, PartialEq)]
 pub struct FocusUpdate {
     pub focus: Option<ParticipantId>,
+}
+
+/// Represents a error of the janus media module
+#[derive(Debug, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case", tag = "error")]
+pub enum Error {
+    InvalidSdpOffer,
+    HandleSdpAnswer,
+    InvalidCandidate,
+    InvalidEndOfCandidates,
+    InvalidRequestOffer,
+    InvalidConfigureRequest,
 }
 
 #[cfg(test)]
@@ -191,11 +202,29 @@ mod test {
     }
 
     #[test]
-    fn error() {
-        let expected = r#"{"message":"error","text":"Error!"}"#;
+    fn test_errors() {
+        let errors_and_expected = vec![
+            (Error::InvalidSdpOffer, "{\"error\":\"invalid_sdp_offer\"}"),
+            (Error::HandleSdpAnswer, "{\"error\":\"handle_sdp_answer\"}"),
+            (Error::InvalidCandidate, "{\"error\":\"invalid_candidate\"}"),
+            (
+                Error::InvalidEndOfCandidates,
+                "{\"error\":\"invalid_end_of_candidates\"}",
+            ),
+            (
+                Error::InvalidRequestOffer,
+                "{\"error\":\"invalid_request_offer\"}",
+            ),
+            (
+                Error::InvalidConfigureRequest,
+                "{\"error\":\"invalid_configure_request\"}",
+            ),
+        ];
 
-        let produced = serde_json::to_string(&Message::Error { text: "Error!" }).unwrap();
-
-        assert_eq!(expected, produced);
+        for (error, expected) in errors_and_expected {
+            let produced = serde_json::to_string(&error).unwrap();
+            println!("{}", produced);
+            assert_eq!(expected, produced);
+        }
     }
 }
