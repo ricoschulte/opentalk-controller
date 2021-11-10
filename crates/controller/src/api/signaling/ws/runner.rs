@@ -652,8 +652,9 @@ impl Runner {
                 if join.display_name.is_empty() {
                     self.ws
                         .send(Message::Text(
-                            Namespaced {
+                            NamespacedOutgoing {
                                 namespace: NAMESPACE,
+                                timestamp,
                                 payload: outgoing::Message::Error {
                                     text: "invalid username",
                                 },
@@ -736,8 +737,9 @@ impl Runner {
 
                 self.ws
                     .send(Message::Text(
-                        Namespaced {
+                        NamespacedOutgoing {
                             namespace: NAMESPACE,
+                            timestamp,
                             payload: outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
                                 id: self.id,
                                 role: self.role,
@@ -948,8 +950,9 @@ impl Runner {
 
                 self.ws
                     .send(Message::Text(
-                        Namespaced {
+                        NamespacedOutgoing {
                             namespace: NAMESPACE,
+                            timestamp,
                             payload: outgoing::Message::Joined(participant),
                         }
                         .to_json(),
@@ -974,8 +977,9 @@ impl Runner {
 
                 self.ws
                     .send(Message::Text(
-                        Namespaced {
+                        NamespacedOutgoing {
                             namespace: NAMESPACE,
+                            timestamp,
                             payload: outgoing::Message::Left(outgoing::AssociatedParticipant {
                                 id,
                             }),
@@ -1004,8 +1008,9 @@ impl Runner {
 
                 self.ws
                     .send(Message::Text(
-                        Namespaced {
+                        NamespacedOutgoing {
                             namespace: NAMESPACE,
+                            timestamp,
                             payload: outgoing::Message::Update(participant),
                         }
                         .to_json(),
