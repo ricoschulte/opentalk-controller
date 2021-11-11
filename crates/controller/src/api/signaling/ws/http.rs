@@ -8,7 +8,6 @@ use crate::api::v1::{ApiError, DefaultApiError};
 use crate::api::Participant;
 use crate::db::rooms::Room;
 use crate::db::users::User;
-use crate::db::DbInterface;
 use actix_web::get;
 use actix_web::http::{header, HeaderValue};
 use actix_web::web::Data;
@@ -16,6 +15,9 @@ use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use async_tungstenite::tungstenite::protocol::Role;
 use async_tungstenite::WebSocketStream;
+use database::Db;
+use db_storage::rooms::DbRoomsEx;
+use db_storage::DbUsersEx;
 use redis::aio::ConnectionManager;
 use std::marker::PhantomData;
 use tokio::sync::broadcast;
@@ -49,7 +51,7 @@ impl SignalingProtocols {
 #[get("/signaling")]
 pub(crate) async fn ws_service(
     shutdown: Data<broadcast::Sender<()>>,
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     redis_conn: Data<ConnectionManager>,
     rabbit_mq_channel: Data<lapin::Channel>,
     protocols: Data<SignalingProtocols>,
@@ -201,7 +203,7 @@ async fn get_ticket_data_from_redis(
 }
 
 async fn get_user_and_room_from_ticket(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     ticket_data: TicketData,
 ) -> Result<(Participant<User>, Room), ApiError> {
     crate::block(

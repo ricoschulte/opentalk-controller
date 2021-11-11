@@ -1,0 +1,55 @@
+/// Implement [`redis::ToRedisArgs`] for a type that implements display
+#[macro_export]
+macro_rules! impl_to_redis_args {
+    ($ty:ty) => {
+        impl ::redis::ToRedisArgs for $ty {
+            fn write_redis_args<W>(&self, out: &mut W)
+            where
+                W: ?Sized + ::redis::RedisWrite,
+            {
+                out.write_arg_fmt(self)
+            }
+        }
+    };
+}
+
+/// Implement [`redis::FromRedisValue`] for a type that implements deserialize
+#[macro_export]
+macro_rules! impl_from_redis_value_de {
+    ($ty:ty) => {
+        impl ::redis::FromRedisValue for $ty {
+            fn from_redis_value(v: &redis::Value) -> ::redis::RedisResult<$ty> {
+                match *v {
+                    ::redis::Value::Data(ref bytes) => {
+                        serde_json::from_slice(bytes).map_err(|_| {
+                            ::redis::RedisError::from((
+                                ::redis::ErrorKind::TypeError,
+                                "invalid data content",
+                            ))
+                        })
+                    }
+                    _ => ::redis::RedisResult::Err(::redis::RedisError::from((
+                        ::redis::ErrorKind::TypeError,
+                        "invalid data type",
+                    ))),
+                }
+            }
+        }
+    };
+}
+
+/// Implement [`redis::ToRedisArgs`] for a type that implements serialize
+#[macro_export]
+macro_rules! impl_to_redis_args_se {
+    ($ty:ty) => {
+        impl ::redis::ToRedisArgs for $ty {
+            fn write_redis_args<W>(&self, out: &mut W)
+            where
+                W: ?Sized + ::redis::RedisWrite,
+            {
+                let json_val = serde_json::to_vec(self).expect("Failed to serialize");
+                out.write_arg(&json_val);
+            }
+        }
+    };
+}

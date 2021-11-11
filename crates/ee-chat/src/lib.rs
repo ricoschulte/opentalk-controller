@@ -8,9 +8,11 @@ use anyhow::{Context, Result};
 use chat::MessageId;
 use chrono::{DateTime, Utc};
 use control::rabbitmq;
+use controller::db::groups::Group;
 use controller::db::users::UserId;
-use controller::db::{groups::Group, DbInterface};
 use controller::prelude::*;
+use db_storage::database::Db;
+use db_storage::groups::DbGroupsEx;
 use r3dlock::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -44,7 +46,7 @@ pub struct Chat {
     id: ParticipantId,
     room: SignalingRoomId,
 
-    db: Arc<DbInterface>,
+    db: Arc<Db>,
 
     groups: HashSet<Group>,
 }

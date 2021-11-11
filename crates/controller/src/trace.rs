@@ -1,8 +1,8 @@
-use crate::settings::Logging;
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::http::header::USER_AGENT;
 use actix_web::Error;
 use anyhow::Result;
+use controller_shared::settings::Logging;
 use opentelemetry::global;
 use tracing::Span;
 use tracing_actix_web::RootSpanBuilder;

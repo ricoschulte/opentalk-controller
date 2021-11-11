@@ -8,7 +8,10 @@ pub fn migration() -> String {
         table.add_column("id", types::custom("BIGSERIAL").primary(true));
 
         // make the FK unique to express a one-to-one relation
-        table.add_column("room", types::custom("UUID REFERENCES rooms(uuid)").unique(true));
+        table.add_column(
+            "room",
+            types::custom("UUID REFERENCES rooms(uuid)").unique(true),
+        );
 
         // A string with 10 numeric characters to identify a room
         table.add_column("sip_id", types::varchar(10).unique(true).nullable(false));

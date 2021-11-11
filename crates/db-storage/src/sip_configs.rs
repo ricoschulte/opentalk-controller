@@ -1,12 +1,11 @@
-use super::{DatabaseError, Result};
-use crate::db::rooms::RoomId;
-use crate::db::schema::sip_configs;
-use crate::db::DbInterface;
+use super::rooms::RoomId;
+use super::schema::sip_configs;
 use crate::diesel::RunQueryDsl;
+use database::DbInterface;
+use database::{DatabaseError, Result};
 use diesel::{ExpressionMethods, QueryDsl, QueryResult};
 use diesel::{Identifiable, Queryable};
-use rand::distributions::Slice;
-use rand::{thread_rng, Rng};
+use rand::{distributions::Slice, thread_rng, Rng};
 use validator::{Validate, ValidationError, ValidationErrors};
 
 /// The set of numbers used to generate [`SipId`] & [`SipPassword`]
@@ -132,10 +131,10 @@ pub struct ModifySipConfig {
     pub enable_lobby: Option<bool>,
 }
 
-impl DbInterface {
+pub trait DbSipConfigsEx: DbInterface {
     /// Create a new sip config from the provided [`SipConfigParams`]
-    pub fn new_sip_config(&self, params: SipConfigParams) -> Result<SipConfig> {
-        let con = self.get_con()?;
+    fn new_sip_config(&self, params: SipConfigParams) -> Result<SipConfig> {
+        let con = self.get_conn()?;
 
         // Attempt a maximum of 3 times to insert a new sip config when a sip_id collision occurs
         for _ in 0..3 {
@@ -176,8 +175,8 @@ impl DbInterface {
     /// Get the sip config for the specified room
     ///
     /// Returns Ok(None) when the room has no sip config set.
-    pub fn get_sip_config(&self, room_id: RoomId) -> Result<Option<SipConfig>> {
-        let con = self.get_con()?;
+    fn get_sip_config(&self, room_id: RoomId) -> Result<Option<SipConfig>> {
+        let con = self.get_conn()?;
 
         let config_result = sip_configs::table
             .filter(sip_configs::columns::room.eq(&room_id))
@@ -199,8 +198,8 @@ impl DbInterface {
     /// Get the sip config for the specified sip_id
     ///
     /// Returns Ok(None) when the no sip config was found.
-    pub fn get_sip_config_by_sip_id(&self, sip_id: SipId) -> Result<Option<SipConfig>> {
-        let con = self.get_con()?;
+    fn get_sip_config_by_sip_id(&self, sip_id: SipId) -> Result<Option<SipConfig>> {
+        let con = self.get_conn()?;
 
         let config_result = sip_configs::table
             .filter(sip_configs::columns::sip_id.eq(&sip_id))
@@ -222,12 +221,12 @@ impl DbInterface {
     /// Modify the sip config for the specified room
     ///
     /// Returns Ok(None) when the room has no sip config set.
-    pub fn modify_sip_config(
+    fn modify_sip_config(
         &self,
         room_id: RoomId,
         config: &ModifySipConfig,
     ) -> Result<Option<SipConfig>> {
-        let con = self.get_con()?;
+        let con = self.get_conn()?;
 
         let target = sip_configs::table.filter(sip_configs::columns::room.eq(&room_id));
         let config_result = diesel::update(target).set(config).get_result(&con);
@@ -248,8 +247,8 @@ impl DbInterface {
     /// Delete the sip config for the specified room
     ///
     /// Returns Ok(None) when the room had no sip config set.
-    pub fn delete_sip_config(&self, room_id: RoomId) -> Result<Option<SipConfig>> {
-        let con = self.get_con()?;
+    fn delete_sip_config(&self, room_id: RoomId) -> Result<Option<SipConfig>> {
+        let con = self.get_conn()?;
 
         let target = sip_configs::table.filter(sip_configs::columns::room.eq(&room_id));
         let config_result = diesel::delete(target).get_result(&con);
@@ -267,3 +266,5 @@ impl DbInterface {
         }
     }
 }
+
+impl<T: DbInterface> DbSipConfigsEx for T {}

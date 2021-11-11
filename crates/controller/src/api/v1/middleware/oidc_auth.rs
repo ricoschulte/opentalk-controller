@@ -12,6 +12,7 @@ use actix_web::web::Data;
 use actix_web::{HttpMessage, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use core::future::ready;
+use db_storage::DbUsersEx;
 use openidconnect::AccessToken;
 use std::future::{Future, Ready};
 use std::pin::Pin;

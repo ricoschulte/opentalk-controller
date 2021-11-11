@@ -12,7 +12,9 @@ use controller::db::legal_votes::VoteId;
 use controller::db::users::UserId;
 use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
-use controller::{db::DbInterface, prelude::*};
+use controller::prelude::*;
+use db_storage::database::Db;
+use db_storage::legal_votes::DbLegalVoteEx;
 use error::{Error, ErrorKind};
 use incoming::VoteMessage;
 use outgoing::{Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess, Votes};
@@ -35,7 +37,7 @@ mod storage;
 
 /// The vote choices
 ///
-/// Abstain can be disabled through the vote parameters (See [`Parameters`](incoming::Parameters)).
+/// Abstain can be disabled through the vote parameters (See [`Parameters`](incoming::UserParameters)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VoteOption {
@@ -55,9 +57,9 @@ pub struct TimerEvent {
 /// The legal vote [`SignalingModule`]
 ///
 /// Holds a database interface and information about the underlying user & room. Vote information is
-/// saved and managed in redis via the [`storage`] module.
+/// saved and managed in redis via the private `storage` module.
 pub struct LegalVote {
-    db_ctx: Arc<DbInterface>,
+    db_ctx: Arc<Db>,
     participant_id: ParticipantId,
     user_id: UserId,
     room_id: SignalingRoomId,

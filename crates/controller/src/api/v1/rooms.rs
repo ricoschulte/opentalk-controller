@@ -10,9 +10,12 @@ use crate::db::invites::InviteCodeUuid;
 use crate::db::rooms::{self as db_rooms, RoomId};
 use crate::db::sip_configs::{SipConfigParams, SipId, SipPassword};
 use crate::db::users::{User, UserId};
-use crate::db::DbInterface;
 use actix_web::web::{Data, Json, Path, ReqData};
 use actix_web::{get, post, put};
+use database::Db;
+use db_storage::invites::DbInvitesEx;
+use db_storage::rooms::DbRoomsEx;
+use db_storage::sip_configs::DbSipConfigsEx;
 use displaydoc::Display;
 use rand::Rng;
 use redis::aio::ConnectionManager;
@@ -86,7 +89,7 @@ fn disallow_empty(modify_room: &ModifyRoom) -> Result<(), ValidationError> {
 /// Returns a JSON array of all owned rooms as [`Room`]
 #[get("/rooms")]
 pub async fn owned(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
 ) -> Result<Json<Vec<Room>>, DefaultApiError> {
     let rooms = crate::block(move || -> Result<Vec<db_rooms::Room>, DefaultApiError> {
@@ -118,7 +121,7 @@ pub async fn owned(
 /// Returns the created [`Room`].
 #[post("/rooms")]
 pub async fn new(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
     room_parameters: Json<NewRoom>,
 ) -> Result<Json<Room>, DefaultApiError> {
@@ -171,7 +174,7 @@ pub async fn new(
 /// Returns the modified [`Room`]
 #[put("/rooms/{room_uuid}")]
 pub async fn modify(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
     modify_room: Json<ModifyRoom>,
@@ -228,7 +231,7 @@ pub async fn modify(
 /// Returns the specified Room as [`RoomDetails`].
 #[get("/rooms/{room_uuid}")]
 pub async fn get(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     room_id: Path<RoomId>,
 ) -> Result<Json<RoomDetails>, DefaultApiError> {
     let room_id = room_id.into_inner();
@@ -318,7 +321,7 @@ type StartError = ApiError<StartRoomError>;
 /// Returns [`StartRoomError::WrongRoomPassword`] when the provided password is wrong.
 #[post("/rooms/{room_id}/start")]
 pub async fn start(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
@@ -391,7 +394,7 @@ pub struct InvitedStartRequest {
 /// See [`start`]
 #[post("/rooms/{room_id}/start_invited")]
 pub async fn start_invited(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
     room_id: Path<RoomId>,
     request: Json<InvitedStartRequest>,
@@ -475,7 +478,7 @@ pub struct SipStartRequest {
 /// Returns [`StartError::NotFound`](ApiError::NotFound) when the requested room could not be found.
 #[post("/rooms/sip/start")]
 pub async fn sip_start(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
     request: Json<SipStartRequest>,
 ) -> Result<ApiResponse<Ticket>, StartError> {

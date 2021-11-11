@@ -1,6 +1,6 @@
-use crate::settings;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use controller_shared::settings;
 use openidconnect::reqwest::async_http_client as http_client;
 use openidconnect::{AccessToken, TokenIntrospectionResponse};
 use provider::ProviderClient;

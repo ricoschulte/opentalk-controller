@@ -4,9 +4,12 @@ use crate::api::v1::{users::UserDetails, DefaultApiError, DefaultApiResult, Page
 use crate::db::invites::{self as db_invites, InviteCodeUuid};
 use crate::db::rooms::RoomId;
 use crate::db::users::{self as db_users, User};
-use crate::db::{DatabaseError, DbInterface};
+use crate::db::DatabaseError;
 use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, post, put, HttpResponse};
+use database::Db;
+use db_storage::invites::DbInvitesEx;
+use db_storage::rooms::DbRoomsEx;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -59,7 +62,7 @@ pub struct UpdateInvite {
 /// Uses the provided [`NewInvite`] to create a new invite.
 #[post("/rooms/{room_uuid}/invites")]
 pub async fn add_invite(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
     room_uuid: Path<RoomId>,
     data: Json<NewInvite>,
@@ -110,7 +113,7 @@ pub async fn add_invite(
 /// Returns a JSON array of all accessible invites for the given room
 #[get("/rooms/{room_uuid}/invites")]
 pub async fn get_invites(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     room_uuid: Path<RoomId>,
     current_user: ReqData<User>,
     pagination: web::Query<PagePaginationQuery>,
@@ -161,7 +164,7 @@ pub struct RoomIdAndInviteCode {
 /// Returns 401 Not Found when the user has no access.
 #[get("/rooms/{room_uuid}/invites/{invite_code}")]
 pub async fn get_invite(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
     path_params: Path<RoomIdAndInviteCode>,
 ) -> DefaultApiResult<Invite> {
@@ -207,7 +210,7 @@ pub async fn get_invite(
 /// Returns the modified [`Invite`]
 #[put("/rooms/{room_uuid}/invites/{invite_code}")]
 pub async fn update_invite(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
     path_params: Path<RoomIdAndInviteCode>,
     update_invite: Json<UpdateInvite>,
@@ -267,7 +270,7 @@ pub async fn update_invite(
 /// Returns 204 No Content
 #[delete("/rooms/{room_uuid}/invites/{invite_code}")]
 pub async fn delete_invite(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
     path_params: Path<RoomIdAndInviteCode>,
 ) -> Result<HttpResponse, DefaultApiError> {
@@ -333,7 +336,7 @@ pub struct CodeVerified {
 /// As the GET request might not be Idempotent this should be the prioritized endpoint to verify invite_codes.
 #[post("/invite/verify")]
 pub async fn verify_invite_code(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     data: Json<VerifyBody>,
 ) -> DefaultApiResult<CodeVerified> {
     let data = data.into_inner();

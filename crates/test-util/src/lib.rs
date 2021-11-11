@@ -1,10 +1,11 @@
+//! Test utility functions for use with the module tester and the controller
+use crate::database::DatabaseContext;
 use anyhow::Result;
-use controller::db::rooms::RoomId;
-use controller::db::users::UserId;
 use controller::prelude::anyhow::Context;
 use controller::prelude::redis::aio::ConnectionManager;
 use controller::prelude::*;
-use database::DatabaseContext;
+use db_storage::rooms::RoomId;
+use db_storage::users::UserId;
 use uuid::Uuid;
 
 pub mod common;

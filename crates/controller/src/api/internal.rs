@@ -1,8 +1,8 @@
 use crate::api::v1::middleware::oidc_auth::check_access_token;
-use crate::db::DbInterface;
 use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json};
 use actix_web::{post, HttpResponse};
+use database::Db;
 use openidconnect::{AccessToken, RefreshToken};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -37,7 +37,7 @@ enum TokenType {
 #[post("/introspect")]
 pub async fn introspect(
     body: Json<IntrospectRequest>,
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     oidc_ctx: Data<OidcContext>,
 ) -> HttpResponse {
     let request = body.into_inner();
@@ -64,7 +64,7 @@ pub async fn introspect(
 
 async fn introspect_access_token(
     token: AccessToken,
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     oidc_ctx: Data<OidcContext>,
 ) -> HttpResponse {
     match check_access_token(db_ctx, oidc_ctx, token).await {
@@ -84,7 +84,7 @@ async fn introspect_access_token(
 
 async fn introspect_refresh_token(
     _token: RefreshToken,
-    _db_ctx: Data<DbInterface>,
+    _db_ctx: Data<Db>,
     _oidc_ctx: Data<OidcContext>,
 ) -> HttpResponse {
     log::error!("Refresh token introspection not implemented.");

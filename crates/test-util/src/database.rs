@@ -1,19 +1,19 @@
 use anyhow::Result;
-use controller::db::migrations::migrate_from_url;
-use controller::db::rooms::{NewRoom, Room, RoomId};
-use controller::db::users::{NewUser, NewUserWithGroups, User, UserId};
-use controller::db::DbInterface;
 use controller::prelude::anyhow::Context;
 use controller::prelude::*;
+use database::Db;
+use db_storage::migrations::migrate_from_url;
+use db_storage::rooms::{DbRoomsEx, NewRoom, Room, RoomId};
+use db_storage::users::{DbUsersEx, NewUser, NewUserWithGroups, User, UserId};
 use diesel::{Connection, PgConnection, RunQueryDsl};
 use std::sync::Arc;
 use uuid::Uuid;
 
-/// Contains the [`DbInterface`] as well as information about the test database
+/// Contains the [`Db`] as well as information about the test database
 pub struct DatabaseContext {
     pub base_url: String,
     pub db_name: String,
-    pub db_conn: Arc<DbInterface>,
+    pub db_conn: Arc<Db>,
     /// DatabaseContext will DROP the database inside postgres when dropped
     pub drop_db_on_drop: bool,
 }
@@ -51,7 +51,7 @@ impl DatabaseContext {
             .await
             .expect("Unable to migrate database");
 
-        let db_conn = Arc::new(DbInterface::connect_url(&db_url, 5, None).unwrap());
+        let db_conn = Arc::new(Db::connect_url(&db_url, 5, None).unwrap());
 
         Self {
             base_url: base_url.to_string(),

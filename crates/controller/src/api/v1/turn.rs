@@ -7,7 +7,6 @@ use crate::db::invites::Invite;
 use crate::db::invites::InviteCodeUuid;
 use crate::db::users::User;
 use crate::db::DatabaseError;
-use crate::db::DbInterface;
 use crate::oidc::OidcContext;
 use crate::settings;
 use crate::settings::{Settings, TurnServer};
@@ -20,6 +19,8 @@ use actix_web::HttpRequest;
 use actix_web_httpauth::headers::authorization::Authorization;
 use actix_web_httpauth::headers::authorization::Bearer;
 use arc_swap::ArcSwap;
+use database::Db;
+use db_storage::invites::DbInvitesEx;
 use either::Either;
 use openidconnect::AccessToken;
 use rand::distributions::{Distribution, Uniform};
@@ -66,7 +67,7 @@ pub enum IceServer {
 #[get("/turn")]
 pub async fn get(
     settings: Data<arc_swap::ArcSwap<settings::Settings>>,
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     req: HttpRequest,
 ) -> Result<AWEither<Json<Vec<IceServer>>, NoContent>, DefaultApiError> {
@@ -189,7 +190,7 @@ fn rr_servers<T: Rng + CryptoRng>(
 /// Checks for a valid access_token similar to the OIDC Middleware, but also allows invite_tokens as a valid bearer token.
 pub async fn check_access_token_or_invite(
     req: &HttpRequest,
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     oidc_ctx: Data<OidcContext>,
 ) -> Result<Either<User, Invite>, DefaultApiError> {
     let auth = Authorization::<Bearer>::parse(req).map_err(|e| {

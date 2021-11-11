@@ -1,6 +1,6 @@
 use super::schema::{groups, user_groups};
 use super::users::UserId;
-use super::{DatabaseError, DbInterface, Result};
+use database::{DatabaseError, DbInterface, Result};
 use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
 use std::borrow::Borrow;
 use std::collections::HashSet;
@@ -30,10 +30,10 @@ pub struct UserGroup {
     pub group_id: String,
 }
 
-impl DbInterface {
+pub trait DbGroupsEx: DbInterface {
     #[tracing::instrument(skip(self, user_id))]
-    pub fn get_groups_for_user(&self, user_id: UserId) -> Result<HashSet<Group>> {
-        let con = self.get_con()?;
+    fn get_groups_for_user(&self, user_id: UserId) -> Result<HashSet<Group>> {
+        let con = self.get_conn()?;
 
         let groups: Vec<Group> = user_groups::table
             .inner_join(groups::table)
@@ -48,3 +48,5 @@ impl DbInterface {
         Ok(groups.into_iter().collect())
     }
 }
+
+impl<T: DbInterface> DbGroupsEx for T {}

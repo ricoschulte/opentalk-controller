@@ -1,9 +1,8 @@
-use super::{Paginate, Result};
-use crate::db::rooms::{Room, RoomId};
-use crate::db::schema::{invites, users};
-use crate::db::users::{User, UserId};
-use crate::db::DbInterface;
+use crate::rooms::{Room, RoomId};
+use crate::schema::{invites, users};
+use crate::users::{User, UserId};
 use chrono::{DateTime, Utc};
+use database::{DbInterface, Paginate, Result};
 use diesel::dsl::any;
 use diesel::{
     BoolExpressionMethods, ExpressionMethods, Identifiable, JoinOnDsl, QueryDsl, QueryResult,
@@ -61,10 +60,10 @@ pub struct UpdateInvite<'a> {
 
 pub type InviteWithUsers = (Invite, User, User);
 
-impl DbInterface {
+pub trait DbInvitesEx: DbInterface {
     #[tracing::instrument(skip(self, new_invite))]
-    pub fn new_invite(&self, new_invite: NewInvite) -> Result<Invite> {
-        let conn = self.get_con()?;
+    fn new_invite(&self, new_invite: NewInvite) -> Result<Invite> {
+        let conn = self.get_conn()?;
 
         // a UUID collision will result in an internal server error
         let invite_result: QueryResult<Invite> = diesel::insert_into(invites::table)
@@ -85,8 +84,8 @@ impl DbInterface {
     /// Returns:
     /// (Invite, CreatedByUser, UpdatedByUser) - The created invite along with the users that created and updated the invite
     #[tracing::instrument(skip(self, new_invite))]
-    pub fn new_invite_with_users(&self, new_invite: NewInvite) -> Result<InviteWithUsers> {
-        let conn = self.get_con()?;
+    fn new_invite_with_users(&self, new_invite: NewInvite) -> Result<InviteWithUsers> {
+        let conn = self.get_conn()?;
 
         // a UUID collision will result in an internal server error
         let invite = diesel::insert_into(invites::table)
@@ -108,13 +107,13 @@ impl DbInterface {
     /// Returns:
     /// Vec<(Invite, CreatedByUser, UpdatedByUser)> - A Vec of invites along with the users that created and updated the invite
     #[tracing::instrument(skip(self))]
-    pub fn get_invites_paginated(
+    fn get_invites_paginated(
         &self,
         room: &Room,
         limit: i64,
         page: i64,
     ) -> Result<(Vec<Invite>, i64)> {
-        let conn = self.get_con()?;
+        let conn = self.get_conn()?;
 
         let query = invites::table
             .filter(invites::room.eq(room.uuid))
@@ -136,13 +135,13 @@ impl DbInterface {
     /// Returns:
     /// Vec<(Invite, CreatedByUser, UpdatedByUser)> - A Vec of invites along with the users that created and updated the invite
     #[tracing::instrument(skip(self))]
-    pub fn get_invites_paginated_with_users(
+    fn get_invites_paginated_with_users(
         &self,
         room: &Room,
         limit: i64,
         page: i64,
     ) -> Result<(Vec<InviteWithUsers>, i64)> {
-        let conn = self.get_con()?;
+        let conn = self.get_conn()?;
 
         let query = invites::table
             .filter(invites::room.eq(room.uuid))
@@ -193,14 +192,14 @@ impl DbInterface {
     /// Returns:
     /// Vec<(Invite, CreatedByUser, UpdatedByUser)> - A Vec of invites along with the users that created and updated the invite
     #[tracing::instrument(skip(self, user))]
-    pub fn get_invites_for_user_paginated_with_users(
+    fn get_invites_for_user_paginated_with_users(
         &self,
         room: &Room,
         user: &User,
         limit: i64,
         page: i64,
     ) -> Result<(Vec<InviteWithUsers>, i64)> {
-        let conn = self.get_con()?;
+        let conn = self.get_conn()?;
 
         let query = invites::table
             .filter(invites::room.eq(room.uuid))
@@ -250,8 +249,8 @@ impl DbInterface {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn get_invite(&self, invite_code: &InviteCodeUuid) -> Result<Invite> {
-        let conn = self.get_con()?;
+    fn get_invite(&self, invite_code: &InviteCodeUuid) -> Result<Invite> {
+        let conn = self.get_conn()?;
 
         let query = invites::table
             .filter(invites::uuid.eq(invite_code))
@@ -260,10 +259,10 @@ impl DbInterface {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn get_invite_with_users(&self, invite_code: &InviteCodeUuid) -> Result<InviteWithUsers> {
+    fn get_invite_with_users(&self, invite_code: &InviteCodeUuid) -> Result<InviteWithUsers> {
         // Diesel currently does not support joining a table twice, so we need to join once and do a second select.
         // Or we need to write our handwritten SQL here.
-        let conn = self.get_con()?;
+        let conn = self.get_conn()?;
 
         let query = invites::table
             .filter(invites::uuid.eq(invite_code))
@@ -275,12 +274,12 @@ impl DbInterface {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn update_invite(
+    fn update_invite(
         &self,
         invite_code: &InviteCodeUuid,
         changeset: &UpdateInvite,
     ) -> Result<Invite> {
-        let conn = self.get_con()?;
+        let conn = self.get_conn()?;
 
         let query = diesel::update(invites::table)
             .filter(invites::uuid.eq(invite_code))
@@ -290,12 +289,12 @@ impl DbInterface {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn update_invite_with_users(
+    fn update_invite_with_users(
         &self,
         invite_code: &InviteCodeUuid,
         changeset: &UpdateInvite,
     ) -> Result<InviteWithUsers> {
-        let conn = self.get_con()?;
+        let conn = self.get_conn()?;
 
         let query = diesel::update(invites::table)
             .filter(invites::uuid.eq(invite_code))
@@ -313,8 +312,8 @@ impl DbInterface {
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn deactivate_invite(&self, invite_code: &InviteCodeUuid) -> Result<Invite> {
-        let conn = self.get_con()?;
+    fn deactivate_invite(&self, invite_code: &InviteCodeUuid) -> Result<Invite> {
+        let conn = self.get_conn()?;
 
         let query = diesel::update(invites::table)
             .filter(invites::uuid.eq(invite_code))
@@ -328,3 +327,5 @@ impl DbInterface {
         query.get_result(&conn).map_err(Into::into)
     }
 }
+
+impl<T: DbInterface> DbInvitesEx for T {}

@@ -29,6 +29,7 @@ use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{anyhow, Context, Result};
 use arc_swap::ArcSwap;
 use breakout::BreakoutRooms;
+use database::Db;
 use db::DbInterface;
 use oidc::OidcContext;
 use prelude::*;
@@ -58,9 +59,6 @@ mod trace;
 
 pub mod db;
 pub mod settings;
-
-#[macro_use]
-extern crate diesel;
 
 pub mod prelude {
     pub use crate::api::signaling::prelude::*;
@@ -225,9 +223,8 @@ impl Controller {
             .context("Failed to init ha_sync")?;
 
         // Connect to postgres
-        let db = Arc::new(
-            DbInterface::connect(&settings.database).context("Failed to connect to database")?,
-        );
+        let db =
+            Arc::new(Db::connect(&settings.database).context("Failed to connect to database")?);
 
         // Discover OIDC Provider
         let oidc = Arc::new(
