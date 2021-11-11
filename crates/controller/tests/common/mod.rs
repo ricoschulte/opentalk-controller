@@ -3,7 +3,7 @@ use k3k_controller_client::{Config, K3KSession};
 use openidconnect::url::Url;
 use regex::Regex;
 use std::process::Stdio;
-use std::rc::Rc;
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{self, Child};
 
@@ -51,7 +51,7 @@ pub async fn setup_client(user: &str, password: &str) -> Result<K3KSession> {
 
     let auth_tokens = oidc.authenticate(user, password).await?;
 
-    let session = K3KSession::new(Rc::new(conf), auth_tokens);
+    let session = K3KSession::new(Arc::new(conf), auth_tokens);
 
     Ok(session)
 }

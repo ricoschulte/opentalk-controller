@@ -10,31 +10,49 @@ pub struct PagePaginationQuery {
         default = "default_pagination_per_page",
         deserialize_with = "deserialize_pagination_per_page"
     )]
-    pub per_page: u64,
-    #[serde(default = "default_pagination_page")]
-    pub page: u64,
+    pub per_page: i64,
+    #[serde(
+        default = "default_pagination_page",
+        deserialize_with = "deserialize_pagination_page"
+    )]
+    pub page: i64,
 }
 
-fn default_pagination_per_page() -> u64 {
+fn default_pagination_per_page() -> i64 {
     30
 }
 
-/// Enforce the per_page setting to be <100
-fn deserialize_pagination_per_page<'de, D>(deserializer: D) -> Result<u64, D::Error>
+/// Enforce the per_page setting to be <100 and >0
+fn deserialize_pagination_per_page<'de, D>(deserializer: D) -> Result<i64, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    let per_page = u64::deserialize(deserializer)?;
+    let per_page = i64::deserialize(deserializer)?;
     if per_page <= 100 {
         Ok(per_page)
+    } else if per_page <= 0 {
+        Err(serde::de::Error::custom("per_page <= 0"))
     } else {
         Err(serde::de::Error::custom("per_page too large"))
     }
 }
-fn default_pagination_page() -> u64 {
+
+fn default_pagination_page() -> i64 {
     1
 }
 
+/// Enforce the per_page setting to be <100 and >0
+fn deserialize_pagination_page<'de, D>(deserializer: D) -> Result<i64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let page = i64::deserialize(deserializer)?;
+    if page <= 0 {
+        Ok(page)
+    } else {
+        Err(serde::de::Error::custom("page too large"))
+    }
+}
 /// Cursor-based pagination query
 #[derive(Deserialize)]
 pub struct CursorPaginationQuery {

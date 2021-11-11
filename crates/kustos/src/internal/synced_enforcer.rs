@@ -126,7 +126,7 @@ impl CoreApi for SyncedEnforcer {
     {
         let enforcer = Enforcer::new_raw(m, a).await?;
 
-        let mut enforcer = SyncedEnforcer {
+        let enforcer = SyncedEnforcer {
             enforcer,
             events: HashMap::new(),
             autoload_running: false,

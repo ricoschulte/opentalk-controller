@@ -3,21 +3,23 @@
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar
 //! structs are defined in the Database module [`crate::db`] for database operations.
 
+use super::response::NoContent;
 use crate::api::signaling::resumption::{ResumptionData, ResumptionToken};
 use crate::api::signaling::ticket::{TicketData, TicketToken};
 use crate::api::signaling::{prelude::*, Namespaced};
-use crate::api::v1::{ApiError, ApiResponse, DefaultApiError};
+use crate::api::v1::{ApiError, ApiResponse, DefaultApiError, PagePaginationQuery};
 use crate::api::Participant;
 use crate::db::invites::InviteCodeUuid;
 use crate::db::rooms::{self as db_rooms, RoomId};
 use crate::db::sip_configs::{SipConfigParams, SipId, SipPassword};
 use crate::db::users::{User, UserId};
-use actix_web::web::{Data, Json, Path, ReqData};
-use actix_web::{get, post, put};
+use actix_web::web::{self, Data, Json, Path, ReqData};
+use actix_web::{delete, get, post, put};
 use database::Db;
 use db_storage::invites::DbInvitesEx;
 use db_storage::rooms::DbRoomsEx;
 use db_storage::sip_configs::DbSipConfigsEx;
+use kustos::prelude::*;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
@@ -91,12 +93,27 @@ fn disallow_empty(modify_room: &ModifyRoom) -> Result<(), ValidationError> {
 pub async fn owned(
     db_ctx: Data<Db>,
     current_user: ReqData<User>,
+    pagination: web::Query<PagePaginationQuery>,
+    authz: Data<Authz>,
 ) -> Result<ApiResponse<Vec<Room>>, DefaultApiError> {
     let current_user = current_user.into_inner();
+    let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
-    let rooms = crate::block(move || -> Result<Vec<db_rooms::Room>, DefaultApiError> {
-        Ok(db_ctx.get_owned_rooms(&current_user)?)
-    })
+    let accessible_rooms: kustos::AccessibleResources<RoomId> = authz
+        .get_accessible_resources_for_user(current_user.clone().oidc_uuid, AccessMethod::Get)
+        .await
+        .map_err(|_| DefaultApiError::Internal)?;
+
+    let (rooms, room_count) = crate::block(
+        move || -> Result<(Vec<db_rooms::Room>, i64), DefaultApiError> {
+            match accessible_rooms {
+                kustos::AccessibleResources::All => Ok(db_ctx.get_rooms_paginated(per_page, page)?),
+                kustos::AccessibleResources::List(list) => {
+                    Ok(db_ctx.get_rooms_by_ids_paginated(&list, per_page as i64, page as i64)?)
+                }
+            }
+        },
+    )
     .await
     .map_err(|e| {
         log::error!("BlockingError on GET /rooms - {}", e);
@@ -114,7 +131,7 @@ pub async fn owned(
         })
         .collect::<Vec<Room>>();
 
-    Ok(ApiResponse::new(rooms))
+    Ok(ApiResponse::new(rooms).with_page_pagination(per_page, page, room_count))
 }
 
 /// API Endpoint *POST /rooms*
@@ -126,6 +143,7 @@ pub async fn new(
     db_ctx: Data<Db>,
     current_user: ReqData<User>,
     room_parameters: Json<NewRoom>,
+    authz: Data<Authz>,
 ) -> Result<Json<Room>, DefaultApiError> {
     let room_parameters = room_parameters.into_inner();
 
@@ -134,7 +152,7 @@ pub async fn new(
         return Err(DefaultApiError::ValidationFailed);
     }
 
-    let current_user_id = current_user.id.clone();
+    let current_user_id = current_user.id;
     let db_room = crate::block(move || -> Result<db_rooms::Room, DefaultApiError> {
         let new_room = db_rooms::NewRoom {
             uuid: RoomId::from(uuid::Uuid::new_v4()),
@@ -168,6 +186,25 @@ pub async fn new(
         listen_only: db_room.listen_only,
     };
 
+    if let Err(e) = authz
+        .grant_user_access(
+            current_user.into_inner().oidc_uuid,
+            &[
+                (
+                    &db_room.uuid.resource_id(),
+                    &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
+                ),
+                (
+                    &db_room.uuid.resource_id().with_suffix("/invites"),
+                    &[AccessMethod::Post, AccessMethod::Get],
+                ),
+            ],
+        )
+        .await
+    {
+        log::error!("Failed to add RBAC policy: {}", e);
+        return Err(DefaultApiError::Internal);
+    }
     Ok(Json(room))
 }
 
@@ -227,6 +264,36 @@ pub async fn modify(
     };
 
     Ok(Json(room))
+}
+
+/// API Endpoint *DELETE /rooms/{room_uuid}*
+///
+/// Deletes the room and owned resources.
+#[delete("/rooms/{room_uuid}")]
+pub async fn delete(
+    db_ctx: Data<Db>,
+    room_id: Path<RoomId>,
+    authz: Data<Authz>,
+) -> Result<NoContent, DefaultApiError> {
+    let room_id = room_id.into_inner();
+    let room_path = format!("/rooms/{}", room_id);
+
+    crate::block(move || db_ctx.delete_room(room_id))
+        .await
+        .map_err(|e| {
+            log::error!("BlockingError on DELETE /rooms{{room_id}} - {}", e);
+            DefaultApiError::Internal
+        })??;
+
+    if !authz
+        .remove_explicit_resource_permissions(room_path.clone())
+        .await
+        .map_err(|_| DefaultApiError::Internal)?
+    {
+        log::error!("Failed to delete permissions for {}", room_path);
+    }
+
+    Ok(NoContent {})
 }
 
 /// API Endpoint *GET /rooms/{room_uuid}*

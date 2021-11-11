@@ -1303,15 +1303,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "itertools"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69ddb889f9d0d08a67338271fa9b62996bc788c7796a5c18cf057420aaed5eaf"
-dependencies = [
- "either",
-]
-
-[[package]]
 name = "itoa"
 version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1405,6 +1396,7 @@ dependencies = [
  "k3k-janus-media",
  "k3k-legal-vote",
  "k3k-polls",
+ "kustos",
 ]
 
 [[package]]
@@ -1451,13 +1443,14 @@ dependencies = [
  "fern",
  "futures",
  "futures-util",
- "itertools 0.10.1",
+ "itertools",
  "jsonwebtoken",
  "k3k-controller-client",
  "k3k-controller-shared",
  "k3k-database",
  "k3k-db-storage",
  "k3k-test-util",
+ "kustos",
  "lapin",
  "log",
  "mime",
@@ -1528,6 +1521,7 @@ dependencies = [
  "k3k-controller-shared",
  "k3k-database",
  "k3k-test-util",
+ "kustos",
  "log",
  "rand 0.8.4",
  "redis",
@@ -1630,7 +1624,7 @@ dependencies = [
  "diesel",
  "futures",
  "http",
- "itertools 0.9.0",
+ "itertools",
  "k3k-database",
  "k3k-db-storage",
  "log",
@@ -1945,7 +1939,7 @@ dependencies = [
  "base64 0.12.3",
  "chrono",
  "http",
- "itertools 0.9.0",
+ "itertools",
  "log",
  "oauth2",
  "rand 0.7.3",

@@ -51,7 +51,7 @@ impl OidcContext {
     ///
     /// If the function returns Ok(_) the caller must inspect the returned [AccessTokenIntrospectInfo]
     /// to check if the AccessToken is still active.
-    #[tracing::instrument(name = "oidc_introspect_access_token", skip(self, access_token))]
+    #[tracing::instrument(name = "oidc_introspect_access_token", skip(self, access_token), fields(active = tracing::field::Empty))]
     pub async fn introspect_access_token(
         &self,
         access_token: &AccessToken,
@@ -63,6 +63,7 @@ impl OidcContext {
             .request_async(http_client)
             .await
             .context("Failed to verify token using the introspect endpoint")?;
+        tracing::Span::current().record("active", &response.active());
 
         Ok(AccessTokenIntrospectInfo {
             active: response.active(),

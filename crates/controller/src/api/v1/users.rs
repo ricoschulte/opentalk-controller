@@ -3,13 +3,14 @@
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar
 //! structs are defined in the Database module [`crate::db`] for database operations.
 
-use crate::api::v1::DefaultApiError;
+use crate::api::v1::{ApiResponse, DefaultApiError, PagePaginationQuery};
 use crate::db::users::User;
 use crate::db::users::{self as db_users, UserId};
-use actix_web::web::{Data, Json, Path, ReqData};
+use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{get, put};
 use database::Db;
 use db_storage::DbUsersEx;
+use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
@@ -83,10 +84,30 @@ fn disallow_empty(modify_user: &ModifyUser) -> Result<(), ValidationError> {
 ///
 /// Returns a JSON array of all database users as [`UserDetails`]
 #[get("/users")]
-pub async fn all(db_ctx: Data<Db>) -> Result<Json<Vec<UserDetails>>, DefaultApiError> {
-    let db_users = crate::block(move || -> Result<Vec<db_users::User>, DefaultApiError> {
-        Ok(db_ctx.get_users()?)
-    })
+pub async fn all(
+    db_ctx: Data<Db>,
+    current_user: ReqData<User>,
+    pagination: Query<PagePaginationQuery>,
+    authz: Data<Authz>,
+) -> Result<ApiResponse<Vec<UserDetails>>, DefaultApiError> {
+    let current_user = current_user.into_inner();
+    let PagePaginationQuery { per_page, page } = pagination.into_inner();
+
+    let accessible_users: kustos::AccessibleResources<UserId> = authz
+        .get_accessible_resources_for_user(current_user.clone().oidc_uuid, AccessMethod::Get)
+        .await
+        .map_err(|_| DefaultApiError::Internal)?;
+
+    let (db_users, total_users) = crate::block(
+        move || -> Result<(Vec<db_users::User>, i64), DefaultApiError> {
+            match accessible_users {
+                kustos::AccessibleResources::All => Ok(db_ctx.get_users_paginated(per_page, page)?),
+                kustos::AccessibleResources::List(list) => {
+                    Ok(db_ctx.get_users_by_ids_paginated(&list, per_page as i64, page as i64)?)
+                }
+            }
+        },
+    )
     .await
     .map_err(|e| {
         log::error!("BlockingError on GET /users - {}", e);
@@ -104,7 +125,7 @@ pub async fn all(db_ctx: Data<Db>) -> Result<Json<Vec<UserDetails>>, DefaultApiE
         })
         .collect::<Vec<UserDetails>>();
 
-    Ok(Json(users))
+    Ok(ApiResponse::new(users).with_page_pagination(per_page, page, total_users))
 }
 
 /// API Endpoint *PUT /users/me*
