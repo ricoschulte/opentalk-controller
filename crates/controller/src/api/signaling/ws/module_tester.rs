@@ -400,6 +400,7 @@ where
         let participant = match participant {
             Participant::User(user) => Participant::User(user.id),
             Participant::Guest => Participant::Guest,
+            Participant::Sip => Participant::Sip,
         };
 
         Ok(Self {
@@ -775,7 +776,7 @@ where
                     return Ok(());
                 }
             }
-            Participant::Guest => {
+            Participant::Guest | Participant::Sip => {
                 if !(rabbitmq_publish.routing_key == "participant.all"
                     || rabbitmq_publish.routing_key == participant_routing_key)
                 {

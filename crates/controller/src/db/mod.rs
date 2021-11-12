@@ -52,6 +52,10 @@ macro_rules! diesel_newtype {
                     Self (inner)
                 }
 
+                pub fn inner(&self) -> &$to_wrap {
+                    &self.0
+                }
+
                 pub fn into_inner(self) -> $to_wrap {
                     self.0
                 }
@@ -94,9 +98,10 @@ pub mod legal_votes;
 pub mod migrations;
 pub mod rooms;
 mod schema;
+pub mod sip_configs;
 pub mod users;
 
-pub(crate) type Result<T> = std::result::Result<T, DatabaseError>;
+pub(crate) type Result<T, E = DatabaseError> = std::result::Result<T, E>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {

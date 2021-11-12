@@ -216,6 +216,7 @@ async fn get_user_and_room_from_ticket(
                     Participant::User(user)
                 }
                 Participant::Guest => Participant::Guest,
+                Participant::Sip => Participant::Sip,
             };
 
             let room = db_ctx

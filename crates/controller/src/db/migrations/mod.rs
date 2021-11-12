@@ -43,6 +43,7 @@ pub async fn migrate_from_url(url: &str) -> Result<()> {
     let config = url.parse::<Config>()?;
     migrate(config).await
 }
+
 mod type_polyfills {
     use barrel::types::{BaseType, Type};
 
