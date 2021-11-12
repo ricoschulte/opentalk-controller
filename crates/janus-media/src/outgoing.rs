@@ -1,4 +1,5 @@
 use crate::mcu::{MediaSessionKey, MediaSessionType};
+use crate::rabbitmq;
 use controller::prelude::*;
 use janus_client::TrickleCandidate;
 use serde::Serialize;
@@ -32,6 +33,9 @@ pub enum Message {
 
     #[serde(rename = "focus_update")]
     FocusUpdate(FocusUpdate),
+
+    #[serde(rename = "request_mute")]
+    RequestMute(rabbitmq::RequestMute),
 
     /// Contains a error about what request failed. See [`Error`]
     Error(Error),
@@ -102,11 +106,13 @@ pub enum Error {
     InvalidEndOfCandidates,
     InvalidRequestOffer,
     InvalidConfigureRequest,
+    PermissionDenied,
 }
 
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::rabbitmq::RequestMute;
 
     #[test]
     fn sdp_offer() {
@@ -195,6 +201,19 @@ mod test {
                 source: ParticipantId::nil(),
                 media_session_type: MediaSessionType::Video,
             },
+        }))
+        .unwrap();
+
+        assert_eq!(expected, produced);
+    }
+
+    #[test]
+    fn test_request_mute() {
+        let expected = r#"{"message":"request_mute","issuer":"00000000-0000-0000-0000-000000000000","force":false}"#;
+
+        let produced = serde_json::to_string(&Message::RequestMute(RequestMute {
+            issuer: ParticipantId::nil(),
+            force: false,
         }))
         .unwrap();
 

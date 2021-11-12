@@ -21,6 +21,10 @@ pub enum Message {
     #[serde(rename = "update_media_session")]
     UpdateMediaSession(MediaSessionInfo),
 
+    /// A moderators request to mute one or more participants
+    #[serde(rename = "moderator_mute")]
+    ModeratorMute(RequestMute),
+
     /// SDP offer
     #[serde(rename = "publish")]
     Publish(TargetedSdp),
@@ -59,6 +63,17 @@ pub struct MediaSessionInfo {
 
     /// The current state of the session
     pub media_session_state: MediaSessionState,
+}
+
+/// Request a number of participants to mute themselves
+///
+/// May only be processed if the issuer is a moderator
+#[derive(Debug, Deserialize)]
+pub struct RequestMute {
+    /// Participants that shall be muted
+    pub targets: Vec<ParticipantId>,
+    /// Force mute the participant(s)
+    pub force: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -197,6 +212,53 @@ mod test {
             assert_eq!(media_session_type, MediaSessionType::Video);
             assert!(media_session_state.audio);
             assert!(!media_session_state.video);
+        } else {
+            panic!()
+        }
+    }
+
+    #[test]
+    fn moderator_mute_single() {
+        let json = r#"
+        {
+            "action": "moderator_mute",
+            "targets": ["00000000-0000-0000-0000-000000000000"],
+            "force": true
+        }
+        "#;
+
+        let msg: Message = serde_json::from_str(json).unwrap();
+
+        if let Message::ModeratorMute(RequestMute { targets, force }) = msg {
+            assert_eq!(targets, vec![ParticipantId::nil()]);
+            assert!(force);
+        } else {
+            panic!()
+        }
+    }
+
+    #[test]
+    fn moderator_mute_many() {
+        let json = r#"
+        {
+            "action": "moderator_mute",
+            "targets": ["00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"],
+            "force": false
+        }
+        "#;
+
+        let msg: Message = serde_json::from_str(json).unwrap();
+
+        if let Message::ModeratorMute(RequestMute { targets, force }) = msg {
+            assert_eq!(
+                targets,
+                [
+                    ParticipantId::new_test(0),
+                    ParticipantId::new_test(1),
+                    ParticipantId::new_test(2)
+                ]
+            );
+            assert!(!force);
         } else {
             panic!()
         }
