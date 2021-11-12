@@ -147,12 +147,10 @@ mod test {
             "session_id":234,
             "candidates":[
                 {
-                    "sdpMid":"video",
                     "sdpMLineIndex":1,
                     "candidate":"1 2 UDP 2130706431 10.0.1.1 5001 typ host"
             },
             {
-                    "sdpMid":"video",
                     "sdpMLineIndex":1,
                     "candidate":"2 1 UDP 1694498815 192.0.2.3 5000 typ srflx raddr 10.0.1.1 rport 8998"
             }
@@ -167,12 +165,10 @@ mod test {
             handle_id: HandleId::new(2123),
             trickle: TrickleMessage::new(&[
                 TrickleCandidate {
-                    sdp_m_id: "video".to_owned(),
                     sdp_m_line_index: 1,
                     candidate: "1 2 UDP 2130706431 10.0.1.1 5001 typ host".to_owned(),
                 },
                 TrickleCandidate {
-                    sdp_m_id: "video".to_owned(),
                     sdp_m_line_index: 1,
                     candidate:
                         "2 1 UDP 1694498815 192.0.2.3 5000 typ srflx raddr 10.0.1.1 rport 8998"

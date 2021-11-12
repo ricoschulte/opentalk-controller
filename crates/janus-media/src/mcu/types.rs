@@ -8,7 +8,7 @@ use std::convert::TryFrom;
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
 pub enum Request {
-    RequestOffer,
+    RequestOffer { without_video: bool },
     SdpOffer(String),
     SdpAnswer(String),
     Candidate(TrickleCandidate),

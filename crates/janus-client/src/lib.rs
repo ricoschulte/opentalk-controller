@@ -57,7 +57,6 @@
 //!     pub async fn send_candidates(&self, candidate: String ) {
 //!         self.0.trickle(TrickleMessage::Candidate(TrickleCandidate{
 //!             candidate: "candidate:..".to_owned(),
-//!             sdp_m_id: "audio".to_owned(),
 //!             sdp_m_line_index: 1
 //!         })).await;
 //!     }

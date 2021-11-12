@@ -131,11 +131,10 @@ mod test {
 
     #[test]
     fn sdp_candidate() {
-        let expected = r#"{"message":"sdp_candidate","candidate":{"sdpMid":"1","sdpMLineIndex":1,"candidate":"candidate:4 1 UDP 123456 192.168.178.1 123456 typ host"},"source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
+        let expected = r#"{"message":"sdp_candidate","candidate":{"sdpMLineIndex":1,"candidate":"candidate:4 1 UDP 123456 192.168.178.1 123456 typ host"},"source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
 
         let produced = serde_json::to_string(&Message::SdpCandidate(SdpCandidate {
             candidate: TrickleCandidate {
-                sdp_m_id: "1".into(),
                 sdp_m_line_index: 1,
                 candidate: "candidate:4 1 UDP 123456 192.168.178.1 123456 typ host".into(),
             },
