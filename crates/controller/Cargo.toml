@@ -52,7 +52,7 @@ parking_lot = "0.11"
 mime = "0.3.16"
 
 ### RabbitMQ
-lapin = { version = "1.7", default-features = false }
+lapin = { version = "1.8.1", default-features = false }
 tokio-amqp = { version = "1", default-features = false }
 
 ### Redis
