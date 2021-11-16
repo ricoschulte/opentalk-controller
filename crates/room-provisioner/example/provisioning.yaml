@@ -1,0 +1,20 @@
+---
+rooms:
+  - uuid: 13579111315
+    owner: ea059b9e-fef6-4d02-b5d2-ad5da295f1f4
+    password: pW!12#@
+    wait_for_moderator: false
+    listen_only: true
+  - owner: b463fdb5-b4d6-4708-828e-b0f8403db12b
+    password: pW!12#@
+    wait_for_moderator: true
+    listen_only: false
+users:
+  - email: alice@example.com
+    first-name: Alice
+    id: b463fdb5-b4d6-4708-828e-b0f8403db12b
+    last-name: Doe
+  - email: bob@example.com
+    first-name: Bob
+    id: ea059b9e-fef6-4d02-b5d2-ad5da295f1f4
+    last-name: Doe

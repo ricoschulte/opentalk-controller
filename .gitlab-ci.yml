@@ -119,7 +119,7 @@ test:container:
       --no-push
       --force
 
-build:container:
+build:controller-container:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG != null
@@ -141,4 +141,28 @@ build:container:
       --cache-ttl=730h
       --destination $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
       --destination $CI_REGISTRY_IMAGE:latest
+      --force
+
+build:room-provisioner-container:
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG != null
+  stage: build
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: ['']
+  script:
+    - mkdir -p /kaniko/.docker
+    - >
+      echo
+      "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" >
+      /kaniko/.docker/config.json
+    - >
+      /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/crates/room-provisioner/ci/Dockerfile
+      --cache=true
+      --cache-ttl=730h
+      --destination $CI_REGISTRY_IMAGE/room-provisioner:$CI_COMMIT_TAG
+      --destination $CI_REGISTRY_IMAGE/room-provisioner:latest
       --force
