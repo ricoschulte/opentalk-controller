@@ -144,9 +144,7 @@ impl SignalingModule for Media {
                         targeted.target,
                         e
                     );
-                    ctx.ws_send(outgoing::Message::Error {
-                        text: "failed to process offer",
-                    });
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::InvalidSdpOffer));
                 }
             }
             Event::WsMessage(incoming::Message::SdpAnswer(targeted)) => {
@@ -159,9 +157,7 @@ impl SignalingModule for Media {
                     .await
                 {
                     log::error!("Failed to handle sdp answer {:?}, {:?}", targeted.target, e);
-                    ctx.ws_send(outgoing::Message::Error {
-                        text: "failed to process answer",
-                    });
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::HandleSdpAnswer));
                 }
             }
             Event::WsMessage(incoming::Message::SdpCandidate(targeted)) => {
@@ -178,9 +174,7 @@ impl SignalingModule for Media {
                         targeted.target,
                         e
                     );
-                    ctx.ws_send(outgoing::Message::Error {
-                        text: "failed to process candidate",
-                    });
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::InvalidCandidate));
                 }
             }
             Event::WsMessage(incoming::Message::SdpEndOfCandidates(target)) => {
@@ -193,9 +187,9 @@ impl SignalingModule for Media {
                         target,
                         e
                     );
-                    ctx.ws_send(outgoing::Message::Error {
-                        text: "failed to process endOfCandidates",
-                    });
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InvalidEndOfCandidates,
+                    ));
                 }
             }
             Event::WsMessage(incoming::Message::Subscribe(subscribe)) => {
@@ -217,17 +211,17 @@ impl SignalingModule for Media {
                         subscribe,
                         e
                     );
-                    ctx.ws_send(outgoing::Message::Error {
-                        text: "failed to process requestOffer",
-                    });
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InvalidRequestOffer,
+                    ));
                 }
             }
             Event::WsMessage(incoming::Message::Configure(target)) => {
                 if let Err(e) = self.handle_configure(target).await {
                     log::error!("Failed to handle configure request {:?}", e);
-                    ctx.ws_send(outgoing::Message::Error {
-                        text: "Failed to process configure request",
-                    });
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InvalidConfigureRequest,
+                    ));
                 }
             }
             Event::Ext((media_session_key, message)) => match message {
