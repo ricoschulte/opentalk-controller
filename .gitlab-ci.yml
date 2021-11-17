@@ -95,7 +95,7 @@ test:cargo_test:
       /usr/local/cargo/bin/rustfmt |
       diff crates/controller/src/db/schema.rs -
 
-test:container:
+test:controller-container:
   rules:
     # Run only on MR, cause we have no access to the registry in other repos
     - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
@@ -113,6 +113,30 @@ test:container:
       /kaniko/executor
       --context $CI_PROJECT_DIR
       --dockerfile $CI_PROJECT_DIR/ci/Dockerfile
+      --cache=true
+      --cache-ttl=730h
+      --cache-repo $CI_REGISTRY_IMAGE/cache
+      --no-push
+      --force
+
+test:room-provisioner-container:
+  rules:
+    # Run only on MR, cause we have no access to the registry in other repos
+    - if: $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == $CI_DEFAULT_BRANCH
+  stage: test
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: ['']
+  script:
+    - mkdir -p /kaniko/.docker
+    - >
+      echo
+      "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" >
+      /kaniko/.docker/config.json
+    - >
+      /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/crates/room-provisioner/ci/Dockerfile
       --cache=true
       --cache-ttl=730h
       --cache-repo $CI_REGISTRY_IMAGE/cache

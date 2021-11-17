@@ -31,7 +31,9 @@ COPY src src
 COPY crates crates
 # Cargo detects changes only by mtime
 RUN touch src/main.rs && touch crates/room-provisioner/src/main.rs && find crates -iname lib.rs -exec touch {} \;
-RUN cargo build --package room-provisioner --release --locked
+RUN cargo build --release --locked --package k3k-room-provisioner 
+
+ENTRYPOINT [ "bash -c sleep 3600" ]
 
 FROM debian:bullseye-slim
 
@@ -39,7 +41,7 @@ RUN apt-get update && apt-get install -y libpq5
 
 WORKDIR /provisioner
 
-COPY --from=Builder /controller/target/release/room-provisioner .
+COPY --from=Builder /controller/target/release/k3k-room-provisioner .
 
 ENV DB_USER="pguser"
 ENV DB_PASSWORD="pgpass"
