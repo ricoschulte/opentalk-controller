@@ -1550,6 +1550,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "k3k-polls"
+version = "0.1.0"
+dependencies = [
+ "actix-rt",
+ "k3k-controller-core",
+ "k3k-test-util",
+ "serde",
+ "serial_test",
+]
+
+[[package]]
 name = "k3k-room-provisioner"
 version = "0.1.0"
 dependencies = [

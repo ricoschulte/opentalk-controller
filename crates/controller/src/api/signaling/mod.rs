@@ -168,16 +168,19 @@ impl fmt::Display for SignalingRoomId {
 /// The values are stores as unix timestamps in redis.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Timestamp(chrono::DateTime<chrono::Utc>);
+
 impl Timestamp {
     fn now() -> Timestamp {
         Timestamp(chrono::Utc::now())
     }
 }
+
 impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
     fn from(value: chrono::DateTime<chrono::Utc>) -> Self {
         Timestamp(value)
     }
 }
+
 impl redis::ToRedisArgs for Timestamp {
     fn write_redis_args<W>(&self, out: &mut W)
     where
