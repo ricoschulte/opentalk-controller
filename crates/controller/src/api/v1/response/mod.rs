@@ -12,7 +12,7 @@ pub use ok::ApiResponse;
 /// The default API Result
 pub type DefaultApiResult<T> = Result<ApiResponse<T>, DefaultApiError>;
 
-// Represents a 204 No Content HTTP Response
+/// Represents a 204 No Content HTTP Response
 pub struct NoContent;
 
 impl Responder for NoContent {

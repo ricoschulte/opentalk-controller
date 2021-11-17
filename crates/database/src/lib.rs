@@ -6,9 +6,10 @@
 //!
 //! # Example
 //! ```rust
-//! use k3k_database::DbInterface;
+//! # use k3k_database::DatabaseError;
+//! # use k3k_database::DbInterface;
 //! trait DbFeatureEx: DbInterface {
-//!     fn feature_a(&self, x: bool) -> Result<bool, ()>{
+//!     fn feature_a(&self, x: bool) -> Result<bool, DatabaseError>{
 //!         let conn = self.get_conn()?;
 //!         // Do stuff with conn and x
 //!         Ok(true)
@@ -19,19 +20,23 @@
 use diesel::pg::Pg;
 use diesel::query_builder::{AstPass, Query, QueryFragment};
 use diesel::query_dsl::LoadQuery;
-
 use diesel::r2d2::ConnectionManager;
 use diesel::result::Error;
 use diesel::sql_types::BigInt;
 use diesel::{r2d2, PgConnection, QueryResult, RunQueryDsl};
 
-mod db;
-pub mod query_helper;
 #[macro_use]
 extern crate diesel;
 
+mod db;
+pub mod query_helper;
+
 pub use db::Db;
+
+/// Pooled connection alias
 pub type DbConnection = r2d2::PooledConnection<ConnectionManager<PgConnection>>;
+
+/// Result type using [`DatabaseError`] as a default Error
 pub type Result<T, E = DatabaseError> = std::result::Result<T, E>;
 
 /// Error types for the database abstraction

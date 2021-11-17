@@ -40,11 +40,23 @@ pub struct Start {
     #[serde(flatten)]
     pub parameter: Parameter,
 
-    /// See [`super::storage::allow_list`]
+    /// Depending on the selection strategy, the list of Participant that can be chosen from.
+    ///
+    ///
+    /// - Strategy = `none`, `random` or `nomination`: The allow_list acts as pool of participants which can
+    ///   be selected (by nomination or randomly etc).
+    ///
+    /// - Strategy = `playlist` The allow_list does not get used by this strategy.
     #[serde(default)]
     pub allow_list: Vec<ParticipantId>,
 
-    /// See [`super::storage::playlist`]
+    /// Ordered list of queued participants
+    ///
+    /// - Strategy = `none`, `random` or `nomination`: The playlist does not get used by these strategies.
+    ///
+    /// - Strategy = `playlist` The playlist is a ordered list of participants which will get used to select
+    ///     the next participant when yielding. It is also used as a pool to select participants
+    ///     randomly from (moderator command `Select`).
     #[serde(default)]
     pub playlist: Vec<ParticipantId>,
 }

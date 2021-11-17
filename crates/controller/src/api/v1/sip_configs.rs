@@ -78,7 +78,7 @@ pub async fn get(
 
 /// API Endpoint *PUT /rooms/{room_id}/sip*
 ///
-/// Modifies a sip config with the provided [`ModifySipConfig`]. A new sip config is created
+/// Modifies a sip config with the provided [`PutSipConfig`]. A new sip config is created
 /// when no config was set.
 ///
 /// Returns the new modified sip config.

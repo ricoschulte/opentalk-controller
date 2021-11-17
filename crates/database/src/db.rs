@@ -1,13 +1,12 @@
+use crate::{DatabaseError, DbConnection, DbInterface};
 use controller_shared::settings;
 use diesel::r2d2::ConnectionManager;
 use diesel::{r2d2, PgConnection};
 use std::time::Duration;
 
-use crate::{DatabaseError, DbConnection, DbInterface};
-
 type DbPool = r2d2::Pool<ConnectionManager<PgConnection>>;
 
-/// Db container that uses a connection pool to hand out connections.
+/// Db container that uses a connection pool to hand out connections
 ///
 /// Uses an r2d2 connection pool to manage multiple established connections.
 pub struct Db {

@@ -25,10 +25,10 @@ pub struct FrontendConfig {
     #[serde(flatten)]
     pub parameter: Parameter,
 
-    /// See documentation of [`super::outgoing::SpeakerUpdate`]
+    /// See documentation of [`super::outgoing::SpeakerUpdated`]
     pub history: Vec<ParticipantId>,
 
-    /// See documentation of [`super::outgoing::SpeakerUpdate`]
+    /// See documentation of [`super::outgoing::SpeakerUpdated`]
     pub remaining: Vec<ParticipantId>,
 }
 

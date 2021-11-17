@@ -3,18 +3,17 @@
 //!
 //! To extend you need to implement a fitting trait extension.
 //! Example:
-//! ```
-//! use k3k_database::DbInterface;
+//! ```rust
+//! # use anyhow::Result;
+//! # use database::DbInterface;
 //! pub trait DbExampleEx: DbInterface {
-//! #[tracing::instrument(skip(self, new_user))]
-//!     fn create_user(&self, new_user: ())) -> Result<()> {
-//!         let con = self.get_con()?;
+//!     fn create_user(&self, new_user: ()) -> Result<()> {
+//!         let con = self.get_conn()?;
 //!         // Do query and Return result
 //!         Ok(())
-//!         })
 //!     }
 //! }
-//! impl<T: DbInterface> DbFeatureEx for T {}
+//! impl<T: DbInterface> DbExampleEx for T {}
 //! ```
 
 #[macro_use]

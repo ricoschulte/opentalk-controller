@@ -11,7 +11,10 @@ use uuid::Uuid;
 #[derive(Debug, Deserialize)]
 pub struct IntrospectRequest {
     token: String,
-    token_type_hint: Option<String>, // expected values: refresh_token, access_token
+    /// TypeHint
+    ///
+    /// Expected values: refresh_token, access_token
+    token_type_hint: Option<String>,
 }
 
 /// The JSON Body returned on by `/introspect`

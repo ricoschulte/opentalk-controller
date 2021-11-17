@@ -64,7 +64,7 @@ where
 {
     /// Unlocks this [`MutexGuard`] / locked redlock mutex
     ///
-    /// If Redis fails to unlock this lock, or this lock is already unlocked, this method returns a [`RedisError`]
+    /// If Redis fails to unlock this lock, or this lock is already unlocked, this method returns a [`Error`]
     pub async fn unlock<C>(mut self, redis: &mut C) -> Result<()>
     where
         C: ConnectionLike,

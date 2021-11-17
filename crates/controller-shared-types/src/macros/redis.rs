@@ -1,4 +1,4 @@
-/// Implement [`redis::ToRedisArgs`] for a type that implements display
+/// Implement [`redis::ToRedisArgs`](https://docs.rs/redis/*/redis/trait.ToRedisArgs.html) for a type that implements display
 #[macro_export]
 macro_rules! impl_to_redis_args {
     ($ty:ty) => {
@@ -13,7 +13,7 @@ macro_rules! impl_to_redis_args {
     };
 }
 
-/// Implement [`redis::FromRedisValue`] for a type that implements deserialize
+/// Implement [`redis::FromRedisValue`](https://docs.rs/redis/*/redis/trait.FromRedisValue.html) for a type that implements deserialize
 #[macro_export]
 macro_rules! impl_from_redis_value_de {
     ($ty:ty) => {
@@ -38,7 +38,7 @@ macro_rules! impl_from_redis_value_de {
     };
 }
 
-/// Implement [`redis::ToRedisArgs`] for a type that implements serialize
+/// Implement [`redis::ToRedisArgs`](https://docs.rs/redis/*/redis/trait.ToRedisArgs.html) for a type that implements serialize
 #[macro_export]
 macro_rules! impl_to_redis_args_se {
     ($ty:ty) => {

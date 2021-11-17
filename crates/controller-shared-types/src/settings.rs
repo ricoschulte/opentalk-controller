@@ -1,4 +1,3 @@
-use arc_swap::ArcSwap;
 /// Contains the application settings.
 ///
 /// The application settings are set with a TOML config file. Settings specified in the config file
@@ -22,6 +21,7 @@ use arc_swap::ArcSwap;
 /// # Note
 /// Fields set via environment variables do not affect the underlying config file.
 ///
+use arc_swap::ArcSwap;
 use config::{Config, ConfigError, Environment, File};
 use openidconnect::{ClientId, ClientSecret, IssuerUrl};
 use serde::{Deserialize, Deserializer};

@@ -4,6 +4,9 @@ use diesel::query_builder::*;
 use diesel::result::QueryResult;
 use diesel::RunQueryDsl;
 
+/// Database drop statement
+///
+/// This `struct` is created by [`drop_database`] function
 #[derive(Debug, Clone)]
 pub struct DropDatabaseStatement {
     db_name: String,
@@ -45,6 +48,9 @@ impl QueryId for DropDatabaseStatement {
     const HAS_STATIC_QUERY_ID: bool = false;
 }
 
+/// Database create statement
+///
+/// This `struct` is created by [`create_database`] function
 #[derive(Debug, Clone)]
 pub struct CreateDatabaseStatement {
     db_name: String,
@@ -74,10 +80,12 @@ impl QueryId for CreateDatabaseStatement {
     const HAS_STATIC_QUERY_ID: bool = false;
 }
 
+/// Takes a database name and creates a diesel drop database statement struct
 pub fn drop_database(db_name: &str) -> DropDatabaseStatement {
     DropDatabaseStatement::new(db_name)
 }
 
+/// Takes a database name and creates a diesel create database statement struct
 pub fn create_database(db_name: &str) -> CreateDatabaseStatement {
     CreateDatabaseStatement::new(db_name)
 }

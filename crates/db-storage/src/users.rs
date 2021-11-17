@@ -65,7 +65,7 @@ pub struct ModifyUser {
     pub id_token_exp: Option<i64>,
 }
 
-/// Ok type of [`DbInterface::modify_user`]
+/// Ok type of [`DbUsersEx::modify_user`]
 pub struct ModifiedUser {
     /// The user after the modification
     pub user: User,
