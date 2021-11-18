@@ -25,6 +25,7 @@ pub struct Started {
 #[derive(Debug, Serialize, PartialEq)]
 #[serde(tag = "error", rename_all = "snake_case")]
 pub enum Error {
+    Inactive,
     InvalidAssignment,
     InsufficientPermissions,
 }

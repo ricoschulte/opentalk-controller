@@ -317,13 +317,15 @@ impl BreakoutRooms {
                 );
             }
             incoming::Message::Stop => {
-                storage::del_config(ctx.redis_conn(), self.parent).await?;
-
-                ctx.rabbitmq_publish(
-                    rabbitmq::global_exchange_name(self.parent),
-                    control::rabbitmq::room_all_routing_key().into(),
-                    rabbitmq::Message::Stop,
-                );
+                if storage::del_config(ctx.redis_conn(), self.parent).await? {
+                    ctx.rabbitmq_publish(
+                        rabbitmq::global_exchange_name(self.parent),
+                        control::rabbitmq::room_all_routing_key().into(),
+                        rabbitmq::Message::Stop,
+                    );
+                } else {
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::Inactive));
+                }
             }
         }
 

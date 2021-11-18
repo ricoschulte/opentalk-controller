@@ -81,7 +81,7 @@ pub async fn get_config(
         .context("Failed to get breakout-room config")
 }
 
-pub async fn del_config(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<()> {
+pub async fn del_config(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<bool> {
     redis_conn
         .del(BreakoutRoomConfig { room })
         .await
