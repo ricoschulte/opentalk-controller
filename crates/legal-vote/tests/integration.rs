@@ -47,6 +47,7 @@ async fn basic_vote() {
     {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
+        assert_eq!(parameters.max_votes, 2);
 
         parameters.vote_id
     } else {
@@ -62,6 +63,7 @@ async fn basic_vote() {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
         assert_eq!(parameters.vote_id, vote_id);
+        assert_eq!(parameters.max_votes, 2);
     } else {
         panic!("Expected Start message")
     };
@@ -261,6 +263,7 @@ async fn basic_vote_abstain() {
     {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
+        assert_eq!(parameters.max_votes, 2);
 
         parameters.vote_id
     } else {
@@ -276,6 +279,7 @@ async fn basic_vote_abstain() {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
         assert_eq!(parameters.vote_id, vote_id);
+        assert_eq!(parameters.max_votes, 2);
     } else {
         panic!("Expected Start message")
     };
@@ -475,6 +479,7 @@ async fn expired_vote() {
     {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
+        assert_eq!(parameters.max_votes, 2);
 
         parameters.vote_id
     } else {
@@ -490,6 +495,7 @@ async fn expired_vote() {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
         assert_eq!(parameters.vote_id, vote_id);
+        assert_eq!(parameters.max_votes, 2);
     } else {
         panic!("Expected Start message")
     };
@@ -583,6 +589,7 @@ async fn auto_stop_vote() {
     {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
+        assert_eq!(parameters.max_votes, 2);
 
         parameters.vote_id
     } else {
@@ -598,6 +605,7 @@ async fn auto_stop_vote() {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
         assert_eq!(parameters.vote_id, vote_id);
+        assert_eq!(parameters.max_votes, 2);
     } else {
         panic!("Expected Start message")
     };

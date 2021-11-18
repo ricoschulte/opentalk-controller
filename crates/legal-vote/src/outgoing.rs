@@ -191,12 +191,13 @@ mod test {
 
     #[test]
     fn start_message() {
-        let json_str = r#"{"message":"started","initiator_id":"00000000-0000-0000-0000-000000000000","vote_id":"00000000-0000-0000-0000-000000000000","start_time":"1970-01-01T00:00:00Z","name":"TestVote","topic":"Yes or No?","allowed_participants":["00000000-0000-0000-0000-000000000001","00000000-0000-0000-0000-000000000002"],"enable_abstain":false,"auto_stop":false,"duration":null}"#;
+        let json_str = r#"{"message":"started","initiator_id":"00000000-0000-0000-0000-000000000000","vote_id":"00000000-0000-0000-0000-000000000000","start_time":"1970-01-01T00:00:00Z","max_votes":2,"name":"TestVote","topic":"Yes or No?","allowed_participants":["00000000-0000-0000-0000-000000000001","00000000-0000-0000-0000-000000000002"],"enable_abstain":false,"auto_stop":false,"duration":null}"#;
 
         let message = Message::Started(rabbitmq::Parameters {
             initiator_id: ParticipantId::nil(),
             vote_id: VoteId::from(Uuid::nil()),
             start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+            max_votes: 2,
             inner: incoming::UserParameters {
                 name: "TestVote".into(),
                 topic: "Yes or No?".into(),

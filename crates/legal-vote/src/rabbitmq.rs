@@ -32,6 +32,8 @@ pub struct Parameters {
     pub vote_id: VoteId,
     /// The time the vote got started
     pub start_time: DateTime<Utc>,
+    /// The maximum amount of votes possible
+    pub max_votes: u32,
     /// Parameters set by the initiator
     #[serde(flatten)]
     pub inner: UserParameters,
