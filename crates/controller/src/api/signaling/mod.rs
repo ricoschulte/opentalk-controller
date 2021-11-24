@@ -166,7 +166,7 @@ impl fmt::Display for SignalingRoomId {
 /// A UTC DateTime wrapper that implements ToRedisArgs and FromRedisValue.
 ///
 /// The values are stores as unix timestamps in redis.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct Timestamp(chrono::DateTime<chrono::Utc>);
 impl Timestamp {
     fn now() -> Timestamp {
