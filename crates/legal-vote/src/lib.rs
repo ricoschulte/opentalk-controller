@@ -400,17 +400,19 @@ impl LegalVote {
     ) -> Result<rabbitmq::Parameters, Error> {
         let start_time = Utc::now();
 
-        self.init_allowed_list(
-            redis_conn,
-            vote_id,
-            &incoming_parameters.allowed_participants,
-        )
-        .await?;
+        let max_votes = self
+            .init_allowed_list(
+                redis_conn,
+                vote_id,
+                &incoming_parameters.allowed_participants,
+            )
+            .await?;
 
         let parameters = rabbitmq::Parameters {
             initiator_id: self.participant_id,
             vote_id,
             start_time,
+            max_votes,
             inner: incoming_parameters,
         };
 
@@ -448,12 +450,14 @@ impl LegalVote {
     }
 
     /// Set the allowed users list for the provided `vote_id` to its initial state
+    ///
+    /// Returns the maximum number of possible votes
     async fn init_allowed_list(
         &self,
         redis_conn: &mut ConnectionManager,
         vote_id: VoteId,
         allowed_participants: &[ParticipantId],
-    ) -> Result<(), Error> {
+    ) -> Result<u32, Error> {
         let allowed_users = control::storage::get_attribute_for_participants::<UserId>(
             redis_conn,
             self.room_id,
@@ -492,9 +496,11 @@ impl LegalVote {
             )));
         }
 
+        let max_votes = users.len();
+
         storage::allowed_users::set(redis_conn, self.room_id, vote_id, users).await?;
 
-        Ok(())
+        Ok(max_votes as u32)
     }
 
     /// Stop a vote
@@ -833,7 +839,11 @@ impl LegalVote {
             },
         };
 
+        let mut total_votes = 0;
+
         for (_, vote_option) in voters {
+            total_votes += 1;
+
             match vote_option {
                 VoteOption::Yes => protocol_vote_count.yes += 1,
                 VoteOption::No => protocol_vote_count.no += 1,
@@ -855,7 +865,7 @@ impl LegalVote {
         )
         .await?;
 
-        if protocol_vote_count == vote_count {
+        if protocol_vote_count == vote_count && total_votes <= parameters.max_votes {
             Ok(rabbitmq::FinalResults::Valid(vote_count))
         } else {
             Ok(rabbitmq::FinalResults::Invalid(
