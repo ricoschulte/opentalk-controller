@@ -7,7 +7,7 @@ use anyhow::{bail, Context, Result};
 use controller::prelude::*;
 use controller::Controller;
 use focus::FocusDetection;
-use incoming::TargetConfigure;
+use incoming::{RequestMute, TargetConfigure};
 use janus_client::TrickleCandidate;
 use mcu::McuPool;
 use mcu::{
@@ -34,6 +34,7 @@ mod storage;
 pub struct Media {
     id: ParticipantId,
     room: SignalingRoomId,
+    role: Role,
 
     mcu: Arc<McuPool>,
     media: MediaSessions,
@@ -77,6 +78,7 @@ impl SignalingModule for Media {
 
         let id = ctx.participant_id();
         let room = ctx.room_id();
+        let role = ctx.role();
 
         storage::set_state(ctx.redis_conn(), room, id, &state).await?;
 
@@ -85,6 +87,7 @@ impl SignalingModule for Media {
         Ok(Some(Self {
             id,
             room,
+            role,
             mcu: mcu.clone(),
             media: MediaSessions::new(ctx.participant_id(), media_sender),
             state,
@@ -118,6 +121,9 @@ impl SignalingModule for Media {
 
                     ctx.invalidate_data();
                 }
+            }
+            Event::WsMessage(incoming::Message::ModeratorMute(moderator_mute)) => {
+                self.handle_moderator_mute(&mut ctx, moderator_mute).await?;
             }
             Event::WsMessage(incoming::Message::Unpublish(assoc)) => {
                 self.media.remove_publisher(assoc.media_session_type).await;
@@ -289,6 +295,9 @@ impl SignalingModule for Media {
                     }));
                 }
             }
+            Event::RabbitMq(rabbitmq::Message::RequestMute(request_mute)) => {
+                ctx.ws_send(outgoing::Message::RequestMute(request_mute));
+            }
             Event::ParticipantJoined(id, evt_state) => {
                 *evt_state = Some(
                     storage::get_state(ctx.redis_conn(), self.room, id)
@@ -353,6 +362,43 @@ impl SignalingModule for Media {
 }
 
 impl Media {
+    /// Send mute requests to the targeted participants
+    ///
+    /// Fails if the issuing user is not a moderator.
+    async fn handle_moderator_mute(
+        &self,
+        ctx: &mut ModuleContext<'_, Self>,
+        moderator_mute: RequestMute,
+    ) -> Result<()> {
+        if self.role != Role::Moderator {
+            ctx.ws_send(outgoing::Message::Error(outgoing::Error::PermissionDenied));
+
+            return Ok(());
+        }
+
+        let room_participants =
+            control::storage::get_all_participants(ctx.redis_conn(), self.room).await?;
+
+        let request_mute = rabbitmq::RequestMute {
+            issuer: self.id,
+            force: moderator_mute.force,
+        };
+
+        for target in moderator_mute.targets {
+            if !room_participants.contains(&target) {
+                continue;
+            }
+
+            ctx.rabbitmq_publish(
+                control::rabbitmq::current_room_exchange_name(self.room),
+                control::rabbitmq::room_participant_routing_key(target),
+                rabbitmq::Message::RequestMute(request_mute),
+            )
+        }
+
+        Ok(())
+    }
+
     /// Gracefully removes the media session that is associated with the provided MediaSessionKey
     ///
     /// Send detach and destroy messages to janus in order to remove a media session gracefully.

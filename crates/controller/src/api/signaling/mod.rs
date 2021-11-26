@@ -129,13 +129,16 @@ impl FromRedisValue for ParticipantId {
 impl_to_redis_args!(ParticipantId);
 
 /// Role of the participant inside a room
-#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Role {
     Guest,
     User,
     Moderator,
 }
+
+impl_to_redis_args_se!(Role);
+impl_from_redis_value_de!(Role);
 
 /// The complete room id
 ///
