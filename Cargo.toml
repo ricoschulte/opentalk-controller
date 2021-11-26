@@ -8,19 +8,7 @@ authors = [
 edition = "2018"
 
 [workspace]
-members = [
-    "crates/legal-vote",
-    "crates/janus-client",
-    "crates/janus-media",
-    "crates/automod",
-    "crates/ee-chat",
-    "crates/chat",
-    "crates/controller",
-    "crates/test-util",
-    "crates/client",
-    "crates/r3dlock",
-    "crates/room-provisioner",
-]
+members = ["crates/*", "xtask"]
 
 [dependencies]
 anyhow = "1.0"

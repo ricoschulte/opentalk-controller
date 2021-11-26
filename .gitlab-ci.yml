@@ -88,12 +88,8 @@ test:cargo_test:
     - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"
   script:
     - cargo test --workspace --locked
-    # Run the migration test which creates a valid database layout to test validity of schema.rs
-    - cargo test -p k3k-controller-core --lib -- db::migrations::migration_tests::test_migration --exact
-    - >
-      ./.cargo/bin/diesel --database-url="${POSTGRES_BASE_URL}/${DATABASE_NAME}" print-schema |
-      /usr/local/cargo/bin/rustfmt |
-      diff crates/controller/src/db/schema.rs -
+    # Verify that the HEAD schema.rs matches the actual HEAD migration database schema.
+    - RUST_LOG=error cargo xtask verify-db-schema --postgres-url="${POSTGRES_BASE_URL}"
 
 test:controller-container:
   rules:
