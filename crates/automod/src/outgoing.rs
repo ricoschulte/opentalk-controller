@@ -13,12 +13,12 @@ pub enum Message {
 
     /// The current speaker has been updated.
     ///
-    /// See [`SpeakerUpdate`]
+    /// See [`SpeakerUpdated`]
     SpeakerUpdated(SpeakerUpdated),
 
     /// The remaining list has been updated
     ///
-    /// See [`RemainingUpdate`]
+    /// See [`RemainingUpdated`]
     RemainingUpdated(RemainingUpdated),
 
     /// Tell the frontend to start the animation for random selection

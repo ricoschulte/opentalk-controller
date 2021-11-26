@@ -3,6 +3,7 @@ use controller::prelude::serde_json::Value;
 use controller::prelude::uuid::Uuid;
 use controller::prelude::*;
 use controller::prelude::{ModuleTester, ParticipantId, WsMessageOutgoing};
+use db_storage::legal_votes::DbLegalVoteEx;
 use k3k_legal_vote::incoming::{Cancel, Stop, UserParameters, VoteMessage};
 use k3k_legal_vote::outgoing::{
     Canceled, ErrorKind, GuestParticipants, InvalidFields, Response, Stopped, VoteFailed,

@@ -4,7 +4,7 @@ use refinery_core::tokio_postgres::{Config, NoTls};
 use tokio::sync::oneshot;
 use tracing::Instrument;
 
-include_migration_mods!("src/db/migrations");
+include_migration_mods!("src/migrations");
 
 #[tracing::instrument(skip(config))]
 async fn migrate(config: Config) -> Result<()> {
@@ -66,12 +66,14 @@ mod type_polyfills {
 #[cfg(test)]
 mod migration_tests {
     use anyhow::Result;
+    use serial_test::serial;
 
     /// Tests the refinery database migration.
     /// A database config has to be specified via the environment variables
     /// * POSTGRES_BASE_URL (default: `postgres://postgres:password123@localhost:5432`) - url to the postgres database without the database name specifier
     /// * DATABASE_NAME (default: `k3k_test`) - the database name inside postgres
     #[tokio::test]
+    #[serial]
     async fn test_migration() -> Result<()> {
         // This will create a database and migrate it
         test_util::database::DatabaseContext::new(false).await;

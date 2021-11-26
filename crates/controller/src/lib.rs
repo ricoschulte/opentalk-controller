@@ -29,7 +29,7 @@ use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{anyhow, Context, Result};
 use arc_swap::ArcSwap;
 use breakout::BreakoutRooms;
-use db::DbInterface;
+use database::Db;
 use oidc::OidcContext;
 use prelude::*;
 use redis::aio::ConnectionManager;
@@ -58,9 +58,6 @@ mod trace;
 
 pub mod db;
 pub mod settings;
-
-#[macro_use]
-extern crate diesel;
 
 pub mod prelude {
     pub use crate::api::signaling::prelude::*;
@@ -133,10 +130,11 @@ pub struct Controller {
     /// Cloneable shared settings, can be used to reload settings from, when receiving the `reload` signal.
     pub shared_settings: SharedSettings,
 
-    // CLI arguments
+    /// CLI arguments
     args: cli::Args,
 
-    db: Arc<DbInterface>,
+    db: Arc<Db>,
+
     oidc: Arc<OidcContext>,
 
     /// RabbitMQ connection, can be used to create channels
@@ -177,7 +175,6 @@ impl Controller {
     /// subprogram (e.g. `--reload`) and must now exit.
     ///
     /// Otherwise it will return itself which can be modified and then run using [`Controller::run`]
-
     pub async fn create() -> Result<Option<Self>> {
         let args = cli::parse_args()?;
 
@@ -225,9 +222,8 @@ impl Controller {
             .context("Failed to init ha_sync")?;
 
         // Connect to postgres
-        let db = Arc::new(
-            DbInterface::connect(&settings.database).context("Failed to connect to database")?,
-        );
+        let db =
+            Arc::new(Db::connect(&settings.database).context("Failed to connect to database")?);
 
         // Discover OIDC Provider
         let oidc = Arc::new(
@@ -297,6 +293,7 @@ impl Controller {
 
             let signaling_modules = Arc::downgrade(&signaling_modules);
             let db_ctx = Arc::downgrade(&self.db);
+
             let oidc_ctx = Arc::downgrade(&self.oidc);
             let shutdown = self.shutdown.clone();
             let shared_settings = self.shared_settings.clone();
@@ -307,6 +304,7 @@ impl Controller {
 
                 // Unwraps cannot panic. Server gets stopped before dropping the Arc.
                 let db_ctx = Data::from(db_ctx.upgrade().unwrap());
+
                 let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
                 let redis = Data::new(redis.clone());
 
@@ -439,7 +437,7 @@ impl Controller {
     }
 }
 
-fn v1_scope(db_ctx: Data<DbInterface>, oidc_ctx: Data<OidcContext>) -> Scope {
+fn v1_scope(db_ctx: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
     // the latest version contains the root services
     web::scope("/v1")
         .service(api::v1::auth::login)

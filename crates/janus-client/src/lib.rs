@@ -5,7 +5,7 @@
 //! Thus this creates needs to be run in a async/.await runtime. Currently we only support the tokio runtime.
 //!
 //! # Examples
-//!```should_panic
+//!```no_run
 //! # use janus_client::types::outgoing;
 //! # use janus_client::{JanusPlugin, Client, RabbitMqConfig, ClientId};
 //! # use tokio::sync::{broadcast,mpsc};
@@ -33,7 +33,7 @@
 //! ```
 //!
 //! Furtermore you can wrap the API and build upon that similar to spreed
-//! ```should_panic
+//! ```no_run
 //! # use janus_client::{Client, Handle, JanusPlugin, RabbitMqConfig};
 //! # use janus_client::types::{TrickleCandidate, RoomId, FeedId};
 //! # use janus_client::types::outgoing::{TrickleMessage, PluginBody, VideoRoomPluginJoin, VideoRoomPluginJoinSubscriber};

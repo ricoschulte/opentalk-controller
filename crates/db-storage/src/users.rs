@@ -1,12 +1,13 @@
 //! Contains the user specific database structs amd queries
-use super::groups::{Group, UserGroup};
+use super::groups::{DbGroupsEx, Group, UserGroup};
 use super::schema::{groups, user_groups, users};
-use super::{DatabaseError, DbConnection, DbInterface, Result};
-use crate::{impl_from_redis_value_de, impl_to_redis_args_se};
+use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
+use database::{DatabaseError, DbInterface, Result};
+use diesel::r2d2::{self, ConnectionManager};
 use diesel::result::Error;
 use diesel::{
-    Connection, ExpressionMethods, Identifiable, Insertable, QueryDsl, QueryResult, Queryable,
-    RunQueryDsl,
+    Connection, ExpressionMethods, Identifiable, Insertable, PgConnection, QueryDsl, QueryResult,
+    Queryable, RunQueryDsl,
 };
 use uuid::Uuid;
 
@@ -64,7 +65,7 @@ pub struct ModifyUser {
     pub id_token_exp: Option<i64>,
 }
 
-/// Ok type of [`DbInterface::modify_user`]
+/// Ok type of [`DbUsersEx::modify_user`]
 pub struct ModifiedUser {
     /// The user after the modification
     pub user: User,
@@ -72,14 +73,17 @@ pub struct ModifiedUser {
     /// True the user's groups changed.
     /// Relevant for permission related state
     pub groups_changed: bool,
+
+    pub groups_added: Vec<String>,
+    pub groups_removed: Vec<String>,
 }
 
-impl DbInterface {
+pub trait DbUsersEx: DbInterface + DbGroupsEx {
     #[tracing::instrument(skip(self, new_user))]
-    pub fn create_user(&self, new_user: NewUserWithGroups) -> Result<()> {
-        let con = self.get_con()?;
+    fn create_user(&self, new_user: NewUserWithGroups) -> Result<User> {
+        let con = self.get_conn()?;
 
-        con.transaction::<(), super::DatabaseError, _>(|| {
+        con.transaction::<User, DatabaseError, _>(|| {
             let user: User = diesel::insert_into(users::table)
                 .values(new_user.new_user)
                 .get_result(&con)
@@ -90,13 +94,13 @@ impl DbInterface {
 
             insert_user_into_user_groups(&con, &user, new_user.groups)?;
 
-            Ok(())
+            Ok(user)
         })
     }
 
     #[tracing::instrument(skip(self))]
-    pub fn get_users(&self) -> Result<Vec<User>> {
-        let con = self.get_con()?;
+    fn get_users(&self) -> Result<Vec<User>> {
+        let con = self.get_conn()?;
 
         let users_result: QueryResult<Vec<User>> = users::table.get_results(&con);
 
@@ -110,8 +114,8 @@ impl DbInterface {
     }
 
     #[tracing::instrument(skip(self, uuid))]
-    pub fn get_user_by_uuid(&self, uuid: &Uuid) -> Result<Option<User>> {
-        let con = self.get_con()?;
+    fn get_user_by_uuid(&self, uuid: &Uuid) -> Result<Option<User>> {
+        let con = self.get_conn()?;
 
         let result: QueryResult<User> = users::table
             .filter(users::columns::oidc_uuid.eq(uuid))
@@ -128,15 +132,15 @@ impl DbInterface {
     }
 
     #[tracing::instrument(skip(self, user_uuid, modify, groups))]
-    pub fn modify_user(
+    fn modify_user(
         &self,
         user_uuid: Uuid,
         modify: ModifyUser,
         groups: Option<Vec<String>>,
     ) -> Result<ModifiedUser> {
-        let con = self.get_con()?;
+        let con = self.get_conn()?;
 
-        con.transaction::<ModifiedUser, super::DatabaseError, _>(|| {
+        con.transaction::<ModifiedUser, DatabaseError, _>(|| {
             let target = users::table.filter(users::columns::oidc_uuid.eq(user_uuid));
             let user: User = diesel::update(target).set(modify).get_result(&con)?;
 
@@ -145,13 +149,21 @@ impl DbInterface {
                 let curr_groups = self.get_groups_for_user(user.id)?;
 
                 // check current groups and if reinsert of groups into user_groups is needed
-                let groups_unchanged = if groups.len() == curr_groups.len() {
-                    groups.iter().all(|old| curr_groups.contains(old))
-                } else {
-                    false
-                };
+                let (added, removed) = (
+                    groups
+                        .iter()
+                        .filter(|&old| curr_groups.contains(old))
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                    curr_groups
+                        .iter()
+                        .filter(|&curr| groups.contains(&curr.id))
+                        .map(|g| g.id.clone())
+                        .collect::<Vec<_>>(),
+                );
+                let groups_changed = !added.is_empty() || !removed.is_empty();
 
-                if !groups_unchanged {
+                if groups_changed {
                     // Remove user from user_groups table
                     let target =
                         user_groups::table.filter(user_groups::columns::user_id.eq(user.id));
@@ -165,20 +177,24 @@ impl DbInterface {
 
                 Ok(ModifiedUser {
                     user,
-                    groups_changed: !groups_unchanged,
+                    groups_changed,
+                    groups_added: added,
+                    groups_removed: removed,
                 })
             } else {
                 Ok(ModifiedUser {
                     user,
                     groups_changed: false,
+                    groups_added: vec![],
+                    groups_removed: vec![],
                 })
             }
         })
     }
 
     #[tracing::instrument(skip(self, user_id))]
-    pub fn get_user_by_id(&self, user_id: UserId) -> Result<Option<User>> {
-        let con = self.get_con()?;
+    fn get_user_by_id(&self, user_id: UserId) -> Result<Option<User>> {
+        let con = self.get_conn()?;
 
         let result: QueryResult<User> = users::table
             .filter(users::columns::id.eq(user_id))
@@ -195,9 +211,10 @@ impl DbInterface {
         }
     }
 }
+impl<T: DbInterface> DbUsersEx for T {}
 
 fn insert_user_into_user_groups(
-    con: &DbConnection,
+    con: &r2d2::PooledConnection<ConnectionManager<PgConnection>>,
     user: &User,
     groups: Vec<String>,
 ) -> Result<()> {

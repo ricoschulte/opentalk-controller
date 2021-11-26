@@ -6,9 +6,10 @@
 use crate::api::v1::DefaultApiError;
 use crate::db::users::User;
 use crate::db::users::{self as db_users, UserId};
-use crate::db::DbInterface;
 use actix_web::web::{Data, Json, Path, ReqData};
 use actix_web::{get, put};
+use database::Db;
+use db_storage::DbUsersEx;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
@@ -82,7 +83,7 @@ fn disallow_empty(modify_user: &ModifyUser) -> Result<(), ValidationError> {
 ///
 /// Returns a JSON array of all database users as [`UserDetails`]
 #[get("/users")]
-pub async fn all(db_ctx: Data<DbInterface>) -> Result<Json<Vec<UserDetails>>, DefaultApiError> {
+pub async fn all(db_ctx: Data<Db>) -> Result<Json<Vec<UserDetails>>, DefaultApiError> {
     let db_users = crate::block(move || -> Result<Vec<db_users::User>, DefaultApiError> {
         Ok(db_ctx.get_users()?)
     })
@@ -112,7 +113,7 @@ pub async fn all(db_ctx: Data<DbInterface>) -> Result<Json<Vec<UserDetails>>, De
 /// Returns the [`UserProfile`] of the affected user.
 #[put("/users/me")]
 pub async fn set_current_user_profile(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
     modify_user: Json<ModifyUser>,
 ) -> Result<Json<UserProfile>, DefaultApiError> {
@@ -181,7 +182,7 @@ pub async fn current_user_profile(
 /// Returns [`UserDetails`] of the specified user
 #[get("/users/{user_id}")]
 pub async fn user_details(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     user_id: Path<UserId>,
 ) -> Result<Json<UserDetails>, DefaultApiError> {
     let db_user = crate::block(move || -> Result<Option<db_users::User>, DefaultApiError> {

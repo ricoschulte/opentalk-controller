@@ -2,9 +2,11 @@ use anyhow::Result;
 use controller::db::migrations::migrate_from_url;
 use controller::db::rooms::{NewRoom, RoomId};
 use controller::db::users::UserId;
-use controller::db::DbInterface;
 use controller::settings::Database;
 use credentials::Credentials;
+use database::Db;
+use db_storage::rooms::DbRoomsEx;
+use db_storage::DbUsersEx;
 use provision::Provision;
 use provision::{Room, User};
 use uuid::Uuid;
@@ -32,24 +34,25 @@ async fn apply_provisioning(provision: Provision, credentials: Credentials) -> R
 }
 
 fn create_users(users: Vec<User>, database: &Database) -> Result<()> {
-    let database_interface = DbInterface::connect(database)?;
+    let database_interface = Db::connect(database)?;
     users
         .into_iter()
         .try_for_each(|user| create_user(user, &database_interface))
 }
 
-fn create_user(user: User, database_interface: &DbInterface) -> Result<()> {
-    Ok(database_interface.create_user(user.into())?)
+fn create_user(user: User, database_interface: &Db) -> Result<()> {
+    database_interface.create_user(user.into())?;
+    Ok(())
 }
 
 fn create_rooms(rooms: Vec<Room>, database: &Database) -> Result<()> {
-    let database_interface = DbInterface::connect(database)?;
+    let database_interface = Db::connect(database)?;
     rooms
         .into_iter()
         .try_for_each(|room| try_to_create_room(room, &database_interface))
 }
 
-fn try_to_create_room(room: Room, database_interface: &DbInterface) -> Result<()> {
+fn try_to_create_room(room: Room, database_interface: &Db) -> Result<()> {
     if let Some(room_owner) = database_interface.get_user_by_uuid(&room.owner)? {
         return create_room(room, room_owner.id, database_interface);
     }
@@ -60,7 +63,7 @@ fn try_to_create_room(room: Room, database_interface: &DbInterface) -> Result<()
     Ok(())
 }
 
-fn create_room(room: Room, owner_id: UserId, database_interface: &DbInterface) -> Result<()> {
+fn create_room(room: Room, owner_id: UserId, database_interface: &Db) -> Result<()> {
     let new_room = NewRoom {
         uuid: RoomId::from(room.uuid.unwrap_or_else(Uuid::new_v4)),
         owner: owner_id,

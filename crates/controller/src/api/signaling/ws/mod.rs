@@ -4,11 +4,11 @@ use crate::api::signaling::{ParticipantId, Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
 use crate::db::rooms::Room;
 use crate::db::users::User;
-use crate::db::DbInterface;
 use adapter::ActixTungsteniteAdapter;
 use anyhow::Result;
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use async_tungstenite::WebSocketStream;
+use database::Db;
 use futures::stream::SelectAll;
 use lapin::options::{ExchangeDeclareOptions, QueueBindOptions};
 use lapin::ExchangeKind;
@@ -102,7 +102,7 @@ where
     breakout_room: Option<BreakoutRoomId>,
     participant: &'ctx Participant<User>,
     role: Role,
-    db: &'ctx Arc<DbInterface>,
+    db: &'ctx Arc<Db>,
     rabbitmq_exchanges: &'ctx mut Vec<RabbitMqExchange>,
     rabbitmq_bindings: &'ctx mut Vec<RabbitMqBinding>,
     events: &'ctx mut SelectAll<AnyStream>,
@@ -161,7 +161,7 @@ where
     }
 
     /// Returns a reference to the controllers database interface
-    pub fn db(&self) -> &Arc<DbInterface> {
+    pub fn db(&self) -> &Arc<Db> {
         self.db
     }
 

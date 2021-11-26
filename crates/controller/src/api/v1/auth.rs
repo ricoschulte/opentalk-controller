@@ -2,11 +2,12 @@
 use super::{DefaultApiError, INVALID_ID_TOKEN};
 use crate::db;
 use crate::db::users::ModifiedUser;
-use crate::db::DbInterface;
 use crate::ha_sync::user_update;
 use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
+use database::Db;
+use db_storage::DbUsersEx;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::str::FromStr;
@@ -32,7 +33,7 @@ pub struct LoginResponse {
 /// Returns a [`LoginResponse`] containing the users permissions.
 #[post("/auth/login")]
 pub async fn login(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     rabbitmq_channel: Data<lapin::Channel>,
     body: Json<Login>,

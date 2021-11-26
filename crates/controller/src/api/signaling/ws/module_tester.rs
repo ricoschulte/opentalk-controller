@@ -18,10 +18,10 @@ use crate::api::Participant;
 use crate::db::rooms::Room;
 use crate::db::users::User;
 use crate::db::users::UserId;
-use crate::db::DbInterface;
 use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use database::Db;
 use futures::stream::SelectAll;
 use redis::aio::ConnectionManager;
 use serde_json::Value;
@@ -51,7 +51,7 @@ where
     /// The redis interface
     pub redis_conn: ConnectionManager,
     /// The database interface
-    pub db_ctx: Arc<DbInterface>,
+    pub db_ctx: Arc<Db>,
     /// The room that the users are inside
     room: Room,
     /// Optional breakout room id
@@ -68,7 +68,7 @@ where
     M: SignalingModule,
 {
     /// Create a new ModuleTester instance
-    pub fn new(db_ctx: Arc<DbInterface>, redis_conn: ConnectionManager, room: Room) -> Self {
+    pub fn new(db_ctx: Arc<Db>, redis_conn: ConnectionManager, room: Room) -> Self {
         let (rabbitmq_sender, _) = broadcast::channel(10);
 
         Self {
@@ -218,7 +218,7 @@ where
     ///
     ///
     /// This function will yield when there is no available message and timeout after two seconds.
-    /// When a longer timeout is required, use [`ModuleTester::receive_ws_message_with_specific_timeout`]
+    /// When a longer timeout is required, use [`ModuleTester::receive_ws_message_override_timeout`]
     ///
     /// # Returns
     /// - Ok([`WsMessageOutgoing`]) when a message is available within the timeout window.
@@ -371,7 +371,7 @@ where
         breakout_room: Option<BreakoutRoomId>,
         mut participant: Participant<User>,
         role: Role,
-        db_ctx: Arc<DbInterface>,
+        db_ctx: Arc<Db>,
         mut redis_conn: ConnectionManager,
         params: M::Params,
         interface: ClientInterface<M>,

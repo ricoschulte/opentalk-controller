@@ -3,7 +3,6 @@ use crate::api::v1::{
     DefaultApiError, ACCESS_TOKEN_INACTIVE, INVALID_ACCESS_TOKEN, SESSION_EXPIRED,
 };
 use crate::db::users::User;
-use crate::db::DbInterface;
 use crate::oidc::OidcContext;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::error::Error;
@@ -12,6 +11,8 @@ use actix_web::web::Data;
 use actix_web::{HttpMessage, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use core::future::ready;
+use database::Db;
+use db_storage::DbUsersEx;
 use openidconnect::AccessToken;
 use std::future::{Future, Ready};
 use std::pin::Pin;
@@ -24,7 +25,7 @@ use uuid::Uuid;
 ///
 /// Transforms into [`OidcAuthMiddleware`]
 pub struct OidcAuth {
-    pub db_ctx: Data<DbInterface>,
+    pub db_ctx: Data<Db>,
     pub oidc_ctx: Data<OidcContext>,
 }
 
@@ -54,7 +55,7 @@ where
 /// token and provide the associated user as [`ReqData`](actix_web::web::ReqData) for the subsequent services.
 pub struct OidcAuthMiddleware<S> {
     service: Rc<S>,
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     oidc_ctx: Data<OidcContext>,
 }
 
@@ -103,7 +104,7 @@ where
 }
 
 pub async fn check_access_token(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     access_token: AccessToken,
 ) -> Result<User, DefaultApiError> {

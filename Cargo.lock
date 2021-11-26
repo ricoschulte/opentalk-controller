@@ -537,6 +537,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "camino"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "52d74260d9bf6944e2208aa46841b4b8f0d7ffc0849a06837b2f510337f86b2b"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "cargo-platform"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cbdb825da8a5df079a43676dbe042702f1707b1109f713a01420fbb4cc71fa27"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "cargo_metadata"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ba2ae6de944143141f6155a473a6b02f66c7c3f9f47316f802f80204ebfe6e12"
+dependencies = [
+ "camino",
+ "cargo-platform",
+ "semver 1.0.4",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "cc"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -745,10 +776,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "diesel"
-version = "1.4.7"
+name = "devx-cmd"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bba51ca66f57261fd17cadf8b73e4775cc307d0521d855de3f5de91a8f074e0e"
+checksum = "25f18d96d782b50bca1504e143d61efeff7c1fb7658fd2b433ba955faf468c8c"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "diesel"
+version = "1.4.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b28135ecf6b7d446b43e27e225622a038cc4e2930a1022f51cdb97ada19b8e4d"
 dependencies = [
  "bitflags",
  "byteorder",
@@ -770,16 +810,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "diesel_migrations"
-version = "1.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf3cde8413353dc7f5d72fa8ce0b99a560a359d2c5ef1e5817ca731cd9008f4c"
-dependencies = [
- "migrations_internals",
- "migrations_macros",
 ]
 
 [[package]]
@@ -846,6 +876,19 @@ name = "env_logger"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
+dependencies = [
+ "atty",
+ "humantime",
+ "log",
+ "regex",
+ "termcolor",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
 dependencies = [
  "atty",
  "humantime",
@@ -1249,7 +1292,7 @@ name = "janus-client"
 version = "0.2.0"
 dependencies = [
  "displaydoc",
- "env_logger",
+ "env_logger 0.8.4",
  "futures",
  "lapin",
  "log",
@@ -1371,7 +1414,6 @@ dependencies = [
  "chrono",
  "config",
  "diesel",
- "diesel_migrations",
  "displaydoc",
  "either",
  "fern",
@@ -1379,6 +1421,9 @@ dependencies = [
  "futures-util",
  "jsonwebtoken",
  "k3k-controller-client",
+ "k3k-controller-shared",
+ "k3k-database",
+ "k3k-db-storage",
  "k3k-test-util",
  "lapin",
  "log",
@@ -1417,12 +1462,64 @@ dependencies = [
 ]
 
 [[package]]
+name = "k3k-controller-shared"
+version = "0.1.0"
+dependencies = [
+ "arc-swap",
+ "chrono",
+ "config",
+ "openidconnect",
+ "serde",
+ "url",
+]
+
+[[package]]
+name = "k3k-database"
+version = "0.1.0"
+dependencies = [
+ "diesel",
+ "k3k-controller-shared",
+ "log",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "k3k-db-storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "barrel",
+ "chrono",
+ "diesel",
+ "k3k-controller-shared",
+ "k3k-database",
+ "k3k-test-util",
+ "log",
+ "rand 0.8.4",
+ "redis",
+ "refinery",
+ "refinery-core",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid 0.8.2",
+ "validator",
+]
+
+[[package]]
 name = "k3k-ee-chat"
 version = "0.1.0"
 dependencies = [
  "actix-rt",
  "k3k-chat",
  "k3k-controller-core",
+ "k3k-controller-shared",
+ "k3k-db-storage",
  "k3k-test-util",
  "serde",
  "serial_test",
@@ -1444,6 +1541,8 @@ dependencies = [
  "actix-rt",
  "diesel",
  "k3k-controller-core",
+ "k3k-controller-shared",
+ "k3k-db-storage",
  "k3k-test-util",
  "serde",
  "serial_test",
@@ -1456,6 +1555,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "k3k-controller-core",
+ "k3k-database",
+ "k3k-db-storage",
  "serde",
  "serde_yaml",
  "tokio",
@@ -1469,6 +1570,8 @@ dependencies = [
  "diesel",
  "fern",
  "k3k-controller-core",
+ "k3k-database",
+ "k3k-db-storage",
 ]
 
 [[package]]
@@ -1601,27 +1704,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59accc507f1338036a0477ef61afdae33cde60840f4dfe481319ce3ad116ddf9"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "migrations_internals"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b4fc84e4af020b837029e017966f86a1c2d5e83e64b589963d5047525995860"
-dependencies = [
- "diesel",
-]
-
-[[package]]
-name = "migrations_macros"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9753f12909fd8d923f75ae5c3258cae1ed3c8ec052e1b38c93c21a6d157f789c"
-dependencies = [
- "migrations_internals",
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -2456,6 +2538,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "semver"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "568a8e6258aa33c13358f81fd834adb854c6f7c9468520910a9b1e8fac068012"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "semver-parser"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3276,6 +3367,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ccb82d61f80a663efe1f787a51b16b5a51e3314d6ac365b08639f52387b33f3"
 
 [[package]]
+name = "unified-diff"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "496a3d395ed0c30f411ceace4a91f7d93b148fb5a9b383d5d4cff7850f048d5f"
+dependencies = [
+ "diff",
+]
+
+[[package]]
 name = "untrusted"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3554,6 +3654,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0120db82e8a1e0b9fb3345a539c478767c0048d842860994d96113d5b667bd69"
 dependencies = [
  "winapi",
+]
+
+[[package]]
+name = "xtask"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "cargo_metadata",
+ "devx-cmd",
+ "diesel",
+ "env_logger 0.9.0",
+ "k3k-database",
+ "k3k-db-storage",
+ "log",
+ "rand 0.8.4",
+ "structopt",
+ "tokio",
+ "unified-diff",
+ "url",
 ]
 
 [[package]]

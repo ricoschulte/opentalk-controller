@@ -15,13 +15,13 @@ use crate::api::signaling::ws_modules::control::{
 use crate::api::signaling::{ParticipantId, Role, SignalingRoomId};
 use crate::db::rooms::Room;
 use crate::db::users::User;
-use crate::db::DbInterface;
 use crate::ha_sync::user_update;
 use anyhow::{bail, Context, Result};
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use async_tungstenite::tungstenite::protocol::CloseFrame;
 use async_tungstenite::tungstenite::Message;
 use chrono::TimeZone;
+use database::Db;
 use futures::stream::SelectAll;
 use futures::SinkExt;
 use lapin::message::DeliveryResult;
@@ -56,7 +56,7 @@ pub struct Builder {
     pub(super) rabbitmq_exchanges: Vec<RabbitMqExchange>,
     pub(super) rabbitmq_bindings: Vec<RabbitMqBinding>,
     pub(super) events: SelectAll<AnyStream>,
-    pub(super) db: Arc<DbInterface>,
+    pub(super) db: Arc<Db>,
     pub(super) redis_conn: ConnectionManager,
     pub(super) rabbitmq_channel: lapin::Channel,
 }
@@ -377,7 +377,7 @@ impl Runner {
         breakout_room: Option<BreakoutRoomId>,
         participant: api::Participant<User>,
         protocol: &'static str,
-        db: Arc<DbInterface>,
+        db: Arc<Db>,
         redis_conn: ConnectionManager,
         rabbitmq_channel: lapin::Channel,
     ) -> Builder {

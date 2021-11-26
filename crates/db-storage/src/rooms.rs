@@ -1,9 +1,8 @@
 //! Contains the room specific database structs and queries
-use super::Result;
-use crate::db::schema::rooms;
-use crate::db::users::{User, UserId};
-use crate::db::DbInterface;
 use crate::diesel::RunQueryDsl;
+use crate::schema::rooms;
+use crate::users::{User, UserId};
+use database::{DbInterface, Result};
 use diesel::{ExpressionMethods, QueryDsl, QueryResult};
 use diesel::{Identifiable, Queryable};
 
@@ -47,10 +46,27 @@ pub struct ModifyRoom {
     pub listen_only: Option<bool>,
 }
 
-impl DbInterface {
+pub trait DbRoomsEx: DbInterface {
     #[tracing::instrument(skip(self, user))]
-    pub fn get_owned_rooms(&self, user: &User) -> Result<Vec<Room>> {
-        let con = self.get_con()?;
+    fn get_owned_rooms(&self, user: &User) -> Result<Vec<Room>> {
+        let con = self.get_conn()?;
+
+        let rooms_result: QueryResult<Vec<Room>> = rooms::table
+            .filter(rooms::columns::owner.eq(user.id))
+            .get_results(&con);
+
+        match rooms_result {
+            Ok(rooms) => Ok(rooms),
+            Err(e) => {
+                log::error!("Query error getting owned rooms, {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    #[tracing::instrument(skip(self, user))]
+    fn get_rooms(&self, user: &User) -> Result<Vec<Room>> {
+        let con = self.get_conn()?;
 
         let rooms_result: QueryResult<Vec<Room>> = rooms::table
             .filter(rooms::columns::owner.eq(user.id))
@@ -66,8 +82,8 @@ impl DbInterface {
     }
 
     #[tracing::instrument(skip(self, room))]
-    pub fn new_room(&self, room: NewRoom) -> Result<Room> {
-        let con = self.get_con()?;
+    fn new_room(&self, room: NewRoom) -> Result<Room> {
+        let con = self.get_conn()?;
 
         // a UUID collision will result in an internal server error
         let room_result: QueryResult<Room> = diesel::insert_into(rooms::table)
@@ -84,8 +100,8 @@ impl DbInterface {
     }
 
     #[tracing::instrument(skip(self, room_id, room))]
-    pub fn modify_room(&self, room_id: RoomId, room: ModifyRoom) -> Result<Room> {
-        let con = self.get_con()?;
+    fn modify_room(&self, room_id: RoomId, room: ModifyRoom) -> Result<Room> {
+        let con = self.get_conn()?;
 
         let target = rooms::table.filter(rooms::columns::uuid.eq(&room_id));
         let room_result = diesel::update(target).set(&room).get_result(&con);
@@ -100,8 +116,8 @@ impl DbInterface {
     }
 
     #[tracing::instrument(skip(self, room_id))]
-    pub fn get_room(&self, room_id: RoomId) -> Result<Option<Room>> {
-        let con = self.get_con()?;
+    fn get_room(&self, room_id: RoomId) -> Result<Option<Room>> {
+        let con = self.get_conn()?;
 
         let result: QueryResult<Room> = rooms::table
             .filter(rooms::columns::uuid.eq(room_id))
@@ -117,3 +133,4 @@ impl DbInterface {
         }
     }
 }
+impl<T: DbInterface> DbRoomsEx for T {}

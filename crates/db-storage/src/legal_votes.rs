@@ -1,8 +1,7 @@
-use super::{DatabaseError, Result};
-use crate::db::schema::legal_votes;
-use crate::db::users::UserId;
-use crate::db::DbInterface;
-use crate::{impl_from_redis_value_de, impl_to_redis_args_se};
+use crate::schema::legal_votes;
+use crate::users::UserId;
+use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
+use database::{DatabaseError, DbInterface, Result};
 use diesel::result::DatabaseErrorKind;
 use diesel::{ExpressionMethods, Identifiable, QueryDsl, QueryResult, Queryable, RunQueryDsl};
 use serde::Serialize;
@@ -34,18 +33,14 @@ pub struct NewLegalVote {
     pub protocol: serde_json::Value,
 }
 
-impl DbInterface {
+pub trait DbLegalVoteEx: DbInterface {
     /// Insert a [`NewLegalVote`] into the database and returns the created [`LegalVote`]
     ///
     /// Generates a [`VoteId`] (uuid) for the entry in the database. In case the insert statement fails with an `UniqueViolation`,
     /// the statement will be resend with a different [`VoteId`] to counteract uuid collisions.
     #[tracing::instrument(skip(self, protocol))]
-    pub fn new_legal_vote<T: Serialize>(
-        &self,
-        initiator: UserId,
-        protocol: T,
-    ) -> Result<LegalVote> {
-        let con = self.get_con()?;
+    fn new_legal_vote<T: Serialize>(&self, initiator: UserId, protocol: T) -> Result<LegalVote> {
+        let con = self.get_conn()?;
 
         let protocol =
             serde_json::to_value(protocol).map_err(|e| DatabaseError::Error(e.to_string()))?;
@@ -97,8 +92,8 @@ impl DbInterface {
 
     /// Set the vote protocol for the provided `vote_id`
     #[tracing::instrument(skip(self, protocol))]
-    pub fn set_protocol<T: Serialize>(&self, vote_id: VoteId, protocol: T) -> Result<()> {
-        let con = self.get_con()?;
+    fn set_protocol<T: Serialize>(&self, vote_id: VoteId, protocol: T) -> Result<()> {
+        let con = self.get_conn()?;
 
         let protocol =
             serde_json::to_value(protocol).map_err(|e| DatabaseError::Error(e.to_string()))?;
@@ -114,8 +109,8 @@ impl DbInterface {
 
     /// Get the legal vote with the provided `vote_id`
     #[tracing::instrument(skip(self))]
-    pub fn get_legal_vote(&self, vote_id: VoteId) -> Result<Option<LegalVote>> {
-        let con = self.get_con()?;
+    fn get_legal_vote(&self, vote_id: VoteId) -> Result<Option<LegalVote>> {
+        let con = self.get_conn()?;
 
         let query_result: QueryResult<LegalVote> = legal_votes::table
             .filter(legal_votes::columns::id.eq(&vote_id))
@@ -131,3 +126,5 @@ impl DbInterface {
         }
     }
 }
+
+impl<T: DbInterface> DbLegalVoteEx for T {}

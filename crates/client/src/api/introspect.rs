@@ -7,7 +7,10 @@ use uuid::Uuid;
 #[derive(Debug, Serialize)]
 pub struct IntrospectRequest {
     pub token: String,
-    pub token_type_hint: Option<String>, // expected values: refresh_token, access_token
+    /// TypeHint
+    ///
+    /// Expected values: refresh_token, access_token
+    pub token_type_hint: Option<String>,
 }
 
 /// The JSON Body returned on by `/introspect`

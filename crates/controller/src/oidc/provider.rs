@@ -1,5 +1,5 @@
-use crate::settings;
 use anyhow::{Context, Result};
+use controller_shared::settings;
 use openidconnect::core::CoreClient;
 use openidconnect::reqwest::async_http_client as http_client;
 use openidconnect::url::Url;

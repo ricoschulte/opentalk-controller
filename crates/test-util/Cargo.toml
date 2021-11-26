@@ -5,6 +5,9 @@ edition = "2018"
 
 [dependencies]
 controller = { path = "../controller", package = "k3k-controller-core" }
+database = { path = "../database", package = "k3k-database" }
+db-storage = { path = "../db-storage", package = "k3k-db-storage" }
+
 diesel = { version = "1.4.6", features = [
     "postgres",
     "uuid",

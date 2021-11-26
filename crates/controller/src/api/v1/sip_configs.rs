@@ -1,10 +1,12 @@
 use crate::api::v1::DefaultApiError;
-use crate::db::rooms::RoomId;
-use crate::db::sip_configs::{SipConfigParams, SipId, SipPassword};
-use crate::db::users::User;
-use crate::db::{self, DbInterface};
+use crate::db;
 use actix_web::web::{Data, Json, Path, ReqData};
 use actix_web::{delete, get, put, HttpResponse};
+use database::Db;
+use db_storage::rooms::{DbRoomsEx, RoomId};
+use db_storage::sip_configs::DbSipConfigsEx;
+use db_storage::sip_configs::{SipConfigParams, SipId, SipPassword};
+use db_storage::users::User;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
 
@@ -41,7 +43,7 @@ fn disallow_empty(modify_room: &PutSipConfig) -> Result<(), ValidationError> {
 /// Get the sip config for the specified room.
 #[get("/rooms/{room_uuid}/sip")]
 pub async fn get(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
 ) -> Result<Json<SipConfig>, DefaultApiError> {
@@ -76,13 +78,13 @@ pub async fn get(
 
 /// API Endpoint *PUT /rooms/{room_id}/sip*
 ///
-/// Modifies a sip config with the provided [`ModifySipConfig`]. A new sip config is created
+/// Modifies a sip config with the provided [`PutSipConfig`]. A new sip config is created
 /// when no config was set.
 ///
 /// Returns the new modified sip config.
 #[put("/rooms/{room_uuid}/sip")]
 pub async fn put(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
     modify_sip_config: Json<PutSipConfig>,
@@ -160,7 +162,7 @@ pub async fn put(
 /// Deletes the sip config of the provided room.
 #[delete("/rooms/{room_uuid}/sip")]
 pub async fn delete(
-    db_ctx: Data<DbInterface>,
+    db_ctx: Data<Db>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
 ) -> Result<HttpResponse, DefaultApiError> {
