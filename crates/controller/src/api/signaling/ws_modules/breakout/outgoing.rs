@@ -26,27 +26,29 @@ pub struct Started {
 #[serde(tag = "error", rename_all = "snake_case")]
 pub enum Error {
     Inactive,
-    InvalidAssignment,
     InsufficientPermissions,
 }
 
 #[cfg(test)]
 mod test {
+    use uuid::Uuid;
+
     use super::*;
     use crate::api::signaling::ParticipantId;
 
     #[test]
     fn started() {
-        let expected =
-            r#"{"message":"started","rooms":[{"id":0},{"id":1}],"expires":null,"assignment":0}"#;
+        let expected = r#"{"message":"started","rooms":[{"id":"00000000-0000-0000-0000-000000000000","name":"Room 1"},{"id":"00000000-0000-0000-0000-000000000001","name":"Room 2"}],"expires":null,"assignment":"00000000-0000-0000-0000-000000000000"}"#;
 
         let produced = serde_json::to_string(&Message::Started(Started {
             rooms: vec![
                 BreakoutRoom {
-                    id: BreakoutRoomId(0),
+                    id: BreakoutRoomId(Uuid::from_u128(0)),
+                    name: "Room 1".into(),
                 },
                 BreakoutRoom {
-                    id: BreakoutRoomId(1),
+                    id: BreakoutRoomId(Uuid::from_u128(1)),
+                    name: "Room 2".into(),
                 },
             ],
             expires: None,
@@ -77,7 +79,7 @@ mod test {
 
     #[test]
     fn joined() {
-        let expected = r#"{"message":"joined","breakout_room":0,"id":"00000000-0000-0000-0000-000000000000","display_name":"test"}"#;
+        let expected = r#"{"message":"joined","breakout_room":"00000000-0000-0000-0000-000000000000","id":"00000000-0000-0000-0000-000000000000","display_name":"test"}"#;
 
         let produced = serde_json::to_string(&Message::Joined(ParticipantInOtherRoom {
             breakout_room: Some(BreakoutRoomId::nil()),
@@ -91,8 +93,7 @@ mod test {
 
     #[test]
     fn left() {
-        let expected =
-            r#"{"message":"left","breakout_room":0,"id":"00000000-0000-0000-0000-000000000000"}"#;
+        let expected = r#"{"message":"left","breakout_room":"00000000-0000-0000-0000-000000000000","id":"00000000-0000-0000-0000-000000000000"}"#;
 
         let produced = serde_json::to_string(&Message::Left(AssocParticipantInOtherRoom {
             breakout_room: Some(BreakoutRoomId::nil()),
