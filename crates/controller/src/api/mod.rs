@@ -8,7 +8,7 @@ pub mod internal;
 pub mod signaling;
 pub mod v1;
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 pub enum Participant<U> {
     User(U),
     Guest,

@@ -1,9 +1,9 @@
 use super::adapter::ActixTungsteniteAdapter;
 use super::modules::{ModuleBuilder, ModuleBuilderImpl};
 use super::runner::Runner;
-use super::ParticipantId;
 use super::SignalingModule;
-use crate::api::v1::rooms::{Ticket, TicketData};
+use crate::api::signaling::resumption::{ResumptionData, ResumptionTokenKeepAlive};
+use crate::api::signaling::ticket::{TicketData, TicketRedisKey};
 use crate::api::v1::{ApiError, DefaultApiError};
 use crate::api::Participant;
 use crate::db::rooms::Room;
@@ -22,7 +22,7 @@ use redis::aio::ConnectionManager;
 use std::marker::PhantomData;
 use tokio::sync::broadcast;
 use tokio::task;
-use validator::Validate;
+use tracing_actix_web::RequestId;
 
 #[derive(Default)]
 pub struct SignalingModules(Vec<Box<dyn ModuleBuilder>>);
@@ -61,21 +61,48 @@ pub(crate) async fn ws_service(
 ) -> actix_web::Result<HttpResponse> {
     let mut redis_conn = (**redis_conn).clone();
 
+    let request_id = if let Some(request_id) = request.extensions().get::<RequestId>() {
+        **request_id
+    } else {
+        log::error!("missing request id in signaling request");
+        return Ok(HttpResponse::InternalServerError().finish());
+    };
+
+    // Read ticket and protocol from protocol header
     let (ticket, protocol) = read_request_header(&request, protocols.0)?;
 
-    let ticket_data = get_ticket_data_from_redis(&mut redis_conn, &ticket).await?;
+    // Read ticket data from redis
+    let ticket_data = get_ticket_data_from_redis(&mut redis_conn, ticket).await?;
 
-    let (participant, room) = get_user_and_room_from_ticket(db_ctx.clone(), ticket_data).await?;
+    // Get user & room from database using the ticket data
+    let (participant, room) =
+        get_user_and_room_from_ticket_data(db_ctx.clone(), &ticket_data).await?;
 
+    // Create resumption data to be refreshed by the runner in redis
+    let resumption_data = ResumptionData {
+        participant_id: ticket_data.participant_id,
+        participant: match &participant {
+            Participant::User(user) => Participant::User(user.id),
+            Participant::Guest => Participant::Guest,
+            Participant::Sip => Participant::Sip,
+        },
+        room: ticket_data.room,
+        breakout_room: ticket_data.breakout_room,
+    };
+
+    // Create keep-alive util for resumption data
+    let resumption_keep_alive =
+        ResumptionTokenKeepAlive::new(ticket_data.resumption, resumption_data);
+
+    // Finish websocket handshake
     let mut response = ws::handshake(&request)?;
 
     let (adapter, actix_stream) = ActixTungsteniteAdapter::from_actix_payload(stream);
     let websocket = WebSocketStream::from_raw_socket(adapter, Role::Server, None).await;
 
-    let id = ParticipantId::new();
-
     let mut builder = Runner::builder(
-        id,
+        request_id,
+        ticket_data.participant_id,
         room,
         ticket_data.breakout_room,
         participant,
@@ -83,6 +110,7 @@ pub(crate) async fn ws_service(
         db_ctx.into_inner(),
         redis_conn,
         (**rabbit_mq_channel).clone(),
+        resumption_keep_alive,
     );
 
     // add all modules
@@ -114,10 +142,10 @@ pub(crate) async fn ws_service(
     Ok(response.streaming(actix_stream))
 }
 
-fn read_request_header(
-    request: &HttpRequest,
+fn read_request_header<'t>(
+    request: &'t HttpRequest,
     allowed_protocols: &'static [&'static str],
-) -> Result<(Ticket, &'static str), ApiError> {
+) -> Result<(TicketRedisKey<'t>, &'static str), ApiError> {
     let mut protocol = None;
     let mut ticket = None;
 
@@ -132,9 +160,7 @@ fn read_request_header(
         for value in values {
             if value.starts_with("ticket#") {
                 let (_, tmp_ticket) = value.split_once("#").unwrap();
-                ticket = Some(Ticket {
-                    ticket: tmp_ticket.into(),
-                });
+                ticket = Some(tmp_ticket);
                 continue;
             } else if protocol.is_some() {
                 continue;
@@ -153,19 +179,20 @@ fn read_request_header(
         }
     };
 
-    // look if ticket exists
+    // verify ticket existence and validity
     let ticket = match ticket {
-        Some(ticket) => match ticket.validate() {
-            Ok(_) => ticket,
-            Err(e) => {
-                log::warn!("Ticket validation failed for {:?}, {}", ticket, e);
+        Some(ticket) if ticket.len() == 64 => ticket,
+        Some(ticket) => {
+            log::warn!(
+                "got ticket with invalid ticket length expected 64, got {} ",
+                ticket.len()
+            );
 
-                return Err(DefaultApiError::auth_bearer_invalid_token(
-                    "ticket invalid",
-                    "Please request a new ticket from /v1/rooms/<room_id>/start".into(),
-                ));
-            }
-        },
+            return Err(DefaultApiError::auth_bearer_invalid_token(
+                "ticket invalid",
+                "Please request a new ticket from /v1/rooms/<room_id>/start".into(),
+            ));
+        }
         None => {
             log::debug!("Rejecting websocket request, missing ticket");
             return Err(DefaultApiError::auth_bearer_invalid_request(
@@ -175,12 +202,12 @@ fn read_request_header(
         }
     };
 
-    Ok((ticket, protocol))
+    Ok((TicketRedisKey { ticket }, protocol))
 }
 
 async fn get_ticket_data_from_redis(
     redis_conn: &mut ConnectionManager,
-    ticket: &Ticket,
+    ticket: TicketRedisKey<'_>,
 ) -> Result<TicketData, ApiError> {
     // GETDEL available since redis 6.2.0, missing direct support by redis crate
     let ticket_data: Option<TicketData> = redis::cmd("GETDEL")
@@ -202,13 +229,16 @@ async fn get_ticket_data_from_redis(
     Ok(ticket_data)
 }
 
-async fn get_user_and_room_from_ticket(
+async fn get_user_and_room_from_ticket_data(
     db_ctx: Data<Db>,
-    ticket_data: TicketData,
+    ticket_data: &TicketData,
 ) -> Result<(Participant<User>, Room), ApiError> {
+    let participant = ticket_data.participant;
+    let room_id = ticket_data.room;
+
     crate::block(
         move || -> Result<(Participant<User>, Room), DefaultApiError> {
-            let participant = match ticket_data.participant {
+            let participant = match participant {
                 Participant::User(user_id) => {
                     let user = db_ctx
                         .get_user_by_id(user_id)
@@ -221,9 +251,7 @@ async fn get_user_and_room_from_ticket(
                 Participant::Sip => Participant::Sip,
             };
 
-            let room = db_ctx
-                .get_room(ticket_data.room)
-                .map_err(DefaultApiError::from)?;
+            let room = db_ctx.get_room(room_id).map_err(DefaultApiError::from)?;
 
             let room = room.ok_or(DefaultApiError::NotFound)?;
 

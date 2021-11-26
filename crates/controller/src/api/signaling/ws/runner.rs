@@ -7,10 +7,12 @@ use super::{
 };
 use crate::api;
 use crate::api::signaling::prelude::*;
+use crate::api::signaling::resumption::{ResumptionTokenKeepAlive, ResumptionTokenUsed};
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
+use crate::api::signaling::ws_modules::control::storage::ParticipantIdRunnerLock;
 use crate::api::signaling::ws_modules::control::{
-    incoming, outgoing, rabbitmq, storage, ControlData,
+    incoming, outgoing, rabbitmq, storage, ControlData, NAMESPACE,
 };
 use crate::api::signaling::{ParticipantId, Role, SignalingRoomId};
 use crate::db::rooms::Room;
@@ -37,15 +39,15 @@ use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio::time::{sleep, Sleep};
 use tokio_stream::StreamExt;
+use uuid::Uuid;
 
 const WS_TIMEOUT: Duration = Duration::from_secs(20);
-
-pub(super) const NAMESPACE: &str = "control";
 
 /// Builder to the runner type.
 ///
 /// Passed into [`ModuleBuilder::build`](super::modules::ModuleBuilder::build) function to create an [`InitContext`](super::InitContext).
 pub struct Builder {
+    runner_id: Uuid,
     pub(super) id: ParticipantId,
     pub(super) room: Room,
     pub(super) breakout_room: Option<BreakoutRoomId>,
@@ -59,6 +61,7 @@ pub struct Builder {
     pub(super) db: Arc<Db>,
     pub(super) redis_conn: ConnectionManager,
     pub(super) rabbitmq_channel: lapin::Channel,
+    resumption_keep_alive: ResumptionTokenKeepAlive,
 }
 
 impl Builder {
@@ -74,6 +77,32 @@ impl Builder {
         self.modules.destroy(ctx).await
     }
 
+    async fn aquire_participant_id(&mut self) -> Result<()> {
+        let key = ParticipantIdRunnerLock { id: self.id };
+        let runner_id = self.runner_id.to_string();
+
+        // Try for up to 10 secs to aquire the key
+        for _ in 0..10 {
+            let value: redis::Value = redis::cmd("SET")
+                .arg(&key)
+                .arg(&runner_id)
+                .arg("NX")
+                .query_async(&mut self.redis_conn)
+                .await?;
+
+            match value {
+                redis::Value::Nil => sleep(Duration::from_secs(1)).await,
+                redis::Value::Okay => return Ok(()),
+                _ => bail!(
+                    "got unexpected value while acquiring runner id, value={:?}",
+                    value
+                ),
+            }
+        }
+
+        bail!("failed to aquire runner id");
+    }
+
     /// Build to runner from the data inside the builder and provided websocket
     #[tracing::instrument(skip(self, websocket, shutdown_sig))]
     pub async fn build(
@@ -81,6 +110,8 @@ impl Builder {
         websocket: WebSocket,
         shutdown_sig: broadcast::Receiver<()>,
     ) -> Result<Runner> {
+        self.aquire_participant_id().await?;
+
         // ==== CONTROL MODULE DECLARATIONS ====
 
         let room_id = SignalingRoomId(self.room.uuid, self.breakout_room);
@@ -162,7 +193,7 @@ impl Builder {
         let queue = self
             .rabbitmq_channel
             .queue_declare(
-                &format!("{}.{}", room_exchange, self_routing_key),
+                &format!("k3k-controller.runner.{}", self.runner_id),
                 queue_options,
                 Default::default(),
             )
@@ -256,6 +287,7 @@ impl Builder {
                 Default::default(),
             )
             .await?;
+
         match &self.participant {
             api::Participant::User(ref user) => {
                 storage::set_attribute(&mut self.redis_conn, room_id, self.id, "kind", "user")
@@ -282,7 +314,12 @@ impl Builder {
         )
         .await?;
 
+        self.resumption_keep_alive
+            .set_initial(&mut self.redis_conn)
+            .await?;
+
         Ok(Runner {
+            runner_id: self.runner_id,
             id: self.id,
             room_id,
             participant: self.participant,
@@ -301,6 +338,7 @@ impl Builder {
             consumer_delegated: false,
             rabbit_mq_channel: self.rabbitmq_channel,
             room_exchange,
+            resumption_keep_alive: self.resumption_keep_alive,
             shutdown_sig,
             exit: false,
         })
@@ -314,6 +352,9 @@ impl Builder {
 ///
 /// Also acts as `control` module which handles participant and room states.
 pub struct Runner {
+    // Runner ID which is used to assume ownership of a participant id
+    runner_id: Uuid,
+
     // participant id that the runner is connected to
     id: ParticipantId,
 
@@ -350,6 +391,9 @@ pub struct Runner {
     // Name of the rabbitmq room exchange
     room_exchange: String,
 
+    // Util to keep the resumption token alive
+    resumption_keep_alive: ResumptionTokenKeepAlive,
+
     // global application shutdown signal
     shutdown_sig: broadcast::Receiver<()>,
 
@@ -372,6 +416,7 @@ impl Drop for Runner {
 impl Runner {
     #[allow(clippy::too_many_arguments)]
     pub fn builder(
+        runner_id: Uuid,
         id: ParticipantId,
         room: Room,
         breakout_room: Option<BreakoutRoomId>,
@@ -380,6 +425,7 @@ impl Runner {
         db: Arc<Db>,
         redis_conn: ConnectionManager,
         rabbitmq_channel: lapin::Channel,
+        resumption_keep_alive: ResumptionTokenKeepAlive,
     ) -> Builder {
         // TODO(r.floren) Change this when the permissions system gets introduced
         let role = match &participant {
@@ -394,6 +440,7 @@ impl Runner {
         };
 
         Builder {
+            runner_id,
             id,
             room,
             breakout_room,
@@ -407,6 +454,7 @@ impl Runner {
             db,
             redis_conn,
             rabbitmq_channel,
+            resumption_keep_alive,
         }
     }
 
@@ -511,6 +559,20 @@ impl Runner {
             self.rabbitmq_publish_control(Timestamp::now(), None, rabbitmq::Message::Left(self.id))
                 .await;
         }
+
+        // release participant id
+        match redis::cmd("GETDEL")
+            .arg(ParticipantIdRunnerLock { id: self.id })
+            .query_async::<_, String>(&mut self.redis_conn)
+            .await
+        {
+            Ok(runner_id) => {
+                if runner_id != self.runner_id.to_string() {
+                    log::warn!("removed runner id does not match the id of the runner");
+                }
+            }
+            Err(e) => log::error!("failed to remove participant id, {}", e),
+        }
     }
 
     /// Cleanup the participant attributes that were set by the runner
@@ -565,6 +627,17 @@ impl Runner {
                 }
                 _ = self.shutdown_sig.recv() => {
                     self.ws.close(CloseCode::Away).await;
+                }
+                _ = self.resumption_keep_alive.wait() => {
+                    if let Err(e) = self.resumption_keep_alive.refresh(&mut self.redis_conn).await {
+                        if e.is::<ResumptionTokenUsed>() {
+                            log::warn!("Closing connection of this runner as its resumption token was used");
+
+                            self.ws.close(CloseCode::Normal).await;
+                        } else {
+                            log::error!("failed to set resumption token in redis, {:?}", e);
+                        }
+                    }
                 }
             }
         }
@@ -1024,6 +1097,7 @@ impl Runner {
                 self.handle_module_requested_actions(timestamp, actions)
                     .await;
             }
+            rabbitmq::Message::Exit => self.ws.close(CloseCode::Normal).await,
         }
 
         Ok(())

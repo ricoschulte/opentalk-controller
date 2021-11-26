@@ -9,6 +9,8 @@ pub mod outgoing;
 pub mod rabbitmq;
 pub mod storage;
 
+pub const NAMESPACE: &str = "control";
+
 /// Control module's FrontendData
 #[derive(Debug, Serialize)]
 pub struct ControlData {

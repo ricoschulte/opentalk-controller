@@ -6,9 +6,17 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Message {
+    /// Participant with the given id joined the current room
     Joined(ParticipantId),
+
+    /// Participant with the given id left the current room
     Left(ParticipantId),
+
+    /// Participant with the given id updated its status
     Update(ParticipantId),
+
+    /// Runner should exit. This message is usually only sent directly to a queue.
+    Exit,
 }
 
 /// Returns the name of the RabbitMQ topic exchange used inside the current room.

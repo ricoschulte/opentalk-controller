@@ -10,9 +10,8 @@ use super::{
     DestroyContext, Event, Namespaced, NamespacedOutgoing, RabbitMqPublish, SignalingModule,
 };
 use crate::api::signaling::prelude::control::incoming::Join;
-use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlData};
+use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlData, NAMESPACE};
 use crate::api::signaling::prelude::{BreakoutRoomId, InitContext, ModuleContext};
-use crate::api::signaling::ws::runner::NAMESPACE;
 use crate::api::signaling::{ParticipantId, Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
 use crate::db::rooms::Room;
@@ -733,6 +732,9 @@ where
                 ))?;
 
                 Ok(())
+            }
+            control::rabbitmq::Message::Exit => {
+                unreachable!("exit should not be received in test environments")
             }
         }
     }
