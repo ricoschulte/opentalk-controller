@@ -5,7 +5,6 @@
 //! Issues timestamp and messageIds to incoming chat messages and forwards them to other participants in the room.
 //! For this the rabbitmq room exchange is used.
 use anyhow::Result;
-use chrono::{DateTime, Utc};
 use control::rabbitmq;
 use controller::prelude::*;
 use controller::{impl_from_redis_value_de, impl_to_redis_args_se};
@@ -23,10 +22,10 @@ pub struct IncomingWsMessage {
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "scope", content = "target", rename_all = "snake_case")]
 pub enum Scope {
     Global,
-    Private,
+    Private(ParticipantId),
 }
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
 pub struct MessageId(uuid::Uuid);
@@ -79,28 +78,33 @@ pub struct Message {
     pub id: MessageId,
     pub source: ParticipantId,
     pub content: String,
-    // todo The timestamp is now included in the Namespaced struct. Once the frontend adopted this change, remove the timestamp from Message
-    pub timestamp: DateTime<Utc>,
+    #[serde(flatten)]
     pub scope: Scope,
+    // todo The timestamp is now included in the Namespaced struct. Once the frontend adopted this change, remove the timestamp from Message
+    pub timestamp: Timestamp,
 }
 
+/// Message type stores in redis
+///
+/// This needs to have a inner timestamp.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct TimedMessage {
     pub id: MessageId,
     pub source: ParticipantId,
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Timestamp,
     pub content: String,
+    #[serde(flatten)]
     pub scope: Scope,
 }
 
 impl Message {
-    fn with_timestamp(&self, timestamp: &Timestamp) -> TimedMessage {
+    fn with_timestamp(&self, timestamp: Timestamp) -> TimedMessage {
         TimedMessage {
             id: self.id,
             source: self.source,
             content: self.content.clone(),
             scope: self.scope,
-            timestamp: **timestamp,
+            timestamp,
         }
     }
 }
@@ -158,7 +162,6 @@ impl SignalingModule for Chat {
         mut ctx: ModuleContext<'_, Self>,
         event: Event<'_, Self>,
     ) -> Result<()> {
-        let timestamp = ctx.timestamp();
         match event {
             Event::Joined {
                 control_data: _,
@@ -196,8 +199,8 @@ impl SignalingModule for Chat {
                         id: MessageId::new(),
                         source,
                         content: msg.content,
-                        timestamp: *timestamp,
-                        scope: Scope::Private,
+                        timestamp: ctx.timestamp(),
+                        scope: Scope::Private(target),
                     };
 
                     ctx.rabbitmq_publish(
@@ -207,11 +210,12 @@ impl SignalingModule for Chat {
                     );
                     ctx.ws_send(out_message);
                 } else {
+                    let timestamp = ctx.timestamp();
                     let out_message = Message {
                         id: MessageId::new(),
                         source,
                         content: msg.content,
-                        timestamp: *timestamp,
+                        timestamp,
                         scope: Scope::Global,
                     };
 
@@ -219,7 +223,7 @@ impl SignalingModule for Chat {
                     storage::add_message_to_room_chat_history(
                         ctx.redis_conn(),
                         self.room,
-                        &out_message.with_timestamp(&timestamp),
+                        &out_message.with_timestamp(timestamp),
                     )
                     .await?;
 
@@ -261,6 +265,7 @@ pub fn register(controller: &mut controller::Controller) {
 #[cfg(test)]
 mod test {
     use super::*;
+    use controller::prelude::chrono::DateTime;
     use std::str::FromStr;
 
     #[test]
@@ -298,12 +303,47 @@ mod test {
         let produced = serde_json::to_string(&TimedMessage {
             id: MessageId::nil(),
             source: ParticipantId::nil(),
-            timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z").unwrap(),
+            timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z")
+                .unwrap()
+                .into(),
             content: "Hello All!".to_string(),
             scope: Scope::Global,
         })
         .unwrap();
 
+        assert_eq!(expected, produced);
+    }
+
+    #[test]
+    fn global_serialize() {
+        let produced = serde_json::to_string(&Message {
+            id: MessageId::nil(),
+            source: ParticipantId::nil(),
+            timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z")
+                .unwrap()
+                .into(),
+            content: "Hello All!".to_string(),
+            scope: Scope::Global,
+        })
+        .unwrap();
+        let expected = r#"{"id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","content":"Hello All!","scope":"global","timestamp":"2021-06-24T14:00:11.873753715Z"}"#;
+
+        assert_eq!(expected, produced);
+    }
+
+    #[test]
+    fn private_serialize() {
+        let produced = serde_json::to_string(&Message {
+            id: MessageId::nil(),
+            source: ParticipantId::nil(),
+            timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z")
+                .unwrap()
+                .into(),
+            content: "Hello All!".to_string(),
+            scope: Scope::Private(ParticipantId::new_test(1)),
+        })
+        .unwrap();
+        let expected = r#"{"id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","content":"Hello All!","scope":"private","target":"00000000-0000-0000-0000-000000000001","timestamp":"2021-06-24T14:00:11.873753715Z"}"#;
         assert_eq!(expected, produced);
     }
 }
