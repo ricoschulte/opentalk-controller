@@ -1248,6 +1248,8 @@ impl Ws {
             reason: "".into(),
         };
 
+        log::debug!("closing websocket with code {}", code);
+
         if let Err(e) = self.websocket.close(Some(frame)).await {
             log::error!("Failed to close websocket, {}", e);
             self.state = State::Error;
