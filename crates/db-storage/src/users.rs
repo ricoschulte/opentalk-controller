@@ -152,12 +152,12 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
                 let (added, removed) = (
                     groups
                         .iter()
-                        .filter(|&old| curr_groups.contains(old))
+                        .filter(|&old| !curr_groups.contains(old))
                         .cloned()
                         .collect::<Vec<_>>(),
                     curr_groups
                         .iter()
-                        .filter(|&curr| groups.contains(&curr.id))
+                        .filter(|&curr| !groups.contains(&curr.id))
                         .map(|g| g.id.clone())
                         .collect::<Vec<_>>(),
                 );
