@@ -1,6 +1,7 @@
 use super::VoteOption;
 use controller::db::legal_votes::VoteId;
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 

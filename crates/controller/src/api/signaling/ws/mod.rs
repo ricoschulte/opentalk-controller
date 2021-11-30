@@ -1,6 +1,6 @@
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::ControlData;
-use crate::api::signaling::{ParticipantId, Role, SignalingRoomId, Timestamp};
+use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
 use crate::db::rooms::Room;
 use crate::db::users::User;
@@ -8,6 +8,7 @@ use adapter::ActixTungsteniteAdapter;
 use anyhow::Result;
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use async_tungstenite::WebSocketStream;
+use controller_shared::ParticipantId;
 use database::Db;
 use futures::stream::SelectAll;
 use lapin::options::{ExchangeDeclareOptions, QueueBindOptions};

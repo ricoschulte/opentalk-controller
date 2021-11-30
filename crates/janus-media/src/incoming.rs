@@ -1,6 +1,6 @@
 use crate::mcu::MediaSessionType;
 use crate::MediaSessionState;
-use controller::prelude::*;
+use controller_shared::ParticipantId;
 use janus_client::TrickleCandidate;
 use serde::Deserialize;
 
@@ -142,6 +142,7 @@ pub struct SubscriberConfiguration {
 #[cfg(test)]
 mod test {
     use super::*;
+    use controller::prelude::*;
 
     #[test]
     fn publish() {

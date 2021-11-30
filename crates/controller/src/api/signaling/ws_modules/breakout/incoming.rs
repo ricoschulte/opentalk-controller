@@ -1,4 +1,4 @@
-use crate::api::signaling::ParticipantId;
+use controller_shared::ParticipantId;
 use serde::Deserialize;
 use std::time::Duration;
 

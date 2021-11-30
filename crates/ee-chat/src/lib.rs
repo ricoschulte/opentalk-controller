@@ -11,6 +11,7 @@ use control::rabbitmq;
 use controller::db::groups::Group;
 use controller::db::users::UserId;
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use db_storage::database::Db;
 use db_storage::groups::DbGroupsEx;
 use r3dlock::Mutex;

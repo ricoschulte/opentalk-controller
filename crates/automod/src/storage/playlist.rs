@@ -10,6 +10,7 @@
 
 use anyhow::{Context, Result};
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;

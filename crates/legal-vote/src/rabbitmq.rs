@@ -3,6 +3,7 @@ use crate::{outgoing::Votes, VoteOption};
 use chrono::{DateTime, Utc};
 use controller::db::legal_votes::VoteId;
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 
 /// Rabbitmq event to inform participants

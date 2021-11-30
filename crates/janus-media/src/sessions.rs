@@ -4,6 +4,7 @@ use crate::mcu::{
 use crate::MediaSessionState;
 use anyhow::{ensure, Result};
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 

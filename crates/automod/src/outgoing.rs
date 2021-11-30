@@ -1,5 +1,5 @@
 use crate::config::PublicConfig;
-use controller::prelude::*;
+use controller_shared::ParticipantId;
 use serde::Serialize;
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -96,6 +96,7 @@ pub enum Error {
 mod test {
     use super::*;
     use crate::config::{FrontendConfig, Parameter, SelectionStrategy};
+    use controller::prelude::*;
     use std::time::Duration;
 
     #[test]

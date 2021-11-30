@@ -1,8 +1,8 @@
 use super::resumption::ResumptionToken;
-use crate::api::Participant;
 use crate::db::rooms::RoomId;
 use crate::db::users::UserId;
 use crate::prelude::*;
+use controller_shared::ParticipantId;
 use displaydoc::Display;
 use rand::Rng;
 use serde::{Deserialize, Serialize};

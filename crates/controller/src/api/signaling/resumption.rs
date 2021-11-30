@@ -6,11 +6,12 @@
 //! to receive the same participant when reconnecting to the room. This enables all participant id
 //! based features to recognize the reconnected client as the previously disconnected one.
 
-use super::{ws_modules::breakout::BreakoutRoomId, ParticipantId};
+use super::ws_modules::breakout::BreakoutRoomId;
 use crate::api::Participant;
 use crate::db::rooms::RoomId;
 use crate::db::users::UserId;
 use anyhow::{bail, Context, Result};
+use controller_shared::ParticipantId;
 use displaydoc::Display;
 use rand::Rng;
 use redis::aio::ConnectionManager;

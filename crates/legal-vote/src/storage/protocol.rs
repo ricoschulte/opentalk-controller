@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use controller::db::legal_votes::VoteId;
 use controller::db::users::UserId;
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;

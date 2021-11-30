@@ -34,7 +34,7 @@ mod test {
     use uuid::Uuid;
 
     use super::*;
-    use crate::api::signaling::ParticipantId;
+    use controller_shared::ParticipantId;
 
     #[test]
     fn started() {

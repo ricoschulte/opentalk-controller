@@ -1,7 +1,7 @@
 use super::VoteOption;
 use crate::rabbitmq::{CancelReason, Invalid, Parameters, StopKind};
 use controller::db::legal_votes::VoteId;
-use controller::prelude::*;
+use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -182,11 +182,10 @@ impl From<super::error::ErrorKind> for ErrorKind {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::{
-        incoming,
-        rabbitmq::{self, CancelReason},
-    };
+    use crate::incoming;
+    use crate::rabbitmq::{self, CancelReason};
     use chrono::prelude::*;
+    use controller::prelude::*;
     use uuid::Uuid;
 
     #[test]

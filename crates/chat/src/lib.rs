@@ -8,6 +8,7 @@ use anyhow::Result;
 use control::rabbitmq;
 use controller::prelude::*;
 use controller::{impl_from_redis_value_de, impl_to_redis_args_se};
+use controller_shared::ParticipantId;
 use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::fmt;

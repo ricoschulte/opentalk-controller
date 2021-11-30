@@ -4,6 +4,7 @@ use anyhow::Result;
 use controller::prelude::anyhow::Context;
 use controller::prelude::redis::aio::ConnectionManager;
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
 use db_storage::users::UserId;
 use uuid::Uuid;

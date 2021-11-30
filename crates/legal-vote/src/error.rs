@@ -1,4 +1,5 @@
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use validator::ValidationErrors;
 
 /// A legal vote error

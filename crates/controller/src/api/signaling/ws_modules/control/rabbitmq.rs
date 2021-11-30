@@ -1,5 +1,6 @@
-use crate::api::signaling::{ParticipantId, SignalingRoomId};
+use crate::api::signaling::SignalingRoomId;
 use crate::db::users::UserId;
+use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 
 /// Control messages sent between controller modules to communicate changes inside a room

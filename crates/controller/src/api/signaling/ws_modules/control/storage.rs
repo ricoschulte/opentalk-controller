@@ -1,5 +1,6 @@
-use crate::api::signaling::{ParticipantId, SignalingRoomId, Timestamp};
+use crate::api::signaling::{SignalingRoomId, Timestamp};
 use anyhow::{Context, Result};
+use controller_shared::ParticipantId;
 use displaydoc::Display;
 use r3dlock::Mutex;
 use redis::aio::ConnectionManager;

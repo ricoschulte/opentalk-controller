@@ -1348,6 +1348,7 @@ dependencies = [
  "actix-rt",
  "chrono",
  "k3k-controller-core",
+ "k3k-controller-shared",
  "k3k-test-util",
  "rand 0.8.4",
  "serde",
@@ -1359,6 +1360,7 @@ name = "k3k-chat"
 version = "0.1.0"
 dependencies = [
  "k3k-controller-core",
+ "k3k-controller-shared",
  "serde",
 ]
 
@@ -1477,8 +1479,10 @@ dependencies = [
  "chrono",
  "config",
  "openidconnect",
+ "redis",
  "serde",
  "url",
+ "uuid 0.8.2",
 ]
 
 [[package]]
@@ -1540,6 +1544,7 @@ version = "0.1.0"
 dependencies = [
  "janus-client",
  "k3k-controller-core",
+ "k3k-controller-shared",
  "serde",
 ]
 
@@ -1590,6 +1595,7 @@ dependencies = [
  "diesel",
  "fern",
  "k3k-controller-core",
+ "k3k-controller-shared",
  "k3k-database",
  "k3k-db-storage",
 ]

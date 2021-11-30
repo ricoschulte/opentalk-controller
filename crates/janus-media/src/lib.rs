@@ -6,6 +6,7 @@
 use anyhow::{bail, Context, Result};
 use controller::prelude::*;
 use controller::Controller;
+use controller_shared::ParticipantId;
 use focus::FocusDetection;
 use incoming::{RequestMute, TargetConfigure};
 use janus_client::TrickleCandidate;

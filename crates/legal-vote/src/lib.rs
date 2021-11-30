@@ -13,6 +13,7 @@ use controller::db::users::UserId;
 use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use db_storage::database::Db;
 use db_storage::legal_votes::DbLegalVoteEx;
 use error::{Error, ErrorKind};

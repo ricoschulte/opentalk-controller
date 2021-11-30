@@ -2,9 +2,8 @@
 //!
 //! Mostly duplicates of [`super::outgoing`] types.
 //! See their respective originals for documentation.
-
 use super::config::FrontendConfig;
-use controller::prelude::*;
+use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize, Serialize)]
