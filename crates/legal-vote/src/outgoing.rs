@@ -1,8 +1,8 @@
-use super::VoteOption;
-use crate::rabbitmq::{CancelReason, Invalid, Parameters, StopKind};
+use crate::rabbitmq::Canceled;
 use controller::db::legal_votes::VoteId;
 use controller_shared::ParticipantId;
-use serde::{Deserialize, Serialize};
+use db_storage::legal_votes::types::{Invalid, Parameters, StopKind, VoteOption, Votes};
+use serde::Serialize;
 use std::collections::HashMap;
 
 /// A message to the participant, send via a websocket connection
@@ -62,18 +62,6 @@ pub enum VoteFailed {
     InvalidOption,
 }
 
-/// The vote options with their respective vote count
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Votes {
-    /// Vote count for yes
-    pub yes: u64,
-    /// Vote count for no
-    pub no: u64,
-    /// Vote count for abstain, abstain has to be enabled in the vote parameters
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub abstain: Option<u64>,
-}
-
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Results {
     /// The vote options with their respective vote count
@@ -114,16 +102,6 @@ pub enum FinalResults {
     Valid(Results),
     /// Invalid final results
     Invalid(Invalid),
-}
-
-/// A cancel message
-#[derive(Debug, Serialize, PartialEq)]
-pub struct Canceled {
-    /// The vote that has been canceled
-    pub vote_id: VoteId,
-    /// The reason for the cancel
-    #[serde(flatten)]
-    pub reason: CancelReason,
 }
 
 /// The error kind sent to the user
@@ -182,22 +160,22 @@ impl From<super::error::ErrorKind> for ErrorKind {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::incoming;
-    use crate::rabbitmq::{self, CancelReason};
     use chrono::prelude::*;
     use controller::prelude::*;
+    use controller_shared::ParticipantId;
+    use db_storage::legal_votes::types::{CancelReason, Parameters, StopKind, UserParameters};
     use uuid::Uuid;
 
     #[test]
     fn start_message() {
         let json_str = r#"{"message":"started","initiator_id":"00000000-0000-0000-0000-000000000000","vote_id":"00000000-0000-0000-0000-000000000000","start_time":"1970-01-01T00:00:00Z","max_votes":2,"name":"TestVote","topic":"Yes or No?","allowed_participants":["00000000-0000-0000-0000-000000000001","00000000-0000-0000-0000-000000000002"],"enable_abstain":false,"auto_stop":false,"duration":null}"#;
 
-        let message = Message::Started(rabbitmq::Parameters {
+        let message = Message::Started(Parameters {
             initiator_id: ParticipantId::nil(),
             vote_id: VoteId::from(Uuid::nil()),
             start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
             max_votes: 2,
-            inner: incoming::UserParameters {
+            inner: UserParameters {
                 name: "TestVote".into(),
                 topic: "Yes or No?".into(),
                 allowed_participants: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
@@ -309,7 +287,7 @@ mod test {
 
         let message = Message::Stopped(Stopped {
             vote_id: VoteId::from(Uuid::nil()),
-            kind: rabbitmq::StopKind::ByParticipant(ParticipantId::nil()),
+            kind: StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Valid(Results { votes, voters }),
         });
 
@@ -333,7 +311,7 @@ mod test {
 
         let message = Message::Stopped(Stopped {
             vote_id: VoteId::from(Uuid::nil()),
-            kind: rabbitmq::StopKind::Auto,
+            kind: StopKind::Auto,
             results: FinalResults::Valid(Results { votes, voters }),
         });
 
@@ -357,7 +335,7 @@ mod test {
 
         let message = Message::Stopped(Stopped {
             vote_id: VoteId::from(Uuid::nil()),
-            kind: rabbitmq::StopKind::Expired,
+            kind: StopKind::Expired,
             results: FinalResults::Valid(Results { votes, voters }),
         });
 
@@ -372,7 +350,7 @@ mod test {
 
         let message = Message::Stopped(Stopped {
             vote_id: VoteId::from(Uuid::nil()),
-            kind: rabbitmq::StopKind::ByParticipant(ParticipantId::nil()),
+            kind: StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Invalid(Invalid::VoteCountInconsistent),
         });
 

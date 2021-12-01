@@ -1,8 +1,6 @@
-use super::VoteOption;
 use controller::db::legal_votes::VoteId;
-use controller::prelude::*;
-use controller_shared::ParticipantId;
-use serde::{Deserialize, Serialize};
+use db_storage::legal_votes::types::{UserParameters, VoteOption};
+use serde::Deserialize;
 use validator::Validate;
 
 /// An incoming message issued by an participant
@@ -30,36 +28,12 @@ impl Validate for Message {
     }
 }
 
-/// The users parameters to start a new vote
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize, Validate)]
-pub struct UserParameters {
-    /// The name of the vote
-    #[validate(length(max = 150))]
-    pub name: String,
-    /// The topic that will be voted on
-    #[validate(length(max = 500))]
-    pub topic: String,
-    /// List of participants that are allowed to cast a vote
-    #[validate(length(min = 1))]
-    pub allowed_participants: Vec<ParticipantId>,
-    /// Indicates that the `Abstain` vote option is enabled
-    pub enable_abstain: bool,
-    /// The vote will automatically stop when every participant voted
-    pub auto_stop: bool,
-    /// The vote will stop when the duration (in seconds) has passed
-    #[validate(range(min = 5))]
-    pub duration: Option<u64>,
-}
-
 /// Stop a vote
 #[derive(Debug, Clone, Deserialize)]
 pub struct Stop {
     /// The vote id of the targeted vote
     pub vote_id: VoteId,
 }
-
-impl_to_redis_args_se!(UserParameters);
-impl_from_redis_value_de!(UserParameters);
 
 /// Cancel a vote
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -83,6 +57,8 @@ pub struct VoteMessage {
 #[cfg(test)]
 mod test {
     use super::*;
+    use controller::prelude::*;
+    use controller_shared::ParticipantId;
     use uuid::Uuid;
 
     #[test]

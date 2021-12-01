@@ -4,7 +4,6 @@
 //!
 //! Offers full legal vote features including live voting with high safety guards (atomic changes, audit log).
 //! Stores the result for further archival storage in postgres.
-use crate::rabbitmq::CancelReason;
 use anyhow::Context;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -15,17 +14,20 @@ use controller::prelude::futures::FutureExt;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::database::Db;
+use db_storage::legal_votes::types::protocol::{Cancel, ProtocolEntry, Start, Vote, VoteEvent};
+use db_storage::legal_votes::types::{
+    CancelReason, FinalResults, Invalid, Parameters, StopKind, UserParameters, VoteOption, Votes,
+};
 use db_storage::legal_votes::DbLegalVoteEx;
 use error::{Error, ErrorKind};
 use incoming::VoteMessage;
-use outgoing::{Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess, Votes};
-use rabbitmq::{Cancel, Invalid, Parameters, StopKind};
+use outgoing::{Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess};
+use rabbitmq::Canceled;
 use redis::aio::ConnectionManager;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use storage::protocol;
-use storage::protocol::{reduce_protocol, ProtocolEntry, Vote, VoteEvent};
+use storage::protocol::reduce_protocol;
 use storage::VoteScriptResult;
 use tokio::time::sleep;
 use validator::Validate;
@@ -35,20 +37,6 @@ pub mod incoming;
 pub mod outgoing;
 pub mod rabbitmq;
 mod storage;
-
-/// The vote choices
-///
-/// Abstain can be disabled through the vote parameters (See [`Parameters`](incoming::UserParameters)).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum VoteOption {
-    Yes,
-    No,
-    Abstain,
-}
-
-impl_to_redis_args_se!(VoteOption);
-impl_from_redis_value_de!(VoteOption);
 
 /// A TimerEvent used for the vote expiration feature
 pub struct TimerEvent {
@@ -136,8 +124,7 @@ impl SignalingModule for LegalVote {
                     storage::VoteStatus::Active => {
                         let stop_kind = StopKind::Expired;
 
-                        let expired_entry =
-                            ProtocolEntry::new(protocol::VoteEvent::Stop(stop_kind));
+                        let expired_entry = ProtocolEntry::new(VoteEvent::Stop(stop_kind));
 
                         if let Err(error) = self
                             .end_vote(&mut ctx, timer_event.vote_id, expired_entry, stop_kind)
@@ -275,9 +262,9 @@ impl LegalVote {
                 ctx.rabbitmq_publish(
                     control::rabbitmq::current_room_exchange_name(self.room_id),
                     control::rabbitmq::room_all_routing_key().into(),
-                    rabbitmq::Event::Cancel(Cancel {
+                    rabbitmq::Event::Cancel(Canceled {
                         vote_id,
-                        reason: rabbitmq::CancelReason::Custom(reason),
+                        reason: CancelReason::Custom(reason),
                     }),
                 );
             }
@@ -313,8 +300,7 @@ impl LegalVote {
                     if auto_stop {
                         let stop_kind = StopKind::Auto;
 
-                        let auto_stop_entry =
-                            protocol::ProtocolEntry::new(VoteEvent::Stop(stop_kind));
+                        let auto_stop_entry = ProtocolEntry::new(VoteEvent::Stop(stop_kind));
 
                         self.end_vote(ctx, vote_message.vote_id, auto_stop_entry, stop_kind)
                             .await?;
@@ -339,7 +325,7 @@ impl LegalVote {
             }
             rabbitmq::Event::Stop(stop) => {
                 let final_results = match stop.results {
-                    rabbitmq::FinalResults::Valid(votes) => {
+                    FinalResults::Valid(votes) => {
                         let protocol =
                             storage::protocol::get(ctx.redis_conn(), self.room_id, stop.vote_id)
                                 .await?;
@@ -349,9 +335,7 @@ impl LegalVote {
                             voters: reduce_protocol(protocol),
                         })
                     }
-                    rabbitmq::FinalResults::Invalid(invalid) => {
-                        outgoing::FinalResults::Invalid(invalid)
-                    }
+                    FinalResults::Invalid(invalid) => outgoing::FinalResults::Invalid(invalid),
                 };
 
                 let stop = outgoing::Stopped {
@@ -372,7 +356,7 @@ impl LegalVote {
                 }))
             }
             rabbitmq::Event::Cancel(cancel) => {
-                ctx.ws_send(outgoing::Message::Canceled(outgoing::Canceled {
+                ctx.ws_send(outgoing::Message::Canceled(Canceled {
                     vote_id: cancel.vote_id,
                     reason: cancel.reason,
                 }));
@@ -399,8 +383,8 @@ impl LegalVote {
         &self,
         redis_conn: &mut ConnectionManager,
         vote_id: VoteId,
-        incoming_parameters: incoming::UserParameters,
-    ) -> Result<rabbitmq::Parameters, Error> {
+        incoming_parameters: UserParameters,
+    ) -> Result<Parameters, Error> {
         let start_time = Utc::now();
 
         let max_votes = self
@@ -411,7 +395,7 @@ impl LegalVote {
             )
             .await?;
 
-        let parameters = rabbitmq::Parameters {
+        let parameters = Parameters {
             initiator_id: self.participant_id,
             vote_id,
             start_time,
@@ -437,11 +421,11 @@ impl LegalVote {
         redis_conn: &mut ConnectionManager,
         vote_id: VoteId,
         start_time: DateTime<Utc>,
-        parameters: rabbitmq::Parameters,
+        parameters: Parameters,
     ) -> Result<()> {
         let start_entry = ProtocolEntry::new_with_time(
             start_time,
-            VoteEvent::Start(protocol::Start {
+            VoteEvent::Start(Start {
                 issuer: self.user_id,
                 parameters,
             }),
@@ -703,7 +687,7 @@ impl LegalVote {
             ctx.rabbitmq_publish(
                 control::rabbitmq::current_room_exchange_name(self.room_id),
                 control::rabbitmq::room_all_routing_key().into(),
-                rabbitmq::Event::Cancel(rabbitmq::Cancel {
+                rabbitmq::Event::Cancel(rabbitmq::Canceled {
                     vote_id: current_vote_id,
                     reason,
                 }),
@@ -771,7 +755,7 @@ impl LegalVote {
         vote_id: VoteId,
         reason: CancelReason,
     ) -> Result<(), Error> {
-        let cancel_entry = ProtocolEntry::new(VoteEvent::Cancel(protocol::Cancel {
+        let cancel_entry = ProtocolEntry::new(VoteEvent::Cancel(Cancel {
             issuer: self.user_id,
             reason,
         }));
@@ -822,7 +806,7 @@ impl LegalVote {
         &self,
         ctx: &mut ModuleContext<'_, Self>,
         vote_id: VoteId,
-    ) -> Result<rabbitmq::FinalResults, Error> {
+    ) -> Result<FinalResults, Error> {
         let parameters = storage::parameters::get(ctx.redis_conn(), self.room_id, vote_id)
             .await?
             .ok_or(ErrorKind::InvalidVoteId)?;
@@ -854,7 +838,7 @@ impl LegalVote {
                     if let Some(abstain) = &mut protocol_vote_count.abstain {
                         *abstain += 1;
                     } else {
-                        return Ok(rabbitmq::FinalResults::Invalid(Invalid::AbstainDisabled));
+                        return Ok(FinalResults::Invalid(Invalid::AbstainDisabled));
                     }
                 }
             }
@@ -869,11 +853,9 @@ impl LegalVote {
         .await?;
 
         if protocol_vote_count == vote_count && total_votes <= parameters.max_votes {
-            Ok(rabbitmq::FinalResults::Valid(vote_count))
+            Ok(FinalResults::Valid(vote_count))
         } else {
-            Ok(rabbitmq::FinalResults::Invalid(
-                Invalid::VoteCountInconsistent,
-            ))
+            Ok(FinalResults::Invalid(Invalid::VoteCountInconsistent))
         }
     }
 

@@ -1,21 +1,24 @@
-use controller::db::legal_votes::VoteId;
-use controller::prelude::serde_json::Value;
-use controller::prelude::uuid::Uuid;
 use controller::prelude::*;
 use controller::prelude::{ModuleTester, WsMessageOutgoing};
 use controller_shared::ParticipantId;
-use db_storage::legal_votes::DbLegalVoteEx;
-use k3k_legal_vote::incoming::{Cancel, Stop, UserParameters, VoteMessage};
-use k3k_legal_vote::outgoing::{
-    Canceled, ErrorKind, GuestParticipants, InvalidFields, Response, Stopped, VoteFailed,
-    VoteResponse, VoteResults, VoteSuccess, Votes,
+use db_storage::legal_votes::types::{
+    CancelReason, Parameters, StopKind, UserParameters, VoteOption, Votes,
 };
-use k3k_legal_vote::rabbitmq::{self, CancelReason, Parameters};
-use k3k_legal_vote::{incoming, outgoing, LegalVote, VoteOption};
+use db_storage::legal_votes::DbLegalVoteEx;
+use db_storage::legal_votes::VoteId;
+use k3k_legal_vote::incoming::{Stop, VoteMessage};
+use k3k_legal_vote::outgoing::{
+    ErrorKind, GuestParticipants, InvalidFields, Response, Stopped, VoteFailed, VoteResponse,
+    VoteResults, VoteSuccess,
+};
+use k3k_legal_vote::rabbitmq::Canceled;
+use k3k_legal_vote::{incoming, outgoing, LegalVote};
+use serde_json::Value;
 use serial_test::serial;
 use std::collections::HashMap;
 use std::time::Duration;
 use test_util::*;
+use uuid::Uuid;
 
 #[actix_rt::test]
 #[serial]
@@ -197,7 +200,7 @@ async fn basic_vote() {
     let expected_stop_message =
         WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
             vote_id,
-            kind: rabbitmq::StopKind::ByParticipant(USER_1.participant_id),
+            kind: StopKind::ByParticipant(USER_1.participant_id),
             results: outgoing::FinalResults::Valid(outgoing::Results {
                 votes: Votes {
                     yes: 1,
@@ -413,7 +416,7 @@ async fn basic_vote_abstain() {
     let expected_stop_message =
         WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
             vote_id,
-            kind: rabbitmq::StopKind::ByParticipant(USER_1.participant_id),
+            kind: StopKind::ByParticipant(USER_1.participant_id),
             results: outgoing::FinalResults::Valid(outgoing::Results {
                 votes: Votes {
                     yes: 0,
@@ -517,7 +520,7 @@ async fn expired_vote() {
     let expected_stop_message =
         WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
             vote_id,
-            kind: rabbitmq::StopKind::Expired,
+            kind: StopKind::Expired,
             results: outgoing::FinalResults::Valid(outgoing::Results {
                 votes: Votes {
                     yes: 0,
@@ -741,7 +744,7 @@ async fn auto_stop_vote() {
     let expected_stop_message =
         WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
             vote_id,
-            kind: rabbitmq::StopKind::Auto,
+            kind: StopKind::Auto,
             results: final_results,
         }));
 
@@ -1202,7 +1205,7 @@ async fn ineligible_cancel() {
     let vote_id = default_start_setup(&mut module_tester).await;
 
     // cancel vote with user 2
-    let cancel_vote = incoming::Message::Cancel(Cancel {
+    let cancel_vote = incoming::Message::Cancel(incoming::Cancel {
         vote_id,
         reason: "Yes".into(),
     });
