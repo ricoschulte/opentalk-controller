@@ -29,6 +29,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 
 pub type SharedSettings = Arc<ArcSwap<Settings>>;
 
@@ -42,6 +43,7 @@ pub struct Settings {
     pub redis: RedisConfig,
     pub rabbit_mq: RabbitMqConfig,
     pub logging: Logging,
+    pub authz: Authz,
 
     #[serde(flatten)]
     pub extensions: HashMap<String, config::Value>,
@@ -142,7 +144,7 @@ fn default_directives() -> Vec<String> {
 pub struct Turn {
     /// How long should a credential pair be valid, in seconds
     #[serde(deserialize_with = "duration_from_secs")]
-    pub lifetime: chrono::Duration,
+    pub lifetime: Duration,
     /// List of configured TURN servers.
     pub servers: Vec<TurnServer>,
 }
@@ -172,6 +174,16 @@ pub struct RabbitMqConfig {
     pub url: String,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct Authz {
+    /// Authz reload interval in seconds
+    #[serde(
+        deserialize_with = "duration_from_secs",
+        default = "default_authz_reload_interval"
+    )]
+    pub reload_interval: Duration,
+}
+
 const fn default_http_port() -> u16 {
     11311
 }
@@ -188,15 +200,13 @@ fn default_min_idle_connections() -> u32 {
     10
 }
 
-fn duration_from_secs<'de, D>(deserializer: D) -> Result<chrono::Duration, D::Error>
+fn duration_from_secs<'de, D>(deserializer: D) -> Result<Duration, D::Error>
 where
     D: Deserializer<'de>,
 {
     let duration: u64 = Deserialize::deserialize(deserializer)?;
 
-    Ok(chrono::Duration::seconds(
-        i64::try_from(duration).map_err(serde::de::Error::custom)?,
-    ))
+    Ok(Duration::from_secs(duration))
 }
 
 fn redis_default_url() -> url::Url {
@@ -205,4 +215,8 @@ fn redis_default_url() -> url::Url {
 
 fn rabbitmq_default_url() -> String {
     "amqp://guest:guest@localhost:5672".to_owned()
+}
+
+fn default_authz_reload_interval() -> Duration {
+    Duration::from_secs(10)
 }

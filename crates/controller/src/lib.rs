@@ -305,7 +305,7 @@ impl Controller {
             let (enforcer, _) = kustos::Authz::new_with_autoload(
                 db_ctx.upgrade().unwrap(),
                 self.shutdown.subscribe(),
-                std::time::Duration::from_secs(10),
+                self.startup_settings.authz.reload_interval,
             )
             .await?;
 
@@ -313,8 +313,6 @@ impl Controller {
             check_or_create_kustos_default_permissions(&enforcer).await?;
 
             let authz_middleware = enforcer.actix_web_middleware(true).await?;
-
-            // let acl = api::v1::middleware::authn::CasbinService::new(enforcer.clone()).await?;
 
             HttpServer::new(move || {
                 let cors = setup_cors(&cors);
