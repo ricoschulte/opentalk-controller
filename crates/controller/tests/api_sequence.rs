@@ -83,7 +83,7 @@ async fn basic_sequence() -> Result<()> {
         listen_only: false,
     };
 
-    let room = session.new_room(&new_room).await?;
+    let room = session.new_room(new_room).await?;
     log::info!("created room: {:#?}", room);
     assert_eq!(room.owner, current_user.id);
     assert_eq!(room.password, "password123");
@@ -92,7 +92,7 @@ async fn basic_sequence() -> Result<()> {
 
     // Test room details
     log::info!("get room by uuid...");
-    let room_details = session.get_room_by_uuid(&room.uuid).await?;
+    let room_details = session.get_room(&room).await?;
     log::info!("created room details: {:#?}", room_details);
     assert_eq!(room_details.uuid, room.uuid);
     assert_eq!(room_details.owner, current_user.id);

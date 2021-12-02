@@ -37,7 +37,7 @@ struct KeyCloakExtraMetadata {
 impl AdditionalProviderMetadata for KeyCloakExtraMetadata {}
 
 /// Contains the OIDC providers metadata
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct OpenIdConnectContext {
     oidc_client: CoreClient,
     end_session_endpoint: Url,
@@ -121,6 +121,16 @@ fn parse_keycloak_login(raw_page: &str) -> Result<Url> {
     Ok(action)
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UserRepresentation {
+    email: Option<String>,
+    first_name: Option<String>,
+    last_name: Option<String>,
+    username: Option<String>,
+    email_verified: Option<bool>,
+}
+
 impl OpenIdConnectContext {
     pub fn logout_url(&self) -> &Url {
         &self.end_session_endpoint
@@ -154,23 +164,32 @@ impl OpenIdConnectContext {
 
         let login_result_resp = http_client.post(login_action).form(&params).send().await?;
 
-        anyhow::ensure!(login_result_resp.status() == StatusCode::FOUND);
-        let auth_finish_location = Url::parse(
-            login_result_resp
-                .headers()
-                .get("location")
-                .expect("Redirect location unset")
-                .to_str()?,
-        )?;
-        let auth_finish_query = auth_finish_location
-            .query()
-            .expect("No challenge response in handshake");
+        if login_result_resp.status() != StatusCode::FOUND {
+            let status = login_result_resp.status();
+            anyhow::bail!("HTTP STATUS is: {}", status);
+        } else {
+            let auth_finish_location = Url::parse(
+                login_result_resp
+                    .headers()
+                    .get("location")
+                    .expect("Redirect location unset")
+                    .to_str()?,
+            )?;
+            let auth_finish_query = auth_finish_location
+                .query()
+                .expect("No challenge response in handshake");
+            let response = serde_urlencoded::from_str(auth_finish_query);
+            let response = match response {
+                Ok(r) => r,
+                Err(e) => {
+                    log::error!("Error {}, Response was: {}", e, auth_finish_query);
+                    return Err(e.into());
+                }
+            };
+            let tokens = self.finish(response, challenge).await?;
 
-        let tokens = self
-            .finish(serde_urlencoded::from_str(auth_finish_query)?, challenge)
-            .await?;
-
-        Ok(tokens)
+            Ok(tokens)
+        }
     }
 
     fn start_session(&self) -> (Url, SessionChallenge) {

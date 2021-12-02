@@ -1,10 +1,11 @@
 use crate::K3KSession;
-use reqwest::{Error, Response, StatusCode, Url};
+use reqwest::{Error, Request, Response, StatusCode, Url};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use std::fmt;
 
 pub mod auth;
+pub mod invites;
 pub mod rooms;
 pub mod users;
 
@@ -16,11 +17,16 @@ pub struct HttpError {
     pub status: StatusCode,
     /// Response body
     pub reason: String,
+    pub request_id: String,
 }
 
 impl fmt::Display for HttpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "(error {}: {})", self.status, self.reason)
+        write!(
+            f,
+            "(error {}: {}, requestId: {})",
+            self.status, self.reason, self.request_id
+        )
     }
 }
 
@@ -36,8 +42,8 @@ pub enum ApiError {
     #[error("Reqwest error: {0}")]
     ReqwestError(String),
     /// A Non-200 HTTP response
-    #[error("Http error: {0}")]
-    NonSuccess(HttpError),
+    #[error("Http error: {0:?}: {1}")]
+    NonSuccess(Box<Request>, HttpError),
 }
 
 impl From<reqwest::Error> for ApiError {
@@ -50,12 +56,6 @@ pub(crate) async fn parse_json_response<T>(response: Response) -> Result<T>
 where
     T: DeserializeOwned,
 {
-    if !response.status().is_success() {
-        return Err(ApiError::NonSuccess(HttpError {
-            status: response.status(),
-            reason: response.text().await?,
-        }));
-    }
     Ok(response.json::<T>().await?)
 }
 
@@ -67,19 +67,44 @@ impl K3KSession {
             .map_err(|e| ApiError::InvalidUrl(e.to_string()))
     }
 
+    async fn execute_request(&self, request: Request) -> Result<Response> {
+        let response = self
+            .http_client
+            .execute(request.try_clone().unwrap())
+            .await?;
+
+        if !response.status().is_success() {
+            let request_id = response
+                .headers()
+                .get("X-Request-Id")
+                .map(|s| s.to_str().map(|s| s.to_owned()).ok())
+                .flatten()
+                .unwrap_or_else(|| "n/a".to_string());
+
+            return Err(ApiError::NonSuccess(
+                Box::new(request),
+                HttpError {
+                    status: response.status(),
+                    reason: response.text().await?,
+                    request_id,
+                },
+            ));
+        }
+        Ok(response)
+    }
+
     async fn get_authenticated(&self, path: &str) -> Result<Response> {
         let url = self.url(path)?;
-        let response = self
+        let request = self
             .http_client
             .get(url)
             .header(
                 "Authorization",
                 format!("Bearer {}", self.tokens.access_token.secret()),
             )
-            .send()
-            .await?;
+            .build()?;
 
-        Ok(response)
+        self.execute_request(request).await
     }
 
     async fn post_json_authenticated<T>(&self, path: &str, data: &T) -> Result<Response>
@@ -87,7 +112,7 @@ impl K3KSession {
         T: Serialize,
     {
         let url = self.url(path)?;
-        let response = self
+        let request = self
             .http_client
             .post(url)
             .json(data)
@@ -95,10 +120,9 @@ impl K3KSession {
                 "Authorization",
                 format!("Bearer {}", self.tokens.access_token.secret()),
             )
-            .send()
-            .await?;
+            .build()?;
 
-        Ok(response)
+        self.execute_request(request).await
     }
 
     async fn put_json_authenticated<T>(&self, path: &str, data: &T) -> Result<Response>
@@ -106,7 +130,7 @@ impl K3KSession {
         T: Serialize,
     {
         let url = self.url(path)?;
-        let response = self
+        let request = self
             .http_client
             .put(url)
             .json(data)
@@ -114,9 +138,22 @@ impl K3KSession {
                 "Authorization",
                 format!("Bearer {}", self.tokens.access_token.secret()),
             )
-            .send()
-            .await?;
+            .build()?;
 
-        Ok(response)
+        self.execute_request(request).await
+    }
+
+    async fn delete_authenticated(&self, path: &str) -> Result<Response> {
+        let url = self.url(path)?;
+        let request = self
+            .http_client
+            .delete(url)
+            .header(
+                "Authorization",
+                format!("Bearer {}", self.tokens.access_token.secret()),
+            )
+            .build()?;
+
+        self.execute_request(request).await
     }
 }
