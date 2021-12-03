@@ -18,8 +18,14 @@
 /// ```sh
 /// K3K_CTRL_DATABASE__MAX_CONNECTIONS=5
 /// ```
+///
 /// # Note
+///
 /// Fields set via environment variables do not affect the underlying config file.
+///
+/// # Implementation Details:
+///
+/// Setting categories, in which all properties implement a default value, should also implement the [`Default`] trait.
 ///
 use arc_swap::ArcSwap;
 use config::{Config, ConfigError, Environment, File};
@@ -38,11 +44,17 @@ pub struct Settings {
     pub database: Database,
     pub oidc: Oidc,
     pub http: Http,
+    #[serde(default)]
     pub turn: Option<Turn>,
+    #[serde(default)]
     pub stun: Option<Stun>,
+    #[serde(default)]
     pub redis: RedisConfig,
+    #[serde(default)]
     pub rabbit_mq: RabbitMqConfig,
+    #[serde(default)]
     pub logging: Logging,
+    #[serde(default)]
     pub authz: Authz,
 
     #[serde(flatten)]
@@ -74,6 +86,14 @@ pub struct Database {
     pub min_idle_connections: u32,
 }
 
+fn default_max_connections() -> u32 {
+    100
+}
+
+fn default_min_idle_connections() -> u32 {
+    10
+}
+
 /// Settings for OpenID Connect protocol which is used for user management.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Oidc {
@@ -98,6 +118,25 @@ pub struct Http {
     pub cors: HttpCors,
     #[serde(default)]
     pub tls: Option<HttpTls>,
+}
+
+impl Default for Http {
+    fn default() -> Self {
+        Self {
+            port: default_http_port(),
+            internal_port: internal_http_port(),
+            cors: HttpCors::default(),
+            tls: None,
+        }
+    }
+}
+
+const fn default_http_port() -> u16 {
+    11311
+}
+
+const fn internal_http_port() -> u16 {
+    8844
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -125,6 +164,16 @@ pub struct Logging {
     pub service_name: String,
 }
 
+impl Default for Logging {
+    fn default() -> Self {
+        Self {
+            default_directives: default_directives(),
+            enable_opentelemetry: false,
+            service_name: default_service_name(),
+        }
+    }
+}
+
 fn default_service_name() -> String {
     "k3k-controller".into()
 }
@@ -143,10 +192,26 @@ fn default_directives() -> Vec<String> {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Turn {
     /// How long should a credential pair be valid, in seconds
-    #[serde(deserialize_with = "duration_from_secs")]
+    #[serde(
+        deserialize_with = "duration_from_secs",
+        default = "default_turn_credential_lifetime"
+    )]
     pub lifetime: Duration,
     /// List of configured TURN servers.
     pub servers: Vec<TurnServer>,
+}
+
+impl Default for Turn {
+    fn default() -> Self {
+        Self {
+            lifetime: default_turn_credential_lifetime(),
+            servers: vec![],
+        }
+    }
+}
+
+fn default_turn_credential_lifetime() -> Duration {
+    Duration::from_secs(60)
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -168,10 +233,34 @@ pub struct RedisConfig {
     pub url: url::Url,
 }
 
+impl Default for RedisConfig {
+    fn default() -> Self {
+        Self {
+            url: redis_default_url(),
+        }
+    }
+}
+
+fn redis_default_url() -> url::Url {
+    url::Url::try_from("redis://localhost:6379/").expect("Invalid default redis URL")
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct RabbitMqConfig {
     #[serde(default = "rabbitmq_default_url")]
     pub url: String,
+}
+
+impl Default for RabbitMqConfig {
+    fn default() -> Self {
+        Self {
+            url: rabbitmq_default_url(),
+        }
+    }
+}
+
+fn rabbitmq_default_url() -> String {
+    "amqp://guest:guest@localhost:5672".to_owned()
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -184,20 +273,16 @@ pub struct Authz {
     pub reload_interval: Duration,
 }
 
-const fn default_http_port() -> u16 {
-    11311
+impl Default for Authz {
+    fn default() -> Self {
+        Self {
+            reload_interval: default_authz_reload_interval(),
+        }
+    }
 }
 
-const fn internal_http_port() -> u16 {
-    8844
-}
-
-fn default_max_connections() -> u32 {
-    100
-}
-
-fn default_min_idle_connections() -> u32 {
-    10
+fn default_authz_reload_interval() -> Duration {
+    Duration::from_secs(10)
 }
 
 fn duration_from_secs<'de, D>(deserializer: D) -> Result<Duration, D::Error>
@@ -207,16 +292,4 @@ where
     let duration: u64 = Deserialize::deserialize(deserializer)?;
 
     Ok(Duration::from_secs(duration))
-}
-
-fn redis_default_url() -> url::Url {
-    url::Url::try_from("redis://localhost:6379/").expect("Invalid default redis URL")
-}
-
-fn rabbitmq_default_url() -> String {
-    "amqp://guest:guest@localhost:5672".to_owned()
-}
-
-fn default_authz_reload_interval() -> Duration {
-    Duration::from_secs(10)
 }
