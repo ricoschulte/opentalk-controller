@@ -173,6 +173,24 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
         }
     }
 
+    #[tracing::instrument(skip(self, ids))]
+    fn get_users_by_ids(&self, ids: &[UserId]) -> Result<Vec<User>> {
+        let conn = self.get_conn()?;
+
+        let result: QueryResult<Vec<User>> = users::table
+            .filter(users::columns::id.eq_any(ids))
+            .get_results(&conn);
+
+        match result {
+            Ok(users) => Ok(users),
+            Err(Error::NotFound) => Ok(vec![]),
+            Err(e) => {
+                log::error!("Query error getting user by uuid, {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
     #[tracing::instrument(skip(self, uuid))]
     fn get_user_by_uuid(&self, uuid: &Uuid) -> Result<Option<User>> {
         let conn = self.get_conn()?;
@@ -253,7 +271,7 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
     }
 
     #[tracing::instrument(skip(self, user_id))]
-    fn get_user_by_id(&self, user_id: UserId) -> Result<Option<User>> {
+    fn get_opt_user_by_id(&self, user_id: UserId) -> Result<Option<User>> {
         let conn = self.get_conn()?;
 
         let result: QueryResult<User> = users::table
@@ -268,6 +286,15 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
 
                 Err(e.into())
             }
+        }
+    }
+
+    #[tracing::instrument(skip(self, user_id))]
+    fn get_user_by_id(&self, user_id: UserId) -> Result<User> {
+        match self.get_opt_user_by_id(user_id) {
+            Ok(Some(user)) => Ok(user),
+            Ok(None) => Err(Error::NotFound.into()),
+            Err(e) => Err(e),
         }
     }
 }

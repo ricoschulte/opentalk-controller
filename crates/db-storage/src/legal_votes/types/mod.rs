@@ -63,18 +63,6 @@ pub struct UserParameters {
 impl_to_redis_args_se!(UserParameters);
 impl_from_redis_value_de!(UserParameters);
 
-/// Describes the type of a vote stop
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "kind", content = "issuer")]
-pub enum StopKind {
-    /// A normal vote stop issued by a participant. Contains the ParticipantId of the issuer
-    ByParticipant(ParticipantId),
-    /// The vote has been stopped automatically because all allowed users have voted
-    Auto,
-    /// The vote expired due to a set duration
-    Expired,
-}
-
 /// Final vote results
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "results")]

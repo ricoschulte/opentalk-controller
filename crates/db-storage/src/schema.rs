@@ -32,6 +32,13 @@ table! {
 }
 
 table! {
+    legal_vote_room (vote_id) {
+        vote_id -> Uuid,
+        room_id -> Uuid,
+    }
+}
+
+table! {
     legal_votes (id) {
         id -> Uuid,
         initiator -> Int8,
@@ -90,6 +97,7 @@ table! {
     }
 }
 
+joinable!(legal_vote_room -> legal_votes (vote_id));
 joinable!(legal_votes -> users (initiator));
 joinable!(rooms -> users (owner));
 joinable!(user_groups -> groups (group_id));
@@ -99,6 +107,7 @@ allow_tables_to_appear_in_same_query!(
     casbin_rule,
     groups,
     invites,
+    legal_vote_room,
     legal_votes,
     refinery_schema_history,
     rooms,

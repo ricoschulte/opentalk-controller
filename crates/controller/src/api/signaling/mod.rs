@@ -101,6 +101,10 @@ impl SignalingRoomId {
     pub const fn new_test(room: RoomId) -> Self {
         Self(room, None)
     }
+
+    pub const fn room_id(&self) -> RoomId {
+        self.0
+    }
 }
 
 impl fmt::Display for SignalingRoomId {

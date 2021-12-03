@@ -390,6 +390,7 @@ where
             participant: &builder.participant,
             role: builder.role,
             db: &builder.db,
+            authz: &builder.authz,
             rabbitmq_exchanges: &mut builder.rabbitmq_exchanges,
             rabbitmq_bindings: &mut builder.rabbitmq_bindings,
             events: &mut builder.events,

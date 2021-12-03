@@ -27,8 +27,12 @@ async fn common_groups_on_join() {
         .create_test_room(ROOM_ID, USER_1.user_id)
         .unwrap();
 
-    let mut module_tester =
-        ModuleTester::<Chat>::new(test_ctx.db_ctx.db_conn.clone(), test_ctx.redis_conn, room);
+    let mut module_tester = ModuleTester::<Chat>::new(
+        test_ctx.db_ctx.db_conn.clone(),
+        test_ctx.authz,
+        test_ctx.redis_conn,
+        room,
+    );
 
     module_tester
         .join_user(USER_1.participant_id, user1, Role::User, USER_1.name, ())

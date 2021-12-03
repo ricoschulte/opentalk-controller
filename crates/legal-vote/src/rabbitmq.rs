@@ -1,8 +1,6 @@
 use controller::db::legal_votes::VoteId;
 use controller_shared::ParticipantId;
-use db_storage::legal_votes::types::{
-    CancelReason, FinalResults, Parameters, StopKind, VoteOption,
-};
+use db_storage::legal_votes::types::{CancelReason, FinalResults, Parameters, VoteOption};
 use serde::{Deserialize, Serialize};
 
 /// Rabbitmq event to inform participants
@@ -46,6 +44,18 @@ pub struct Stop {
     pub kind: StopKind,
     /// The final vote results
     pub results: FinalResults,
+}
+
+/// Describes the type of a vote stop
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "issuer")]
+pub enum StopKind {
+    /// A normal vote stop issued by a participant. Contains the ParticipantId of the issuer
+    ByParticipant(ParticipantId),
+    /// The vote has been stopped automatically because all allowed users have voted
+    Auto,
+    /// The vote expired due to a set duration
+    Expired,
 }
 
 /// The specified vote has been canceled

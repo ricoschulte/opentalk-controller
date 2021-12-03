@@ -1,7 +1,7 @@
-use crate::rabbitmq::Canceled;
+use crate::rabbitmq::{Canceled, StopKind};
 use controller::db::legal_votes::VoteId;
 use controller_shared::ParticipantId;
-use db_storage::legal_votes::types::{Invalid, Parameters, StopKind, VoteOption, Votes};
+use db_storage::legal_votes::types::{Invalid, Parameters, VoteOption, Votes};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -122,6 +122,8 @@ pub enum ErrorKind {
     Inconsistency,
     /// The provided parameters of a request are invalid
     BadRequest(InvalidFields),
+    /// Failed to set or get permissions
+    PermissionError,
     /// A internal server error occurred
     ///
     /// This means the legal-vote module is broken, the source of this event are unrecoverable backend errors.
@@ -153,6 +155,7 @@ impl From<super::error::ErrorKind> for ErrorKind {
             crate::error::ErrorKind::BadRequest(fields) => {
                 Self::BadRequest(InvalidFields { fields })
             }
+            crate::error::ErrorKind::PermissionError => Self::PermissionError,
         }
     }
 }
@@ -163,7 +166,7 @@ mod test {
     use chrono::prelude::*;
     use controller::prelude::*;
     use controller_shared::ParticipantId;
-    use db_storage::legal_votes::types::{CancelReason, Parameters, StopKind, UserParameters};
+    use db_storage::legal_votes::types::{CancelReason, Parameters, UserParameters};
     use uuid::Uuid;
 
     #[test]

@@ -1,15 +1,19 @@
-use crate::schema::legal_votes;
+use crate::rooms::RoomId;
+use crate::schema::{legal_vote_room, legal_votes};
 use crate::users::UserId;
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
-use database::{DatabaseError, DbInterface, Result};
+use database::{DatabaseError, DbInterface, Paginate, Result};
+use diesel::dsl::any;
 use diesel::result::DatabaseErrorKind;
-use diesel::{ExpressionMethods, Identifiable, QueryDsl, QueryResult, Queryable, RunQueryDsl};
+use diesel::{
+    Connection, ExpressionMethods, Identifiable, QueryDsl, QueryResult, Queryable, RunQueryDsl,
+};
 use serde::Serialize;
 use uuid::Uuid;
 
 pub mod types;
 
-diesel_newtype!(#[derive(Copy)] VoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid");
+diesel_newtype!(#[derive(Copy)] VoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/legalvote/");
 
 impl_to_redis_args_se!(VoteId);
 impl_from_redis_value_de!(VoteId);
@@ -35,14 +39,26 @@ pub struct NewLegalVote {
     pub protocol: serde_json::Value,
 }
 
+#[derive(Debug, Clone, Insertable, Queryable)]
+#[table_name = "legal_vote_room"]
+pub struct LegalVoteRoom {
+    pub vote_id: VoteId,
+    pub room_id: RoomId,
+}
+
 pub trait DbLegalVoteEx: DbInterface {
     /// Insert a [`NewLegalVote`] into the database and returns the created [`LegalVote`]
     ///
     /// Generates a [`VoteId`] (uuid) for the entry in the database. In case the insert statement fails with an `UniqueViolation`,
     /// the statement will be resend with a different [`VoteId`] to counteract uuid collisions.
     #[tracing::instrument(skip(self, protocol))]
-    fn new_legal_vote<T: Serialize>(&self, initiator: UserId, protocol: T) -> Result<LegalVote> {
-        let con = self.get_conn()?;
+    fn new_legal_vote<T: Serialize>(
+        &self,
+        room_id: RoomId,
+        initiator: UserId,
+        protocol: T,
+    ) -> Result<LegalVote> {
+        let conn = self.get_conn()?;
 
         let protocol =
             serde_json::to_value(protocol).map_err(|e| DatabaseError::Custom(e.to_string()))?;
@@ -60,9 +76,22 @@ pub trait DbLegalVoteEx: DbInterface {
                 protocol: protocol.clone(),
             };
 
-            let query_result: QueryResult<LegalVote> = diesel::insert_into(legal_votes::table)
-                .values(new_legal_vote)
-                .get_result(&con);
+            let query_result: QueryResult<LegalVote> = conn.transaction(|| {
+                let legal_vote: LegalVote = diesel::insert_into(legal_votes::table)
+                    .values(new_legal_vote)
+                    .get_result(&conn)?;
+
+                let new_legal_vote_room = LegalVoteRoom {
+                    vote_id: legal_vote.id,
+                    room_id,
+                };
+
+                diesel::insert_into(legal_vote_room::table)
+                    .values(new_legal_vote_room)
+                    .execute(&conn)?;
+
+                Ok(legal_vote)
+            });
 
             match query_result {
                 Ok(legal_vote) => return Ok(legal_vote),
@@ -123,6 +152,138 @@ pub trait DbLegalVoteEx: DbInterface {
             Err(diesel::NotFound) => Ok(None),
             Err(e) => {
                 log::error!("Query error getting legal vote by id, {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn get_legal_votes_by_id_for_room_paginated(
+        &self,
+        room_id: RoomId,
+        accessible_ids: &[VoteId],
+        limit: i64,
+        page: i64,
+    ) -> Result<(Vec<LegalVote>, i64)> {
+        let conn = self.get_conn()?;
+
+        let room_votes: QueryResult<Vec<LegalVoteRoom>> = legal_vote_room::table
+            .filter(legal_vote_room::columns::room_id.eq(room_id))
+            .get_results(&conn);
+
+        let vote_ids = match room_votes {
+            Ok(room_votes) => room_votes
+                .into_iter()
+                .filter_map(|legal_vote_room| {
+                    if accessible_ids.contains(&legal_vote_room.vote_id) {
+                        Some(legal_vote_room.vote_id)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<VoteId>>(),
+            Err(e) => {
+                log::error!("Query error getting legal votes room mappings {}", e);
+                return Err(e.into());
+            }
+        };
+
+        let query = legal_votes::table
+            .filter(legal_votes::columns::id.eq(any(vote_ids)))
+            .paginate_by(limit, page);
+
+        let query_result = query.load_and_count::<LegalVote, _>(&conn);
+
+        match query_result {
+            Ok(legal_votes) => Ok(legal_votes),
+            Err(e) => {
+                log::error!("Query error getting all legal votes by id for room, {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn get_legal_votes_by_id_paginated(
+        &self,
+        ids: &[VoteId],
+        limit: i64,
+        page: i64,
+    ) -> Result<(Vec<LegalVote>, i64)> {
+        let conn = self.get_conn()?;
+
+        let query = legal_votes::table
+            .filter(legal_votes::columns::id.eq(any(ids)))
+            .paginate_by(limit, page);
+
+        let query_result = query.load_and_count::<LegalVote, _>(&conn);
+
+        match query_result {
+            Ok(legal_votes) => Ok(legal_votes),
+            Err(e) => {
+                log::error!("Query error getting all legal votes by id, {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn get_all_legal_votes_paginated(
+        &self,
+        limit: i64,
+        page: i64,
+    ) -> Result<(Vec<LegalVote>, i64)> {
+        let conn = self.get_conn()?;
+
+        let query = legal_votes::table
+            .order_by(legal_votes::columns::id.desc())
+            .paginate_by(limit, page);
+
+        let query_result = query.load_and_count::<LegalVote, _>(&conn);
+
+        match query_result {
+            Ok(legal_votes) => Ok(legal_votes),
+            Err(e) => {
+                log::error!("Query error getting all legal votes, {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn get_all_legal_votes_for_room_paginated(
+        &self,
+        room_id: RoomId,
+        limit: i64,
+        page: i64,
+    ) -> Result<(Vec<LegalVote>, i64)> {
+        let conn = self.get_conn()?;
+
+        let room_votes: QueryResult<Vec<LegalVoteRoom>> = legal_vote_room::table
+            .filter(legal_vote_room::columns::room_id.eq(room_id))
+            .get_results(&conn);
+
+        let vote_ids = match room_votes {
+            Ok(room_votes) => room_votes
+                .into_iter()
+                .map(|legal_vote_room| legal_vote_room.vote_id)
+                .collect::<Vec<VoteId>>(),
+            Err(e) => {
+                log::error!("Query error getting legal votes room mappings {}", e);
+                return Err(e.into());
+            }
+        };
+
+        let query = legal_votes::table
+            .filter(legal_votes::columns::id.eq(any(vote_ids)))
+            .paginate_by(limit, page);
+
+        let query_result = query.load_and_count::<LegalVote, _>(&conn);
+
+        match query_result {
+            Ok(legal_votes) => Ok(legal_votes),
+            Err(e) => {
+                log::error!("Query error getting all legal votes, {}", e);
                 Err(e.into())
             }
         }

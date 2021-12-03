@@ -11,6 +11,7 @@ use async_tungstenite::WebSocketStream;
 use controller_shared::ParticipantId;
 use database::Db;
 use futures::stream::SelectAll;
+use kustos::Authz;
 use lapin::options::{ExchangeDeclareOptions, QueueBindOptions};
 use lapin::ExchangeKind;
 use modules::{any_stream, AnyStream};
@@ -104,6 +105,7 @@ where
     participant: &'ctx Participant<User>,
     role: Role,
     db: &'ctx Arc<Db>,
+    authz: &'ctx Arc<Authz>,
     rabbitmq_exchanges: &'ctx mut Vec<RabbitMqExchange>,
     rabbitmq_bindings: &'ctx mut Vec<RabbitMqBinding>,
     events: &'ctx mut SelectAll<AnyStream>,
@@ -164,6 +166,10 @@ where
     /// Returns a reference to the controllers database interface
     pub fn db(&self) -> &Arc<Db> {
         self.db
+    }
+
+    pub fn authz(&self) -> &Arc<Authz> {
+        self.authz
     }
 
     /// Access to a redis connection

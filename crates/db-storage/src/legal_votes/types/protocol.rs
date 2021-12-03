@@ -1,4 +1,4 @@
-use super::{CancelReason, FinalResults, Parameters, StopKind, VoteOption};
+use super::{CancelReason, FinalResults, Parameters, VoteOption};
 use crate::users::UserId;
 use chrono::{DateTime, Utc};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se, ParticipantId};
@@ -65,6 +65,17 @@ pub struct Vote {
     pub participant_id: ParticipantId,
     /// The chosen vote option
     pub option: VoteOption,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StopKind {
+    /// A normal vote stop issued by a user. Contains the UserId of the issuer
+    ByUser(UserId),
+    /// The vote has been stopped automatically because all allowed users have voted
+    Auto,
+    /// The vote expired due to a set duration
+    Expired,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]

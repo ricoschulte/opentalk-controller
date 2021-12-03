@@ -11,18 +11,24 @@ use controller::db::legal_votes::VoteId;
 use controller::db::users::UserId;
 use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
+use controller::prelude::uuid::Uuid;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::database::Db;
+use db_storage::legal_votes::types::protocol as protocol_db;
 use db_storage::legal_votes::types::protocol::{Cancel, ProtocolEntry, Start, Vote, VoteEvent};
 use db_storage::legal_votes::types::{
-    CancelReason, FinalResults, Invalid, Parameters, StopKind, UserParameters, VoteOption, Votes,
+    CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
 };
 use db_storage::legal_votes::DbLegalVoteEx;
 use error::{Error, ErrorKind};
 use incoming::VoteMessage;
+use kustos::prelude::AccessMethod;
+use kustos::Authz;
+use kustos::Resource;
 use outgoing::{Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess};
 use rabbitmq::Canceled;
+use rabbitmq::StopKind;
 use redis::aio::ConnectionManager;
 use std::sync::Arc;
 use std::time::Duration;
@@ -49,8 +55,10 @@ pub struct TimerEvent {
 /// saved and managed in redis via the private `storage` module.
 pub struct LegalVote {
     db_ctx: Arc<Db>,
+    authz: Arc<Authz>,
     participant_id: ParticipantId,
     user_id: UserId,
+    user_uuid: Uuid,
     room_id: SignalingRoomId,
 }
 
@@ -73,8 +81,10 @@ impl SignalingModule for LegalVote {
         if let Participant::User(user) = ctx.participant() {
             Ok(Some(Self {
                 db_ctx: ctx.db().clone(),
+                authz: ctx.authz().clone(),
                 participant_id: ctx.participant_id(),
                 user_id: user.id,
+                user_uuid: user.oidc_uuid,
                 room_id: ctx.room_id(),
             }))
         } else {
@@ -124,7 +134,8 @@ impl SignalingModule for LegalVote {
                     storage::VoteStatus::Active => {
                         let stop_kind = StopKind::Expired;
 
-                        let expired_entry = ProtocolEntry::new(VoteEvent::Stop(stop_kind));
+                        let expired_entry =
+                            ProtocolEntry::new(VoteEvent::Stop(protocol_db::StopKind::Expired));
 
                         if let Err(error) = self
                             .end_vote(&mut ctx, timer_event.vote_id, expired_entry, stop_kind)
@@ -226,6 +237,23 @@ impl LegalVote {
                     .await
                 {
                     Ok(rabbitmq_parameters) => {
+                        if let Err(e) = self
+                            .authz
+                            .grant_user_access(
+                                self.user_uuid,
+                                &[(
+                                    &rabbitmq_parameters.vote_id.resource_id(),
+                                    &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
+                                )],
+                            )
+                            .await
+                        {
+                            log::error!("Failed to add RBAC policy for legalvote: {}", e);
+                            storage::cleanup_vote(ctx.redis_conn(), self.room_id, vote_id).await?;
+
+                            return Err(ErrorKind::PermissionError.into());
+                        }
+
                         if let Some(duration) = rabbitmq_parameters.inner.duration {
                             ctx.add_event_stream(once(
                                 sleep(Duration::from_secs(duration))
@@ -300,7 +328,8 @@ impl LegalVote {
                     if auto_stop {
                         let stop_kind = StopKind::Auto;
 
-                        let auto_stop_entry = ProtocolEntry::new(VoteEvent::Stop(stop_kind));
+                        let auto_stop_entry =
+                            ProtocolEntry::new(VoteEvent::Stop(protocol_db::StopKind::Auto));
 
                         self.end_vote(ctx, vote_message.vote_id, auto_stop_entry, stop_kind)
                             .await?;
@@ -511,7 +540,8 @@ impl LegalVote {
 
         let stop_kind = StopKind::ByParticipant(self.participant_id);
 
-        let stop_entry = ProtocolEntry::new(VoteEvent::Stop(stop_kind));
+        let stop_entry =
+            ProtocolEntry::new(VoteEvent::Stop(protocol_db::StopKind::ByUser(self.user_id)));
 
         self.end_vote(ctx, vote_id, stop_entry, stop_kind).await?;
 
@@ -889,9 +919,11 @@ impl LegalVote {
         let db_ctx = self.db_ctx.clone();
 
         let user_id = self.user_id;
+        let room_id = self.room_id.room_id();
 
         let legal_vote =
-            controller::block(move || db_ctx.new_legal_vote(user_id, empty_protocol)).await??;
+            controller::block(move || db_ctx.new_legal_vote(room_id, user_id, empty_protocol))
+                .await??;
 
         Ok(legal_vote.id)
     }

@@ -18,6 +18,7 @@ use async_tungstenite::WebSocketStream;
 use database::Db;
 use db_storage::rooms::DbRoomsEx;
 use db_storage::DbUsersEx;
+use kustos::Authz;
 use redis::aio::ConnectionManager;
 use std::marker::PhantomData;
 use tokio::sync::broadcast;
@@ -52,6 +53,7 @@ impl SignalingProtocols {
 pub(crate) async fn ws_service(
     shutdown: Data<broadcast::Sender<()>>,
     db_ctx: Data<Db>,
+    authz: Data<Authz>,
     redis_conn: Data<ConnectionManager>,
     rabbit_mq_channel: Data<lapin::Channel>,
     protocols: Data<SignalingProtocols>,
@@ -108,6 +110,7 @@ pub(crate) async fn ws_service(
         participant,
         protocol,
         db_ctx.into_inner(),
+        authz.into_inner(),
         redis_conn,
         (**rabbit_mq_channel).clone(),
         resumption_keep_alive,
@@ -241,7 +244,7 @@ async fn get_user_and_room_from_ticket_data(
             let participant = match participant {
                 Participant::User(user_id) => {
                     let user = db_ctx
-                        .get_user_by_id(user_id)
+                        .get_opt_user_by_id(user_id)
                         .map_err(DefaultApiError::from)?;
 
                     let user = user.ok_or(DefaultApiError::Internal)?;

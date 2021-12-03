@@ -27,6 +27,7 @@ use controller_shared::ParticipantId;
 use database::Db;
 use futures::stream::SelectAll;
 use futures::SinkExt;
+use kustos::Authz;
 use lapin::message::DeliveryResult;
 use lapin::options::{ExchangeDeclareOptions, QueueDeclareOptions};
 use lapin::{BasicProperties, ExchangeKind};
@@ -60,6 +61,7 @@ pub struct Builder {
     pub(super) rabbitmq_bindings: Vec<RabbitMqBinding>,
     pub(super) events: SelectAll<AnyStream>,
     pub(super) db: Arc<Db>,
+    pub(super) authz: Arc<Authz>,
     pub(super) redis_conn: ConnectionManager,
     pub(super) rabbitmq_channel: lapin::Channel,
     resumption_keep_alive: ResumptionTokenKeepAlive,
@@ -445,6 +447,7 @@ impl Runner {
         participant: api::Participant<User>,
         protocol: &'static str,
         db: Arc<Db>,
+        authz: Arc<Authz>,
         redis_conn: ConnectionManager,
         rabbitmq_channel: lapin::Channel,
         resumption_keep_alive: ResumptionTokenKeepAlive,
@@ -474,6 +477,7 @@ impl Runner {
             rabbitmq_bindings: vec![],
             events: SelectAll::new(),
             db,
+            authz,
             redis_conn,
             rabbitmq_channel,
             resumption_keep_alive,

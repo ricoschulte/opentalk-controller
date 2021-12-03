@@ -210,6 +210,7 @@ pub async fn new(
         log::error!("Failed to add RBAC policy: {}", e);
         return Err(DefaultApiError::Internal);
     }
+
     Ok(Json(room))
 }
 

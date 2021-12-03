@@ -1,9 +1,7 @@
 use controller::prelude::*;
 use controller::prelude::{ModuleTester, WsMessageOutgoing};
 use controller_shared::ParticipantId;
-use db_storage::legal_votes::types::{
-    CancelReason, Parameters, StopKind, UserParameters, VoteOption, Votes,
-};
+use db_storage::legal_votes::types::{CancelReason, Parameters, UserParameters, VoteOption, Votes};
 use db_storage::legal_votes::DbLegalVoteEx;
 use db_storage::legal_votes::VoteId;
 use k3k_legal_vote::incoming::{Stop, VoteMessage};
@@ -11,7 +9,7 @@ use k3k_legal_vote::outgoing::{
     ErrorKind, GuestParticipants, InvalidFields, Response, Stopped, VoteFailed, VoteResponse,
     VoteResults, VoteSuccess,
 };
-use k3k_legal_vote::rabbitmq::Canceled;
+use k3k_legal_vote::rabbitmq::{Canceled, StopKind};
 use k3k_legal_vote::{incoming, outgoing, LegalVote};
 use serde_json::Value;
 use serial_test::serial;
@@ -1244,6 +1242,7 @@ async fn join_as_guest() {
 
     let mut module_tester = ModuleTester::<LegalVote>::new(
         test_ctx.db_ctx.db_conn.clone(),
+        test_ctx.authz.clone(),
         test_ctx.redis_conn.clone(),
         room,
     );

@@ -32,7 +32,7 @@ uuid = { version = "0.8.2", features = ["serde", "v4"] }
 ### Database migrations
 refinery = { version = "0.6", features = ["tokio-postgres", "tokio"] }
 refinery-core = "0.6"
-barrel = { version = "0.6", features = ["pg"] }
+barrel = { version = "0.7", features = ["pg"] }
 
 ### Logging utilities
 log = { version = "0.4", features = ["serde"] }
