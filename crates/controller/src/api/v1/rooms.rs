@@ -91,7 +91,9 @@ fn disallow_empty(modify_room: &ModifyRoom) -> Result<(), ValidationError> {
 pub async fn owned(
     db_ctx: Data<Db>,
     current_user: ReqData<User>,
-) -> Result<Json<Vec<Room>>, DefaultApiError> {
+) -> Result<ApiResponse<Vec<Room>>, DefaultApiError> {
+    let current_user = current_user.into_inner();
+
     let rooms = crate::block(move || -> Result<Vec<db_rooms::Room>, DefaultApiError> {
         Ok(db_ctx.get_owned_rooms(&current_user)?)
     })
@@ -112,7 +114,7 @@ pub async fn owned(
         })
         .collect::<Vec<Room>>();
 
-    Ok(Json(rooms))
+    Ok(ApiResponse::new(rooms))
 }
 
 /// API Endpoint *POST /rooms*
@@ -132,10 +134,11 @@ pub async fn new(
         return Err(DefaultApiError::ValidationFailed);
     }
 
+    let current_user_id = current_user.id.clone();
     let db_room = crate::block(move || -> Result<db_rooms::Room, DefaultApiError> {
         let new_room = db_rooms::NewRoom {
             uuid: RoomId::from(uuid::Uuid::new_v4()),
-            owner: current_user.id,
+            owner: current_user_id,
             password: room_parameters.password,
             wait_for_moderator: room_parameters.wait_for_moderator,
             listen_only: room_parameters.listen_only,
