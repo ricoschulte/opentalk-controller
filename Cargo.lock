@@ -1374,6 +1374,7 @@ dependencies = [
  "k3k-ee-chat",
  "k3k-janus-media",
  "k3k-legal-vote",
+ "k3k-polls",
 ]
 
 [[package]]

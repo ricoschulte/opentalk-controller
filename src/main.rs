@@ -13,6 +13,7 @@ async fn run() -> Result<()> {
         automod::register(&mut controller);
         janus_media::register(&mut controller).await?;
         legal_vote::register(&mut controller);
+        polls::register(&mut controller);
         controller.run().await?;
     }
 

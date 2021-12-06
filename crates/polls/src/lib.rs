@@ -163,11 +163,28 @@ impl Polls {
                     return Ok(());
                 }
 
-                if let 2..=64 = choices.len() {
-                    // OK
-                } else {
+                if !matches!(topic.len(), 2..=100) {
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InvalidTopicLength,
+                    ));
+
+                    return Ok(());
+                }
+
+                if !matches!(choices.len(), 2..=64) {
                     ctx.ws_send(outgoing::Message::Error(
                         outgoing::Error::InvalidChoiceCount,
+                    ));
+
+                    return Ok(());
+                }
+
+                if choices
+                    .iter()
+                    .any(|content| !matches!(content.len(), 2..=100))
+                {
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InvalidChoiceDescription,
                     ));
 
                     return Ok(());
@@ -379,7 +396,7 @@ pub struct Config {
     live: bool,
     choices: Vec<Choice>,
     started: Timestamp,
-    #[serde(with = "duration_millis")]
+    #[serde(with = "duration_secs")]
     duration: Duration,
 
     // skip flag, not serialized into redis and always false when reading from it
@@ -408,7 +425,7 @@ impl Config {
     }
 }
 
-mod duration_millis {
+mod duration_secs {
     use serde::{Deserialize, Deserializer, Serializer};
     use std::time::Duration;
 
@@ -416,13 +433,17 @@ mod duration_millis {
     where
         D: Deserializer<'de>,
     {
-        u64::deserialize(deserializer).map(Duration::from_millis)
+        u64::deserialize(deserializer).map(Duration::from_secs)
     }
 
     pub fn serialize<S>(duration: &Duration, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        serializer.serialize_u64(duration.as_millis() as u64)
+        serializer.serialize_u64(duration.as_secs())
     }
+}
+
+pub fn register(controller: &mut controller::Controller) {
+    controller.signaling.add_module::<Polls>(());
 }

@@ -15,7 +15,7 @@ pub struct Start {
     pub topic: String,
     pub live: bool,
     pub choices: Vec<String>,
-    #[serde(with = "super::duration_millis")]
+    #[serde(with = "super::duration_secs")]
     pub duration: Duration,
 }
 
@@ -44,7 +44,7 @@ mod test {
             "topic": "abc",
             "live": true,
             "choices": ["a", "b", "c"],
-            "duration": 30000
+            "duration": 30
         }
         "#;
 
