@@ -1,0 +1,14 @@
+[package]
+name = "k3k-polls"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+controller = { path = "../controller", package = "k3k-controller-core" }
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+test-util = { path = "../test-util", package = "k3k-test-util" }
+serial_test = "0.5"
+actix-rt = "2.2"
