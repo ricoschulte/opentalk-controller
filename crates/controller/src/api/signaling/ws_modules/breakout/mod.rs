@@ -9,9 +9,11 @@ use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use chrono::{DateTime, Utc};
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
+use uuid::Uuid;
 
 pub mod incoming;
 pub mod outgoing;
@@ -19,13 +21,13 @@ pub mod rabbitmq;
 pub mod storage;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct BreakoutRoomId(u32);
+pub struct BreakoutRoomId(Uuid);
 
 impl_to_redis_args!(BreakoutRoomId);
 
 impl BreakoutRoomId {
     pub const fn nil() -> Self {
-        Self(0)
+        Self(Uuid::nil())
     }
 }
 
@@ -56,9 +58,10 @@ pub struct BreakoutRooms {
     breakout_room: Option<BreakoutRoomId>,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BreakoutRoom {
     id: BreakoutRoomId,
+    name: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -69,7 +72,10 @@ pub struct FrontendData {
     participants: Vec<ParticipantInOtherRoom>,
 }
 
-pub struct ExpireEvent;
+pub enum TimerEvent {
+    RoomExpired,
+    LeavePeriodExpired,
+}
 
 #[async_trait::async_trait(?Send)]
 impl SignalingModule for BreakoutRooms {
@@ -79,7 +85,7 @@ impl SignalingModule for BreakoutRooms {
     type Incoming = incoming::Message;
     type Outgoing = outgoing::Message;
     type RabbitMqMessage = rabbitmq::Message;
-    type ExtEvent = ExpireEvent;
+    type ExtEvent = TimerEvent;
     type FrontendData = FrontendData;
     type PeerFrontendData = ();
 
@@ -120,9 +126,9 @@ impl SignalingModule for BreakoutRooms {
                         let remaining = duration.checked_sub(elapsed);
 
                         if let Some(remaining) = remaining {
-                            // Create expiry event
+                            // Create room expiry event
                             ctx.add_event_stream(futures::stream::once(
-                                sleep(remaining).map(|_| ExpireEvent),
+                                sleep(remaining).map(|_| TimerEvent::RoomExpired),
                             ));
 
                             expires = Some((config.started + duration).into())
@@ -159,20 +165,18 @@ impl SignalingModule for BreakoutRooms {
                     }
 
                     // Collect all participant from all other breakout rooms, expect the one we were inside
-                    for breakout_room in 0..config.rooms {
-                        let breakout_room = BreakoutRoomId(breakout_room);
-
+                    for breakout_room in &config.rooms {
                         // skip own room if inside one
                         if self
                             .breakout_room
-                            .map(|self_breakout_room| self_breakout_room == breakout_room)
+                            .map(|self_breakout_room| self_breakout_room == breakout_room.id)
                             .unwrap_or_default()
                         {
                             continue;
                         }
 
                         // get the full room id of the breakout room to access the storage and such
-                        let full_room_id = SignalingRoomId(self.room.0, Some(breakout_room));
+                        let full_room_id = SignalingRoomId(self.room.0, Some(breakout_room.id));
 
                         self.add_room_to_participants_list(
                             &mut ctx,
@@ -185,7 +189,7 @@ impl SignalingModule for BreakoutRooms {
                     *frontend_data = Some(FrontendData {
                         current: self.breakout_room,
                         expires,
-                        rooms: num_rooms_to_vec(config.rooms),
+                        rooms: config.rooms,
                         participants,
                     });
                 } else if self.breakout_room.is_some() {
@@ -218,9 +222,20 @@ impl SignalingModule for BreakoutRooms {
             Event::ParticipantUpdated(_, _) => Ok(()),
             Event::WsMessage(msg) => self.on_ws_msg(ctx, msg).await,
             Event::RabbitMq(msg) => self.on_rabbitmq_msg(ctx, msg).await,
-            Event::Ext(_) => {
+            Event::Ext(TimerEvent::RoomExpired) => {
                 ctx.ws_send(outgoing::Message::Expired);
+
+                // Create timer to force leave the room after 5min
+                ctx.add_event_stream(futures::stream::once(
+                    sleep(Duration::from_secs(60 * 5)).map(|_| TimerEvent::LeavePeriodExpired),
+                ));
+
+                Ok(())
+            }
+            Event::Ext(TimerEvent::LeavePeriodExpired) => {
+                // The 5min leave period expired, force quit
                 ctx.exit(None);
+
                 Ok(())
             }
         }
@@ -280,30 +295,34 @@ impl BreakoutRooms {
 
         match msg {
             incoming::Message::Start(start) => {
-                if start.rooms == 0 {
+                if start.rooms.is_empty() {
                     // Discard message, case should be handled by frontend
                     return Ok(());
                 }
 
                 let started = SystemTime::now();
 
+                let mut rooms = vec![];
+                let mut assignments = HashMap::new();
+
+                for room_param in start.rooms {
+                    let id = BreakoutRoomId(Uuid::new_v4());
+
+                    for assigned_participant_id in room_param.assignments {
+                        assignments.insert(assigned_participant_id, id);
+                    }
+
+                    rooms.push(BreakoutRoom {
+                        id,
+                        name: room_param.name,
+                    });
+                }
+
                 let config = BreakoutConfig {
-                    rooms: start.rooms,
+                    rooms,
                     started,
                     duration: start.duration,
                 };
-
-                // validate the start message, check that no bogus assignments have been made
-                if let incoming::Strategy::Manual { assignments } = &start.strategy {
-                    for id in assignments.values() {
-                        if !config.is_valid_id(*id) {
-                            ctx.ws_send(outgoing::Message::Error(
-                                outgoing::Error::InvalidAssignment,
-                            ));
-                            return Ok(());
-                        }
-                    }
-                }
 
                 storage::set_config(ctx.redis_conn(), self.parent, &config).await?;
 
@@ -311,8 +330,9 @@ impl BreakoutRooms {
                     rabbitmq::global_exchange_name(self.parent),
                     control::rabbitmq::room_all_routing_key().into(),
                     rabbitmq::Message::Start(rabbitmq::Start {
-                        ws_start: start,
+                        config,
                         started,
+                        assignments,
                     }),
                 );
             }
@@ -339,21 +359,16 @@ impl BreakoutRooms {
     ) -> Result<()> {
         match msg {
             rabbitmq::Message::Start(start) => {
-                let assignment = match &start.ws_start.strategy {
-                    incoming::Strategy::Manual { assignments } => {
-                        assignments.get(&self.id).copied()
-                    }
-                    incoming::Strategy::LetParticipantsChoose => None,
-                };
+                let assignment = start.assignments.get(&self.id).copied();
 
-                let expires = if let Some(duration) = start.ws_start.duration {
+                let expires = if let Some(duration) = start.config.duration {
                     Some((start.started + duration).into())
                 } else {
                     None
                 };
 
                 ctx.ws_send(outgoing::Message::Started(outgoing::Started {
-                    rooms: num_rooms_to_vec(start.ws_start.rooms),
+                    rooms: start.config.rooms,
                     expires,
                     assignment,
                 }));
@@ -361,9 +376,10 @@ impl BreakoutRooms {
             rabbitmq::Message::Stop => {
                 ctx.ws_send(outgoing::Message::Stopped);
 
-                if self.breakout_room.is_some() {
-                    ctx.exit(None);
-                }
+                // Create timer to force leave the room after 5min
+                ctx.add_event_stream(futures::stream::once(
+                    sleep(Duration::from_secs(60 * 5)).map(|_| TimerEvent::LeavePeriodExpired),
+                ));
             }
             rabbitmq::Message::Joined(participant) => {
                 if self.breakout_room == participant.breakout_room {
@@ -383,12 +399,4 @@ impl BreakoutRooms {
 
         Ok(())
     }
-}
-
-fn num_rooms_to_vec(n: u32) -> Vec<BreakoutRoom> {
-    (0..n)
-        .map(|id| BreakoutRoom {
-            id: BreakoutRoomId(id),
-        })
-        .collect()
 }

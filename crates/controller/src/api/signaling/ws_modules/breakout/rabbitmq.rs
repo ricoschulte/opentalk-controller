@@ -1,6 +1,9 @@
+use super::storage::BreakoutConfig;
 use super::{AssocParticipantInOtherRoom, ParticipantInOtherRoom};
+use crate::api::signaling::{BreakoutRoomId, ParticipantId};
 use crate::db::rooms::RoomId;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::time::SystemTime;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -15,8 +18,9 @@ pub enum Message {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Start {
-    pub ws_start: super::incoming::Start,
+    pub config: BreakoutConfig,
     pub started: SystemTime,
+    pub assignments: HashMap<ParticipantId, BreakoutRoomId>,
 }
 
 /// Returns the name of the RabbitMQ topic exchange used to communicate across

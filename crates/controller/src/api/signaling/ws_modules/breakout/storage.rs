@@ -1,3 +1,4 @@
+use super::BreakoutRoom;
 use crate::db::rooms::RoomId;
 use crate::prelude::*;
 use anyhow::{Context, Result};
@@ -33,16 +34,16 @@ impl_to_redis_args!(BreakoutRoomConfig);
 /// When the configuration is set the breakoutrooms are considered active.
 /// Breakout rooms with a duration will have the redis entry expire
 /// whenever the breakoutrooms expire.
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct BreakoutConfig {
-    pub rooms: u32,
+    pub rooms: Vec<BreakoutRoom>,
     pub started: SystemTime,
     pub duration: Option<Duration>,
 }
 
 impl BreakoutConfig {
     pub fn is_valid_id(&self, id: BreakoutRoomId) -> bool {
-        id.0 < self.rooms
+        self.rooms.iter().any(|room| room.id == id)
     }
 }
 
