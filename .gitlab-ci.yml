@@ -5,6 +5,7 @@ stages:
   - lint
   - test
   - build
+  - package
 
 variables:
   CARGO_HOME: ${CI_PROJECT_DIR}/.cargo
@@ -91,59 +92,26 @@ test:cargo_test:
     # Verify that the HEAD schema.rs matches the actual HEAD migration database schema.
     - RUST_LOG=error cargo xtask verify-db-schema --postgres-url="${POSTGRES_BASE_URL}"
 
-test:controller-container:
-  rules:
-    # Run only on MR, cause we have no access to the registry in other repos
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-  stage: test
-  image:
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: ['']
-  script:
-    - mkdir -p /kaniko/.docker
-    - >
-      echo
-      "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" >
-      /kaniko/.docker/config.json
-    - >
-      /kaniko/executor
-      --context $CI_PROJECT_DIR
-      --dockerfile $CI_PROJECT_DIR/ci/Dockerfile
-      --cache=true
-      --cache-ttl=730h
-      --cache-repo $CI_REGISTRY_IMAGE/cache
-      --no-push
-      --force
-
-test:room-provisioner-container:
-  rules:
-    # Run only on MR, cause we have no access to the registry in other repos
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-  stage: test
-  image:
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: ['']
-  script:
-    - mkdir -p /kaniko/.docker
-    - >
-      echo
-      "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" >
-      /kaniko/.docker/config.json
-    - >
-      /kaniko/executor
-      --context $CI_PROJECT_DIR
-      --dockerfile $CI_PROJECT_DIR/crates/room-provisioner/ci/Dockerfile
-      --cache=true
-      --cache-ttl=730h
-      --cache-repo $CI_REGISTRY_IMAGE/cache
-      --no-push
-      --force
-
-build:controller-container:
+build:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG != null
   stage: build
+  artifacts:
+    paths:
+      - target/release/k3k-controller
+      - target/release/k3k-room-provisioner
+    expire_in: 1 week
+  before_script:
+    - apt-get update && apt-get install -y libpq-dev musl-tools
+  script:
+    - cargo build --release --locked --workspace
+
+package:controller-container:
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG != null
+  stage: package
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: ['']
@@ -157,17 +125,15 @@ build:controller-container:
       /kaniko/executor
       --context $CI_PROJECT_DIR
       --dockerfile $CI_PROJECT_DIR/ci/Dockerfile
-      --cache=true
-      --cache-ttl=730h
       --destination $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
       --destination $CI_REGISTRY_IMAGE:latest
       --force
 
-build:room-provisioner-container:
+package:room-provisioner-container:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG != null
-  stage: build
+  stage: package
   image:
     name: gcr.io/kaniko-project/executor:debug
     entrypoint: ['']
@@ -181,8 +147,6 @@ build:room-provisioner-container:
       /kaniko/executor
       --context $CI_PROJECT_DIR
       --dockerfile $CI_PROJECT_DIR/crates/room-provisioner/ci/Dockerfile
-      --cache=true
-      --cache-ttl=730h
       --destination $CI_REGISTRY_IMAGE/room-provisioner:$CI_COMMIT_TAG
       --destination $CI_REGISTRY_IMAGE/room-provisioner:latest
       --force

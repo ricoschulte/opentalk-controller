@@ -86,3 +86,30 @@ K3K_CTRL_DATABASE__MAX_CONNECTIONS=5
 ```
 ### Note
 Fields set via environment variables do not affect the underlying config file.
+
+## Building the container image(s)
+
+Building the container image(s) is split in two steps.
+
+### 1. Build the controller binaries itself
+
+Run the following command in the project dir.
+
+```bash
+cargo build --release --locked --workspace --target x86_64-unknown-linux-musl
+```
+
+### 2. Build the container image
+
+The Dockerfiles expect the binaries in `./target/release`.
+After the build, execute the following commands in the project dir.
+
+```bash
+# Build the controller image
+docker build -f ci/Dockerfile . --tag <your-image-name>:<your-image-tag>
+```
+
+```bash
+# Build the room provisioner image
+docker build -f crates/room-provisioner/ci/Dockerfile . --tag <your-image-name>:<your-image-tag>
+```
