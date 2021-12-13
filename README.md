@@ -96,7 +96,7 @@ Building the container image(s) is split in two steps.
 Run the following command in the project dir.
 
 ```bash
-cargo build --release --locked --workspace --target x86_64-unknown-linux-musl
+cargo build --release --locked --workspace --target x86_64-unknown-linux-gnu
 ```
 
 ### 2. Build the container image
