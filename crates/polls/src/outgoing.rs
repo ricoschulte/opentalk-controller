@@ -17,7 +17,7 @@ pub struct Started {
     pub topic: String,
     pub live: bool,
     pub choices: Vec<Choice>,
-    #[serde(with = "super::duration_millis")]
+    #[serde(with = "super::duration_secs")]
     pub duration: Duration,
 }
 
@@ -34,13 +34,15 @@ pub struct Item {
 }
 
 #[derive(Debug, Serialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "error")]
 pub enum Error {
     InsufficientPermissions,
     InvalidChoiceCount,
     InvalidPollId,
     InvalidChoiceId,
+    InvalidChoiceDescription,
     InvalidDuration,
+    InvalidTopicLength,
     VotedAlready,
     StillRunning,
 }
@@ -87,7 +89,7 @@ mod test {
       "content": "no"
     }
   ],
-  "duration": 10000
+  "duration": 10
 }"#;
 
         assert_eq!(json, expected);

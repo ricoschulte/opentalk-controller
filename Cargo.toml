@@ -19,3 +19,4 @@ automod = { path = "crates/automod", package = "k3k-automod" }
 ee-chat = { path = "crates/ee-chat", package = "k3k-ee-chat" }
 chat = { path = "crates/chat", package = "k3k-chat" }
 legal-vote = { path = "crates/legal-vote", package = "k3k-legal-vote" }
+polls = { path = "crates/polls", package = "k3k-polls" }
