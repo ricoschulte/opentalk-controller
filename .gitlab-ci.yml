@@ -73,6 +73,7 @@ test:cargo_test:
     # Used for integration tests
     POSTGRES_BASE_URL: postgres://postgres:password123@postgres:5432
     DATABASE_NAME: k3k
+    KUSTOS_TESTS_DATABASE_URL: postgres://postgres:password123@postgres:5432/kustos
     AMQP_ADDR: amqp://guest:guest@rabbitmq:5672
     REDIS_ADDR: redis://redis:6379/
   services:
