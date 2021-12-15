@@ -375,7 +375,7 @@ pub trait SignalingModule: Sized + 'static {
 /// This is used for incoming WebSocket messages and rabbitMQ messages.
 /// The Namespace is used to route the message to appropriate [`SignalingModule`]
 #[derive(Deserialize, Serialize)]
-pub(super) struct Namespaced<'n, O> {
+pub(crate) struct Namespaced<'n, O> {
     pub namespace: &'n str,
     pub payload: O,
 }

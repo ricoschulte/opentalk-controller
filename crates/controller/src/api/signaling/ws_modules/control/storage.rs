@@ -223,3 +223,11 @@ where
             .with_context(|| format!("Failed to get attribute '{}' for all participants ", name))
     }
 }
+
+#[derive(Debug, Display)]
+/// k3k-signaling:runner:{id}
+pub struct ParticipantIdRunnerLock {
+    pub id: ParticipantId,
+}
+
+impl_to_redis_args!(ParticipantIdRunnerLock);

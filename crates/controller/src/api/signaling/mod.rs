@@ -62,10 +62,13 @@ macro_rules! impl_to_redis_args_se {
     };
 }
 
+pub(crate) mod resumption;
+pub(crate) mod ticket;
+
 mod ws;
 mod ws_modules;
 
-pub(crate) use ws::ws_service;
+pub(crate) use ws::{ws_service, Namespaced};
 
 pub mod prelude {
     pub use super::ws::module_tester::*;
@@ -96,7 +99,7 @@ impl ParticipantId {
         Self(Uuid::from_u128(id))
     }
 
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self(Uuid::new_v4())
     }
 }

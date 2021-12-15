@@ -3,7 +3,9 @@
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar
 //! structs are defined in the Database module [`crate::db`] for database operations.
 
-use crate::api::signaling::prelude::*;
+use crate::api::signaling::resumption::{ResumptionData, ResumptionToken};
+use crate::api::signaling::ticket::{TicketData, TicketToken};
+use crate::api::signaling::{prelude::*, Namespaced};
 use crate::api::v1::{ApiError, ApiResponse, DefaultApiError};
 use crate::api::Participant;
 use crate::db::invites::InviteCodeUuid;
@@ -16,8 +18,6 @@ use database::Db;
 use db_storage::invites::DbInvitesEx;
 use db_storage::rooms::DbRoomsEx;
 use db_storage::sip_configs::DbSipConfigsEx;
-use displaydoc::Display;
-use rand::Rng;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
@@ -265,31 +265,15 @@ pub async fn get(
 pub struct StartRequest {
     password: Option<String>,
     breakout_room: Option<BreakoutRoomId>,
+    resumption: Option<ResumptionToken>,
 }
 
-#[derive(Display, Validate, Debug, Clone, Serialize)]
-/// k3k-signaling:ticket={ticket}
-#[ignore_extra_doc_attributes]
-/// The ticket for a room used at /signaling to start a WebSocket connection.
-///
-/// The Display implementation represents the redis key for the underlying [`TicketData`]
-pub struct Ticket {
-    #[validate(length(min = 64, max = 64))]
-    pub ticket: String,
+/// The JSON body returned from the start endpoints supporting session resumption
+#[derive(Debug, Serialize)]
+pub struct StartResponse {
+    ticket: TicketToken,
+    resumption: ResumptionToken,
 }
-
-impl_to_redis_args!(&Ticket);
-
-/// Data stored behind the [`Ticket`] key.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize)]
-pub struct TicketData {
-    pub participant: Participant<UserId>,
-    pub room: RoomId,
-    pub breakout_room: Option<BreakoutRoomId>,
-}
-
-impl_from_redis_value_de!(TicketData);
-impl_to_redis_args_se!(&TicketData);
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -323,10 +307,12 @@ type StartError = ApiError<StartRoomError>;
 pub async fn start(
     db_ctx: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
+    rabbitmq_channel: Data<lapin::Channel>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
     request: Json<StartRequest>,
-) -> Result<Json<Ticket>, StartError> {
+) -> Result<Json<StartResponse>, StartError> {
+    let request = request.into_inner();
     let room_id = room_id.into_inner();
 
     let room = crate::block(move || -> Result<db_rooms::Room, StartError> {
@@ -370,15 +356,17 @@ pub async fn start(
         }
     }
 
-    let ticket_data = TicketData {
-        participant: current_user.id.into(),
-        room: room_id,
-        breakout_room: request.breakout_room,
-    };
+    let response = generate_response(
+        &mut redis_conn,
+        rabbitmq_channel,
+        current_user.id.into(),
+        room_id,
+        request.breakout_room,
+        request.resumption,
+    )
+    .await?;
 
-    let ticket = generate_ticket(&mut redis_conn, &ticket_data).await?;
-
-    Ok(Json(ticket))
+    Ok(Json(response))
 }
 
 /// The JSON body expected when making a *POST /rooms/{room_uuid}/start_invited*
@@ -387,6 +375,7 @@ pub struct InvitedStartRequest {
     password: Option<String>,
     invite_code: String,
     breakout_room: Option<BreakoutRoomId>,
+    resumption: Option<ResumptionToken>,
 }
 
 /// API Endpoint *POST /rooms/{room_id}/start_invited*
@@ -396,10 +385,13 @@ pub struct InvitedStartRequest {
 pub async fn start_invited(
     db_ctx: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
+    rabbitmq_channel: Data<lapin::Channel>,
     room_id: Path<RoomId>,
     request: Json<InvitedStartRequest>,
-) -> Result<ApiResponse<Ticket>, StartError> {
+) -> Result<ApiResponse<StartResponse>, StartError> {
+    let request = request.into_inner();
     let room_id = room_id.into_inner();
+
     let invite_code_as_uuid = uuid::Uuid::from_str(&request.invite_code)
         .map_err(|_| StartError::BadRequest("bad invite_code format".to_string()))?;
 
@@ -451,15 +443,15 @@ pub async fn start_invited(
         }
     }
 
-    let ticket_data = TicketData {
-        participant: Participant::Guest,
-        room: room_id,
-        breakout_room: request.breakout_room,
-    };
-
-    let ticket = generate_ticket(&mut redis_conn, &ticket_data).await?;
-
-    // TODO(r.floren): create session resumption token for guests
+    let ticket = generate_response(
+        &mut redis_conn,
+        rabbitmq_channel,
+        Participant::Guest,
+        room_id,
+        request.breakout_room,
+        request.resumption,
+    )
+    .await?;
 
     Ok(ApiResponse::new(ticket))
 }
@@ -480,8 +472,9 @@ pub struct SipStartRequest {
 pub async fn sip_start(
     db_ctx: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
+    rabbitmq_channel: Data<lapin::Channel>,
     request: Json<SipStartRequest>,
-) -> Result<ApiResponse<Ticket>, StartError> {
+) -> Result<ApiResponse<StartResponse>, StartError> {
     let mut redis_conn = (**redis_ctx).clone();
     let request = request.into_inner();
 
@@ -495,18 +488,14 @@ pub async fn sip_start(
         .validate()
         .map_err(|_| StartError::BadRequest("bad sip_password format".to_string()))?;
 
-    let ticket_data = crate::block(move || -> Result<TicketData, StartError> {
+    let room_id = crate::block(move || -> Result<RoomId, StartError> {
         if let Some(sip_config) = db_ctx.get_sip_config_by_sip_id(request.sip_id)? {
             if sip_config.password == request.password {
                 let room = db_ctx
                     .get_room(sip_config.room)?
                     .ok_or(StartError::Internal)?;
 
-                Ok(TicketData {
-                    participant: Participant::Sip,
-                    room: room.uuid,
-                    breakout_room: None,
-                })
+                Ok(room.uuid)
             } else {
                 Err(StartError::AuthJson(
                     StartRoomError::InvalidCredentials.into(),
@@ -524,38 +513,102 @@ pub async fn sip_start(
         StartError::Internal
     })??;
 
-    let ticket = generate_ticket(&mut redis_conn, &ticket_data).await?;
+    let response = generate_response(
+        &mut redis_conn,
+        rabbitmq_channel,
+        Participant::Sip,
+        room_id,
+        None,
+        None,
+    )
+    .await?;
 
-    Ok(ApiResponse::new(ticket))
+    Ok(ApiResponse::new(response))
 }
 
-/// Generates a new ticket
+/// Generates a [`StartResponse`] from a given participant, room id, optional breakout room id and optional resumption token
 ///
 /// Stores the generated ticket in redis together with its ticket data. The redis
 /// key expires after 30 seconds.
 ///
-/// Returns the new ticket or an Error when the redis command fails
-async fn generate_ticket(
+/// If the given resumption token is correct, a exit-msg is sent via rabbitmq to the runner of the to-resume session.
+async fn generate_response(
     redis_conn: &mut ConnectionManager,
-    ticket_data: &TicketData,
-) -> Result<Ticket, StartError> {
-    let ticket = Ticket {
-        ticket: rand::thread_rng()
-            .sample_iter(rand::distributions::Alphanumeric)
-            .take(64)
-            .map(char::from)
-            .collect::<String>(),
+    rabbitmq_channel: Data<lapin::Channel>,
+    participant: Participant<UserId>,
+    room: RoomId,
+    breakout_room: Option<BreakoutRoomId>,
+    resumption: Option<ResumptionToken>,
+) -> Result<StartResponse, StartError> {
+    // Get participant id, check resumption token if it exists, if not generate random one
+    let participant_id = if let Some(resumption) = resumption {
+        // Check for resumption data behind resumption token
+        let resumption_data: Option<ResumptionData> = redis::cmd("GETDEL")
+            .arg(&resumption.into_redis_key())
+            .query_async(redis_conn)
+            .await
+            .map_err(|e| {
+                log::error!("Failed to fetch resumption token from redis, {}", e);
+                StartError::Internal
+            })?;
+
+        // If redis returned None generate random id, else check if request matches resumption data
+        if let Some(data) = resumption_data {
+            if data.room == room && data.participant == participant {
+                // Send exit message to runner maintaining the resumption token
+                // using the participant id in the resumption token
+                rabbitmq_channel
+                    .basic_publish(
+                        &breakout::rabbitmq::global_exchange_name(room),
+                        &control::rabbitmq::room_participant_routing_key(data.participant_id),
+                        Default::default(),
+                        serde_json::to_vec(&Namespaced {
+                            namespace: control::NAMESPACE,
+                            payload: control::rabbitmq::Message::Exit,
+                        })
+                        .map_err(|_| StartError::Internal)?,
+                        Default::default(),
+                    )
+                    .await
+                    .map_err(|e| {
+                        log::error!("failed to send exit message to runner, {}", e);
+                        StartError::Internal
+                    })?;
+
+                data.participant_id
+            } else {
+                log::debug!("given resumption was valid but was used in an invalid context (wrong user/room)");
+                ParticipantId::new()
+            }
+        } else {
+            log::debug!("given resumption was invalid, ignoring it");
+            ParticipantId::new()
+        }
+    } else {
+        // No resumption token given
+        ParticipantId::new()
+    };
+
+    let ticket = TicketToken::generate();
+    let resumption = ResumptionToken::generate();
+
+    let ticket_data = TicketData {
+        participant_id,
+        participant,
+        room,
+        breakout_room,
+        resumption: resumption.clone(),
     };
 
     // TODO: make the expiration configurable through settings
     // let the ticket expire in 30 seconds
     redis_conn
-        .set_ex(&ticket, &ticket_data, 30)
+        .set_ex(ticket.redis_key(), &ticket_data, 30)
         .await
         .map_err(|e| {
             log::error!("Unable to store ticket in redis, {}", e);
             StartError::Internal
         })?;
 
-    Ok(ticket)
+    Ok(StartResponse { ticket, resumption })
 }
