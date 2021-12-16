@@ -3,14 +3,18 @@ name = "k3k-controller-client"
 version = "0.1.0"
 authors = [
     "Marvin Ankert <m.ankert@heinlein-video.de>",
-    "Stefan Sydow <s.sydow@heinlein-video.de>"
+    "Stefan Sydow <s.sydow@heinlein-video.de>",
 ]
 edition = "2018"
 
 [dependencies]
 percent-encoding = "2.1"
 thiserror = "1"
-reqwest = { version = "0.11", default-features = false, features = ["json", "cookies", "rustls-tls"] }
+reqwest = { version = "0.11", default-features = false, features = [
+    "json",
+    "cookies",
+    "rustls-tls",
+] }
 html-escape = "0.2"
 openidconnect = "2.0"
 anyhow = "1.0"
@@ -21,3 +25,6 @@ serde_urlencoded = "0.7.0"
 log = { version = "0.4", features = ["serde"] }
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
 regex = "1"
+oauth2 = "4"
+chrono = "0.4.19"
+async-trait = "0.1.51"

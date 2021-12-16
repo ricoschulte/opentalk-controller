@@ -2,7 +2,8 @@
 use super::groups::{DbGroupsEx, Group, UserGroup};
 use super::schema::{groups, user_groups, users};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
-use database::{DatabaseError, DbInterface, Result};
+use database::{DatabaseError, DbInterface, Paginate, Result};
+use diesel::dsl::any;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::result::Error;
 use diesel::{
@@ -11,7 +12,7 @@ use diesel::{
 };
 use uuid::Uuid;
 
-diesel_newtype!(#[derive(Copy)] UserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt");
+diesel_newtype!(#[derive(Copy)] UserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt", "/users/");
 
 impl_to_redis_args_se!(UserId);
 impl_from_redis_value_de!(UserId);
@@ -81,30 +82,59 @@ pub struct ModifiedUser {
 pub trait DbUsersEx: DbInterface + DbGroupsEx {
     #[tracing::instrument(skip(self, new_user))]
     fn create_user(&self, new_user: NewUserWithGroups) -> Result<User> {
-        let con = self.get_conn()?;
+        let conn = self.get_conn()?;
 
-        con.transaction::<User, DatabaseError, _>(|| {
+        conn.transaction::<User, DatabaseError, _>(|| {
             let user: User = diesel::insert_into(users::table)
                 .values(new_user.new_user)
-                .get_result(&con)
+                .get_result(&conn)
                 .map_err(|e| {
                     log::error!("Failed to create user, {}", e);
                     DatabaseError::from(e)
                 })?;
 
-            insert_user_into_user_groups(&con, &user, new_user.groups)?;
+            insert_user_into_user_groups(&conn, &user, new_user.groups)?;
 
             Ok(user)
         })
     }
 
     #[tracing::instrument(skip(self))]
-    fn get_users(&self) -> Result<Vec<User>> {
-        let con = self.get_conn()?;
+    fn get_users_paginated(&self, limit: i64, page: i64) -> Result<(Vec<User>, i64)> {
+        let conn = self.get_conn()?;
 
-        let users_result: QueryResult<Vec<User>> = users::table.get_results(&con);
+        let query = users::table
+            .order_by(users::columns::id.desc())
+            .paginate_by(limit, page);
 
-        match users_result {
+        let query_result = query.load_and_count::<User, _>(&conn);
+
+        match query_result {
+            Ok(users) => Ok(users),
+            Err(e) => {
+                log::error!("Query error getting all users, {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn get_users_by_ids_paginated(
+        &self,
+        ids: &[UserId],
+        limit: i64,
+        page: i64,
+    ) -> Result<(Vec<User>, i64)> {
+        let conn = self.get_conn()?;
+
+        let query = users::table
+            .filter(users::columns::id.eq(any(ids)))
+            .order_by(users::columns::id.desc())
+            .paginate_by(limit, page);
+
+        let query_result = query.load_and_count::<User, _>(&conn);
+
+        match query_result {
             Ok(users) => Ok(users),
             Err(e) => {
                 log::error!("Query error getting all users, {}", e);
@@ -115,11 +145,11 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
 
     #[tracing::instrument(skip(self, uuid))]
     fn get_user_by_uuid(&self, uuid: &Uuid) -> Result<Option<User>> {
-        let con = self.get_conn()?;
+        let conn = self.get_conn()?;
 
         let result: QueryResult<User> = users::table
             .filter(users::columns::oidc_uuid.eq(uuid))
-            .get_result(&con);
+            .get_result(&conn);
 
         match result {
             Ok(user) => Ok(Some(user)),
@@ -138,11 +168,11 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
         modify: ModifyUser,
         groups: Option<Vec<String>>,
     ) -> Result<ModifiedUser> {
-        let con = self.get_conn()?;
+        let conn = self.get_conn()?;
 
-        con.transaction::<ModifiedUser, DatabaseError, _>(|| {
+        conn.transaction::<ModifiedUser, DatabaseError, _>(|| {
             let target = users::table.filter(users::columns::oidc_uuid.eq(user_uuid));
-            let user: User = diesel::update(target).set(modify).get_result(&con)?;
+            let user: User = diesel::update(target).set(modify).get_result(&conn)?;
 
             // modify groups if parameter exists
             if let Some(groups) = groups {
@@ -167,12 +197,12 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
                     // Remove user from user_groups table
                     let target =
                         user_groups::table.filter(user_groups::columns::user_id.eq(user.id));
-                    diesel::delete(target).execute(&con).map_err(|e| {
+                    diesel::delete(target).execute(&conn).map_err(|e| {
                         log::error!("Failed to remove user's groups from user_groups, {}", e);
                         DatabaseError::from(e)
                     })?;
 
-                    insert_user_into_user_groups(&con, &user, groups)?;
+                    insert_user_into_user_groups(&conn, &user, groups)?;
                 }
 
                 Ok(ModifiedUser {
@@ -194,11 +224,11 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
 
     #[tracing::instrument(skip(self, user_id))]
     fn get_user_by_id(&self, user_id: UserId) -> Result<Option<User>> {
-        let con = self.get_conn()?;
+        let conn = self.get_conn()?;
 
         let result: QueryResult<User> = users::table
             .filter(users::columns::id.eq(user_id))
-            .get_result(&con);
+            .get_result(&conn);
 
         match result {
             Ok(user) => Ok(Some(user)),

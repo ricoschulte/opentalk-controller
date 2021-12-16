@@ -20,6 +20,7 @@
 //! }
 //! ```
 
+use crate::acl::check_or_create_kustos_default_permissions;
 use crate::settings::{Settings, SharedSettings};
 use crate::trace::ReducedSpanBuilder;
 use actix_cors::Cors;
@@ -51,6 +52,7 @@ mod api;
 #[cfg(doc)]
 pub mod api;
 
+mod acl;
 mod cli;
 mod ha_sync;
 mod oidc;
@@ -299,6 +301,19 @@ impl Controller {
             let shared_settings = self.shared_settings.clone();
             let redis = self.redis;
 
+            // TODO(r.floren) what to do with the handle
+            let (enforcer, _) = kustos::Authz::new_with_autoload(
+                db_ctx.upgrade().unwrap(),
+                self.shutdown.subscribe(),
+                self.startup_settings.authz.reload_interval,
+            )
+            .await?;
+
+            log::info!("Making sure the default permissions are set");
+            check_or_create_kustos_default_permissions(&enforcer).await?;
+
+            let authz_middleware = enforcer.actix_web_middleware(true).await?;
+
             HttpServer::new(move || {
                 let cors = setup_cors(&cors);
 
@@ -307,22 +322,27 @@ impl Controller {
 
                 let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
                 let redis = Data::new(redis.clone());
+                let authz = Data::new(enforcer.clone());
+
+                let acl = authz_middleware.clone();
 
                 let signaling_modules = Data::from(signaling_modules.upgrade().unwrap());
 
                 App::new()
+                    .wrap(api::v1::middleware::headers::Headers {})
                     .wrap(TracingLogger::<ReducedSpanBuilder>::new())
                     .wrap(cors)
                     .app_data(Data::from(shared_settings.clone()))
                     .app_data(db_ctx.clone())
                     .app_data(oidc_ctx.clone())
+                    .app_data(authz)
                     .app_data(redis)
                     .app_data(Data::new(shutdown.clone()))
                     .app_data(rabbitmq_channel.clone())
                     .app_data(signaling_modules)
                     .app_data(SignalingProtocols::data())
                     .service(api::signaling::ws_service)
-                    .service(v1_scope(db_ctx, oidc_ctx))
+                    .service(v1_scope(db_ctx, oidc_ctx, acl))
             })
         };
 
@@ -437,7 +457,11 @@ impl Controller {
     }
 }
 
-fn v1_scope(db_ctx: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
+fn v1_scope(
+    db_ctx: Data<Db>,
+    oidc_ctx: Data<OidcContext>,
+    acl: kustos::actix_web::KustosService,
+) -> Scope {
     // the latest version contains the root services
     web::scope("/v1")
         .service(api::v1::auth::login)
@@ -449,6 +473,7 @@ fn v1_scope(db_ctx: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
         .service(
             // empty scope to differentiate between auth endpoints
             web::scope("")
+                .wrap(acl)
                 .wrap(api::v1::middleware::oidc_auth::OidcAuth { db_ctx, oidc_ctx })
                 .service(api::v1::users::all)
                 .service(api::v1::users::set_current_user_profile)
@@ -459,6 +484,7 @@ fn v1_scope(db_ctx: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
                 .service(api::v1::rooms::modify)
                 .service(api::v1::rooms::get)
                 .service(api::v1::rooms::start)
+                .service(api::v1::rooms::delete)
                 .service(api::v1::sip_configs::get)
                 .service(api::v1::sip_configs::put)
                 .service(api::v1::sip_configs::delete)

@@ -5,12 +5,11 @@ use chrono::{DateTime, Utc};
 use database::{DbInterface, Paginate, Result};
 use diesel::dsl::any;
 use diesel::{
-    BoolExpressionMethods, ExpressionMethods, Identifiable, JoinOnDsl, QueryDsl, QueryResult,
-    Queryable, RunQueryDsl,
+    ExpressionMethods, Identifiable, JoinOnDsl, QueryDsl, QueryResult, Queryable, RunQueryDsl,
 };
 use std::collections::{HashMap, HashSet};
 
-diesel_newtype!(InviteCodeUuid(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid");
+diesel_newtype!(InviteCodeUuid(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/invites/");
 
 /// Diesel invites struct
 ///
@@ -107,7 +106,7 @@ pub trait DbInvitesEx: DbInterface {
     /// Returns:
     /// Vec<(Invite, CreatedByUser, UpdatedByUser)> - A Vec of invites along with the users that created and updated the invite
     #[tracing::instrument(skip(self))]
-    fn get_invites_paginated(
+    fn get_invites_for_room_paginated(
         &self,
         room: &Room,
         limit: i64,
@@ -135,7 +134,7 @@ pub trait DbInvitesEx: DbInterface {
     /// Returns:
     /// Vec<(Invite, CreatedByUser, UpdatedByUser)> - A Vec of invites along with the users that created and updated the invite
     #[tracing::instrument(skip(self))]
-    fn get_invites_paginated_with_users(
+    fn get_invites_for_room_with_users_paginated(
         &self,
         room: &Room,
         limit: i64,
@@ -191,11 +190,11 @@ pub trait DbInvitesEx: DbInterface {
     ///
     /// Returns:
     /// Vec<(Invite, CreatedByUser, UpdatedByUser)> - A Vec of invites along with the users that created and updated the invite
-    #[tracing::instrument(skip(self, user))]
-    fn get_invites_for_user_paginated_with_users(
+    #[tracing::instrument(skip(self, ids))]
+    fn get_invites_for_room_with_users_by_ids_paginated(
         &self,
         room: &Room,
-        user: &User,
+        ids: &[InviteCodeUuid],
         limit: i64,
         page: i64,
     ) -> Result<(Vec<InviteWithUsers>, i64)> {
@@ -203,11 +202,7 @@ pub trait DbInvitesEx: DbInterface {
 
         let query = invites::table
             .filter(invites::room.eq(room.uuid))
-            .filter(
-                invites::created_by
-                    .eq(user.id)
-                    .or(invites::updated_by.eq(user.id)),
-            )
+            .filter(invites::uuid.eq(any(ids)))
             .inner_join(users::table.on(invites::created_by.eq(users::id)))
             .order(invites::updated.desc())
             .paginate_by(limit, page);

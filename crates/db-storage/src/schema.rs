@@ -1,4 +1,17 @@
 table! {
+    casbin_rule (id) {
+        id -> Int4,
+        ptype -> Varchar,
+        v0 -> Varchar,
+        v1 -> Varchar,
+        v2 -> Varchar,
+        v3 -> Varchar,
+        v4 -> Varchar,
+        v5 -> Varchar,
+    }
+}
+
+table! {
     groups (id) {
         id -> Varchar,
     }
@@ -83,6 +96,7 @@ joinable!(user_groups -> groups (group_id));
 joinable!(user_groups -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
+    casbin_rule,
     groups,
     invites,
     legal_votes,

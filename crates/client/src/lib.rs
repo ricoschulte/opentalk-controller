@@ -3,7 +3,7 @@ use crate::keycloak::{OpenIdConnectContext, SessionTokens};
 use anyhow::Result;
 use reqwest::redirect::Policy;
 use reqwest::{Client, Url};
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub mod api;
 pub mod keycloak;
@@ -38,7 +38,7 @@ pub struct K3KSession {
     /// Reusable reqwest connection pool
     pub http_client: Client,
     /// Configuration for a K3K session
-    pub config: Rc<Config>,
+    pub config: Arc<Config>,
     /// The sessions id-, access- & refresh-token
     pub tokens: SessionTokens,
 }
@@ -47,7 +47,7 @@ impl K3KSession {
     /// Creates a new session
     ///
     /// Attempts to login at the configured OIDC provider to acquire the session tokens.
-    pub fn new(config: Rc<Config>, tokens: SessionTokens) -> Self {
+    pub fn new(config: Arc<Config>, tokens: SessionTokens) -> Self {
         let http_client = reqwest::Client::builder()
             .cookie_store(true)
             .redirect(Policy::none())

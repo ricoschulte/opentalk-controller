@@ -1,11 +1,11 @@
 use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::http::header::USER_AGENT;
-use actix_web::Error;
+use actix_web::{Error, HttpMessage};
 use anyhow::Result;
 use controller_shared::settings::Logging;
 use opentelemetry::global;
 use tracing::Span;
-use tracing_actix_web::RootSpanBuilder;
+use tracing_actix_web::{RequestId, RootSpanBuilder};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
@@ -114,6 +114,7 @@ fn create_span(request: &ServiceRequest) -> Span {
         .unwrap_or_else(|| "default".into());
 
     let connection_info = request.connection_info();
+    let request_id = request.extensions().get::<RequestId>().cloned().unwrap();
     let span = tracing::info_span!(
         "HTTP request",
         http.method = %request.method().as_str(),
@@ -126,6 +127,7 @@ fn create_span(request: &ServiceRequest) -> Span {
         http.status_code = tracing::field::Empty,
         otel.kind = "server",
         otel.status_code = tracing::field::Empty,
+        request_id = %request_id,
         trace_id = tracing::field::Empty,
         exception.message = tracing::field::Empty,
         // Not proper OpenTelemetry, but their terminology is fairly exception-centric

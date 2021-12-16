@@ -96,7 +96,10 @@ pub async fn get(
     }
     let mut ice_servers = match turn_servers {
         Some(turn_config) => {
-            let expires = (chrono::Utc::now() + turn_config.lifetime).timestamp();
+            let expires = (chrono::Utc::now()
+                + chrono::Duration::from_std(turn_config.lifetime)
+                    .map_err(|_| DefaultApiError::Internal)?)
+            .timestamp();
             let mut rand_rng = ::rand::thread_rng();
             rr_servers(&mut rand_rng, &turn_config.servers, expires)?
         }

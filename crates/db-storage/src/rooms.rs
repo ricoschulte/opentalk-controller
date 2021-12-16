@@ -1,13 +1,13 @@
 //! Contains the room specific database structs and queries
 use crate::diesel::RunQueryDsl;
 use crate::schema::rooms;
-use crate::users::{User, UserId};
-use database::{DbInterface, Result};
-use diesel::{ExpressionMethods, QueryDsl, QueryResult};
+use crate::users::UserId;
+use database::{DbInterface, Paginate, Result};
+use diesel::dsl::any;
+use diesel::{Connection, ExpressionMethods, QueryDsl, QueryResult};
 use diesel::{Identifiable, Queryable};
 
-diesel_newtype!(#[derive(Copy)] RoomId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid");
-
+diesel_newtype!(#[derive(Copy)] RoomId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/rooms/");
 /// Diesel room struct
 ///
 /// Is used as a result in various queries. Represents a room column
@@ -47,15 +47,17 @@ pub struct ModifyRoom {
 }
 
 pub trait DbRoomsEx: DbInterface {
-    #[tracing::instrument(skip(self, user))]
-    fn get_owned_rooms(&self, user: &User) -> Result<Vec<Room>> {
-        let con = self.get_conn()?;
+    #[tracing::instrument(skip(self))]
+    fn get_rooms_paginated(&self, limit: i64, page: i64) -> Result<(Vec<Room>, i64)> {
+        let conn = self.get_conn()?;
 
-        let rooms_result: QueryResult<Vec<Room>> = rooms::table
-            .filter(rooms::columns::owner.eq(user.id))
-            .get_results(&con);
+        let query = rooms::table
+            .order_by(rooms::columns::id.desc())
+            .paginate_by(limit, page);
 
-        match rooms_result {
+        let query_result = query.load_and_count::<Room, _>(&conn);
+
+        match query_result {
             Ok(rooms) => Ok(rooms),
             Err(e) => {
                 log::error!("Query error getting owned rooms, {}", e);
@@ -64,15 +66,23 @@ pub trait DbRoomsEx: DbInterface {
         }
     }
 
-    #[tracing::instrument(skip(self, user))]
-    fn get_rooms(&self, user: &User) -> Result<Vec<Room>> {
-        let con = self.get_conn()?;
+    #[tracing::instrument(skip(self))]
+    fn get_rooms_by_ids_paginated(
+        &self,
+        ids: &[RoomId],
+        limit: i64,
+        page: i64,
+    ) -> Result<(Vec<Room>, i64)> {
+        let conn = self.get_conn()?;
 
-        let rooms_result: QueryResult<Vec<Room>> = rooms::table
-            .filter(rooms::columns::owner.eq(user.id))
-            .get_results(&con);
+        let query = rooms::table
+            .filter(rooms::columns::uuid.eq(any(ids)))
+            .order_by(rooms::columns::id.desc())
+            .paginate_by(limit, page);
 
-        match rooms_result {
+        let query_result = query.load_and_count::<Room, _>(&conn);
+
+        match query_result {
             Ok(rooms) => Ok(rooms),
             Err(e) => {
                 log::error!("Query error getting owned rooms, {}", e);
@@ -128,6 +138,24 @@ pub trait DbRoomsEx: DbInterface {
             Err(diesel::NotFound) => Ok(None),
             Err(e) => {
                 log::error!("Query error getting room by uuid, {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    #[tracing::instrument(skip(self, room_id))]
+    fn delete_room(&self, room_id: RoomId) -> Result<()> {
+        let conn = self.get_conn()?;
+        let result = conn.transaction::<_, diesel::result::Error, _>(|| {
+            diesel::delete(rooms::table.filter(rooms::columns::uuid.eq(room_id))).execute(&conn)?;
+
+            Ok(())
+        });
+
+        match result {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                log::error!("Failed to delete room by uuid, {}", e);
                 Err(e.into())
             }
         }

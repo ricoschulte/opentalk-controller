@@ -10,6 +10,7 @@ use actix_web::{delete, get, post, put, HttpResponse};
 use database::Db;
 use db_storage::invites::DbInvitesEx;
 use db_storage::rooms::DbRoomsEx;
+use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -66,18 +67,21 @@ pub async fn add_invite(
     current_user: ReqData<User>,
     room_uuid: Path<RoomId>,
     data: Json<NewInvite>,
+    authz: Data<kustos::Authz>,
 ) -> DefaultApiResult<Invite> {
     let room_uuid = room_uuid.into_inner();
+    let current_user = current_user.into_inner();
 
     let new_invite = data.into_inner();
     let db_ctx_clone = db_ctx.clone();
+    let current_user_clone = current_user.clone();
     let (db_invite, created_by, updated_by) = crate::block(
         move || -> Result<db_invites::InviteWithUsers, DefaultApiError> {
             let room = db_ctx_clone
                 .get_room(room_uuid)?
                 .ok_or(DefaultApiError::NotFound)?;
 
-            if room.owner != current_user.id {
+            if room.owner != current_user_clone.id {
                 // Avoid leaking rooms the user has no access to.
                 return Err(DefaultApiError::NotFound);
             }
@@ -88,9 +92,9 @@ pub async fn add_invite(
                 uuid: &InviteCodeUuid::from(invite_code_uuid),
                 active: true,
                 created: &now,
-                created_by: &current_user.id,
+                created_by: &current_user_clone.id,
                 updated: &now,
-                updated_by: &current_user.id,
+                updated_by: &current_user_clone.id,
                 room: &room.uuid,
                 expiration: new_invite.expiration.as_ref(),
             };
@@ -103,6 +107,30 @@ pub async fn add_invite(
         log::error!("BlockingError on GET /rooms/{}/invites - {}", room_uuid, e);
         DefaultApiError::Internal
     })??;
+
+    // TODO(r.floren) Do we want to rollback if this failed?
+    let rel_invite_path = format!("/rooms/{}/invites/{}", room_uuid, db_invite.uuid).into();
+    let invite_path = db_invite.uuid.resource_id();
+
+    if let Err(e) = authz
+        .grant_user_access(
+            current_user.oidc_uuid,
+            &[
+                (
+                    &rel_invite_path,
+                    &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
+                ),
+                (
+                    &invite_path,
+                    &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
+                ),
+            ],
+        )
+        .await
+    {
+        log::error!("Failed to add RBAC policy: {}", e);
+        return Err(DefaultApiError::Internal);
+    }
 
     let output = ApiResponse::new(Invite::from_with_user(db_invite, created_by, updated_by));
     Ok(output)
@@ -117,30 +145,40 @@ pub async fn get_invites(
     room_uuid: Path<RoomId>,
     current_user: ReqData<User>,
     pagination: web::Query<PagePaginationQuery>,
+    authz: Data<kustos::Authz>,
 ) -> DefaultApiResult<Vec<Invite>> {
     let room_uuid = room_uuid.into_inner();
+    let current_user = current_user.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
-    let (invites, total_invites) = crate::block(
-        move || -> Result<(Vec<db_invites::InviteWithUsers>, i64), DefaultApiError> {
-            let room = db_ctx.get_room(room_uuid)?;
-            if let Some(room) = room {
-                Ok(db_ctx.get_invites_for_user_paginated_with_users(
-                    &room,
-                    &current_user.into_inner(),
-                    per_page as i64,
-                    page as i64,
-                )?)
-            } else {
-                Err(DefaultApiError::NotFound)
-            }
-        },
-    )
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on GET /rooms/{}/invites - {}", room_uuid, e);
-        DefaultApiError::Internal
-    })??;
+    let accessible_rooms: kustos::AccessibleResources<InviteCodeUuid> = authz
+        .get_accessible_resources_for_user(current_user.clone().oidc_uuid, AccessMethod::Get)
+        .await
+        .map_err(|_| DefaultApiError::Internal)?;
+
+    let (invites, total_invites) =
+        crate::block(
+            move || -> Result<(Vec<db_invites::InviteWithUsers>, i64), DefaultApiError> {
+                let room = db_ctx.get_room(room_uuid)?;
+                if let Some(room) = room {
+                    match accessible_rooms {
+                        kustos::AccessibleResources::All => Ok(db_ctx
+                            .get_invites_for_room_with_users_paginated(&room, per_page, page)?),
+                        kustos::AccessibleResources::List(list) => Ok(db_ctx
+                            .get_invites_for_room_with_users_by_ids_paginated(
+                                &room, &list, per_page, page,
+                            )?),
+                    }
+                } else {
+                    Err(DefaultApiError::NotFound)
+                }
+            },
+        )
+        .await
+        .map_err(|e| {
+            log::error!("BlockingError on GET /rooms/{}/invites - {}", room_uuid, e);
+            DefaultApiError::Internal
+        })??;
 
     let invites = invites
         .into_iter()
@@ -149,7 +187,7 @@ pub async fn get_invites(
         })
         .collect::<Vec<Invite>>();
 
-    Ok(ApiResponse::new(invites).with_page_pagination(per_page as i64, page as i64, total_invites))
+    Ok(ApiResponse::new(invites).with_page_pagination(per_page, page, total_invites))
 }
 
 #[derive(Debug, Deserialize)]

@@ -19,6 +19,7 @@ use std::pin::Pin;
 use std::rc::Rc;
 use std::str::FromStr;
 use std::task::{Context, Poll};
+use tracing_futures::Instrument;
 use uuid::Uuid;
 
 /// Middleware factory
@@ -79,6 +80,10 @@ where
         let db_ctx = self.db_ctx.clone();
         let oidc_ctx = self.oidc_ctx.clone();
 
+        let parse_match_span =
+            tracing::span!(tracing::Level::TRACE, "Authorization::<Bearer>::parse");
+
+        let _enter = parse_match_span.enter();
         let auth = match Authorization::<Bearer>::parse(&req) {
             Ok(a) => a,
             Err(e) => {
@@ -94,15 +99,21 @@ where
 
         let access_token = AccessToken::new(auth.into_scheme().token().to_string());
 
-        Box::pin(async move {
-            let current_user = check_access_token(db_ctx, oidc_ctx, access_token).await?;
-
-            req.extensions_mut().insert(current_user);
-            service.call(req).await
-        })
+        Box::pin(
+            async move {
+                let current_user = check_access_token(db_ctx, oidc_ctx, access_token).await?;
+                let uuid = current_user.oidc_uuid;
+                req.extensions_mut().insert(current_user);
+                req.extensions_mut()
+                    .insert(kustos::actix_web::User::from(uuid));
+                service.call(req).await
+            }
+            .instrument(tracing::trace_span!("OidcAuthMiddleware::async::call")),
+        )
     }
 }
 
+#[tracing::instrument(skip(db_ctx, oidc_ctx, access_token))]
 pub async fn check_access_token(
     db_ctx: Data<Db>,
     oidc_ctx: Data<OidcContext>,

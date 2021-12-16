@@ -43,7 +43,7 @@ macro_rules! eq_empty {
 /// See <https://stackoverflow.com/a/59948116> for more information.
 #[macro_export]
 macro_rules! diesel_newtype {
-    ($($(#[$meta:meta])* $name:ident($to_wrap:ty) => $sql_type:ty, $sql_type_lit:literal ),+) => {
+    ($($(#[$meta:meta])* $name:ident($to_wrap:ty) => $sql_type:ty, $sql_type_lit:literal $(, $kustos_prefix:literal)?),+) => {
         $(
             pub use __newtype_impl::$name;
         )+
@@ -115,6 +115,21 @@ macro_rules! diesel_newtype {
                     <$to_wrap as FromSql<$sql_type, DB>>::from_sql(bytes).map(Self)
                 }
             }
+
+            $(
+            impl ::std::str::FromStr for $name {
+                type Err = kustos::ResourceParseError;
+
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    s.parse().map(Self).map_err(From::from)
+                }
+            }
+
+            impl ::kustos::Resource for $name {
+                const PREFIX: &'static str = $kustos_prefix;
+            }
+
+            )?
 
             )+
         }

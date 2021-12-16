@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 /// Public user details.
 ///
 /// Contains general "public" information about a user. Is accessible to all other users.
-#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[derive(Debug, Deserialize, Eq, PartialEq, Clone)]
 pub struct UserDetails {
     pub id: i64,
     pub email: String,

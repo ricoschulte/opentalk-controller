@@ -6,7 +6,7 @@ edition = "2018"
 
 [dependencies]
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
-database  = { path = "../database", package = "k3k-database" }
+database = { path = "../database", package = "k3k-database" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 
 ### Logging utilities
@@ -15,8 +15,13 @@ tracing = { version = "0.1" }
 tracing-futures = "0.2"
 tracing-subscriber = { version = "0.2", features = ["parking_lot"] }
 tracing-opentelemetry = "0.15"
-opentelemetry = { version = "0.16", default-features = false, features = ["trace", "rt-tokio-current-thread"] }
-opentelemetry-jaeger = { version = "0.15", features = ["rt-tokio-current-thread"] }
+opentelemetry = { version = "0.16", default-features = false, features = [
+    "trace",
+    "rt-tokio-current-thread",
+] }
+opentelemetry-jaeger = { version = "0.15", features = [
+    "rt-tokio-current-thread",
+] }
 tracing-actix-web = { version = "0.4.0-beta.10" }
 
 ### Config
@@ -31,7 +36,14 @@ thiserror = "1.0"
 validator = { version = "0.14", features = ["derive"] }
 
 ### Database ORM
-diesel = { version = "1.4.6", features = ["postgres", "uuid", "uuidv07", "r2d2", "serde_json", "chrono"] }
+diesel = { version = "1.4.6", features = [
+    "postgres",
+    "uuid",
+    "uuidv07",
+    "r2d2",
+    "serde_json",
+    "chrono",
+] }
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
 
 ### Database migrations
@@ -40,7 +52,7 @@ refinery-core = "0.6"
 barrel = { version = "0.6", features = ["pg"] }
 
 ### Web Framework & Runtime
-tokio = { version = " 1", features = ["signal"] }
+tokio = { version = "1", features = ["signal"] }
 tokio-stream = { version = "0.1.5", features = ["sync"] }
 actix-web = { version = "= 4.0.0-beta.9", features = ["rustls"] }
 actix-rt = "2.2"
@@ -80,6 +92,7 @@ rustls = "0.19"
 ### QoL
 displaydoc = "0.2"
 either = "1.6.1"
+itertools = "0.9"
 
 # Random Distributions etc. Used for RR
 rand = "0.8.3"
@@ -88,10 +101,18 @@ rand = "0.8.3"
 sysinfo = { version = "0.20.0", default-features = false }
 nix = "0.22.0"
 
+### Access Control
+casbin = { version = "2.0.9", default-features = false, features = [
+    "runtime-tokio",
+    "incremental",
+] }
+kustos = { path = "../kustos" }
+
+regex = "1.5"
+
 [dev-dependencies]
 fern = "0.6"
 k3k-controller-client = { path = "../client" }
 tokio-postgres = "0.7"
 serial_test = "0.5"
-regex = "1.5"
 test-util = { path = "../test-util", package = "k3k-test-util" }
