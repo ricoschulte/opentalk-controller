@@ -72,10 +72,12 @@ use crate::actix_web::KustosService;
 use access::AccessMethod;
 use casbin::{CoreApi, MgmtApi, RbacApi};
 use db::DbCasbinEx;
-use internal::{synced_enforcer::SyncedEnforcer, ToCasbinMultiple, ToCasbinString};
+use internal::{synced_enforcer::SyncedEnforcer, ToCasbin, ToCasbinMultiple, ToCasbinString};
 use policy::{GroupPolicies, Policy, RolePolicies, UserPolicies, UserPolicy};
 use std::{str::FromStr, sync::Arc, time::Duration};
-use subject::{GroupToRole, IsSubject, PolicyGroup, PolicyRole, PolicyUser};
+use subject::{
+    GroupToRole, IsSubject, PolicyGroup, PolicyRole, PolicyUser, UserToGroup, UserToRole,
+};
 use tokio::{
     sync::{broadcast::Receiver, RwLock},
     task::JoinHandle,
@@ -104,6 +106,19 @@ pub struct Authz {
 }
 
 impl Authz {
+    pub async fn new<T>(db_ctx: Arc<T>) -> Result<Self>
+    where
+        T: 'static + DbCasbinEx + Sync + Send,
+    {
+        let acl_model = internal::default_acl_model().await;
+        let adapter = internal::diesel_adapter::CasbinAdapter::new(db_ctx.clone());
+        let enforcer = Arc::new(tokio::sync::RwLock::new(
+            SyncedEnforcer::new(acl_model, adapter).await?,
+        ));
+
+        Ok(Self { inner: enforcer })
+    }
+
     pub async fn new_with_autoload<T>(
         db_ctx: Arc<T>,
         shutdown_channel: Receiver<()>,
@@ -409,6 +424,34 @@ impl Authz {
             .has_group_policy(GroupToRole(group.into(), role.into())))
     }
 
+    /// Checks if the given user is in the given group
+    #[tracing::instrument(level = "debug", skip(self, user, group))]
+    pub async fn is_user_in_group<G, R>(&self, user: G, group: R) -> Result<bool>
+    where
+        G: Into<PolicyUser>,
+        R: Into<PolicyGroup>,
+    {
+        Ok(self
+            .inner
+            .write()
+            .await
+            .has_group_policy(UserToGroup(user.into(), group.into())))
+    }
+
+    /// Checks if the given user is in the given role
+    #[tracing::instrument(level = "debug", skip(self, user, role))]
+    pub async fn is_user_in_role<G, R>(&self, user: G, role: R) -> Result<bool>
+    where
+        G: Into<PolicyUser>,
+        R: Into<PolicyRole>,
+    {
+        Ok(self
+            .inner
+            .write()
+            .await
+            .has_group_policy(UserToRole(user.into(), role.into())))
+    }
+
     /// Removes all rules that explicitly name the given resource
     #[tracing::instrument(level = "debug", skip(self, resource))]
     pub async fn remove_explicit_resource_permissions(&self, resource: String) -> Result<bool> {
@@ -416,6 +459,54 @@ impl Authz {
             .write()
             .await
             .remove_filtered_policy(1, vec![resource])
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Removes access for user
+    #[tracing::instrument(level = "debug", skip(self, user, resource, access))]
+    pub async fn remove_user_permission<S, R, A>(
+        &self,
+        user: S,
+        resource: R,
+        access: A,
+    ) -> Result<bool>
+    where
+        S: Into<PolicyUser>,
+        R: Into<ResourceId>,
+        A: Into<Vec<AccessMethod>>,
+    {
+        self.inner
+            .write()
+            .await
+            .remove_policy(
+                Policy::<PolicyUser>::new(user.into(), resource.into(), access.into())
+                    .to_casbin_policy(),
+            )
+            .await
+            .map_err(Into::into)
+    }
+
+    /// Removes access for role
+    #[tracing::instrument(level = "debug", skip(self, user, resource, access))]
+    pub async fn remove_role_permission<S, R, A>(
+        &self,
+        user: S,
+        resource: R,
+        access: A,
+    ) -> Result<bool>
+    where
+        S: Into<PolicyRole>,
+        R: Into<ResourceId>,
+        A: Into<Vec<AccessMethod>>,
+    {
+        self.inner
+            .write()
+            .await
+            .remove_policy(
+                Policy::<PolicyRole>::new(user.into(), resource.into(), access.into())
+                    .to_casbin_policy(),
+            )
             .await
             .map_err(Into::into)
     }
