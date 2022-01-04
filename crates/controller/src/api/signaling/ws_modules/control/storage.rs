@@ -1,7 +1,7 @@
-use crate::api::signaling::{ParticipantId, SignalingRoomId};
+use crate::api::signaling::{ParticipantId, SignalingRoomId, Timestamp};
 use anyhow::{Context, Result};
 use displaydoc::Display;
-use r3dlock::{Mutex, MutexGuard};
+use r3dlock::Mutex;
 use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use std::convert::identity;
@@ -63,6 +63,17 @@ pub async fn get_all_participants(
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn remove_participant_set(
+    redis_conn: &mut ConnectionManager,
+    room: SignalingRoomId,
+) -> Result<()> {
+    redis_conn
+        .del(RoomParticipants { room })
+        .await
+        .context("Failed to del participants")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn participants_contains(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
@@ -110,24 +121,34 @@ pub async fn add_participant_to_set(
     sadd_result
 }
 
-/// Removes the given participant from the room's participant set and returns the number of
-/// remaining participants
-#[tracing::instrument(level = "debug", skip(_room_guard, redis_conn))]
-pub async fn remove_participant_from_set(
-    _room_guard: &MutexGuard<'_, RoomLock>,
+/// Mark the given participant in the given room as left.
+///
+/// # Returns
+/// true if all participants in the room are marked as left
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn mark_participant_as_left(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
     participant: ParticipantId,
-) -> Result<usize> {
-    redis_conn
-        .srem(RoomParticipants { room }, participant)
+) -> Result<bool> {
+    set_attribute(redis_conn, room, participant, "left_at", Timestamp::now())
         .await
-        .context("Failed to remove participant from participants-set")?;
+        .context("failed to set left_at attribute")?;
 
-    redis_conn
+    let total_participant: usize = redis_conn
         .scard(RoomParticipants { room })
         .await
-        .context("Failed to get number of remaining participants inside the set")
+        .context("Failed to get number of participants in participant set")?;
+
+    let left_participants: usize = redis_conn
+        .hlen(RoomParticipantAttributes {
+            room,
+            attribute_name: "left_at",
+        })
+        .await
+        .context("failed to get attributes len")?;
+
+    Ok(total_participant == left_participants)
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
@@ -141,6 +162,25 @@ pub async fn remove_attribute_key(
             room,
             attribute_name: name,
         })
+        .await
+        .with_context(|| format!("Failed to remove participant attribute key, {}", name))
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn remove_attribute(
+    redis_conn: &mut ConnectionManager,
+    room: SignalingRoomId,
+    participant: ParticipantId,
+    name: &str,
+) -> Result<()> {
+    redis_conn
+        .hdel(
+            RoomParticipantAttributes {
+                room,
+                attribute_name: name,
+            },
+            participant,
+        )
         .await
         .with_context(|| format!("Failed to remove participant attribute key, {}", name))
 }

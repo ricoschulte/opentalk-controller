@@ -332,6 +332,9 @@ impl Builder {
         )
         .await?;
 
+        // Remove left_at attribute for in case that this is a session resumption
+        storage::remove_attribute(&mut self.redis_conn, room_id, self.id, "left_at").await?;
+
         self.resumption_keep_alive
             .set_initial(&mut self.redis_conn)
             .await?;
@@ -539,22 +542,16 @@ impl Runner {
             }
         };
 
-        // Remove participant from set and check if set is empty
-        let destroy_room = match storage::remove_participant_from_set(
-            &room_guard,
-            &mut self.redis_conn,
-            self.room_id,
-            self.id,
-        )
-        .await
-        {
-            Ok(n) => n == 0,
-            Err(e) => {
-                log::error!("Failed to remove participant from room, {}", e);
-                // TODO this possibly leaks resources if we actually are the last one in the room
-                false
-            }
-        };
+        let destroy_room =
+            match storage::mark_participant_as_left(&mut self.redis_conn, self.room_id, self.id)
+                .await
+            {
+                Ok(destroy_room) => destroy_room,
+                Err(e) => {
+                    log::error!("failed to mark participant as left, {:?}", e);
+                    false
+                }
+            };
 
         let ctx = DestroyContext {
             redis_conn: &mut self.redis_conn,
@@ -564,7 +561,7 @@ impl Runner {
         self.modules.destroy(ctx).await;
 
         if destroy_room {
-            if let Err(e) = self.cleanup_attributes().await {
+            if let Err(e) = self.cleanup_redis().await {
                 log::error!("Failed to remove all control attributes, {}", e);
             }
         }
@@ -593,10 +590,12 @@ impl Runner {
         }
     }
 
-    /// Cleanup the participant attributes that were set by the runner
-    async fn cleanup_attributes(&mut self) -> Result<()> {
+    /// Remove all room and control module related data from redis  
+    async fn cleanup_redis(&mut self) -> Result<()> {
+        storage::remove_participant_set(&mut self.redis_conn, self.room_id).await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "display_name").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "joined_at").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "left_at").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "hand_is_up").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "hand_updated_at")
             .await?;
@@ -922,6 +921,8 @@ impl Runner {
             storage::get_attribute(&mut self.redis_conn, self.room_id, id, "display_name").await?;
         let joined_at: Timestamp =
             storage::get_attribute(&mut self.redis_conn, self.room_id, id, "joined_at").await?;
+        let left_at: Option<Timestamp> =
+            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "left_at").await?;
 
         let hand_is_up: bool =
             storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_is_up").await?;
@@ -940,7 +941,7 @@ impl Runner {
                 hand_is_up,
                 hand_updated_at,
                 joined_at,
-                left_at: None,
+                left_at,
             })
             .expect("Failed to convert ControlData to serde_json::Value"),
         );
