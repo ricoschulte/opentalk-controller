@@ -22,6 +22,13 @@ async fn enable_user_access_to_all_rooms(settings: &Settings) -> Result<()> {
     let db = Arc::new(Db::connect(&settings.database).context("Failed to connect to database")?);
     let authz = kustos::Authz::new(db.clone()).await?;
 
+    check_or_create_kustos_role_policy(
+        &authz,
+        "user",
+        "/rooms/{roomUuid}/start",
+        AccessMethod::POST,
+    )
+    .await?;
     check_or_create_kustos_role_policy(&authz, "user", "/rooms/{roomUuid}", AccessMethod::GET)
         .await?;
     println!("Enabled access for all users to all rooms");
@@ -32,6 +39,13 @@ async fn disable_user_access_to_all_rooms(settings: &Settings) -> Result<()> {
     let db = Arc::new(Db::connect(&settings.database).context("Failed to connect to database")?);
     let authz = kustos::Authz::new(db.clone()).await?;
 
+    maybe_remove_kustos_role_policy(
+        &authz,
+        "user",
+        "/rooms/{roomUuid}/start",
+        AccessMethod::POST,
+    )
+    .await?;
     maybe_remove_kustos_role_policy(&authz, "user", "/rooms/{roomUuid}", AccessMethod::GET).await?;
     println!("Disabled access for all users to all rooms");
     Ok(())

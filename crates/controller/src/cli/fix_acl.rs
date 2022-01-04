@@ -12,6 +12,7 @@ use kustos::{
     Resource,
 };
 use std::sync::Arc;
+use uuid::Uuid;
 
 pub(crate) struct FixAclConfig {
     pub(crate) user_roles: bool,
@@ -110,69 +111,58 @@ async fn fix_rooms(
         .get_rooms_with_creator()
         .context("failed to load rooms")?;
     for (room, user) in rooms {
-        let needs_addition = !match authz
-            .is_permissions_present(
-                PolicyUser::from(user.oidc_uuid),
-                room.uuid.resource_id(),
-                [AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
-            )
-            .await
-            .with_context(|| format!("User: {}, Room: {}", user.oidc_uuid, room.uuid))
+        match maybe_grant_access_to_user(
+            authz,
+            user.oidc_uuid,
+            room.uuid.resource_id(),
+            &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
+        )
+        .await
         {
-            Ok(present) => present,
-            Err(e) => {
-                errors.push(e);
-                false
-            }
-        };
-        if needs_addition {
-            match authz
-                .grant_user_access(
-                    user.oidc_uuid,
-                    &[(
-                        &room.uuid.resource_id(),
-                        &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
-                    )],
-                )
-                .await
-                .with_context(|| format!("User: {}, Room: {}", user.oidc_uuid, room.uuid))
-            {
-                Ok(_) => {}
-                Err(e) => errors.push(e),
-            }
+            Ok(_) => {}
+            Err(e) => errors.push(e),
         }
+        match maybe_grant_access_to_user(
+            authz,
+            user.oidc_uuid,
+            room.uuid.resource_id().with_suffix("/invites"),
+            &[AccessMethod::Post, AccessMethod::Get],
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(e) => errors.push(e),
+        }
+        match maybe_grant_access_to_user(
+            authz,
+            user.oidc_uuid,
+            room.uuid.resource_id().with_suffix("/start"),
+            &[AccessMethod::Post],
+        )
+        .await
+        {
+            Ok(_) => {}
+            Err(e) => errors.push(e),
+        }
+    }
+    Ok(())
+}
 
-        let needs_addition = !match authz
-            .is_permissions_present(
-                PolicyUser::from(user.oidc_uuid),
-                room.uuid.resource_id().with_suffix("/invites"),
-                [AccessMethod::Post, AccessMethod::Get],
-            )
+async fn maybe_grant_access_to_user(
+    authz: &kustos::Authz,
+    user: Uuid,
+    res: kustos::ResourceId,
+    access: &[AccessMethod],
+) -> Result<()> {
+    let needs_addition = !authz
+        .is_permissions_present(PolicyUser::from(user), res.clone(), access)
+        .await
+        .with_context(|| format!("User: {}, Resource: {:?}", user, res))?;
+    if needs_addition {
+        return authz
+            .grant_user_access(user, &[(&res, access)])
             .await
-            .with_context(|| format!("User: {}, Room: {}", user.oidc_uuid, room.uuid))
-        {
-            Ok(present) => present,
-            Err(e) => {
-                errors.push(e);
-                false
-            }
-        };
-        if needs_addition {
-            match authz
-                .grant_user_access(
-                    user.oidc_uuid,
-                    &[(
-                        &room.uuid.resource_id().with_suffix("/invites"),
-                        &[AccessMethod::Post, AccessMethod::Get],
-                    )],
-                )
-                .await
-                .with_context(|| format!("User: {}, Room: {}", user.oidc_uuid, room.uuid))
-            {
-                Ok(_) => {}
-                Err(e) => errors.push(e),
-            }
-        }
+            .with_context(|| format!("User: {}, Resource: {:?}", user, res));
     }
     Ok(())
 }
