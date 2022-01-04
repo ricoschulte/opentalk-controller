@@ -54,7 +54,12 @@ barrel = { version = "0.6", features = ["pg"] }
 ### Web Framework & Runtime
 tokio = { version = "1", features = ["signal"] }
 tokio-stream = { version = "0.1.5", features = ["sync"] }
-actix-web = { version = "= 4.0.0-beta.9", features = ["rustls"] }
+actix-web = { default-features = false, version = "= 4.0.0-beta.9", features = [
+    "rustls",
+    "compress-gzip",
+    "compress-zstd",
+    "cookies",
+] }
 actix-rt = "2.2"
 actix-web-httpauth = "0.6.0-beta.2"
 actix-cors = "0.6.0-beta.2"

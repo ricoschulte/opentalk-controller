@@ -12,7 +12,7 @@ members = ["crates/*", "xtask"]
 
 [dependencies]
 anyhow = "1.0"
-actix-web = "4.0.0-beta.8"
+actix-web = { version = "4.0.0-beta.8", default-features = false }
 controller = { path = "crates/controller", package = "k3k-controller-core" }
 janus-media = { path = "crates/janus-media", package = "k3k-janus-media" }
 automod = { path = "crates/automod", package = "k3k-automod" }
