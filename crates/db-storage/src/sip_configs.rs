@@ -167,7 +167,7 @@ pub trait DbSipConfigsEx: DbInterface {
             }
         }
 
-        Err(DatabaseError::Error(
+        Err(DatabaseError::Custom(
             "Unable to insert sip config after 3 attempts with sip_id collision".into(),
         ))
     }

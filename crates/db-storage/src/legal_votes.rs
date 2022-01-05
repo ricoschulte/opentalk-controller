@@ -43,7 +43,7 @@ pub trait DbLegalVoteEx: DbInterface {
         let con = self.get_conn()?;
 
         let protocol =
-            serde_json::to_value(protocol).map_err(|e| DatabaseError::Error(e.to_string()))?;
+            serde_json::to_value(protocol).map_err(|e| DatabaseError::Custom(e.to_string()))?;
 
         let mut last_err = None;
 
@@ -84,7 +84,7 @@ pub trait DbLegalVoteEx: DbInterface {
         }
 
         Err(last_err.unwrap_or_else(|| {
-            DatabaseError::Error(
+            DatabaseError::Custom(
                 "Unable to create legal vote after 3 attempts with unique violation".into(),
             )
         }))
@@ -96,7 +96,7 @@ pub trait DbLegalVoteEx: DbInterface {
         let con = self.get_conn()?;
 
         let protocol =
-            serde_json::to_value(protocol).map_err(|e| DatabaseError::Error(e.to_string()))?;
+            serde_json::to_value(protocol).map_err(|e| DatabaseError::Custom(e.to_string()))?;
 
         let target = legal_votes::table.filter(legal_votes::columns::id.eq(&vote_id));
 
