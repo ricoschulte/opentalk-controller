@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use db_storage::legal_votes::types::protocol::{ProtocolEntry, VoteEvent};
+use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, VoteEvent};
 use db_storage::legal_votes::types::VoteOption;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;

@@ -5,8 +5,8 @@ use actix_web::web::{Data, Json, Path, Query, ReqData};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use database::Db;
-use db_storage::legal_votes::types::protocol;
-use db_storage::legal_votes::types::protocol::{Cancel, ProtocolEntry, VoteEvent};
+use db_storage::legal_votes::types::protocol::v1::{self, Cancel, VoteEvent};
+use db_storage::legal_votes::types::protocol::{self, Protocol};
 use db_storage::legal_votes::types::{
     FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
 };
@@ -308,17 +308,30 @@ pub async fn get_specific(
     Ok(Json(legal_vote_detailed))
 }
 
-/// Converts the provided `protocol_json` to [`LegalVoteDetails`]
-pub fn parse_protocol(
-    protocol_json: serde_json::Value,
+fn parse_protocol(protocol: Protocol, db_ctx: Arc<Db>) -> Result<LegalvoteDetails, ProtocolError> {
+    match protocol.version {
+        1 => {
+            let entries: Vec<v1::ProtocolEntry> = serde_json::from_str(protocol.entries.get())
+                .map_err(|e| {
+                    log::error!("Failed to deserialize v1 protocol entries {}", e);
+                    ProtocolError::InvalidProtocol
+                })?;
+
+            parse_v1_entries(entries, db_ctx)
+        }
+        unknown => {
+            log::error!("Unknown legalvote protocol version '{}'", unknown);
+            Err(ProtocolError::InvalidProtocol)
+        }
+    }
+}
+
+/// Converts a list of v1 protocol entries to [`LegalVoteDetails`]
+fn parse_v1_entries(
+    entries: Vec<v1::ProtocolEntry>,
     db_ctx: Arc<Db>,
 ) -> Result<LegalvoteDetails, ProtocolError> {
-    let protocol: Vec<ProtocolEntry> = serde_json::from_value(protocol_json).map_err(|e| {
-        log::error!("Failed to deserialize legalvote protocol, {}", e);
-        ProtocolError::InternalError
-    })?;
-
-    if protocol.is_empty() {
+    if entries.is_empty() {
         log::error!("Legalvote protocol is empty");
         return Err(ProtocolError::InvalidProtocol);
     }
@@ -331,7 +344,7 @@ pub fn parse_protocol(
     let mut raw_voters = HashMap::new();
     let mut user_ids = vec![];
 
-    for entry in protocol {
+    for entry in entries {
         match entry.event {
             VoteEvent::Start(start) => {
                 let Parameters {
@@ -378,9 +391,9 @@ pub fn parse_protocol(
             }
             VoteEvent::Stop(kind) => {
                 stop_kind = Some(match kind {
-                    protocol::StopKind::Auto => StopKind::Auto,
-                    protocol::StopKind::Expired => StopKind::Expired,
-                    protocol::StopKind::ByUser(user_id) => {
+                    protocol::v1::StopKind::Auto => StopKind::Auto,
+                    protocol::v1::StopKind::Expired => StopKind::Expired,
+                    protocol::v1::StopKind::ByUser(user_id) => {
                         let participant_info = db_ctx
                             .get_user_by_id(user_id)
                             .map_err(|e| {

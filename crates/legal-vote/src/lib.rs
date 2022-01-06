@@ -15,8 +15,9 @@ use controller::prelude::uuid::Uuid;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::database::Db;
-use db_storage::legal_votes::types::protocol as protocol_db;
-use db_storage::legal_votes::types::protocol::{Cancel, ProtocolEntry, Start, Vote, VoteEvent};
+use db_storage::legal_votes::types::protocol as db_protocol;
+use db_storage::legal_votes::types::protocol::v1::{Cancel, ProtocolEntry, Start, Vote, VoteEvent};
+use db_storage::legal_votes::types::protocol::NewProtocol;
 use db_storage::legal_votes::types::{
     CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
 };
@@ -43,6 +44,8 @@ pub mod incoming;
 pub mod outgoing;
 pub mod rabbitmq;
 mod storage;
+
+const PROTOCOL_VERSION: u8 = 1;
 
 /// A TimerEvent used for the vote expiration feature
 pub struct TimerEvent {
@@ -135,7 +138,7 @@ impl SignalingModule for LegalVote {
                         let stop_kind = StopKind::Expired;
 
                         let expired_entry =
-                            ProtocolEntry::new(VoteEvent::Stop(protocol_db::StopKind::Expired));
+                            ProtocolEntry::new(VoteEvent::Stop(db_protocol::v1::StopKind::Expired));
 
                         if let Err(error) = self
                             .end_vote(&mut ctx, timer_event.vote_id, expired_entry, stop_kind)
@@ -329,7 +332,7 @@ impl LegalVote {
                         let stop_kind = StopKind::Auto;
 
                         let auto_stop_entry =
-                            ProtocolEntry::new(VoteEvent::Stop(protocol_db::StopKind::Auto));
+                            ProtocolEntry::new(VoteEvent::Stop(db_protocol::v1::StopKind::Auto));
 
                         self.end_vote(ctx, vote_message.vote_id, auto_stop_entry, stop_kind)
                             .await?;
@@ -540,8 +543,9 @@ impl LegalVote {
 
         let stop_kind = StopKind::ByParticipant(self.participant_id);
 
-        let stop_entry =
-            ProtocolEntry::new(VoteEvent::Stop(protocol_db::StopKind::ByUser(self.user_id)));
+        let stop_entry = ProtocolEntry::new(VoteEvent::Stop(db_protocol::v1::StopKind::ByUser(
+            self.user_id,
+        )));
 
         self.end_vote(ctx, vote_id, stop_entry, stop_kind).await?;
 
@@ -913,16 +917,13 @@ impl LegalVote {
     ///
     /// Adds a new vote with an empty protocol to the database. Returns the [`VoteId`] of the new vote.
     async fn new_vote_in_database(&self) -> Result<VoteId> {
-        let empty_protocol = serde_json::to_value(Vec::<ProtocolEntry>::new())
-            .context("Unable to serialize empty protocol")?;
-
         let db_ctx = self.db_ctx.clone();
 
         let user_id = self.user_id;
         let room_id = self.room_id.room_id();
 
         let legal_vote =
-            controller::block(move || db_ctx.new_legal_vote(room_id, user_id, empty_protocol))
+            controller::block(move || db_ctx.new_legal_vote(room_id, user_id, PROTOCOL_VERSION))
                 .await??;
 
         Ok(legal_vote.id)
@@ -934,9 +935,9 @@ impl LegalVote {
         redis_conn: &mut ConnectionManager,
         vote_id: VoteId,
     ) -> Result<()> {
-        let protocol = storage::protocol::get(redis_conn, self.room_id, vote_id).await?;
+        let entries = storage::protocol::get(redis_conn, self.room_id, vote_id).await?;
 
-        let protocol = serde_json::to_value(protocol).context("Unable to serialize protocol")?;
+        let protocol = NewProtocol::new(entries);
 
         let db_ctx = self.db_ctx.clone();
 

@@ -1,3 +1,4 @@
+use self::types::protocol::NewProtocol;
 use crate::rooms::RoomId;
 use crate::schema::{legal_vote_room, legal_votes};
 use crate::users::UserId;
@@ -8,7 +9,7 @@ use diesel::result::DatabaseErrorKind;
 use diesel::{
     Connection, ExpressionMethods, Identifiable, QueryDsl, QueryResult, Queryable, RunQueryDsl,
 };
-use serde::Serialize;
+use types::protocol::Protocol;
 use uuid::Uuid;
 
 pub mod types;
@@ -25,7 +26,7 @@ impl_from_redis_value_de!(VoteId);
 pub struct LegalVote {
     pub id: VoteId,
     pub initiator: UserId,
-    pub protocol: serde_json::Value,
+    pub protocol: Protocol,
 }
 
 /// Diesel legal_vote struct
@@ -36,7 +37,7 @@ pub struct LegalVote {
 pub struct NewLegalVote {
     pub id: VoteId,
     pub initiator: UserId,
-    pub protocol: serde_json::Value,
+    pub protocol: NewProtocol,
 }
 
 #[derive(Debug, Clone, Insertable, Queryable)]
@@ -51,17 +52,16 @@ pub trait DbLegalVoteEx: DbInterface {
     ///
     /// Generates a [`VoteId`] (uuid) for the entry in the database. In case the insert statement fails with an `UniqueViolation`,
     /// the statement will be resend with a different [`VoteId`] to counteract uuid collisions.
-    #[tracing::instrument(skip(self, protocol))]
-    fn new_legal_vote<T: Serialize>(
+    #[tracing::instrument(skip(self))]
+    fn new_legal_vote(
         &self,
         room_id: RoomId,
         initiator: UserId,
-        protocol: T,
+        protocol_version: u8,
     ) -> Result<LegalVote> {
         let conn = self.get_conn()?;
 
-        let protocol =
-            serde_json::to_value(protocol).map_err(|e| DatabaseError::Custom(e.to_string()))?;
+        let protocol = NewProtocol::new(Vec::new());
 
         let mut last_err = None;
 
@@ -123,7 +123,7 @@ pub trait DbLegalVoteEx: DbInterface {
 
     /// Set the vote protocol for the provided `vote_id`
     #[tracing::instrument(skip(self, protocol))]
-    fn set_protocol<T: Serialize>(&self, vote_id: VoteId, protocol: T) -> Result<()> {
+    fn set_protocol(&self, vote_id: VoteId, protocol: NewProtocol) -> Result<()> {
         let con = self.get_conn()?;
 
         let protocol =

@@ -81,7 +81,9 @@ async fn basic_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    assert_eq!(legal_vote.protocol, Value::Array(vec![]));
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    assert_eq!(protocol_entries, Value::Array(vec![]));
 
     // Start casting votes
 
@@ -229,8 +231,10 @@ async fn basic_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    if let Value::Array(protocol) = legal_vote.protocol {
-        assert_eq!(protocol.len(), 5);
+
+    let protocol_entries = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    if let Value::Array(entries) = protocol_entries {
+        assert_eq!(entries.len(), 5);
     }
 }
 
@@ -297,7 +301,9 @@ async fn basic_vote_abstain() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    assert_eq!(legal_vote.protocol, Value::Array(vec![]));
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    assert_eq!(protocol_entries, Value::Array(vec![]));
 
     // Start casting votes
 
@@ -445,7 +451,8 @@ async fn basic_vote_abstain() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    if let Value::Array(protocol) = legal_vote.protocol {
+    let protocol_entries = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    if let Value::Array(protocol) = protocol_entries {
         assert_eq!(protocol.len(), 5);
     }
 }
@@ -513,7 +520,9 @@ async fn expired_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    assert_eq!(legal_vote.protocol, Value::Array(vec![]));
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    assert_eq!(protocol_entries, Value::Array(vec![]));
 
     let expected_stop_message =
         WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
@@ -555,8 +564,10 @@ async fn expired_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    if let Value::Array(protocol) = legal_vote.protocol {
-        assert_eq!(protocol.len(), 3);
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    if let Value::Array(entries) = protocol_entries {
+        assert_eq!(entries.len(), 3);
     }
 }
 
@@ -623,7 +634,9 @@ async fn auto_stop_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    assert_eq!(legal_vote.protocol, Value::Array(vec![]));
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    assert_eq!(protocol_entries, Value::Array(vec![]));
 
     // Start casting votes
 
@@ -766,8 +779,10 @@ async fn auto_stop_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    if let Value::Array(protocol) = legal_vote.protocol {
-        assert_eq!(protocol.len(), 5);
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    if let Value::Array(entries) = protocol_entries {
+        assert_eq!(entries.len(), 5);
     }
 
     module_tester.shutdown().await.unwrap();

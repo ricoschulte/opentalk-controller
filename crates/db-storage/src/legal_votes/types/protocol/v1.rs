@@ -1,4 +1,4 @@
-use super::{CancelReason, FinalResults, Parameters, VoteOption};
+use super::super::{CancelReason, FinalResults, Parameters, VoteOption};
 use crate::users::UserId;
 use chrono::{DateTime, Utc};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se, ParticipantId};
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 /// A legalvote protocol entry
 ///
 /// Contains the event that will be logged in the vote protocol with some meta data.
-#[derive(Debug, Serialize, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize)]
 pub struct ProtocolEntry {
     /// The time that an entry got created
     pub timestamp: DateTime<Utc>,
@@ -31,7 +31,7 @@ impl ProtocolEntry {
 }
 
 /// A event related to an active vote
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "event")]
 pub enum VoteEvent {
     /// The vote started
@@ -48,7 +48,7 @@ pub enum VoteEvent {
 
 impl_to_redis_args_se!(VoteEvent);
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Start {
     /// User id of the initiator
     pub issuer: UserId,
@@ -57,7 +57,7 @@ pub struct Start {
 }
 
 /// A vote entry mapped to a specific user
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Vote {
     /// The user id of the voting user
     pub issuer: UserId,
@@ -67,7 +67,7 @@ pub struct Vote {
     pub option: VoteOption,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StopKind {
     /// A normal vote stop issued by a user. Contains the UserId of the issuer
@@ -78,7 +78,7 @@ pub enum StopKind {
     Expired,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Cancel {
     /// The user id of the entry issuer
     pub issuer: UserId,
