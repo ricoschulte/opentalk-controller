@@ -299,20 +299,19 @@ impl SignalingModule for Media {
                 ctx.ws_send(outgoing::Message::RequestMute(request_mute));
             }
             Event::ParticipantJoined(id, evt_state) => {
-                *evt_state = Some(
-                    storage::get_state(ctx.redis_conn(), self.room, id)
-                        .await
-                        .context("Failed to get peer participants state")?,
-                );
-            }
-            Event::ParticipantUpdated(id, evt_state) => {
-                let state = storage::get_state(ctx.redis_conn(), self.room, id)
+                *evt_state = storage::get_state(ctx.redis_conn(), self.room, id)
                     .await
                     .context("Failed to get peer participants state")?;
+            }
+            Event::ParticipantUpdated(id, evt_state) => {
+                if let Some(state) = storage::get_state(ctx.redis_conn(), self.room, id)
+                    .await
+                    .context("Failed to get peer participants state")?
+                {
+                    self.media.remove_dangling_subscriber(id, &state).await;
 
-                self.media.remove_dangling_subscriber(id, &state).await;
-
-                *evt_state = Some(state);
+                    *evt_state = Some(state);
+                }
             }
             Event::ParticipantLeft(id) => {
                 self.media.remove_subscribers(id).await;
@@ -331,11 +330,9 @@ impl SignalingModule for Media {
                 participants,
             } => {
                 for (id, evt_state) in participants {
-                    let state = storage::get_state(ctx.redis_conn(), self.room, *id)
+                    *evt_state = storage::get_state(ctx.redis_conn(), self.room, *id)
                         .await
                         .context("Failed to get peer participants state")?;
-
-                    *evt_state = Some(state);
                 }
             }
             Event::Leaving | Event::RaiseHand | Event::LowerHand { .. } => {}
