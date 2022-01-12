@@ -64,7 +64,7 @@ pub struct PeerFrontendData {
 
 #[async_trait::async_trait(?Send)]
 impl SignalingModule for Chat {
-    const NAMESPACE: &'static str = "ee-chat";
+    const NAMESPACE: &'static str = "ee_chat";
     type Params = ();
     type Incoming = IncomingWsMessage;
     type Outgoing = Message;
