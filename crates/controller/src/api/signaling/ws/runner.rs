@@ -43,7 +43,7 @@ use tokio::time::{sleep, Sleep};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
-const WS_TIMEOUT: Duration = Duration::from_secs(20);
+const WS_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Builder to the runner type.
 ///
@@ -114,7 +114,6 @@ impl Builder {
         shutdown_sig: broadcast::Receiver<()>,
     ) -> Result<Runner> {
         self.aquire_participant_id().await?;
-
         // ==== CONTROL MODULE DECLARATIONS ====
 
         let room_id = SignalingRoomId(self.room.uuid, self.breakout_room);
@@ -1130,7 +1129,6 @@ impl Runner {
                 self.handle_module_requested_actions(timestamp, actions)
                     .await;
             }
-            rabbitmq::Message::Exit => self.ws.close(CloseCode::Normal).await,
         }
 
         Ok(())

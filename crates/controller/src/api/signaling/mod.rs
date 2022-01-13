@@ -65,7 +65,7 @@ pub(crate) mod ticket;
 mod ws;
 mod ws_modules;
 
-pub(crate) use ws::{ws_service, Namespaced};
+pub(crate) use ws::ws_service;
 
 pub mod prelude {
     pub use super::ws::module_tester::*;
