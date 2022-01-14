@@ -260,6 +260,11 @@ impl Handle {
         self.inner.session_id
     }
 
+    /// Returns the plugin type for the handle
+    pub fn plugin_type(&self) -> JanusPlugin {
+        self.inner.plugin_type
+    }
+
     /// Subscribe to messages that are not the response to a sent request
     pub fn subscribe(&self) -> broadcast::Receiver<Arc<incoming::JanusMessage>> {
         self.inner.subscribe()

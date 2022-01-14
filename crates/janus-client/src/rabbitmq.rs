@@ -5,7 +5,7 @@ use lapin::{
         QueueDeclareOptions,
     },
     types::FieldTable,
-    BasicProperties, Channel, Queue,
+    BasicProperties, Channel,
 };
 
 /// Configuration for the Rabbit MQ connection the janus-client uses.
@@ -25,8 +25,6 @@ pub struct RabbitMqConfig {
 pub struct RabbitMqConnection {
     to_janus_routing_key: String,
     janus_exchange: String,
-    from_janus_routing_key: String,
-    incoming_queue: Queue,
     tag: String,
     channel: Channel,
 }
@@ -103,10 +101,7 @@ impl RabbitMqConfig {
             RabbitMqConnection {
                 to_janus_routing_key: self.to_janus_routing_key,
                 janus_exchange: self.janus_exchange,
-                from_janus_routing_key: self.from_janus_routing_key,
-                incoming_queue: from_janus,
                 tag: self.tag,
-
                 channel: self.channel,
             },
             consumer,

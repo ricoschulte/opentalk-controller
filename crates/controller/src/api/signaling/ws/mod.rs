@@ -167,7 +167,7 @@ where
 
     /// Access to a redis connection
     pub fn redis_conn(&mut self) -> &mut ConnectionManager {
-        &mut self.redis_conn
+        self.redis_conn
     }
 
     /// Add a rabbitmq exchange to be created
@@ -270,7 +270,7 @@ where
 
     /// Access to the storage of the room
     pub fn redis_conn(&mut self) -> &mut ConnectionManager {
-        &mut self.redis_conn
+        self.redis_conn
     }
 
     /// Add a custom event stream which return `M::ExtEvent`
@@ -305,7 +305,7 @@ pub struct DestroyContext<'ctx> {
 impl DestroyContext<'_> {
     /// Access to a redis connection
     pub fn redis_conn(&mut self) -> &mut ConnectionManager {
-        &mut self.redis_conn
+        self.redis_conn
     }
 
     /// Returns true if the module belongs to the last participant inside a room
