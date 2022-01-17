@@ -50,63 +50,63 @@ pub enum VideoRoomPluginData {
 pub struct Room {
     /// unique numeric ID
     #[serde(rename = "room")]
-    id: RoomId,
+    pub id: RoomId,
     /// <Name of the room>
-    description: String,
+    pub description: String,
     /// true|false, whether a PIN is required to join this room
-    pin_required: bool,
+    pub pin_required: bool,
     /// how many publishers can actually publish via WebRTC at the same time
-    max_publishers: u64,
+    pub max_publishers: u64,
     /// bitrate cap that should be forced (via REMB) on all publishers by default, in bit/s
-    bitrate: u64,
+    pub bitrate: u64,
     /// true|false, whether the above cap should act as a limit to dynamic bitrate changes by publishers
     #[serde(default)]
-    bitrate_cap: bool,
+    pub bitrate_cap: bool,
     /// how often a keyframe request is sent via PLI/FIR to active publishers
-    fir_freq: u64,
+    pub fir_freq: u64,
     /// todo ?
-    require_pvtid: bool,
+    pub require_pvtid: bool,
     /// todo ?
-    require_e2ee: bool,
+    pub require_e2ee: bool,
     /// todo ?
-    notify_joining: bool,
+    pub notify_joining: bool,
     /// <comma separated list of allowed audio codecs>
     #[serde(deserialize_with = "comma_separated")]
-    audiocodec: Vec<AudioCodec>,
+    pub audiocodec: Vec<AudioCodec>,
     #[serde(deserialize_with = "comma_separated")]
     /// <comma separated list of allowed video codecs>
-    videocodec: Vec<VideoCodec>,
+    pub videocodec: Vec<VideoCodec>,
     /// todo ?
     #[serde(default)]
-    opus_fec: bool,
+    pub opus_fec: bool,
     /// todo ?
     #[serde(default)]
-    video_svc: bool,
+    pub video_svc: bool,
     /// true|false, whether the room is being recorded
-    record: bool,
+    pub record: bool,
     /// <if recording, the path where the .mjr files are being saved>
     #[serde(default)]
-    rec_dir: Option<PathBuf>,
+    pub rec_dir: Option<PathBuf>,
     /// true|false, whether the room recording state can only be changed providing the secret
-    lock_record: bool,
+    pub lock_record: bool,
     /// count of the participants (publishers, active or not; not subscribers)
-    num_participants: u64,
+    pub num_participants: u64,
     /// todo ?
-    audiolevel_ext: bool,
+    pub audiolevel_ext: bool,
     /// todo ?
-    audiolevel_event: bool,
-    /// todo ?
-    #[serde(default)]
-    audio_active_packets: u64,
+    pub audiolevel_event: bool,
     /// todo ?
     #[serde(default)]
-    audio_level_average: u64,
+    pub audio_active_packets: u64,
     /// todo ?
-    videoorient_ext: bool,
+    #[serde(default)]
+    pub audio_level_average: u64,
     /// todo ?
-    playoutdelay_ext: bool,
+    pub videoorient_ext: bool,
     /// todo ?
-    transport_wide_cc_ext: bool,
+    pub playoutdelay_ext: bool,
+    /// todo ?
+    pub transport_wide_cc_ext: bool,
 }
 
 impl Room {
@@ -148,7 +148,7 @@ impl std::default::Default for Room {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-enum OkEnum {
+pub enum OkEnum {
     #[serde(rename = "ok")]
     Ok,
 }
@@ -232,10 +232,10 @@ pub enum VideoRoomPluginEvent {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct VideoRoomPluginEventConfigured {
-    configured: OkEnum,
-    room: RoomId,
-    audio_codec: Option<AudioCodec>,
-    video_codec: Option<VideoCodec>,
+    pub configured: OkEnum,
+    pub room: RoomId,
+    pub audio_codec: Option<AudioCodec>,
+    pub video_codec: Option<VideoCodec>,
 }
 
 impl TryFrom<PluginData> for VideoRoomPluginEventConfigured {
@@ -253,11 +253,11 @@ impl TryFrom<PluginData> for VideoRoomPluginEventConfigured {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct VideoRoomPluginEventNotification {
-    room: RoomId,
-    substream: Option<u8>,
-    temporal: Option<u8>,
-    spatial_layer: Option<u8>,
-    temporal_layer: Option<u8>,
+    pub room: RoomId,
+    pub substream: Option<u8>,
+    pub temporal: Option<u8>,
+    pub spatial_layer: Option<u8>,
+    pub temporal_layer: Option<u8>,
 }
 
 impl TryFrom<PluginData> for VideoRoomPluginEventNotification {
@@ -275,7 +275,7 @@ impl TryFrom<PluginData> for VideoRoomPluginEventNotification {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct VideoRoomPluginEventLeaving {
-    leaving: OkEnum,
+    pub leaving: OkEnum,
 }
 
 impl TryFrom<PluginData> for VideoRoomPluginEventLeaving {
@@ -293,8 +293,8 @@ impl TryFrom<PluginData> for VideoRoomPluginEventLeaving {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct VideoRoomPluginEventStarted {
-    room: RoomId,
-    started: OkEnum,
+    pub room: RoomId,
+    pub started: OkEnum,
 }
 
 impl TryFrom<PluginData> for VideoRoomPluginEventStarted {
@@ -326,8 +326,8 @@ impl TryFrom<PluginData> for VideoRoomPluginDataStarted {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct VideoRoomPluginDataDestroyed {
-    room: RoomId,
-    permanent: Option<bool>,
+    pub room: RoomId,
+    pub permanent: Option<bool>,
 }
 
 impl TryFrom<PluginData> for VideoRoomPluginDataDestroyed {
@@ -343,8 +343,8 @@ impl TryFrom<PluginData> for VideoRoomPluginDataDestroyed {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct VideoRoomPluginDataAttached {
-    room: RoomId,
-    display: Option<String>,
+    pub room: RoomId,
+    pub display: Option<String>,
 }
 
 impl TryFrom<PluginData> for VideoRoomPluginDataSlowLink {
@@ -371,7 +371,7 @@ impl TryFrom<PluginData> for VideoRoomPluginDataAttached {
 #[derive(Debug, Clone, Deserialize)]
 pub struct VideoRoomPluginDataSlowLink {
     #[serde(rename = "current-bitrate")]
-    current_bitrate: Option<u64>,
+    pub current_bitrate: Option<u64>,
 }
 
 fn comma_separated<'de, V, T, D>(deserializer: D) -> Result<V, D::Error>

@@ -160,13 +160,6 @@ pub struct ApiOutputLinkHeader {
 }
 
 #[derive(Debug, Clone)]
-pub struct ApiOutputPagination {
-    page: i64,
-    per_page: i64,
-    total: i64,
-}
-
-#[derive(Debug, Clone)]
 pub struct ApiResponse<T: Serialize> {
     links: ApiOutputLinkHeader,
     data: T,

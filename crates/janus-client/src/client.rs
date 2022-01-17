@@ -144,8 +144,6 @@ pub(crate) struct InnerClient {
 
     task_sender: mpsc::UnboundedSender<TaskCmd>,
     connection: RabbitMqConnection,
-    /// Sink for general messages from Janus that are not part of a request, such as notifications, etc.
-    server_notification_sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
     pub(crate) sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
 }
 
@@ -167,14 +165,13 @@ impl InnerClient {
             consumer,
             cmd_receiver,
             sessions.clone(),
-            sink.clone(),
+            sink,
         ));
 
         Ok(Self {
             id,
             task_sender,
             connection,
-            server_notification_sink: sink,
             sessions,
         })
     }

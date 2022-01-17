@@ -101,7 +101,7 @@ impl<T: FromStr<Err = crate::ParsingError> + IsSubject> TryFrom<Vec<String>> for
             obj: ResourceId::from(value[1].as_str()),
             act: value[2]
                 .split('|')
-                .map(|s| AccessMethod::from_str(s))
+                .map(AccessMethod::from_str)
                 .collect::<Result<Vec<AccessMethod>, _>>()?,
         })
     }
