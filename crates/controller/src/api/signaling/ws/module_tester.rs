@@ -12,6 +12,7 @@ use super::{
 use crate::api::signaling::prelude::control::incoming::Join;
 use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlData, NAMESPACE};
 use crate::api::signaling::prelude::{BreakoutRoomId, InitContext, ModuleContext};
+use crate::api::signaling::ws_modules::control::ParticipationKind;
 use crate::api::signaling::{ParticipantId, Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
 use crate::db::rooms::Room;
@@ -105,33 +106,46 @@ where
         )
         .await?;
 
-        if let Participant::User(user) = &participant {
-            storage::set_attribute(
-                &mut self.redis_conn,
-                runner.room_id,
-                participant_id,
-                "kind",
-                "user",
-            )
-            .await?;
+        match &participant {
+            Participant::User(user) => {
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    runner.room_id,
+                    participant_id,
+                    "kind",
+                    ParticipationKind::User,
+                )
+                .await?;
 
-            storage::set_attribute(
-                &mut self.redis_conn,
-                runner.room_id,
-                participant_id,
-                "user_id",
-                user.id,
-            )
-            .await?;
-        } else {
-            storage::set_attribute(
-                &mut self.redis_conn,
-                runner.room_id,
-                participant_id,
-                "kind",
-                "guest",
-            )
-            .await?;
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    runner.room_id,
+                    participant_id,
+                    "user_id",
+                    user.id,
+                )
+                .await?;
+            }
+            Participant::Guest => {
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    runner.room_id,
+                    participant_id,
+                    "kind",
+                    ParticipationKind::Guest,
+                )
+                .await?;
+            }
+            Participant::Sip => {
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    runner.room_id,
+                    participant_id,
+                    "kind",
+                    ParticipationKind::Sip,
+                )
+                .await?;
+            }
         }
 
         let runner_handle = task::spawn_local(runner.run());
@@ -547,6 +561,11 @@ where
                 let mut participants_data = participants.iter().map(|p| (p.id, None)).collect();
                 let mut control_data = ControlData {
                     display_name: join.display_name,
+                    participation_kind: match &self.participant {
+                        Participant::User(_) => ParticipationKind::User,
+                        Participant::Guest => ParticipationKind::Guest,
+                        Participant::Sip => ParticipationKind::Sip,
+                    },
                     hand_is_up: false,
                     joined_at: ctx.timestamp,
                     left_at: None,
@@ -904,10 +923,14 @@ where
             storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_updated_at")
                 .await?;
 
+        let participation_kind: ParticipationKind =
+            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "kind").await?;
+
         participant.module_data.insert(
             NAMESPACE,
             serde_json::to_value(ControlData {
                 display_name,
+                participation_kind,
                 hand_is_up,
                 joined_at,
                 hand_updated_at,

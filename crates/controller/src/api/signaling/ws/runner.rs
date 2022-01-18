@@ -12,7 +12,7 @@ use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::storage::ParticipantIdRunnerLock;
 use crate::api::signaling::ws_modules::control::{
-    incoming, outgoing, rabbitmq, storage, ControlData, NAMESPACE,
+    incoming, outgoing, rabbitmq, storage, ControlData, ParticipationKind, NAMESPACE,
 };
 use crate::api::signaling::{ParticipantId, Role, SignalingRoomId};
 use crate::db::rooms::Room;
@@ -290,18 +290,36 @@ impl Builder {
 
         match &self.participant {
             api::Participant::User(ref user) => {
-                storage::set_attribute(&mut self.redis_conn, room_id, self.id, "kind", "user")
-                    .await?;
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    room_id,
+                    self.id,
+                    "kind",
+                    ParticipationKind::User,
+                )
+                .await?;
                 storage::set_attribute(&mut self.redis_conn, room_id, self.id, "user_id", user.id)
                     .await?;
             }
             api::Participant::Guest => {
-                storage::set_attribute(&mut self.redis_conn, room_id, self.id, "kind", "guest")
-                    .await?;
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    room_id,
+                    self.id,
+                    "kind",
+                    ParticipationKind::Guest,
+                )
+                .await?;
             }
             api::Participant::Sip => {
-                storage::set_attribute(&mut self.redis_conn, room_id, self.id, "kind", "sip")
-                    .await?;
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    room_id,
+                    self.id,
+                    "kind",
+                    ParticipationKind::Sip,
+                )
+                .await?;
             }
         }
 
@@ -790,6 +808,11 @@ impl Runner {
 
                 let control_data = ControlData {
                     display_name: join.display_name,
+                    participation_kind: match &self.participant {
+                        api::Participant::User(_) => ParticipationKind::User,
+                        api::Participant::Guest => ParticipationKind::Guest,
+                        api::Participant::Sip => ParticipationKind::Sip,
+                    },
                     joined_at: timestamp,
                     hand_is_up: false,
                     hand_updated_at: timestamp,
@@ -906,10 +929,14 @@ impl Runner {
             storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_updated_at")
                 .await?;
 
+        let participation_kind: ParticipationKind =
+            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "kind").await?;
+
         participant.module_data.insert(
             NAMESPACE,
             serde_json::to_value(ControlData {
                 display_name,
+                participation_kind,
                 hand_is_up,
                 hand_updated_at,
                 joined_at,
