@@ -947,16 +947,12 @@ where
 
         let set_guard = set_lock.lock(&mut self.redis_conn).await?;
 
-        // Remove participant from set and check if set is empty
-        let remaining = storage::remove_participant_from_set(
-            &set_guard,
+        let destroy_room = storage::mark_participant_as_left(
             &mut self.redis_conn,
             self.room_id,
             self.participant_id,
         )
         .await?;
-
-        let destroy_room = remaining == 0;
 
         self.publish_rabbitmq_control(control::rabbitmq::Message::Left(self.participant_id))
             .context("Failed to send rabbitmq left message on destroy")?;

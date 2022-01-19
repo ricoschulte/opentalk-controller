@@ -22,13 +22,17 @@ pub async fn get_state(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
     participant: ParticipantId,
-) -> Result<State> {
-    let json: Vec<u8> = redis_conn
+) -> Result<Option<State>> {
+    let json: Option<Vec<u8>> = redis_conn
         .get(MediaState { room, participant })
         .await
         .context("Failed to get media state")?;
 
-    serde_json::from_slice(&json).context("Failed to convert json to media state")
+    if let Some(json) = json {
+        serde_json::from_slice(&json).context("Failed to convert json to media state")
+    } else {
+        Ok(None)
+    }
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
