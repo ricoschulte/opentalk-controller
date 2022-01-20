@@ -34,15 +34,20 @@ pub(super) async fn set_config(
     room: SignalingRoomId,
     config: &Config,
 ) -> Result<bool> {
-    let value: redis::Value = redis_conn
-        .set_nx(PollConfig { room }, config)
+    let value: redis::Value = redis::cmd("SET")
+        .arg(PollConfig { room })
+        .arg(config)
+        .arg("EX")
+        .arg(config.duration.as_secs())
+        .arg("NX")
+        .query_async(redis_conn)
         .await
         .context("failed to set current config")?;
 
-    // SETNX returns 1 if set and 0 if not
     match value {
-        redis::Value::Int(i) => Ok(i == 1),
-        _ => bail!("got invalid value from SETNX: {:?}", value),
+        redis::Value::Okay => Ok(true),
+        redis::Value::Nil => Ok(false),
+        _ => bail!("got invalid value from SET EX NX: {:?}", value),
     }
 }
 
