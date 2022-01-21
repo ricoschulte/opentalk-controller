@@ -1,6 +1,6 @@
 use self::types::protocol::NewProtocol;
 use crate::rooms::RoomId;
-use crate::schema::{legal_vote_room, legal_votes};
+use crate::schema::legal_votes;
 use crate::users::UserId;
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
 use database::{DatabaseError, DbInterface, Paginate, Result};
@@ -27,6 +27,7 @@ pub struct LegalVote {
     pub id: VoteId,
     pub initiator: UserId,
     pub protocol: Protocol,
+    pub room_id: Option<RoomId>,
 }
 
 /// Diesel legal_vote struct
@@ -38,13 +39,7 @@ pub struct NewLegalVote {
     pub id: VoteId,
     pub initiator: UserId,
     pub protocol: NewProtocol,
-}
-
-#[derive(Debug, Clone, Insertable, Queryable)]
-#[table_name = "legal_vote_room"]
-pub struct LegalVoteRoom {
-    pub vote_id: VoteId,
-    pub room_id: RoomId,
+    pub room_id: Option<RoomId>,
 }
 
 pub trait DbLegalVoteEx: DbInterface {
@@ -74,21 +69,13 @@ pub trait DbLegalVoteEx: DbInterface {
                 id: VoteId::from(Uuid::new_v4()),
                 initiator,
                 protocol: protocol.clone(),
+                room_id: Some(room_id),
             };
 
             let query_result: QueryResult<LegalVote> = conn.transaction(|| {
                 let legal_vote: LegalVote = diesel::insert_into(legal_votes::table)
                     .values(new_legal_vote)
                     .get_result(&conn)?;
-
-                let new_legal_vote_room = LegalVoteRoom {
-                    vote_id: legal_vote.id,
-                    room_id,
-                };
-
-                diesel::insert_into(legal_vote_room::table)
-                    .values(new_legal_vote_room)
-                    .execute(&conn)?;
 
                 Ok(legal_vote)
             });
@@ -167,29 +154,9 @@ pub trait DbLegalVoteEx: DbInterface {
     ) -> Result<(Vec<LegalVote>, i64)> {
         let conn = self.get_conn()?;
 
-        let room_votes: QueryResult<Vec<LegalVoteRoom>> = legal_vote_room::table
-            .filter(legal_vote_room::columns::room_id.eq(room_id))
-            .get_results(&conn);
-
-        let vote_ids = match room_votes {
-            Ok(room_votes) => room_votes
-                .into_iter()
-                .filter_map(|legal_vote_room| {
-                    if accessible_ids.contains(&legal_vote_room.vote_id) {
-                        Some(legal_vote_room.vote_id)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<Vec<VoteId>>(),
-            Err(e) => {
-                log::error!("Query error getting legal votes room mappings {}", e);
-                return Err(e.into());
-            }
-        };
-
         let query = legal_votes::table
-            .filter(legal_votes::columns::id.eq(any(vote_ids)))
+            .filter(legal_votes::columns::room_id.eq(room_id))
+            .filter(legal_votes::columns::id.eq(any(accessible_ids)))
             .paginate_by(limit, page);
 
         let query_result = query.load_and_count::<LegalVote, _>(&conn);
@@ -259,23 +226,8 @@ pub trait DbLegalVoteEx: DbInterface {
     ) -> Result<(Vec<LegalVote>, i64)> {
         let conn = self.get_conn()?;
 
-        let room_votes: QueryResult<Vec<LegalVoteRoom>> = legal_vote_room::table
-            .filter(legal_vote_room::columns::room_id.eq(room_id))
-            .get_results(&conn);
-
-        let vote_ids = match room_votes {
-            Ok(room_votes) => room_votes
-                .into_iter()
-                .map(|legal_vote_room| legal_vote_room.vote_id)
-                .collect::<Vec<VoteId>>(),
-            Err(e) => {
-                log::error!("Query error getting legal votes room mappings {}", e);
-                return Err(e.into());
-            }
-        };
-
         let query = legal_votes::table
-            .filter(legal_votes::columns::id.eq(any(vote_ids)))
+            .filter(legal_votes::columns::room_id.eq(room_id))
             .paginate_by(limit, page);
 
         let query_result = query.load_and_count::<LegalVote, _>(&conn);
