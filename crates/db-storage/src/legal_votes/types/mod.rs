@@ -45,6 +45,9 @@ pub struct UserParameters {
     /// The name of the vote
     #[validate(length(max = 150))]
     pub name: String,
+    /// A Subtitle for the vote
+    #[validate(length(max = 255))]
+    pub subtitle: String,
     /// The topic that will be voted on
     #[validate(length(max = 500))]
     pub topic: String,

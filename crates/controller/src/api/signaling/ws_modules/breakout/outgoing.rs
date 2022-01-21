@@ -31,10 +31,9 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
-    use uuid::Uuid;
-
     use super::*;
     use controller_shared::ParticipantId;
+    use uuid::Uuid;
 
     #[test]
     fn started() {

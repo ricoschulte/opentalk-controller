@@ -56,7 +56,6 @@ pub enum DatabaseError {
 
 impl From<diesel::result::Error> for DatabaseError {
     fn from(err: diesel::result::Error) -> Self {
-        println!("DIESLE ERROR: {:?}", err);
         match err {
             Error::NotFound => Self::NotFound,
             err => DatabaseError::DieselError(err),

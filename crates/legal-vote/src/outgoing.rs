@@ -171,7 +171,7 @@ mod test {
 
     #[test]
     fn start_message() {
-        let json_str = r#"{"message":"started","initiator_id":"00000000-0000-0000-0000-000000000000","vote_id":"00000000-0000-0000-0000-000000000000","start_time":"1970-01-01T00:00:00Z","max_votes":2,"name":"TestVote","topic":"Yes or No?","allowed_participants":["00000000-0000-0000-0000-000000000001","00000000-0000-0000-0000-000000000002"],"enable_abstain":false,"auto_stop":false,"duration":null}"#;
+        let json_str = r#"{"message":"started","initiator_id":"00000000-0000-0000-0000-000000000000","vote_id":"00000000-0000-0000-0000-000000000000","start_time":"1970-01-01T00:00:00Z","max_votes":2,"name":"TestVote","subtitle":"A subtitle","topic":"Yes or No?","allowed_participants":["00000000-0000-0000-0000-000000000001","00000000-0000-0000-0000-000000000002"],"enable_abstain":false,"auto_stop":false,"duration":null}"#;
 
         let message = Message::Started(Parameters {
             initiator_id: ParticipantId::nil(),
@@ -180,6 +180,7 @@ mod test {
             max_votes: 2,
             inner: UserParameters {
                 name: "TestVote".into(),
+                subtitle: "A subtitle".into(),
                 topic: "Yes or No?".into(),
                 allowed_participants: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
                 enable_abstain: false,

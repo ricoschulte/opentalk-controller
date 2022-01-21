@@ -29,7 +29,7 @@ pub struct LegalvoteEntry {
     #[serde(flatten)]
     protocol_result: ProtocolResult,
 }
-
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Serialize)]
 #[serde(untagged)]
 pub enum ProtocolResult {
@@ -71,6 +71,8 @@ pub struct Settings {
     pub max_votes: u32,
     /// The name of the vote
     pub name: String,
+    /// The subtitle of the vote
+    pub subtitle: String,
     /// The topic that will be voted on
     pub topic: String,
     /// Indicates that the `Abstain` vote option is enabled
@@ -355,6 +357,7 @@ fn parse_v1_entries(
                     inner:
                         UserParameters {
                             name,
+                            subtitle,
                             topic,
                             allowed_participants: _,
                             enable_abstain,
@@ -379,6 +382,7 @@ fn parse_v1_entries(
                     start_time,
                     max_votes,
                     name,
+                    subtitle,
                     topic,
                     enable_abstain,
                     auto_stop,
