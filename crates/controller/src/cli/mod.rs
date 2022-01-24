@@ -30,7 +30,7 @@ pub struct Args {
 #[derive(StructOpt, Debug, Clone)]
 #[structopt(rename_all = "kebab_case")]
 enum SubCommand {
-    /// Fixes the ACL based on the overall data
+    /// Rebuild ACLs based on current data
     FixAcl {
         /// Do not add user roles
         #[structopt(long = "no-user-roles", parse(from_flag = std::ops::Not::not))]
@@ -42,7 +42,10 @@ enum SubCommand {
         #[structopt(long = "no-room-creators", parse(from_flag = std::ops::Not::not))]
         room_creators: bool,
     },
+    /// Modify the ACLs.
     Acl(AclSubCommand),
+    /// Migrate the db. This is done automatically during start of the controller,
+    /// but can be done without starting the controller using this command.
     MigrateDb,
 }
 
