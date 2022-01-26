@@ -178,7 +178,7 @@ impl Controller {
     ///
     /// Otherwise it will return itself which can be modified and then run using [`Controller::run`]
     pub async fn create() -> Result<Option<Self>> {
-        let args = cli::parse_args()?;
+        let args = cli::parse_args().await?;
 
         // Some args run commands by them self and thus should exit here
         if !args.controller_should_start() {

@@ -130,23 +130,36 @@ impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
             .map_err(Into::into)
     }
 
+    /// Adds a policy
+    ///
+    /// Ignore the boolean, which is set to true in all cases.
+    // The go interface for adapters only returns an error,
+    // there is not much sense, as you either get an error or a success.
     #[tracing::instrument(level = "trace", skip(self, rule))]
     async fn add_policy(&mut self, _sec: &str, ptype: &str, rule: Vec<String>) -> Result<bool> {
         let conn = self.db_ctx.clone();
         let ptype_c = ptype.to_string();
 
-        block(move || {
-            if let Some(new_rule) = save_policy_line(&ptype_c, &rule) {
-                return conn.add_policy(new_rule);
+        block(move || -> Result<bool> {
+            match save_policy_line(&ptype_c, &rule) {
+                Some(new_rule) => {
+                    conn.add_policy(new_rule)
+                        .map_err(|e| AdapterError(Box::new(e)))?;
+                    Ok(true)
+                }
+                None => Err(crate::Error::Custom("Invalid policy".to_string()).into()),
             }
-            Ok(false)
         })
-        .await
-        .map_err(|e| AdapterError(Box::new(e)))?
+        .await?
         .map_err(|e| AdapterError(Box::new(e)))
         .map_err(Into::into)
     }
 
+    /// Adds multiple policies
+    ///
+    /// Ignore the boolean, which is set to true in all cases.
+    // The go interface for adapters only returns an error,
+    // there is not much sense, as you either get an error or a success.
     #[tracing::instrument(level = "trace", skip(self, rules))]
     async fn add_policies(
         &mut self,
@@ -157,15 +170,16 @@ impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
         let conn = self.db_ctx.clone();
         let ptype_c = ptype.to_string();
 
-        block(move || {
+        block(move || -> Result<bool> {
             let new_rules = rules
                 .iter()
                 .filter_map(|x: &Vec<String>| save_policy_line(&ptype_c, x))
                 .collect::<Vec<NewCasbinRule>>();
             conn.add_policies(new_rules)
+                .map_err(|e| AdapterError(Box::new(e)))?;
+            Ok(true)
         })
-        .await
-        .map_err(|e| AdapterError(Box::new(e)))?
+        .await?
         .map_err(|e| AdapterError(Box::new(e)))
         .map_err(Into::into)
     }

@@ -1,14 +1,15 @@
 //! Contains the user specific database structs amd queries
 use super::groups::{DbGroupsEx, Group, UserGroup};
 use super::schema::{groups, user_groups, users};
+use crate::groups::NewUserGroup;
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
 use database::{DatabaseError, DbInterface, Paginate, Result};
 use diesel::dsl::any;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::result::Error;
 use diesel::{
-    Connection, ExpressionMethods, Identifiable, Insertable, PgConnection, QueryDsl, QueryResult,
-    Queryable, RunQueryDsl,
+    BelongingToDsl, Connection, ExpressionMethods, GroupedBy, Identifiable, Insertable,
+    PgConnection, QueryDsl, QueryResult, Queryable, RunQueryDsl,
 };
 use uuid::Uuid;
 
@@ -97,6 +98,35 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
 
             Ok(user)
         })
+    }
+
+    #[tracing::instrument(skip(self))]
+    fn get_users_with_groups(&self) -> Result<Vec<(User, Vec<Group>)>> {
+        let conn = self.get_conn()?;
+
+        let result = || -> Result<_> {
+            let user_query = users::table.order_by(users::columns::id.desc());
+            let users = user_query.load::<User>(&conn)?;
+
+            let groups: Vec<Vec<(UserGroup, Group)>> = UserGroup::belonging_to(&users)
+                .inner_join(groups::table)
+                .load::<(UserGroup, Group)>(&conn)?
+                .grouped_by(&users);
+
+            Ok(users
+                .into_iter()
+                .zip(groups)
+                .map(|(user, groups)| (user, groups.into_iter().map(|(_, group)| group).collect()))
+                .collect::<Vec<_>>())
+        }();
+
+        match result {
+            Ok(result) => Ok(result),
+            Err(e) => {
+                log::error!("Query error getting all users, {}", e);
+                Err(e)
+            }
+        }
     }
 
     #[tracing::instrument(skip(self))]
@@ -266,11 +296,11 @@ fn insert_user_into_user_groups(
 
     let user_groups_ = groups
         .into_iter()
-        .map(|group_id| UserGroup {
+        .map(|group_id| NewUserGroup {
             user_id: user.id,
             group_id,
         })
-        .collect::<Vec<UserGroup>>();
+        .collect::<Vec<NewUserGroup>>();
 
     diesel::insert_into(user_groups::table)
         .values(&user_groups_)

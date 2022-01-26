@@ -198,6 +198,10 @@ pub async fn new(
                     &db_room.uuid.resource_id().with_suffix("/invites"),
                     &[AccessMethod::Post, AccessMethod::Get],
                 ),
+                (
+                    &db_room.uuid.resource_id().with_suffix("/start"),
+                    &[AccessMethod::Post],
+                ),
             ],
         )
         .await

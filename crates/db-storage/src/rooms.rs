@@ -1,6 +1,8 @@
 //! Contains the room specific database structs and queries
 use crate::diesel::RunQueryDsl;
 use crate::schema::rooms;
+use crate::schema::users;
+use crate::users::User;
 use crate::users::UserId;
 use database::{DbInterface, Paginate, Result};
 use diesel::dsl::any;
@@ -48,6 +50,25 @@ pub struct ModifyRoom {
 
 pub trait DbRoomsEx: DbInterface {
     #[tracing::instrument(skip(self))]
+    fn get_rooms_with_creator(&self) -> Result<Vec<(Room, User)>> {
+        let conn = self.get_conn()?;
+
+        let query = rooms::table
+            .order_by(rooms::columns::id.desc())
+            .inner_join(users::table);
+
+        let query_result = query.load::<(Room, User)>(&conn);
+
+        match query_result {
+            Ok(rooms) => Ok(rooms),
+            Err(e) => {
+                log::error!("Query error getting rooms, {}", e);
+                Err(e.into())
+            }
+        }
+    }
+
+    #[tracing::instrument(skip(self))]
     fn get_rooms_paginated(&self, limit: i64, page: i64) -> Result<(Vec<Room>, i64)> {
         let conn = self.get_conn()?;
 
@@ -60,7 +81,7 @@ pub trait DbRoomsEx: DbInterface {
         match query_result {
             Ok(rooms) => Ok(rooms),
             Err(e) => {
-                log::error!("Query error getting owned rooms, {}", e);
+                log::error!("Query error getting rooms, {}", e);
                 Err(e.into())
             }
         }

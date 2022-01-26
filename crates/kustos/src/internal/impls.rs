@@ -2,7 +2,7 @@
 use super::{ToCasbin, ToCasbinMultiple, ToCasbinString};
 use crate::{
     policy::{Policies, Policy},
-    subject::UserToGroup,
+    subject::{UserToGroup, UserToRole},
     AccessMethod, GroupToRole, IsSubject, PolicyGroup, PolicyRole, PolicyUser, ResourceId,
     UserPolicy,
 };
@@ -156,6 +156,12 @@ impl ToCasbin for GroupToRole {
 }
 
 impl ToCasbin for UserToGroup {
+    fn to_casbin_policy(self) -> Vec<String> {
+        vec![self.0.to_casbin_string(), self.1.to_casbin_string()]
+    }
+}
+
+impl ToCasbin for UserToRole {
     fn to_casbin_policy(self) -> Vec<String> {
         vec![self.0.to_casbin_string(), self.1.to_casbin_string()]
     }

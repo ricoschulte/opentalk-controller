@@ -34,7 +34,7 @@ pub(crate) async fn check_or_create_kustos_default_permissions(authz: &Authz) ->
     Ok(())
 }
 
-async fn check_or_create_kustos_role_policy<P, R, A>(
+pub(crate) async fn check_or_create_kustos_role_policy<P, R, A>(
     authz: &kustos::Authz,
     role: P,
     res: R,
@@ -68,6 +68,44 @@ where
                     res
                 )
             })?
+    }
+    Ok(())
+}
+
+pub(crate) async fn maybe_remove_kustos_role_policy<P, R, A>(
+    authz: &kustos::Authz,
+    role: P,
+    res: R,
+    access: A,
+) -> Result<()>
+where
+    P: Into<PolicyRole>,
+    R: Into<ResourceId>,
+    A: Into<Vec<AccessMethod>>,
+{
+    let role = role.into();
+    let res = res.into();
+    let access = access.into();
+
+    if authz
+        .is_permissions_present(role.clone(), res.clone(), access.clone())
+        .await?
+    {
+        authz
+            .remove_role_permission(role.clone(), res.clone(), access.clone())
+            .await
+            .with_context(|| {
+                format!(
+                    "removing role {:?} {} access to {:?}",
+                    role,
+                    access
+                        .iter()
+                        .map(|s| s.as_ref())
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    res
+                )
+            })?;
     }
     Ok(())
 }

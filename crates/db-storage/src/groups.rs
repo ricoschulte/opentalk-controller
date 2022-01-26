@@ -1,11 +1,11 @@
 use super::schema::{groups, user_groups};
-use super::users::UserId;
+use super::users::{User, UserId};
 use database::{DatabaseError, DbInterface, Result};
-use diesel::{ExpressionMethods, QueryDsl, RunQueryDsl};
+use diesel::{ExpressionMethods, Identifiable, Insertable, QueryDsl, Queryable, RunQueryDsl};
 use std::borrow::Borrow;
 use std::collections::HashSet;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Queryable, Insertable)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Queryable, Insertable, Identifiable)]
 #[table_name = "groups"]
 pub struct Group {
     pub id: String,
@@ -23,8 +23,18 @@ impl Borrow<String> for Group {
     }
 }
 
-#[derive(Debug, Queryable, Insertable)]
+#[derive(Debug, Insertable)]
 #[table_name = "user_groups"]
+pub struct NewUserGroup {
+    pub user_id: UserId,
+    pub group_id: String,
+}
+
+#[derive(Debug, Queryable, Identifiable, Associations)]
+#[table_name = "user_groups"]
+#[belongs_to(User, foreign_key = "user_id")]
+#[belongs_to(Group, foreign_key = "group_id")]
+#[primary_key(user_id, group_id)]
 pub struct UserGroup {
     pub user_id: UserId,
     pub group_id: String,

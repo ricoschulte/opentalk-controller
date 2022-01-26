@@ -43,7 +43,9 @@ pub type Result<T, E = DatabaseError> = std::result::Result<T, E>;
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {
     #[error("Database Error: `{0}`")]
-    Error(String),
+    Custom(String),
+    #[error("Diesel Error: `{0}`")]
+    DieselError(diesel::result::Error),
     #[error("A requested resource could not be found")]
     NotFound,
     // The R2D2 error mapping is only possible when using r2d2 directly as a dependency, hence the
@@ -56,7 +58,7 @@ impl From<diesel::result::Error> for DatabaseError {
     fn from(err: diesel::result::Error) -> Self {
         match err {
             Error::NotFound => Self::NotFound,
-            err => DatabaseError::Error(err.to_string()),
+            err => DatabaseError::DieselError(err),
         }
     }
 }

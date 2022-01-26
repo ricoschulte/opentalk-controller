@@ -31,4 +31,5 @@ pub mod sip_configs;
 pub mod users;
 
 pub use database;
+pub use rooms::DbRoomsEx;
 pub use users::DbUsersEx;

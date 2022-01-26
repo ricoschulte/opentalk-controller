@@ -2,7 +2,8 @@ use super::schema::casbin_rule::{self, dsl::*};
 use crate::eq_empty;
 use database::{DatabaseError, DbInterface, Result};
 use diesel::{
-    result::Error as DieselError, BoolExpressionMethods, ExpressionMethods, QueryDsl, RunQueryDsl,
+    result::Error as DieselError, BoolExpressionMethods, Connection, ExpressionMethods, QueryDsl,
+    RunQueryDsl,
 };
 
 #[derive(Queryable, Identifiable, Debug)]
@@ -173,22 +174,13 @@ pub trait DbCasbinEx: DbInterface {
     fn save_policy(&self, rules: Vec<NewCasbinRule>) -> Result<()> {
         let conn = self.get_conn()?;
 
-        conn.build_transaction().run::<_, DatabaseError, _>(|| {
-            if diesel::delete(casbin_rule).execute(&conn).is_err() {
-                return Err(DieselError::RollbackTransaction.into());
-            }
+        conn.transaction::<_, DatabaseError, _>(|| {
+            diesel::delete(casbin_rule).execute(&conn)?;
 
             diesel::insert_into(casbin_rule)
                 .values(&rules)
-                .execute(&conn)
-                .and_then(|n| {
-                    if n == rules.len() {
-                        Ok(())
-                    } else {
-                        Err(DieselError::RollbackTransaction)
-                    }
-                })
-                .map_err(|_| DieselError::RollbackTransaction.into())
+                .execute(&conn)?;
+            Ok(())
         })
     }
 
@@ -202,33 +194,23 @@ pub trait DbCasbinEx: DbInterface {
     }
 
     #[tracing::instrument(skip(self, new_rule))]
-    fn add_policy(&self, new_rule: NewCasbinRule) -> Result<bool> {
+    fn add_policy(&self, new_rule: NewCasbinRule) -> Result<()> {
         let conn = self.get_conn()?;
 
         diesel::insert_into(casbin_rule)
             .values(&new_rule)
-            .execute(&conn)
-            .map(|n| n == 1)
-            .map_err(DatabaseError::from)
+            .execute(&conn)?;
+        Ok(())
     }
 
     #[tracing::instrument(skip(self, new_rules))]
-    fn add_policies(&self, new_rules: Vec<NewCasbinRule>) -> Result<bool> {
+    fn add_policies(&self, new_rules: Vec<NewCasbinRule>) -> Result<()> {
         let conn = self.get_conn()?;
 
-        conn.build_transaction().run::<_, DatabaseError, _>(|| {
-            diesel::insert_into(casbin_rule)
-                .values(&new_rules)
-                .execute(&*conn)
-                .and_then(|n| {
-                    if n == new_rules.len() {
-                        Ok(true)
-                    } else {
-                        Err(DieselError::RollbackTransaction)
-                    }
-                })
-                .map_err(|_| DieselError::RollbackTransaction.into())
-        })
+        diesel::insert_into(casbin_rule)
+            .values(&new_rules)
+            .execute(&conn)?;
+        Ok(())
     }
 }
 
