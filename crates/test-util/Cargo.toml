@@ -5,9 +5,11 @@ edition = "2018"
 
 [dependencies]
 controller = { path = "../controller", package = "k3k-controller-core" }
+controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
+kustos = { path = "../kustos", package = "kustos" }
 database = { path = "../database", package = "k3k-database" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
-
+tokio = { version = "1" }
 diesel = { version = "1.4.6", features = [
     "postgres",
     "uuid",

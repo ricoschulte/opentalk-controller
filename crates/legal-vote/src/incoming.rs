@@ -1,7 +1,6 @@
-use super::VoteOption;
 use controller::db::legal_votes::VoteId;
-use controller::prelude::*;
-use serde::{Deserialize, Serialize};
+use db_storage::legal_votes::types::{UserParameters, VoteOption};
+use serde::Deserialize;
 use validator::Validate;
 
 /// An incoming message issued by an participant
@@ -29,36 +28,12 @@ impl Validate for Message {
     }
 }
 
-/// The users parameters to start a new vote
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize, Validate)]
-pub struct UserParameters {
-    /// The name of the vote
-    #[validate(length(max = 150))]
-    pub name: String,
-    /// The topic that will be voted on
-    #[validate(length(max = 500))]
-    pub topic: String,
-    /// List of participants that are allowed to cast a vote
-    #[validate(length(min = 1))]
-    pub allowed_participants: Vec<ParticipantId>,
-    /// Indicates that the `Abstain` vote option is enabled
-    pub enable_abstain: bool,
-    /// The vote will automatically stop when every participant voted
-    pub auto_stop: bool,
-    /// The vote will stop when the duration (in seconds) has passed
-    #[validate(range(min = 5))]
-    pub duration: Option<u64>,
-}
-
 /// Stop a vote
 #[derive(Debug, Clone, Deserialize)]
 pub struct Stop {
     /// The vote id of the targeted vote
     pub vote_id: VoteId,
 }
-
-impl_to_redis_args_se!(UserParameters);
-impl_from_redis_value_de!(UserParameters);
 
 /// Cancel a vote
 #[derive(Debug, Clone, Deserialize, Validate)]
@@ -82,6 +57,8 @@ pub struct VoteMessage {
 #[cfg(test)]
 mod test {
     use super::*;
+    use controller::prelude::*;
+    use controller_shared::ParticipantId;
     use uuid::Uuid;
 
     #[test]
@@ -90,6 +67,7 @@ mod test {
         {
             "action": "start",
             "name": "Vote Test",
+            "subtitle": "A subtitle",
             "topic": "Yes or No?",
             "allowed_participants": ["00000000-0000-0000-0000-000000000000"],
             "enable_abstain": false,
@@ -102,6 +80,7 @@ mod test {
 
         if let Message::Start(UserParameters {
             name,
+            subtitle,
             topic,
             allowed_participants,
             enable_abstain,
@@ -110,6 +89,7 @@ mod test {
         }) = start
         {
             assert_eq!("Vote Test", name);
+            assert_eq!("A subtitle", subtitle);
             assert_eq!("Yes or No?", topic);
             assert_eq!(allowed_participants, vec![ParticipantId::nil()]);
             assert!(!enable_abstain);
@@ -221,6 +201,7 @@ mod test {
     #[test]
     fn invalid_start_message() {
         let string_151 = "X".repeat(151);
+        let string_256 = "X".repeat(256);
         let string_501 = "X".repeat(501);
 
         let json_str = format!(
@@ -228,6 +209,7 @@ mod test {
         {{
             "action": "start",
             "name": "{}",
+            "subtitle": "{}",
             "topic": "{}",
             "allowed_participants": [],
             "enable_abstain": false,
@@ -235,7 +217,7 @@ mod test {
             "duration": 4 
         }}
         "#,
-            string_151, string_501
+            string_151, string_256, string_501
         );
 
         let start: Message = serde_json::from_str(&json_str).unwrap();
@@ -244,11 +226,12 @@ mod test {
             let errors = validation_errors.errors();
 
             assert!(errors.contains_key("name"));
+            assert!(errors.contains_key("subtitle"));
             assert!(errors.contains_key("topic"));
             assert!(errors.contains_key("allowed_participants"));
             assert!(errors.contains_key("duration"));
 
-            assert_eq!(errors.len(), 4);
+            assert_eq!(errors.len(), 5);
         } else {
             panic!("Expected validation errors");
         }

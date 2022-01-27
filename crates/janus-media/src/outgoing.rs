@@ -1,6 +1,6 @@
 use crate::mcu::{MediaSessionKey, MediaSessionType};
 use crate::rabbitmq;
-use controller::prelude::*;
+use controller_shared::ParticipantId;
 use janus_client::TrickleCandidate;
 use serde::Serialize;
 
@@ -113,6 +113,7 @@ pub enum Error {
 mod test {
     use super::*;
     use crate::rabbitmq::RequestMute;
+    use controller::prelude::*;
 
     #[test]
     fn sdp_offer() {

@@ -15,6 +15,7 @@ use crate::db::sip_configs::{SipConfigParams, SipId, SipPassword};
 use crate::db::users::{User, UserId};
 use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, post, put};
+use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::invites::DbInvitesEx;
 use db_storage::rooms::DbRoomsEx;
@@ -209,6 +210,7 @@ pub async fn new(
         log::error!("Failed to add RBAC policy: {}", e);
         return Err(DefaultApiError::Internal);
     }
+
     Ok(Json(room))
 }
 

@@ -4,7 +4,6 @@
 //!
 //! Offers full legal vote features including live voting with high safety guards (atomic changes, audit log).
 //! Stores the result for further archival storage in postgres.
-use crate::rabbitmq::CancelReason;
 use anyhow::Context;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
@@ -12,19 +11,30 @@ use controller::db::legal_votes::VoteId;
 use controller::db::users::UserId;
 use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
+use controller::prelude::uuid::Uuid;
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use db_storage::database::Db;
+use db_storage::legal_votes::types::protocol as db_protocol;
+use db_storage::legal_votes::types::protocol::v1::{Cancel, ProtocolEntry, Start, Vote, VoteEvent};
+use db_storage::legal_votes::types::protocol::NewProtocol;
+use db_storage::legal_votes::types::{
+    CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
+};
 use db_storage::legal_votes::DbLegalVoteEx;
 use error::{Error, ErrorKind};
 use incoming::VoteMessage;
-use outgoing::{Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess, Votes};
-use rabbitmq::{Cancel, Invalid, Parameters, StopKind};
+use kustos::prelude::AccessMethod;
+use kustos::Authz;
+use kustos::Resource;
+use outgoing::{Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess};
+use rabbitmq::Canceled;
+use rabbitmq::StopKind;
 use redis::aio::ConnectionManager;
-use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
 use storage::protocol;
-use storage::protocol::{reduce_protocol, ProtocolEntry, Vote, VoteEvent};
+use storage::protocol::reduce_protocol;
 use storage::VoteScriptResult;
 use tokio::time::sleep;
 use validator::Validate;
@@ -35,19 +45,7 @@ pub mod outgoing;
 pub mod rabbitmq;
 mod storage;
 
-/// The vote choices
-///
-/// Abstain can be disabled through the vote parameters (See [`Parameters`](incoming::UserParameters)).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum VoteOption {
-    Yes,
-    No,
-    Abstain,
-}
-
-impl_to_redis_args_se!(VoteOption);
-impl_from_redis_value_de!(VoteOption);
+const PROTOCOL_VERSION: u8 = 1;
 
 /// A TimerEvent used for the vote expiration feature
 pub struct TimerEvent {
@@ -60,8 +58,10 @@ pub struct TimerEvent {
 /// saved and managed in redis via the private `storage` module.
 pub struct LegalVote {
     db_ctx: Arc<Db>,
+    authz: Arc<Authz>,
     participant_id: ParticipantId,
     user_id: UserId,
+    user_uuid: Uuid,
     room_id: SignalingRoomId,
 }
 
@@ -84,8 +84,10 @@ impl SignalingModule for LegalVote {
         if let Participant::User(user) = ctx.participant() {
             Ok(Some(Self {
                 db_ctx: ctx.db().clone(),
+                authz: ctx.authz().clone(),
                 participant_id: ctx.participant_id(),
                 user_id: user.id,
+                user_uuid: user.oidc_uuid,
                 room_id: ctx.room_id(),
             }))
         } else {
@@ -136,7 +138,7 @@ impl SignalingModule for LegalVote {
                         let stop_kind = StopKind::Expired;
 
                         let expired_entry =
-                            ProtocolEntry::new(protocol::VoteEvent::Stop(stop_kind));
+                            ProtocolEntry::new(VoteEvent::Stop(db_protocol::v1::StopKind::Expired));
 
                         if let Err(error) = self
                             .end_vote(&mut ctx, timer_event.vote_id, expired_entry, stop_kind)
@@ -238,6 +240,23 @@ impl LegalVote {
                     .await
                 {
                     Ok(rabbitmq_parameters) => {
+                        if let Err(e) = self
+                            .authz
+                            .grant_user_access(
+                                self.user_uuid,
+                                &[(
+                                    &rabbitmq_parameters.vote_id.resource_id(),
+                                    &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
+                                )],
+                            )
+                            .await
+                        {
+                            log::error!("Failed to add RBAC policy for legalvote: {}", e);
+                            storage::cleanup_vote(ctx.redis_conn(), self.room_id, vote_id).await?;
+
+                            return Err(ErrorKind::PermissionError.into());
+                        }
+
                         if let Some(duration) = rabbitmq_parameters.inner.duration {
                             ctx.add_event_stream(once(
                                 sleep(Duration::from_secs(duration))
@@ -274,9 +293,9 @@ impl LegalVote {
                 ctx.rabbitmq_publish(
                     control::rabbitmq::current_room_exchange_name(self.room_id),
                     control::rabbitmq::room_all_routing_key().into(),
-                    rabbitmq::Event::Cancel(Cancel {
+                    rabbitmq::Event::Cancel(Canceled {
                         vote_id,
-                        reason: rabbitmq::CancelReason::Custom(reason),
+                        reason: CancelReason::Custom(reason),
                     }),
                 );
             }
@@ -313,7 +332,7 @@ impl LegalVote {
                         let stop_kind = StopKind::Auto;
 
                         let auto_stop_entry =
-                            protocol::ProtocolEntry::new(VoteEvent::Stop(stop_kind));
+                            ProtocolEntry::new(VoteEvent::Stop(db_protocol::v1::StopKind::Auto));
 
                         self.end_vote(ctx, vote_message.vote_id, auto_stop_entry, stop_kind)
                             .await?;
@@ -338,7 +357,7 @@ impl LegalVote {
             }
             rabbitmq::Event::Stop(stop) => {
                 let final_results = match stop.results {
-                    rabbitmq::FinalResults::Valid(votes) => {
+                    FinalResults::Valid(votes) => {
                         let protocol =
                             storage::protocol::get(ctx.redis_conn(), self.room_id, stop.vote_id)
                                 .await?;
@@ -348,9 +367,7 @@ impl LegalVote {
                             voters: reduce_protocol(protocol),
                         })
                     }
-                    rabbitmq::FinalResults::Invalid(invalid) => {
-                        outgoing::FinalResults::Invalid(invalid)
-                    }
+                    FinalResults::Invalid(invalid) => outgoing::FinalResults::Invalid(invalid),
                 };
 
                 let stop = outgoing::Stopped {
@@ -371,7 +388,7 @@ impl LegalVote {
                 }))
             }
             rabbitmq::Event::Cancel(cancel) => {
-                ctx.ws_send(outgoing::Message::Canceled(outgoing::Canceled {
+                ctx.ws_send(outgoing::Message::Canceled(Canceled {
                     vote_id: cancel.vote_id,
                     reason: cancel.reason,
                 }));
@@ -398,8 +415,8 @@ impl LegalVote {
         &self,
         redis_conn: &mut ConnectionManager,
         vote_id: VoteId,
-        incoming_parameters: incoming::UserParameters,
-    ) -> Result<rabbitmq::Parameters, Error> {
+        incoming_parameters: UserParameters,
+    ) -> Result<Parameters, Error> {
         let start_time = Utc::now();
 
         let max_votes = self
@@ -410,7 +427,7 @@ impl LegalVote {
             )
             .await?;
 
-        let parameters = rabbitmq::Parameters {
+        let parameters = Parameters {
             initiator_id: self.participant_id,
             vote_id,
             start_time,
@@ -436,11 +453,11 @@ impl LegalVote {
         redis_conn: &mut ConnectionManager,
         vote_id: VoteId,
         start_time: DateTime<Utc>,
-        parameters: rabbitmq::Parameters,
+        parameters: Parameters,
     ) -> Result<()> {
         let start_entry = ProtocolEntry::new_with_time(
             start_time,
-            VoteEvent::Start(protocol::Start {
+            VoteEvent::Start(Start {
                 issuer: self.user_id,
                 parameters,
             }),
@@ -526,7 +543,9 @@ impl LegalVote {
 
         let stop_kind = StopKind::ByParticipant(self.participant_id);
 
-        let stop_entry = ProtocolEntry::new(VoteEvent::Stop(stop_kind));
+        let stop_entry = ProtocolEntry::new(VoteEvent::Stop(db_protocol::v1::StopKind::ByUser(
+            self.user_id,
+        )));
 
         self.end_vote(ctx, vote_id, stop_entry, stop_kind).await?;
 
@@ -702,7 +721,7 @@ impl LegalVote {
             ctx.rabbitmq_publish(
                 control::rabbitmq::current_room_exchange_name(self.room_id),
                 control::rabbitmq::room_all_routing_key().into(),
-                rabbitmq::Event::Cancel(rabbitmq::Cancel {
+                rabbitmq::Event::Cancel(rabbitmq::Canceled {
                     vote_id: current_vote_id,
                     reason,
                 }),
@@ -770,7 +789,7 @@ impl LegalVote {
         vote_id: VoteId,
         reason: CancelReason,
     ) -> Result<(), Error> {
-        let cancel_entry = ProtocolEntry::new(VoteEvent::Cancel(protocol::Cancel {
+        let cancel_entry = ProtocolEntry::new(VoteEvent::Cancel(Cancel {
             issuer: self.user_id,
             reason,
         }));
@@ -821,7 +840,7 @@ impl LegalVote {
         &self,
         ctx: &mut ModuleContext<'_, Self>,
         vote_id: VoteId,
-    ) -> Result<rabbitmq::FinalResults, Error> {
+    ) -> Result<FinalResults, Error> {
         let parameters = storage::parameters::get(ctx.redis_conn(), self.room_id, vote_id)
             .await?
             .ok_or(ErrorKind::InvalidVoteId)?;
@@ -853,7 +872,7 @@ impl LegalVote {
                     if let Some(abstain) = &mut protocol_vote_count.abstain {
                         *abstain += 1;
                     } else {
-                        return Ok(rabbitmq::FinalResults::Invalid(Invalid::AbstainDisabled));
+                        return Ok(FinalResults::Invalid(Invalid::AbstainDisabled));
                     }
                 }
             }
@@ -868,11 +887,9 @@ impl LegalVote {
         .await?;
 
         if protocol_vote_count == vote_count && total_votes <= parameters.max_votes {
-            Ok(rabbitmq::FinalResults::Valid(vote_count))
+            Ok(FinalResults::Valid(vote_count))
         } else {
-            Ok(rabbitmq::FinalResults::Invalid(
-                Invalid::VoteCountInconsistent,
-            ))
+            Ok(FinalResults::Invalid(Invalid::VoteCountInconsistent))
         }
     }
 
@@ -900,15 +917,14 @@ impl LegalVote {
     ///
     /// Adds a new vote with an empty protocol to the database. Returns the [`VoteId`] of the new vote.
     async fn new_vote_in_database(&self) -> Result<VoteId> {
-        let empty_protocol = serde_json::to_value(Vec::<ProtocolEntry>::new())
-            .context("Unable to serialize empty protocol")?;
-
         let db_ctx = self.db_ctx.clone();
 
         let user_id = self.user_id;
+        let room_id = self.room_id.room_id();
 
         let legal_vote =
-            controller::block(move || db_ctx.new_legal_vote(user_id, empty_protocol)).await??;
+            controller::block(move || db_ctx.new_legal_vote(room_id, user_id, PROTOCOL_VERSION))
+                .await??;
 
         Ok(legal_vote.id)
     }
@@ -919,9 +935,9 @@ impl LegalVote {
         redis_conn: &mut ConnectionManager,
         vote_id: VoteId,
     ) -> Result<()> {
-        let protocol = storage::protocol::get(redis_conn, self.room_id, vote_id).await?;
+        let entries = storage::protocol::get(redis_conn, self.room_id, vote_id).await?;
 
-        let protocol = serde_json::to_value(protocol).context("Unable to serialize protocol")?;
+        let protocol = NewProtocol::new(entries);
 
         let db_ctx = self.db_ctx.clone();
 

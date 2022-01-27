@@ -1,7 +1,7 @@
 //! All websocket commands that can be issued by the frontend
 
 use crate::config::Parameter;
-use controller::prelude::*;
+use controller_shared::ParticipantId;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -110,6 +110,7 @@ pub struct Yield {
 mod test {
     use super::*;
     use crate::config::SelectionStrategy;
+    use controller::prelude::*;
     use std::time::Duration;
 
     #[test]

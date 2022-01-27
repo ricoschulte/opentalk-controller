@@ -1,7 +1,8 @@
 use super::storage::BreakoutConfig;
 use super::{AssocParticipantInOtherRoom, ParticipantInOtherRoom};
-use crate::api::signaling::{BreakoutRoomId, ParticipantId};
+use crate::api::signaling::BreakoutRoomId;
 use crate::db::rooms::RoomId;
+use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::SystemTime;

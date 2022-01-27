@@ -4,10 +4,10 @@ use crate::api::signaling::ws::runner::Builder;
 use crate::api::signaling::ws::{DestroyContext, InitContext, RabbitMqPublish};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::ControlData;
-use crate::api::signaling::ParticipantId;
 use anyhow::{Context, Result};
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use async_tungstenite::tungstenite::Message;
+use controller_shared::ParticipantId;
 use futures::stream::SelectAll;
 use redis::aio::ConnectionManager;
 use serde_json::Value;
@@ -390,6 +390,7 @@ where
             participant: &builder.participant,
             role: builder.role,
             db: &builder.db,
+            authz: &builder.authz,
             rabbitmq_exchanges: &mut builder.rabbitmq_exchanges,
             rabbitmq_bindings: &mut builder.rabbitmq_bindings,
             events: &mut builder.events,

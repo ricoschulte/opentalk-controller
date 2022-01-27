@@ -1,8 +1,6 @@
-use super::incoming::UserParameters;
-use crate::{outgoing::Votes, VoteOption};
-use chrono::{DateTime, Utc};
 use controller::db::legal_votes::VoteId;
-use controller::prelude::*;
+use controller_shared::ParticipantId;
+use db_storage::legal_votes::types::{CancelReason, FinalResults, Parameters, VoteOption};
 use serde::{Deserialize, Serialize};
 
 /// Rabbitmq event to inform participants
@@ -16,31 +14,12 @@ pub enum Event {
     /// A vote has been stopped
     Stop(Stop),
     /// A vote has been canceled
-    Cancel(Cancel),
+    Cancel(Canceled),
     /// The results for a vote have changed
     Update(VoteUpdate),
     /// A fatal internal server error has occurred
     FatalServerError,
 }
-
-/// Wraps the [`UserParameters`] with additional server side information
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize)]
-pub struct Parameters {
-    /// The participant id of the vote initiator
-    pub initiator_id: ParticipantId,
-    /// The unique id of this vote
-    pub vote_id: VoteId,
-    /// The time the vote got started
-    pub start_time: DateTime<Utc>,
-    /// The maximum amount of votes possible
-    pub max_votes: u32,
-    /// Parameters set by the initiator
-    #[serde(flatten)]
-    pub inner: UserParameters,
-}
-
-impl_to_redis_args_se!(&Parameters);
-impl_from_redis_value_de!(Parameters);
 
 /// A participant has successfully voted
 ///
@@ -67,7 +46,7 @@ pub struct Stop {
     pub results: FinalResults,
 }
 
-/// Describes the type of the vote stop
+/// Describes the type of a vote stop
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "issuer")]
 pub enum StopKind {
@@ -79,46 +58,14 @@ pub enum StopKind {
     Expired,
 }
 
-/// Final vote results
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "results")]
-pub enum FinalResults {
-    /// Valid vote results
-    Valid(Votes),
-    /// Invalid vote results
-    Invalid(Invalid),
-}
-
-/// Describes the reason for invalid vote results
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "reason")]
-pub enum Invalid {
-    /// An abstain vote was found when the vote itself has abstain disabled
-    AbstainDisabled,
-    /// The protocols vote count is not equal to the votes vote count
-    VoteCountInconsistent,
-}
-
 /// The specified vote has been canceled
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Cancel {
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct Canceled {
     /// The id of the canceled vote
     pub vote_id: VoteId,
     /// The reason for the cancel
     #[serde(flatten)]
     pub reason: CancelReason,
-}
-
-/// The reason for the cancel
-#[derive(Debug, Clone, Eq, PartialOrd, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case", tag = "reason", content = "custom")]
-pub enum CancelReason {
-    /// The room got destroyed and the server canceled the vote
-    RoomDestroyed,
-    /// The initiator left the room and the server canceled the vote
-    InitiatorLeft,
-    /// Custom reason for a cancel
-    Custom(String),
 }
 
 /// The results for a vote have changed

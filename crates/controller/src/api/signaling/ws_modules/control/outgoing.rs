@@ -1,4 +1,5 @@
-use crate::api::signaling::{ParticipantId, Role};
+use crate::api::signaling::Role;
+use controller_shared::ParticipantId;
 use serde::Serialize;
 use std::collections::HashMap;
 

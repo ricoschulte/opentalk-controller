@@ -9,6 +9,7 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;

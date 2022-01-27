@@ -1,4 +1,5 @@
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use validator::ValidationErrors;
 
 /// A legal vote error
@@ -29,6 +30,8 @@ pub(crate) enum ErrorKind {
     Inconsistency,
     #[error("Failed to validate request. Invalid fields: {0:?}")]
     BadRequest(Vec<String>),
+    #[error("Failed to set or get permissions")]
+    PermissionError,
 }
 
 impl From<ErrorKind> for Error {

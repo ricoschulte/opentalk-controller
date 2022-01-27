@@ -10,6 +10,7 @@ use diesel::{Connection, ExpressionMethods, QueryDsl, QueryResult};
 use diesel::{Identifiable, Queryable};
 
 diesel_newtype!(#[derive(Copy)] RoomId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/rooms/");
+
 /// Diesel room struct
 ///
 /// Is used as a result in various queries. Represents a room column

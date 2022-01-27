@@ -13,7 +13,7 @@ use crate::api::signaling::prelude::control::incoming::Join;
 use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlData, NAMESPACE};
 use crate::api::signaling::prelude::{BreakoutRoomId, InitContext, ModuleContext};
 use crate::api::signaling::ws_modules::control::ParticipationKind;
-use crate::api::signaling::{ParticipantId, Role, SignalingRoomId, Timestamp};
+use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
 use crate::db::rooms::Room;
 use crate::db::users::User;
@@ -21,8 +21,10 @@ use crate::db::users::UserId;
 use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use controller_shared::ParticipantId;
 use database::Db;
 use futures::stream::SelectAll;
+use kustos::Authz;
 use redis::aio::ConnectionManager;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -52,6 +54,8 @@ where
     pub redis_conn: ConnectionManager,
     /// The database interface
     pub db_ctx: Arc<Db>,
+    /// Authz
+    pub authz: Arc<Authz>,
     /// The room that the users are inside
     room: Room,
     /// Optional breakout room id
@@ -68,12 +72,18 @@ where
     M: SignalingModule,
 {
     /// Create a new ModuleTester instance
-    pub fn new(db_ctx: Arc<Db>, redis_conn: ConnectionManager, room: Room) -> Self {
+    pub fn new(
+        db_ctx: Arc<Db>,
+        authz: Arc<Authz>,
+        redis_conn: ConnectionManager,
+        room: Room,
+    ) -> Self {
         let (rabbitmq_sender, _) = broadcast::channel(10);
 
         Self {
             redis_conn,
             db_ctx,
+            authz,
             room,
             // todo: add breakout room support
             breakout_room: None,
@@ -99,6 +109,7 @@ where
             participant.clone(),
             role,
             self.db_ctx.clone(),
+            self.authz.clone(),
             self.redis_conn.clone(),
             params,
             client_interface,
@@ -385,6 +396,7 @@ where
         mut participant: Participant<User>,
         role: Role,
         db_ctx: Arc<Db>,
+        authz: Arc<Authz>,
         mut redis_conn: ConnectionManager,
         params: M::Params,
         interface: ClientInterface<M>,
@@ -399,6 +411,7 @@ where
             participant: &mut participant,
             role,
             db: &db_ctx,
+            authz: &authz,
             rabbitmq_exchanges: &mut vec![],
             rabbitmq_bindings: &mut vec![],
             events: &mut events,

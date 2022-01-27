@@ -46,11 +46,6 @@ diesel = { version = "1.4.6", features = [
 ] }
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
 
-### Database migrations
-refinery = { version = "0.6", features = ["tokio-postgres", "tokio"] }
-refinery-core = "0.6"
-barrel = { version = "0.6", features = ["pg"] }
-
 ### Web Framework & Runtime
 tokio = { version = "1", features = ["signal"] }
 tokio-stream = { version = "0.1.5", features = ["sync"] }

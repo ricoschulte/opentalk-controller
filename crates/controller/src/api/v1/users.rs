@@ -207,7 +207,7 @@ pub async fn user_details(
     user_id: Path<UserId>,
 ) -> Result<Json<UserDetails>, DefaultApiError> {
     let db_user = crate::block(move || -> Result<Option<db_users::User>, DefaultApiError> {
-        Ok(db_ctx.get_user_by_id(user_id.into_inner())?)
+        Ok(db_ctx.get_opt_user_by_id(user_id.into_inner())?)
     })
     .await
     .map_err(|e| {

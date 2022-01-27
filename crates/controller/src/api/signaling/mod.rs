@@ -1,12 +1,9 @@
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::db::rooms::RoomId;
 use chrono::TimeZone;
-use redis::{FromRedisValue, RedisError, RedisResult, Value};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::Deref;
-use std::str::{from_utf8, FromStr};
-use uuid::Uuid;
 
 /// Implement [`redis::ToRedisArgs`] for a type that implements display
 #[macro_export]
@@ -77,59 +74,9 @@ pub mod prelude {
         SignalingProtocols,
     };
     pub use super::ws_modules::{breakout, control};
-    pub use super::{ParticipantId, Role, SignalingRoomId, Timestamp};
+    pub use super::{Role, SignalingRoomId, Timestamp};
     pub use breakout::BreakoutRoomId;
 }
-
-/// Unique id of a participant inside a single room
-///
-/// Generated as soon as the user connects to the websocket and authenticated himself,
-/// it is used to store all participant related data and relations.
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
-pub struct ParticipantId(Uuid);
-
-impl ParticipantId {
-    /// Create a ZERO participant id for testing purposes
-    pub fn nil() -> Self {
-        Self(Uuid::nil())
-    }
-
-    /// Create a participant id from a number for testing purposes
-    pub const fn new_test(id: u128) -> Self {
-        Self(Uuid::from_u128(id))
-    }
-
-    pub(crate) fn new() -> Self {
-        Self(Uuid::new_v4())
-    }
-}
-
-impl fmt::Display for ParticipantId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl FromRedisValue for ParticipantId {
-    fn from_redis_value(v: &Value) -> RedisResult<Self> {
-        match v {
-            Value::Data(bytes) => Uuid::from_str(from_utf8(bytes)?)
-                .map(ParticipantId)
-                .map_err(|_| {
-                    RedisError::from((
-                        redis::ErrorKind::TypeError,
-                        "invalid data for ParticipantId",
-                    ))
-                }),
-            _ => RedisResult::Err(RedisError::from((
-                redis::ErrorKind::TypeError,
-                "invalid data type for ParticipantId",
-            ))),
-        }
-    }
-}
-
-impl_to_redis_args!(ParticipantId);
 
 /// Role of the participant inside a room
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
@@ -153,6 +100,10 @@ pub struct SignalingRoomId(RoomId, Option<BreakoutRoomId>);
 impl SignalingRoomId {
     pub const fn new_test(room: RoomId) -> Self {
         Self(room, None)
+    }
+
+    pub const fn room_id(&self) -> RoomId {
+        self.0
     }
 }
 

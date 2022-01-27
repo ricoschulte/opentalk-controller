@@ -8,6 +8,7 @@ use crate::rabbitmq;
 use crate::storage;
 use anyhow::Result;
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use redis::aio::ConnectionManager;
 
 mod next;

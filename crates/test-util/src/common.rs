@@ -23,6 +23,7 @@ pub async fn setup_users<M: SignalingModule>(
 
     let mut module_tester = ModuleTester::new(
         test_ctx.db_ctx.db_conn.clone(),
+        test_ctx.authz.clone(),
         test_ctx.redis_conn.clone(),
         room,
     );

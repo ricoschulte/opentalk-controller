@@ -1,4 +1,4 @@
-use controller::prelude::*;
+use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]

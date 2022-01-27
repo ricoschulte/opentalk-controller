@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use chat::MessageId;
 use chrono::{DateTime, Utc};
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use displaydoc::Display;
 use r3dlock::{Mutex, MutexGuard};
 use redis::aio::ConnectionManager;

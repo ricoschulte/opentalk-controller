@@ -13,7 +13,7 @@ casbin = { version = "2.0.9", default-features = false, features = [
 ] }
 
 ## Database migration
-barrel = { version = "0.6", features = ["pg"] }
+barrel = { version = "0.7", features = ["pg"] }
 
 ### Error handling
 thiserror = "1.0"

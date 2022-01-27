@@ -3,13 +3,13 @@
 //! Contains Lua scripts to manipulate multiple redis keys atomically in one request.
 //!
 //! Each key is defined in its own module with its related functions.
-use self::protocol::{ProtocolEntry, Vote, VoteEvent};
 use allowed_users::AllowedUsersKey;
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
 use controller::db::users::UserId;
 use controller::prelude::*;
 use current_vote_id::CurrentVoteIdKey;
+use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, Vote, VoteEvent};
 use history::VoteHistoryKey;
 use parameters::VoteParametersKey;
 use protocol::ProtocolKey;

@@ -1,20 +1,22 @@
-use controller::db::legal_votes::VoteId;
-use controller::prelude::serde_json::Value;
-use controller::prelude::uuid::Uuid;
 use controller::prelude::*;
-use controller::prelude::{ModuleTester, ParticipantId, WsMessageOutgoing};
+use controller::prelude::{ModuleTester, WsMessageOutgoing};
+use controller_shared::ParticipantId;
+use db_storage::legal_votes::types::{CancelReason, Parameters, UserParameters, VoteOption, Votes};
 use db_storage::legal_votes::DbLegalVoteEx;
-use k3k_legal_vote::incoming::{Cancel, Stop, UserParameters, VoteMessage};
+use db_storage::legal_votes::VoteId;
+use k3k_legal_vote::incoming::{Stop, VoteMessage};
 use k3k_legal_vote::outgoing::{
-    Canceled, ErrorKind, GuestParticipants, InvalidFields, Response, Stopped, VoteFailed,
-    VoteResponse, VoteResults, VoteSuccess, Votes,
+    ErrorKind, GuestParticipants, InvalidFields, Response, Stopped, VoteFailed, VoteResponse,
+    VoteResults, VoteSuccess,
 };
-use k3k_legal_vote::rabbitmq::{self, CancelReason, Parameters};
-use k3k_legal_vote::{incoming, outgoing, LegalVote, VoteOption};
+use k3k_legal_vote::rabbitmq::{Canceled, StopKind};
+use k3k_legal_vote::{incoming, outgoing, LegalVote};
+use serde_json::Value;
 use serial_test::serial;
 use std::collections::HashMap;
 use std::time::Duration;
 use test_util::*;
+use uuid::Uuid;
 
 #[actix_rt::test]
 #[serial]
@@ -25,6 +27,7 @@ async fn basic_vote() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
@@ -79,7 +82,9 @@ async fn basic_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    assert_eq!(legal_vote.protocol, Value::Array(vec![]));
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    assert_eq!(protocol_entries, Value::Array(vec![]));
 
     // Start casting votes
 
@@ -196,7 +201,7 @@ async fn basic_vote() {
     let expected_stop_message =
         WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
             vote_id,
-            kind: rabbitmq::StopKind::ByParticipant(USER_1.participant_id),
+            kind: StopKind::ByParticipant(USER_1.participant_id),
             results: outgoing::FinalResults::Valid(outgoing::Results {
                 votes: Votes {
                     yes: 1,
@@ -227,8 +232,10 @@ async fn basic_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    if let Value::Array(protocol) = legal_vote.protocol {
-        assert_eq!(protocol.len(), 5);
+
+    let protocol_entries = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    if let Value::Array(entries) = protocol_entries {
+        assert_eq!(entries.len(), 5);
     }
 }
 
@@ -241,6 +248,7 @@ async fn basic_vote_abstain() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: true,
@@ -295,7 +303,9 @@ async fn basic_vote_abstain() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    assert_eq!(legal_vote.protocol, Value::Array(vec![]));
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    assert_eq!(protocol_entries, Value::Array(vec![]));
 
     // Start casting votes
 
@@ -412,7 +422,7 @@ async fn basic_vote_abstain() {
     let expected_stop_message =
         WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
             vote_id,
-            kind: rabbitmq::StopKind::ByParticipant(USER_1.participant_id),
+            kind: StopKind::ByParticipant(USER_1.participant_id),
             results: outgoing::FinalResults::Valid(outgoing::Results {
                 votes: Votes {
                     yes: 0,
@@ -443,7 +453,8 @@ async fn basic_vote_abstain() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    if let Value::Array(protocol) = legal_vote.protocol {
+    let protocol_entries = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    if let Value::Array(protocol) = protocol_entries {
         assert_eq!(protocol.len(), 5);
     }
 }
@@ -457,6 +468,7 @@ async fn expired_vote() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
@@ -511,12 +523,14 @@ async fn expired_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    assert_eq!(legal_vote.protocol, Value::Array(vec![]));
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    assert_eq!(protocol_entries, Value::Array(vec![]));
 
     let expected_stop_message =
         WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
             vote_id,
-            kind: rabbitmq::StopKind::Expired,
+            kind: StopKind::Expired,
             results: outgoing::FinalResults::Valid(outgoing::Results {
                 votes: Votes {
                     yes: 0,
@@ -553,8 +567,10 @@ async fn expired_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    if let Value::Array(protocol) = legal_vote.protocol {
-        assert_eq!(protocol.len(), 3);
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    if let Value::Array(entries) = protocol_entries {
+        assert_eq!(entries.len(), 3);
     }
 }
 
@@ -567,6 +583,7 @@ async fn auto_stop_vote() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
@@ -621,7 +638,9 @@ async fn auto_stop_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    assert_eq!(legal_vote.protocol, Value::Array(vec![]));
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    assert_eq!(protocol_entries, Value::Array(vec![]));
 
     // Start casting votes
 
@@ -740,7 +759,7 @@ async fn auto_stop_vote() {
     let expected_stop_message =
         WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
             vote_id,
-            kind: rabbitmq::StopKind::Auto,
+            kind: StopKind::Auto,
             results: final_results,
         }));
 
@@ -764,8 +783,10 @@ async fn auto_stop_vote() {
 
     assert_eq!(legal_vote.id, vote_id);
     assert_eq!(legal_vote.initiator, USER_1.user_id);
-    if let Value::Array(protocol) = legal_vote.protocol {
-        assert_eq!(protocol.len(), 5);
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    if let Value::Array(entries) = protocol_entries {
+        assert_eq!(entries.len(), 5);
     }
 
     module_tester.shutdown().await.unwrap();
@@ -780,6 +801,7 @@ async fn start_with_one_participant() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id],
         enable_abstain: false,
@@ -805,6 +827,7 @@ async fn start_with_empty_participants() {
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
         topic: "Does the test work?".into(),
         allowed_participants: vec![],
         enable_abstain: false,
@@ -877,6 +900,7 @@ async fn ineligible_voter() {
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id],
         enable_abstain: false,
@@ -932,6 +956,7 @@ async fn start_with_allowed_guest() {
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, guest, USER_2.participant_id],
         enable_abstain: false,
@@ -1059,6 +1084,7 @@ async fn vote_twice() {
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
@@ -1201,7 +1227,7 @@ async fn ineligible_cancel() {
     let vote_id = default_start_setup(&mut module_tester).await;
 
     // cancel vote with user 2
-    let cancel_vote = incoming::Message::Cancel(Cancel {
+    let cancel_vote = incoming::Message::Cancel(incoming::Cancel {
         vote_id,
         reason: "Yes".into(),
     });
@@ -1240,6 +1266,7 @@ async fn join_as_guest() {
 
     let mut module_tester = ModuleTester::<LegalVote>::new(
         test_ctx.db_ctx.db_conn.clone(),
+        test_ctx.authz.clone(),
         test_ctx.redis_conn.clone(),
         room,
     );
@@ -1256,6 +1283,7 @@ async fn join_as_guest() {
 async fn default_vote_start(module_tester: &mut ModuleTester<LegalVote>) {
     let start_parameters = UserParameters {
         name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,

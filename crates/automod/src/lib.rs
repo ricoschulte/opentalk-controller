@@ -71,6 +71,7 @@ use controller::prelude::futures::FutureExt;
 use controller::prelude::uuid::Uuid;
 use controller::prelude::*;
 use controller::Controller;
+use controller_shared::ParticipantId;
 use futures::stream::once;
 use rabbitmq::Message;
 use serde::Serialize;

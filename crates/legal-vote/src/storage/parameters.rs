@@ -1,7 +1,7 @@
-use crate::rabbitmq::Parameters;
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
 use controller::prelude::*;
+use db_storage::legal_votes::types::Parameters;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;

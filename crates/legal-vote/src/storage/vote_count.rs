@@ -1,8 +1,7 @@
-use crate::outgoing::Votes;
-use crate::VoteOption;
 use anyhow::{Context, Result};
 use controller::db::legal_votes::VoteId;
 use controller::prelude::*;
+use db_storage::legal_votes::types::{VoteOption, Votes};
 use displaydoc::Display;
 use redis::{aio::ConnectionManager, AsyncCommands};
 use std::collections::HashMap;

@@ -36,6 +36,7 @@ table! {
         id -> Uuid,
         initiator -> Int8,
         protocol -> Jsonb,
+        room_id -> Nullable<Uuid>,
     }
 }
 

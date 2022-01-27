@@ -3,6 +3,7 @@ use crate::config::{Parameter, SelectionStrategy, StorageConfig};
 use crate::storage;
 use anyhow::Result;
 use controller::prelude::*;
+use controller_shared::ParticipantId;
 use rand::Rng;
 use redis::aio::ConnectionManager;
 

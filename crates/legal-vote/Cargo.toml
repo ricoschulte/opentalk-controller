@@ -9,6 +9,7 @@ controller-shared = { path = "../controller-shared-types", package = "k3k-contro
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 serde = { version = "1", features = ["derive"] }
 validator = { version = "0.14", features = ["derive"] }
+kustos = { path = "../kustos" }
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util" }

@@ -451,9 +451,9 @@ checksum = "cdb031dd78e28731d87d56cc8ffef4a8f36ca26c38fe2de700543e627f8a464a"
 
 [[package]]
 name = "barrel"
-version = "0.6.5"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d67c978b1322c8031145b1f6c236fc371292f52c565bc96018b2971afcbffe1"
+checksum = "ad9e605929a6964efbec5ac0884bd0fe93f12a3b1eb271f52c251316640c68d9"
 
 [[package]]
 name = "base-x"
@@ -1348,6 +1348,7 @@ dependencies = [
  "actix-rt",
  "chrono",
  "k3k-controller-core",
+ "k3k-controller-shared",
  "k3k-test-util",
  "rand 0.8.4",
  "serde",
@@ -1359,6 +1360,7 @@ name = "k3k-chat"
 version = "0.1.0"
 dependencies = [
  "k3k-controller-core",
+ "k3k-controller-shared",
  "serde",
 ]
 
@@ -1413,7 +1415,6 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "async-tungstenite",
- "barrel",
  "base64 0.13.0",
  "bytes",
  "casbin",
@@ -1444,8 +1445,6 @@ dependencies = [
  "r3dlock",
  "rand 0.8.4",
  "redis",
- "refinery",
- "refinery-core",
  "regex",
  "ring",
  "rustls",
@@ -1477,8 +1476,10 @@ dependencies = [
  "chrono",
  "config",
  "openidconnect",
+ "redis",
  "serde",
  "url",
+ "uuid 0.8.2",
 ]
 
 [[package]]
@@ -1540,6 +1541,7 @@ version = "0.1.0"
 dependencies = [
  "janus-client",
  "k3k-controller-core",
+ "k3k-controller-shared",
  "serde",
 ]
 
@@ -1553,6 +1555,7 @@ dependencies = [
  "k3k-controller-shared",
  "k3k-db-storage",
  "k3k-test-util",
+ "kustos",
  "serde",
  "serial_test",
  "validator",
@@ -1590,8 +1593,11 @@ dependencies = [
  "diesel",
  "fern",
  "k3k-controller-core",
+ "k3k-controller-shared",
  "k3k-database",
  "k3k-db-storage",
+ "kustos",
+ "tokio",
 ]
 
 [[package]]
