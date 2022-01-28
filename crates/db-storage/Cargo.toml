@@ -30,8 +30,8 @@ diesel = { version = "1.4.6", features = [
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
 
 ### Database migrations
-refinery = { version = "0.6", features = ["tokio-postgres", "tokio"] }
-refinery-core = "0.6"
+refinery = { version = "0.8", features = ["tokio-postgres"] }
+refinery-core = "0.8"
 barrel = { version = "0.7", features = ["pg"] }
 
 ### Logging utilities

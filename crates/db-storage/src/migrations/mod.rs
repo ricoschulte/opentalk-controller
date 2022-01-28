@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
-use refinery::include_migration_mods;
+use refinery::embed_migrations;
 use refinery_core::tokio_postgres::{Config, NoTls};
 use tokio::sync::oneshot;
 use tracing::Instrument;
 
-include_migration_mods!("src/migrations");
+embed_migrations!(".");
 
 #[tracing::instrument(skip(config))]
 async fn migrate(config: Config) -> Result<()> {
@@ -29,7 +29,7 @@ async fn migrate(config: Config) -> Result<()> {
     );
 
     // The runner is specified through the `include_migration_mods` macro
-    runner().run_async(&mut client).await?;
+    migrations::runner().run_async(&mut client).await?;
 
     drop(client);
 

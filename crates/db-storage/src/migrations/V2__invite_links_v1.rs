@@ -1,7 +1,6 @@
+use crate::migrations::type_polyfills::datetime;
 use barrel::backend::Pg;
 use barrel::{types, Migration};
-
-use super::type_polyfills::datetime;
 
 pub fn migration() -> String {
     let mut migr = Migration::new();
