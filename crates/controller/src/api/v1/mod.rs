@@ -17,7 +17,7 @@ pub use response::{ApiError, ApiResponse, DefaultApiError, DefaultApiResult};
 
 pub mod auth;
 pub mod invites;
-pub mod legalvote;
+pub mod legal_vote;
 pub mod middleware;
 mod request;
 mod response;

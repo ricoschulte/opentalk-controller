@@ -133,7 +133,7 @@ Inside the crates folder following crates can be found:
 * [automod](crates/automod)
     - signaling module implementing automoderation for videoconferences
 * [legal-vote](crates/legal-vote)
-    - signaling module implementing legalvote for videoconferences
+    - signaling module implementing legal vote for videoconferences
 * [polls](crates/polls)
     - signaling module implementing polls for videoconferences
 * [client](crates/client) EXPERIMENTAL

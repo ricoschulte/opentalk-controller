@@ -26,7 +26,7 @@ pub struct Parameters {
     /// The participant id of the vote initiator
     pub initiator_id: ParticipantId,
     /// The unique id of this vote
-    pub vote_id: LegalVoteId,
+    pub legal_vote_id: LegalVoteId,
     /// The time the vote got started
     pub start_time: DateTime<Utc>,
     /// The maximum amount of votes possible

@@ -29,7 +29,7 @@ impl_to_redis_args!(CurrentVoteIdKey);
 /// - `Ok(true)` when the key got set.
 /// - `Ok(false)` when the key already exists and no changes were made.
 /// - `Err(anyhow::Error)` when a redis error occurred.
-#[tracing::instrument(name = "legalvote_set_current_vote_id", skip(redis_conn))]
+#[tracing::instrument(name = "legal_vote_set_current_vote_id", skip(redis_conn))]
 pub(crate) async fn set(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
@@ -49,7 +49,7 @@ pub(crate) async fn set(
 }
 
 /// Get the currently active vote id
-#[tracing::instrument(name = "legalvote_get_current_vote_id", skip(redis_conn))]
+#[tracing::instrument(name = "legal_vote_get_current_vote_id", skip(redis_conn))]
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
@@ -61,7 +61,7 @@ pub(crate) async fn get(
 }
 
 /// Delete the current vote id key
-#[tracing::instrument(name = "legalvote_delete_current_vote_id", skip(redis_conn))]
+#[tracing::instrument(name = "legal_vote_delete_current_vote_id", skip(redis_conn))]
 pub(crate) async fn delete(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,

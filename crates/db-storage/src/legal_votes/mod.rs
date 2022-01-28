@@ -15,7 +15,7 @@ use uuid::Uuid;
 pub mod types;
 
 diesel_newtype! {
-    #[derive(Copy)] LegalVoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/legalvote/"
+    #[derive(Copy)] LegalVoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/legal_vote/"
 }
 
 impl_to_redis_args_se!(LegalVoteId);
@@ -110,15 +110,15 @@ pub trait DbLegalVoteEx: DbInterface {
         }))
     }
 
-    /// Set the vote protocol for the provided `vote_id`
+    /// Set the vote protocol for the provided `legal_vote_id`
     #[tracing::instrument(skip(self, protocol))]
-    fn set_protocol(&self, vote_id: LegalVoteId, protocol: NewProtocol) -> Result<()> {
+    fn set_protocol(&self, legal_vote_id: LegalVoteId, protocol: NewProtocol) -> Result<()> {
         let con = self.get_conn()?;
 
         let protocol =
             serde_json::to_value(protocol).map_err(|e| DatabaseError::Custom(e.to_string()))?;
 
-        let target = legal_votes::table.filter(legal_votes::columns::id.eq(&vote_id));
+        let target = legal_votes::table.filter(legal_votes::columns::id.eq(&legal_vote_id));
 
         diesel::update(target)
             .set(legal_votes::protocol.eq(protocol))
@@ -127,13 +127,13 @@ pub trait DbLegalVoteEx: DbInterface {
         Ok(())
     }
 
-    /// Get the legal vote with the provided `vote_id`
+    /// Get the legal vote with the provided `legal_vote_id`
     #[tracing::instrument(skip(self))]
-    fn get_legal_vote(&self, vote_id: LegalVoteId) -> Result<Option<LegalVote>> {
+    fn get_legal_vote(&self, legal_vote_id: LegalVoteId) -> Result<Option<LegalVote>> {
         let con = self.get_conn()?;
 
         let query_result: QueryResult<LegalVote> = legal_votes::table
-            .filter(legal_votes::columns::id.eq(&vote_id))
+            .filter(legal_votes::columns::id.eq(&legal_vote_id))
             .get_result(&con);
 
         match query_result {
