@@ -15,9 +15,6 @@ pub enum Message {
 
     /// Participant with the given id updated its status
     Update(ParticipantId),
-
-    /// Runner should exit. This message is usually only sent directly to a queue.
-    Exit,
 }
 
 /// Returns the name of the RabbitMQ topic exchange used inside the current room.

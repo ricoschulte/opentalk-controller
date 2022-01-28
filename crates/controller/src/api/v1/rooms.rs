@@ -4,9 +4,9 @@
 //! structs are defined in the Database module [`crate::db`] for database operations.
 
 use super::response::NoContent;
+use crate::api::signaling::prelude::*;
 use crate::api::signaling::resumption::{ResumptionData, ResumptionToken};
 use crate::api::signaling::ticket::{TicketData, TicketToken};
-use crate::api::signaling::{prelude::*, Namespaced};
 use crate::api::v1::{ApiError, ApiResponse, DefaultApiError, PagePaginationQuery};
 use crate::api::Participant;
 use crate::db::invites::InviteCodeUuid;
@@ -15,6 +15,7 @@ use crate::db::sip_configs::{SipConfigParams, SipId, SipPassword};
 use crate::db::users::{User, UserId};
 use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, post, put};
+use anyhow::Context;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::invites::DbInvitesEx;
@@ -383,7 +384,6 @@ type StartError = ApiError<StartRoomError>;
 pub async fn start(
     db_ctx: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
-    rabbitmq_channel: Data<lapin::Channel>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
     request: Json<StartRequest>,
@@ -434,7 +434,6 @@ pub async fn start(
 
     let response = generate_response(
         &mut redis_conn,
-        rabbitmq_channel,
         current_user.id.into(),
         room_id,
         request.breakout_room,
@@ -461,7 +460,6 @@ pub struct InvitedStartRequest {
 pub async fn start_invited(
     db_ctx: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
-    rabbitmq_channel: Data<lapin::Channel>,
     room_id: Path<RoomId>,
     request: Json<InvitedStartRequest>,
 ) -> Result<ApiResponse<StartResponse>, StartError> {
@@ -521,7 +519,6 @@ pub async fn start_invited(
 
     let ticket = generate_response(
         &mut redis_conn,
-        rabbitmq_channel,
         Participant::Guest,
         room_id,
         request.breakout_room,
@@ -548,7 +545,6 @@ pub struct SipStartRequest {
 pub async fn sip_start(
     db_ctx: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
-    rabbitmq_channel: Data<lapin::Channel>,
     request: Json<SipStartRequest>,
 ) -> Result<ApiResponse<StartResponse>, StartError> {
     let mut redis_conn = (**redis_ctx).clone();
@@ -589,15 +585,8 @@ pub async fn sip_start(
         StartError::Internal
     })??;
 
-    let response = generate_response(
-        &mut redis_conn,
-        rabbitmq_channel,
-        Participant::Sip,
-        room_id,
-        None,
-        None,
-    )
-    .await?;
+    let response =
+        generate_response(&mut redis_conn, Participant::Sip, room_id, None, None).await?;
 
     Ok(ApiResponse::new(response))
 }
@@ -610,7 +599,6 @@ pub async fn sip_start(
 /// If the given resumption token is correct, a exit-msg is sent via rabbitmq to the runner of the to-resume session.
 async fn generate_response(
     redis_conn: &mut ConnectionManager,
-    rabbitmq_channel: Data<lapin::Channel>,
     participant: Participant<UserId>,
     room: RoomId,
     breakout_room: Option<BreakoutRoomId>,
@@ -618,12 +606,11 @@ async fn generate_response(
 ) -> Result<StartResponse, StartError> {
     // Get participant id, check resumption token if it exists, if not generate random one
     let participant_id = if let Some(resumption) = resumption {
+        let resumption_redis_key = resumption.into_redis_key();
+
         // Check for resumption data behind resumption token
-        let resumption_data: Option<ResumptionData> = redis::cmd("GETDEL")
-            .arg(&resumption.into_redis_key())
-            .query_async(redis_conn)
-            .await
-            .map_err(|e| {
+        let resumption_data: Option<ResumptionData> =
+            redis_conn.get(&resumption_redis_key).await.map_err(|e| {
                 log::error!("Failed to fetch resumption token from redis, {}", e);
                 StartError::Internal
             })?;
@@ -631,27 +618,26 @@ async fn generate_response(
         // If redis returned None generate random id, else check if request matches resumption data
         if let Some(data) = resumption_data {
             if data.room == room && data.participant == participant {
-                // Send exit message to runner maintaining the resumption token
-                // using the participant id in the resumption token
-                rabbitmq_channel
-                    .basic_publish(
-                        &breakout::rabbitmq::global_exchange_name(room),
-                        &control::rabbitmq::room_participant_routing_key(data.participant_id),
-                        Default::default(),
-                        serde_json::to_vec(&Namespaced {
-                            namespace: control::NAMESPACE,
-                            payload: control::rabbitmq::Message::Exit,
-                        })
-                        .map_err(|_| StartError::Internal)?,
-                        Default::default(),
-                    )
-                    .await
-                    .map_err(|e| {
-                        log::error!("failed to send exit message to runner, {}", e);
-                        StartError::Internal
-                    })?;
+                let in_use =
+                    control::storage::participant_id_in_use(redis_conn, data.participant_id)
+                        .await?;
 
-                data.participant_id
+                if in_use {
+                    return Err(StartError::BadRequest(
+                        "the session of the given resumption token is still running".into(),
+                    ));
+                } else if redis_conn
+                    .del(&resumption_redis_key)
+                    .await
+                    .context("failed to remove resumption token")?
+                {
+                    data.participant_id
+                } else {
+                    // edge case: we successfully GET the resumption token but failed to delete it from redis
+                    // This can only be caused by the same endpoint being called at the same time (race condition)
+                    // or the resumption data expiring at the same time as this endpoint was called
+                    ParticipantId::new()
+                }
             } else {
                 log::debug!("given resumption was valid but was used in an invalid context (wrong user/room)");
                 ParticipantId::new()

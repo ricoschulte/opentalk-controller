@@ -765,9 +765,6 @@ where
 
                 Ok(())
             }
-            control::rabbitmq::Message::Exit => {
-                unreachable!("exit should not be received in test environments")
-            }
         }
     }
 

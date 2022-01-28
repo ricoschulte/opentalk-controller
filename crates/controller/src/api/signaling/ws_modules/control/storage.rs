@@ -272,3 +272,13 @@ pub struct ParticipantIdRunnerLock {
 }
 
 impl_to_redis_args!(ParticipantIdRunnerLock);
+
+pub async fn participant_id_in_use(
+    redis_conn: &mut ConnectionManager,
+    participant_id: ParticipantId,
+) -> Result<bool> {
+    redis_conn
+        .exists(ParticipantIdRunnerLock { id: participant_id })
+        .await
+        .context("failed to check if participant id is in use")
+}
