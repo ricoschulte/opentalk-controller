@@ -35,7 +35,7 @@ pub struct LoginResponse {
 /// Returns a [`LoginResponse`] containing the users permissions.
 #[post("/auth/login")]
 pub async fn login(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     rabbitmq_channel: Data<lapin::Channel>,
     body: Json<Login>,
@@ -67,7 +67,7 @@ pub async fn login(
 
             let db_result = crate::block(
                 move || -> Result<Either<ModifiedUser, (User, Vec<String>)>, DefaultApiError> {
-                    let user = db_ctx.get_user_by_uuid(&user_uuid)?;
+                    let user = db.get_user_by_uuid(&user_uuid)?;
 
                     match user {
                         Some(user) => {
@@ -78,11 +78,8 @@ pub async fn login(
                                 id_token_exp: Some(info.expiration.timestamp()),
                             };
 
-                            let modified_user = db_ctx.modify_user(
-                                user.oidc_uuid,
-                                modify_user,
-                                Some(info.x_grp),
-                            )?;
+                            let modified_user =
+                                db.modify_user(user.oidc_uuid, modify_user, Some(info.x_grp))?;
 
                             Ok(Either::Left(modified_user))
                         }
@@ -103,18 +100,14 @@ pub async fn login(
                                 groups: info.x_grp.clone(),
                             };
 
-                            let created_user = db_ctx.create_user(new_user)?;
+                            let created_user = db.create_user(new_user)?;
 
                             Ok(Either::Right((created_user, info.x_grp)))
                         }
                     }
                 },
             )
-            .await
-            .map_err(|e| {
-                log::error!("BlockingError on POST /auth/login - {}", e);
-                DefaultApiError::Internal
-            })??;
+            .await??;
 
             if let Either::Left(modified_user) = &db_result {
                 // The user was updated.

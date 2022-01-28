@@ -85,7 +85,7 @@ fn disallow_empty(modify_user: &ModifyUser) -> Result<(), ValidationError> {
 /// Returns a JSON array of all database users as [`UserDetails`]
 #[get("/users")]
 pub async fn all(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     current_user: ReqData<User>,
     pagination: Query<PagePaginationQuery>,
     authz: Data<Authz>,
@@ -101,18 +101,14 @@ pub async fn all(
     let (db_users, total_users) = crate::block(
         move || -> Result<(Vec<db_users::User>, i64), DefaultApiError> {
             match accessible_users {
-                kustos::AccessibleResources::All => Ok(db_ctx.get_users_paginated(per_page, page)?),
+                kustos::AccessibleResources::All => Ok(db.get_users_paginated(per_page, page)?),
                 kustos::AccessibleResources::List(list) => {
-                    Ok(db_ctx.get_users_by_ids_paginated(&list, per_page as i64, page as i64)?)
+                    Ok(db.get_users_by_ids_paginated(&list, per_page as i64, page as i64)?)
                 }
             }
         },
     )
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on GET /users - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     let users = db_users
         .into_iter()
@@ -134,7 +130,7 @@ pub async fn all(
 /// Returns the [`UserProfile`] of the affected user.
 #[put("/users/me")]
 pub async fn set_current_user_profile(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     current_user: ReqData<User>,
     modify_user: Json<ModifyUser>,
 ) -> Result<Json<UserProfile>, DefaultApiError> {
@@ -153,15 +149,11 @@ pub async fn set_current_user_profile(
             id_token_exp: None,
         };
 
-        let modified_user = db_ctx.modify_user(current_user.oidc_uuid, modify_user, None)?;
+        let modified_user = db.modify_user(current_user.oidc_uuid, modify_user, None)?;
 
         Ok(modified_user.user)
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on PUT /users - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     let user_profile = UserProfile {
         id: db_user.id,
@@ -203,17 +195,13 @@ pub async fn current_user_profile(
 /// Returns [`UserDetails`] of the specified user
 #[get("/users/{user_id}")]
 pub async fn user_details(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     user_id: Path<SerialUserId>,
 ) -> Result<Json<UserDetails>, DefaultApiError> {
     let db_user = crate::block(move || -> Result<Option<db_users::User>, DefaultApiError> {
-        Ok(db_ctx.get_opt_user_by_id(user_id.into_inner())?)
+        Ok(db.get_opt_user_by_id(user_id.into_inner())?)
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on GET /users/me - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     match db_user {
         None => Err(DefaultApiError::NotFound),
@@ -247,11 +235,7 @@ pub async fn find(
     let found_users = crate::block(move || -> Result<Vec<db_users::User>, DefaultApiError> {
         Ok(db.find_users_by_name(&query.name)?)
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on GET /users/find - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     let found_users = found_users.into_iter().map(Into::into).collect();
 

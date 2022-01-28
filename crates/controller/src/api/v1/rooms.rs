@@ -93,7 +93,7 @@ fn disallow_empty(modify_room: &ModifyRoom) -> Result<(), ValidationError> {
 /// Returns a JSON array of all owned rooms as [`Room`]
 #[get("/rooms")]
 pub async fn owned(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     current_user: ReqData<User>,
     pagination: web::Query<PagePaginationQuery>,
     authz: Data<Authz>,
@@ -109,18 +109,14 @@ pub async fn owned(
     let (rooms, room_count) = crate::block(
         move || -> Result<(Vec<db_rooms::Room>, i64), DefaultApiError> {
             match accessible_rooms {
-                kustos::AccessibleResources::All => Ok(db_ctx.get_rooms_paginated(per_page, page)?),
+                kustos::AccessibleResources::All => Ok(db.get_rooms_paginated(per_page, page)?),
                 kustos::AccessibleResources::List(list) => {
-                    Ok(db_ctx.get_rooms_by_ids_paginated(&list, per_page as i64, page as i64)?)
+                    Ok(db.get_rooms_by_ids_paginated(&list, per_page as i64, page as i64)?)
                 }
             }
         },
     )
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on GET /rooms - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     let rooms = rooms
         .into_iter()
@@ -142,7 +138,7 @@ pub async fn owned(
 /// Returns the created [`Room`].
 #[post("/rooms")]
 pub async fn new(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     current_user: ReqData<User>,
     room_parameters: Json<NewRoom>,
     authz: Data<Authz>,
@@ -164,21 +160,17 @@ pub async fn new(
             listen_only: room_parameters.listen_only,
         };
 
-        let room = db_ctx.new_room(new_room)?;
+        let room = db.new_room(new_room)?;
 
         if room_parameters.enable_sip {
             let sip_params = SipConfigParams::generate_new(room.uuid);
 
-            db_ctx.new_sip_config(sip_params)?;
+            db.new_sip_config(sip_params)?;
         }
 
         Ok(room)
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on POST /rooms - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     let room = Room {
         uuid: db_room.uuid,
@@ -221,7 +213,7 @@ pub async fn new(
 /// Returns the modified [`Room`]
 #[put("/rooms/{room_uuid}")]
 pub async fn modify(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
     modify_room: Json<ModifyRoom>,
@@ -235,7 +227,7 @@ pub async fn modify(
     }
 
     let db_room = crate::block(move || {
-        let room = db_ctx.get_room(room_id)?;
+        let room = db.get_room(room_id)?;
 
         match room {
             None => Err(DefaultApiError::NotFound),
@@ -252,15 +244,11 @@ pub async fn modify(
                     listen_only: modify_room.listen_only,
                 };
 
-                Ok(db_ctx.modify_room(room_id, change_room)?)
+                Ok(db.modify_room(room_id, change_room)?)
             }
         }
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on PUT /rooms{{room_id}} - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     let room = Room {
         uuid: db_room.uuid,
@@ -278,19 +266,14 @@ pub async fn modify(
 /// Deletes the room and owned resources.
 #[delete("/rooms/{room_uuid}")]
 pub async fn delete(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     room_id: Path<RoomId>,
     authz: Data<Authz>,
 ) -> Result<NoContent, DefaultApiError> {
     let room_id = room_id.into_inner();
     let room_path = format!("/rooms/{}", room_id);
 
-    crate::block(move || db_ctx.delete_room(room_id))
-        .await
-        .map_err(|e| {
-            log::error!("BlockingError on DELETE /rooms{{room_id}} - {}", e);
-            DefaultApiError::Internal
-        })??;
+    crate::block(move || db.delete_room(room_id)).await??;
 
     if !authz
         .remove_explicit_resource_permissions(room_path.clone())
@@ -308,24 +291,20 @@ pub async fn delete(
 /// Returns the specified Room as [`RoomDetails`].
 #[get("/rooms/{room_uuid}")]
 pub async fn get(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     room_id: Path<RoomId>,
 ) -> Result<Json<RoomDetails>, DefaultApiError> {
     let room_id = room_id.into_inner();
 
     let db_room = crate::block(move || {
-        let room = db_ctx.get_room(room_id)?;
+        let room = db.get_room(room_id)?;
 
         match room {
             None => Err(DefaultApiError::NotFound),
             Some(room) => Ok(room),
         }
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on GET /rooms{{room_id}} - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     let room_details = RoomDetails {
         uuid: db_room.uuid,
@@ -382,7 +361,7 @@ type StartError = ApiError<StartRoomError>;
 /// Returns [`StartRoomError::WrongRoomPassword`] when the provided password is wrong.
 #[post("/rooms/{room_id}/start")]
 pub async fn start(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
@@ -392,15 +371,11 @@ pub async fn start(
     let room_id = room_id.into_inner();
 
     let room = crate::block(move || -> Result<db_rooms::Room, StartError> {
-        let room = db_ctx.get_room(room_id)?.ok_or(StartError::NotFound)?;
+        let room = db.get_room(room_id)?.ok_or(StartError::NotFound)?;
 
         Ok(room)
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on POST /rooms/{{room_uuid}}/start - {}", e);
-        StartError::Internal
-    })??;
+    .await??;
 
     if !room.password.is_empty() {
         if let Some(pw) = &request.password {
@@ -458,7 +433,7 @@ pub struct InvitedStartRequest {
 /// See [`start`]
 #[post("/rooms/{room_id}/start_invited")]
 pub async fn start_invited(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
     room_id: Path<RoomId>,
     request: Json<InvitedStartRequest>,
@@ -470,22 +445,19 @@ pub async fn start_invited(
         .map_err(|_| StartError::BadRequest("bad invite_code format".to_string()))?;
 
     let room = crate::block(move || -> Result<db_rooms::Room, StartError> {
-        let invite = db_ctx.get_invite(&InviteCodeId::from(invite_code_as_uuid))?;
+        let invite = db.get_invite(&InviteCodeId::from(invite_code_as_uuid))?;
+
         if !invite.active {
             return Err(StartError::AuthJson(StartRoomError::InvalidInvite.into()));
         }
         if invite.room != room_id {
             return Err(StartError::BadRequest("RoomId mismatch".to_string()));
         }
-        let room = db_ctx.get_room(invite.room)?.ok_or(StartError::NotFound)?;
+        let room = db.get_room(invite.room)?.ok_or(StartError::NotFound)?;
 
         Ok(room)
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on POST /rooms/{{room_uuid}}/start - {}", e);
-        StartError::Internal
-    })??;
+    .await??;
 
     if !room.password.is_empty() {
         if let Some(pw) = &request.password {
@@ -543,7 +515,7 @@ pub struct SipStartRequest {
 /// Returns [`StartError::NotFound`](ApiError::NotFound) when the requested room could not be found.
 #[post("/rooms/sip/start")]
 pub async fn sip_start(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
     request: Json<SipStartRequest>,
 ) -> Result<ApiResponse<StartResponse>, StartError> {
@@ -561,11 +533,9 @@ pub async fn sip_start(
         .map_err(|_| StartError::BadRequest("bad sip_password format".to_string()))?;
 
     let room_id = crate::block(move || -> Result<RoomId, StartError> {
-        if let Some(sip_config) = db_ctx.get_sip_config_by_sip_id(request.sip_id)? {
+        if let Some(sip_config) = db.get_sip_config_by_sip_id(request.sip_id)? {
             if sip_config.password == request.password {
-                let room = db_ctx
-                    .get_room(sip_config.room)?
-                    .ok_or(StartError::Internal)?;
+                let room = db.get_room(sip_config.room)?.ok_or(StartError::Internal)?;
 
                 Ok(room.uuid)
             } else {
@@ -579,11 +549,7 @@ pub async fn sip_start(
             ))
         }
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on POST /rooms/sip/start - {}", e);
-        StartError::Internal
-    })??;
+    .await??;
 
     let response =
         generate_response(&mut redis_conn, Participant::Sip, room_id, None, None).await?;

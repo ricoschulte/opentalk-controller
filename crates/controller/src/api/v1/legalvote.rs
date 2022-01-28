@@ -146,13 +146,13 @@ pub enum FailReason {
 /// Returns a JSON array of the legalvotes created in this room that the user can access
 #[get("/rooms/{room_id}/legalvote")]
 pub async fn get_all_for_room(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     authz: Data<Authz>,
     pagination: Query<PagePaginationQuery>,
     room_id: Path<RoomId>,
     current_user: ReqData<User>,
 ) -> Result<ApiResponse<Vec<LegalvoteEntry>>, DefaultApiError> {
-    let db_ctx = db_ctx.into_inner();
+    let db_ctx = db.into_inner();
     let room_id = room_id.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
@@ -191,11 +191,7 @@ pub async fn get_all_for_room(
             Ok((detailed_votes, count))
         },
     )
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on GET /rooms/{{room_id}}/legalvote - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     Ok(ApiResponse::new(legal_votes).with_page_pagination(per_page, page, count))
 }
@@ -205,7 +201,7 @@ pub async fn get_all_for_room(
 /// Returns a JSON array of the legalvotes that the user can access
 #[get("/legalvote")]
 pub async fn get_all(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     authz: Data<Authz>,
     pagination: Query<PagePaginationQuery>,
     current_user: ReqData<User>,
@@ -217,7 +213,7 @@ pub async fn get_all(
         .await
         .map_err(|_| DefaultApiError::Internal)?;
 
-    let db_ctx = db_ctx.into_inner();
+    let db_ctx = db.into_inner();
 
     let (legal_votes, count) = crate::block(
         move || -> Result<(Vec<LegalvoteEntry>, i64), DefaultApiError> {
@@ -248,11 +244,7 @@ pub async fn get_all(
             Ok((detailed_votes, count))
         },
     )
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on GET /legalvote - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     Ok(ApiResponse::new(legal_votes).with_page_pagination(per_page, page, count))
 }
@@ -262,7 +254,7 @@ pub async fn get_all(
 /// Returns the specified legalvote as [`LegalvoteEntry`]
 #[get("/legalvote/{vote_id}")]
 pub async fn get_specific(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     authz: Data<Authz>,
     vote_id: Path<LegalVoteId>,
     current_user: ReqData<User>,
@@ -284,11 +276,11 @@ pub async fn get_specific(
     }
 
     let legal_vote_detailed = crate::block(move || -> Result<LegalvoteEntry, DefaultApiError> {
-        let legal_vote = db_ctx
+        let legal_vote = db
             .get_legal_vote(vote_id)?
             .ok_or(DefaultApiError::NotFound)?;
 
-        let legalvote_entry = match parse_protocol(legal_vote.protocol, db_ctx.into_inner()) {
+        let legalvote_entry = match parse_protocol(legal_vote.protocol, db.into_inner()) {
             Ok(legalvote_detailed) => LegalvoteEntry {
                 vote_id: legal_vote.id,
                 protocol_result: ProtocolResult::Ok(legalvote_detailed),
@@ -301,11 +293,7 @@ pub async fn get_specific(
 
         Ok(legalvote_entry)
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on GET /legalvote/{{vote_id}} - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     Ok(Json(legal_vote_detailed))
 }
