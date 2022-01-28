@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::VoteId;
+use controller::db::legal_votes::LegalVoteId;
 use controller::prelude::*;
 use db_storage::legal_votes::types::{VoteOption, Votes};
 use displaydoc::Display;
@@ -16,7 +16,7 @@ use std::collections::HashMap;
 /// See [`VOTE_SCRIPT`](super::VOTE_SCRIPT) for more details on the vote process.
 pub(super) struct VoteCountKey {
     pub(super) room_id: SignalingRoomId,
-    pub(super) vote_id: VoteId,
+    pub(super) vote_id: LegalVoteId,
 }
 
 impl_to_redis_args!(VoteCountKey);
@@ -26,7 +26,7 @@ impl_to_redis_args!(VoteCountKey);
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: VoteId,
+    vote_id: LegalVoteId,
     enable_abstain: bool,
 ) -> Result<Votes> {
     let vote_count: HashMap<VoteOption, u64> = redis_conn

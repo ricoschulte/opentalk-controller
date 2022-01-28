@@ -1,5 +1,5 @@
 use super::schema::{groups, user_groups};
-use super::users::{User, UserId};
+use super::users::{SerialUserId, User};
 use database::{DatabaseError, DbInterface, Result};
 use diesel::{ExpressionMethods, Identifiable, Insertable, QueryDsl, Queryable, RunQueryDsl};
 use std::borrow::Borrow;
@@ -26,7 +26,7 @@ impl Borrow<String> for Group {
 #[derive(Debug, Insertable)]
 #[table_name = "user_groups"]
 pub struct NewUserGroup {
-    pub user_id: UserId,
+    pub user_id: SerialUserId,
     pub group_id: String,
 }
 
@@ -36,13 +36,13 @@ pub struct NewUserGroup {
 #[belongs_to(Group, foreign_key = "group_id")]
 #[primary_key(user_id, group_id)]
 pub struct UserGroup {
-    pub user_id: UserId,
+    pub user_id: SerialUserId,
     pub group_id: String,
 }
 
 pub trait DbGroupsEx: DbInterface {
     #[tracing::instrument(skip(self, user_id))]
-    fn get_groups_for_user(&self, user_id: UserId) -> Result<HashSet<Group>> {
+    fn get_groups_for_user(&self, user_id: SerialUserId) -> Result<HashSet<Group>> {
         let con = self.get_conn()?;
 
         let groups: Vec<Group> = user_groups::table

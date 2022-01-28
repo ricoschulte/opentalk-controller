@@ -4,7 +4,7 @@ use controller::prelude::*;
 use database::Db;
 use db_storage::migrations::migrate_from_url;
 use db_storage::rooms::{DbRoomsEx, NewRoom, Room, RoomId};
-use db_storage::users::{DbUsersEx, NewUser, NewUserWithGroups, User, UserId};
+use db_storage::users::{DbUsersEx, NewUser, NewUserWithGroups, SerialUserId, User};
 use diesel::{Connection, PgConnection, RunQueryDsl};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -61,7 +61,7 @@ impl DatabaseContext {
         }
     }
 
-    pub fn create_test_user(&self, id: UserId, groups: Vec<String>) -> Result<User> {
+    pub fn create_test_user(&self, id: SerialUserId, groups: Vec<String>) -> Result<User> {
         let user_uuid = Uuid::from_u128(id.into_inner() as u128);
 
         let new_user = NewUser {
@@ -85,7 +85,7 @@ impl DatabaseContext {
             .map(|user| user.expect("Expected user1 to exist"))?)
     }
 
-    pub fn create_test_room(&self, room_id: RoomId, owner: UserId) -> Result<Room> {
+    pub fn create_test_room(&self, room_id: RoomId, owner: SerialUserId) -> Result<Room> {
         let new_room = NewRoom {
             uuid: room_id,
             owner,

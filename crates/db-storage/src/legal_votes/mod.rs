@@ -1,7 +1,7 @@
 use self::types::protocol::NewProtocol;
 use crate::rooms::RoomId;
 use crate::schema::legal_votes;
-use crate::users::UserId;
+use crate::users::SerialUserId;
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
 use database::{DatabaseError, DbInterface, Paginate, Result};
 use diesel::dsl::any;
@@ -14,18 +14,20 @@ use uuid::Uuid;
 
 pub mod types;
 
-diesel_newtype!(#[derive(Copy)] VoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/legalvote/");
+diesel_newtype! {
+    #[derive(Copy)] LegalVoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/legalvote/"
+}
 
-impl_to_redis_args_se!(VoteId);
-impl_from_redis_value_de!(VoteId);
+impl_to_redis_args_se!(LegalVoteId);
+impl_from_redis_value_de!(LegalVoteId);
 
 /// Diesel legal_vote struct
 ///
 /// Represents a legal vote in the database
 #[derive(Debug, Queryable, Identifiable)]
 pub struct LegalVote {
-    pub id: VoteId,
-    pub initiator: UserId,
+    pub id: LegalVoteId,
+    pub initiator: SerialUserId,
     pub protocol: Protocol,
     pub room_id: Option<RoomId>,
 }
@@ -36,8 +38,8 @@ pub struct LegalVote {
 #[derive(Debug, Clone, Insertable)]
 #[table_name = "legal_votes"]
 pub struct NewLegalVote {
-    pub id: VoteId,
-    pub initiator: UserId,
+    pub id: LegalVoteId,
+    pub initiator: SerialUserId,
     pub protocol: NewProtocol,
     pub room_id: Option<RoomId>,
 }
@@ -51,7 +53,7 @@ pub trait DbLegalVoteEx: DbInterface {
     fn new_legal_vote(
         &self,
         room_id: RoomId,
-        initiator: UserId,
+        initiator: SerialUserId,
         protocol_version: u8,
     ) -> Result<LegalVote> {
         let conn = self.get_conn()?;
@@ -66,7 +68,7 @@ pub trait DbLegalVoteEx: DbInterface {
         // 3 times, something is wrong with our randomness or our database.
         for _ in 0..3 {
             let new_legal_vote = NewLegalVote {
-                id: VoteId::from(Uuid::new_v4()),
+                id: LegalVoteId::from(Uuid::new_v4()),
                 initiator,
                 protocol: protocol.clone(),
                 room_id: Some(room_id),
@@ -110,7 +112,7 @@ pub trait DbLegalVoteEx: DbInterface {
 
     /// Set the vote protocol for the provided `vote_id`
     #[tracing::instrument(skip(self, protocol))]
-    fn set_protocol(&self, vote_id: VoteId, protocol: NewProtocol) -> Result<()> {
+    fn set_protocol(&self, vote_id: LegalVoteId, protocol: NewProtocol) -> Result<()> {
         let con = self.get_conn()?;
 
         let protocol =
@@ -127,7 +129,7 @@ pub trait DbLegalVoteEx: DbInterface {
 
     /// Get the legal vote with the provided `vote_id`
     #[tracing::instrument(skip(self))]
-    fn get_legal_vote(&self, vote_id: VoteId) -> Result<Option<LegalVote>> {
+    fn get_legal_vote(&self, vote_id: LegalVoteId) -> Result<Option<LegalVote>> {
         let con = self.get_conn()?;
 
         let query_result: QueryResult<LegalVote> = legal_votes::table
@@ -148,7 +150,7 @@ pub trait DbLegalVoteEx: DbInterface {
     fn get_legal_votes_by_id_for_room_paginated(
         &self,
         room_id: RoomId,
-        accessible_ids: &[VoteId],
+        accessible_ids: &[LegalVoteId],
         limit: i64,
         page: i64,
     ) -> Result<(Vec<LegalVote>, i64)> {
@@ -173,7 +175,7 @@ pub trait DbLegalVoteEx: DbInterface {
     #[tracing::instrument(skip(self))]
     fn get_legal_votes_by_id_paginated(
         &self,
-        ids: &[VoteId],
+        ids: &[LegalVoteId],
         limit: i64,
         page: i64,
     ) -> Result<(Vec<LegalVote>, i64)> {

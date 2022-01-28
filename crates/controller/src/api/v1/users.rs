@@ -5,7 +5,7 @@
 
 use crate::api::v1::{ApiResponse, DefaultApiError, PagePaginationQuery};
 use crate::db::users::User;
-use crate::db::users::{self as db_users, UserId};
+use crate::db::users::{self as db_users, SerialUserId};
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{get, put};
 use database::Db;
@@ -19,7 +19,7 @@ use validator::{Validate, ValidationError};
 /// Contains general "public" information about a user. Is accessible to all other users.
 #[derive(Debug, Serialize)]
 pub struct UserDetails {
-    pub id: UserId,
+    pub id: SerialUserId,
     pub email: String,
     pub title: String,
     pub firstname: String,
@@ -45,7 +45,7 @@ impl From<db_users::User> for UserDetails {
 /// Is used on */users/me* endpoints.
 #[derive(Debug, Serialize)]
 pub struct UserProfile {
-    pub id: UserId,
+    pub id: SerialUserId,
     pub email: String,
     pub title: String,
     pub firstname: String,
@@ -93,7 +93,7 @@ pub async fn all(
     let current_user = current_user.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
-    let accessible_users: kustos::AccessibleResources<UserId> = authz
+    let accessible_users: kustos::AccessibleResources<SerialUserId> = authz
         .get_accessible_resources_for_user(current_user.clone().oidc_uuid, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;
@@ -204,7 +204,7 @@ pub async fn current_user_profile(
 #[get("/users/{user_id}")]
 pub async fn user_details(
     db_ctx: Data<Db>,
-    user_id: Path<UserId>,
+    user_id: Path<SerialUserId>,
 ) -> Result<Json<UserDetails>, DefaultApiError> {
     let db_user = crate::block(move || -> Result<Option<db_users::User>, DefaultApiError> {
         Ok(db_ctx.get_opt_user_by_id(user_id.into_inner())?)

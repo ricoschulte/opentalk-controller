@@ -1,7 +1,7 @@
 use anyhow::Result;
 use controller::db::migrations::migrate_from_url;
 use controller::db::rooms::{NewRoom, RoomId};
-use controller::db::users::UserId;
+use controller::db::users::SerialUserId;
 use controller::settings::Database;
 use credentials::Credentials;
 use database::Db;
@@ -63,7 +63,7 @@ fn try_to_create_room(room: Room, database_interface: &Db) -> Result<()> {
     Ok(())
 }
 
-fn create_room(room: Room, owner_id: UserId, database_interface: &Db) -> Result<()> {
+fn create_room(room: Room, owner_id: SerialUserId, database_interface: &Db) -> Result<()> {
     let new_room = NewRoom {
         uuid: RoomId::from(room.uuid.unwrap_or_else(Uuid::new_v4)),
         owner: owner_id,

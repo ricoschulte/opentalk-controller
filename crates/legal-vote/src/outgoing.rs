@@ -1,5 +1,5 @@
 use crate::rabbitmq::{Canceled, StopKind};
-use controller::db::legal_votes::VoteId;
+use controller::db::legal_votes::LegalVoteId;
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::{Invalid, Parameters, VoteOption, Votes};
 use serde::Serialize;
@@ -27,7 +27,7 @@ pub enum Message {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct VoteResponse {
     /// The vote id of the requested vote
-    pub vote_id: VoteId,
+    pub vote_id: LegalVoteId,
     /// The response to the vote request
     #[serde(flatten)]
     pub response: Response,
@@ -75,7 +75,7 @@ pub struct Results {
 #[derive(Debug, Serialize, PartialEq)]
 pub struct VoteResults {
     /// The vote id
-    pub vote_id: VoteId,
+    pub vote_id: LegalVoteId,
     /// The vote results
     #[serde(flatten)]
     pub results: Results,
@@ -85,7 +85,7 @@ pub struct VoteResults {
 #[derive(Debug, Serialize, PartialEq)]
 pub struct Stopped {
     /// The vote id
-    pub vote_id: VoteId,
+    pub vote_id: LegalVoteId,
     /// Specifies the reason for the stop
     #[serde(flatten)]
     pub kind: StopKind,
@@ -175,7 +175,7 @@ mod test {
 
         let message = Message::Started(Parameters {
             initiator_id: ParticipantId::nil(),
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
             max_votes: 2,
             inner: UserParameters {
@@ -199,7 +199,7 @@ mod test {
         let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":"success","vote_option":"yes","issuer":"00000000-0000-0000-0000-000000000000"}"#;
 
         let message = Message::Voted(VoteResponse {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::Yes,
                 issuer: ParticipantId::nil(),
@@ -216,7 +216,7 @@ mod test {
         let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":"failed","reason":"invalid_vote_id"}"#;
 
         let message = Message::Voted(VoteResponse {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             response: Response::Failed(VoteFailed::InvalidVoteId),
         });
 
@@ -230,7 +230,7 @@ mod test {
         let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":"failed","reason":"ineligible"}"#;
 
         let message = Message::Voted(VoteResponse {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             response: Response::Failed(VoteFailed::Ineligible),
         });
 
@@ -244,7 +244,7 @@ mod test {
         let json_str = r#"{"message":"voted","vote_id":"00000000-0000-0000-0000-000000000000","response":"failed","reason":"invalid_option"}"#;
 
         let message = Message::Voted(VoteResponse {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             response: Response::Failed(VoteFailed::InvalidOption),
         });
 
@@ -267,7 +267,7 @@ mod test {
         voters.insert(ParticipantId::new_test(1), VoteOption::Yes);
 
         let message = Message::Updated(VoteResults {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             results: Results { votes, voters },
         });
 
@@ -290,7 +290,7 @@ mod test {
         voters.insert(ParticipantId::new_test(1), VoteOption::Yes);
 
         let message = Message::Stopped(Stopped {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Valid(Results { votes, voters }),
         });
@@ -314,7 +314,7 @@ mod test {
         voters.insert(ParticipantId::new_test(1), VoteOption::Yes);
 
         let message = Message::Stopped(Stopped {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::Auto,
             results: FinalResults::Valid(Results { votes, voters }),
         });
@@ -338,7 +338,7 @@ mod test {
         voters.insert(ParticipantId::new_test(1), VoteOption::Abstain);
 
         let message = Message::Stopped(Stopped {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::Expired,
             results: FinalResults::Valid(Results { votes, voters }),
         });
@@ -353,7 +353,7 @@ mod test {
         let json_str = r#"{"message":"stopped","vote_id":"00000000-0000-0000-0000-000000000000","kind":"by_participant","issuer":"00000000-0000-0000-0000-000000000000","results":"invalid","reason":"vote_count_inconsistent"}"#;
 
         let message = Message::Stopped(Stopped {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Invalid(Invalid::VoteCountInconsistent),
         });
@@ -368,7 +368,7 @@ mod test {
         let json_str = r#"{"message":"canceled","vote_id":"00000000-0000-0000-0000-000000000000","reason":"room_destroyed"}"#;
 
         let message = Message::Canceled(Canceled {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             reason: CancelReason::RoomDestroyed,
         });
 
@@ -382,7 +382,7 @@ mod test {
         let json_str = r#"{"message":"canceled","vote_id":"00000000-0000-0000-0000-000000000000","reason":"initiator_left"}"#;
 
         let message = Message::Canceled(Canceled {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             reason: CancelReason::InitiatorLeft,
         });
 
@@ -396,7 +396,7 @@ mod test {
         let json_str = r#"{"message":"canceled","vote_id":"00000000-0000-0000-0000-000000000000","reason":"custom","custom":"A custom reason"}"#;
 
         let message = Message::Canceled(Canceled {
-            vote_id: VoteId::from(Uuid::nil()),
+            vote_id: LegalVoteId::from(Uuid::nil()),
             reason: CancelReason::Custom("A custom reason".into()),
         });
 

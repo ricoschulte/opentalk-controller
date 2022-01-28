@@ -3,7 +3,7 @@ use controller::prelude::{ModuleTester, WsMessageOutgoing};
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::{CancelReason, Parameters, UserParameters, VoteOption, Votes};
 use db_storage::legal_votes::DbLegalVoteEx;
-use db_storage::legal_votes::VoteId;
+use db_storage::legal_votes::LegalVoteId;
 use k3k_legal_vote::incoming::{Stop, VoteMessage};
 use k3k_legal_vote::outgoing::{
     ErrorKind, GuestParticipants, InvalidFields, Response, Stopped, VoteFailed, VoteResponse,
@@ -994,7 +994,7 @@ async fn vote_on_nonexistent_vote() {
     let test_ctx = TestContext::new().await;
     let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
-    let vote_id = VoteId::from(Uuid::from_u128(11311));
+    let vote_id = LegalVoteId::from(Uuid::from_u128(11311));
 
     module_tester
         .send_ws_message(
@@ -1300,7 +1300,7 @@ async fn default_vote_start(module_tester: &mut ModuleTester<LegalVote>) {
 }
 
 /// Receive the vote start on user2 and return the corresponding vote id
-async fn receive_start_on_user2(module_tester: &mut ModuleTester<LegalVote>) -> VoteId {
+async fn receive_start_on_user2(module_tester: &mut ModuleTester<LegalVote>) -> LegalVoteId {
     if let WsMessageOutgoing::Module(outgoing::Message::Started(Parameters {
         initiator_id: _,
         vote_id,
@@ -1319,7 +1319,7 @@ async fn receive_start_on_user2(module_tester: &mut ModuleTester<LegalVote>) -> 
 /// A default setup where user1 starts the vote and user2 receives the started response.
 ///
 /// Note: This leaves the started response in the ws_receive buffer of user1.
-async fn default_start_setup(module_tester: &mut ModuleTester<LegalVote>) -> VoteId {
+async fn default_start_setup(module_tester: &mut ModuleTester<LegalVote>) -> LegalVoteId {
     default_vote_start(module_tester).await;
     receive_start_on_user2(module_tester).await
 }

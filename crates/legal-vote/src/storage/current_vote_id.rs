@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::VoteId;
+use controller::db::legal_votes::LegalVoteId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
@@ -33,7 +33,7 @@ impl_to_redis_args!(CurrentVoteIdKey);
 pub(crate) async fn set(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    new_vote_id: VoteId,
+    new_vote_id: LegalVoteId,
 ) -> Result<bool> {
     // set if not exists
     let affected_entries: i64 = redis_conn
@@ -53,7 +53,7 @@ pub(crate) async fn set(
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-) -> Result<Option<VoteId>> {
+) -> Result<Option<LegalVoteId>> {
     redis_conn
         .get(CurrentVoteIdKey { room_id })
         .await

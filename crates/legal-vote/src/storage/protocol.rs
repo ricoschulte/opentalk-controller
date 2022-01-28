@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::VoteId;
+use controller::db::legal_votes::LegalVoteId;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, VoteEvent};
@@ -17,7 +17,7 @@ use std::collections::HashMap;
 /// with information about the event that happened.
 pub(super) struct ProtocolKey {
     pub(super) room_id: SignalingRoomId,
-    pub(super) vote_id: VoteId,
+    pub(super) vote_id: LegalVoteId,
 }
 
 impl_to_redis_args!(ProtocolKey);
@@ -27,7 +27,7 @@ impl_to_redis_args!(ProtocolKey);
 pub(crate) async fn add_entry(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: VoteId,
+    vote_id: LegalVoteId,
     entry: ProtocolEntry,
 ) -> Result<()> {
     redis_conn
@@ -43,7 +43,7 @@ pub(crate) async fn add_entry(
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: VoteId,
+    vote_id: LegalVoteId,
 ) -> Result<Vec<ProtocolEntry>> {
     redis_conn
         .lrange(ProtocolKey { room_id, vote_id }, 0, -1)

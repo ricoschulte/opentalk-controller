@@ -2,8 +2,8 @@
 use crate::diesel::RunQueryDsl;
 use crate::schema::rooms;
 use crate::schema::users;
+use crate::users::SerialUserId;
 use crate::users::User;
-use crate::users::UserId;
 use database::{DbInterface, Paginate, Result};
 use diesel::dsl::any;
 use diesel::{Connection, ExpressionMethods, QueryDsl, QueryResult};
@@ -18,7 +18,7 @@ diesel_newtype!(#[derive(Copy)] RoomId(uuid::Uuid) => diesel::sql_types::Uuid, "
 pub struct Room {
     pub id: i64,
     pub uuid: RoomId,
-    pub owner: UserId,
+    pub owner: SerialUserId,
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
@@ -31,7 +31,7 @@ pub struct Room {
 #[table_name = "rooms"]
 pub struct NewRoom {
     pub uuid: RoomId,
-    pub owner: UserId,
+    pub owner: SerialUserId,
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
@@ -43,7 +43,7 @@ pub struct NewRoom {
 #[derive(Debug, AsChangeset)]
 #[table_name = "rooms"]
 pub struct ModifyRoom {
-    pub owner: Option<UserId>,
+    pub owner: Option<SerialUserId>,
     pub password: Option<String>,
     pub wait_for_moderator: Option<bool>,
     pub listen_only: Option<bool>,

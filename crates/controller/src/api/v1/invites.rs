@@ -1,7 +1,7 @@
 //! Contains invite related REST endpoints.
 use crate::api::v1::ApiResponse;
 use crate::api::v1::{users::UserDetails, DefaultApiError, DefaultApiResult, PagePaginationQuery};
-use crate::db::invites::{self as db_invites, InviteCodeUuid};
+use crate::db::invites::{self as db_invites, InviteCodeId};
 use crate::db::rooms::RoomId;
 use crate::db::users::{self as db_users, User};
 use crate::db::DatabaseError;
@@ -89,7 +89,7 @@ pub async fn add_invite(
             let invite_code_uuid = uuid::Uuid::new_v4();
             let now = chrono::Utc::now();
             let new_invite = db_invites::NewInvite {
-                uuid: &InviteCodeUuid::from(invite_code_uuid),
+                uuid: &InviteCodeId::from(invite_code_uuid),
                 active: true,
                 created: &now,
                 created_by: &current_user_clone.id,
@@ -151,7 +151,7 @@ pub async fn get_invites(
     let current_user = current_user.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
-    let accessible_rooms: kustos::AccessibleResources<InviteCodeUuid> = authz
+    let accessible_rooms: kustos::AccessibleResources<InviteCodeId> = authz
         .get_accessible_resources_for_user(current_user.clone().oidc_uuid, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;
@@ -193,7 +193,7 @@ pub async fn get_invites(
 #[derive(Debug, Deserialize)]
 pub struct RoomIdAndInviteCode {
     room_uuid: RoomId,
-    invite_code: InviteCodeUuid,
+    invite_code: InviteCodeId,
 }
 
 /// API Endpoint *GET /rooms/{room_uuid}/invites/{invite_code}*
@@ -387,7 +387,7 @@ pub async fn verify_invite_code(
     let invite_code = data.invite_code;
     let db_ctx_clone = db_ctx.clone();
     let invite = crate::block(move || -> Result<db_invites::Invite, DefaultApiError> {
-        Ok(db_ctx_clone.get_invite(&InviteCodeUuid::from(invite_code))?)
+        Ok(db_ctx_clone.get_invite(&InviteCodeId::from(invite_code))?)
     })
     .await
     .map_err(|e| {
