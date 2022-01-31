@@ -52,7 +52,7 @@ impl SignalingProtocols {
 #[get("/signaling")]
 pub(crate) async fn ws_service(
     shutdown: Data<broadcast::Sender<()>>,
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     authz: Data<Authz>,
     redis_conn: Data<ConnectionManager>,
     rabbit_mq_channel: Data<lapin::Channel>,
@@ -77,8 +77,7 @@ pub(crate) async fn ws_service(
     let ticket_data = get_ticket_data_from_redis(&mut redis_conn, ticket).await?;
 
     // Get user & room from database using the ticket data
-    let (participant, room) =
-        get_user_and_room_from_ticket_data(db_ctx.clone(), &ticket_data).await?;
+    let (participant, room) = get_user_and_room_from_ticket_data(db.clone(), &ticket_data).await?;
 
     // Create resumption data to be refreshed by the runner in redis
     let resumption_data = ResumptionData {
@@ -109,7 +108,7 @@ pub(crate) async fn ws_service(
         ticket_data.breakout_room,
         participant,
         protocol,
-        db_ctx.into_inner(),
+        db.into_inner(),
         authz.into_inner(),
         redis_conn,
         (**rabbit_mq_channel).clone(),
@@ -233,7 +232,7 @@ async fn get_ticket_data_from_redis(
 }
 
 async fn get_user_and_room_from_ticket_data(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     ticket_data: &TicketData,
 ) -> Result<(Participant<User>, Room), ApiError> {
     let participant = ticket_data.participant;
@@ -243,7 +242,7 @@ async fn get_user_and_room_from_ticket_data(
         move || -> Result<(Participant<User>, Room), DefaultApiError> {
             let participant = match participant {
                 Participant::User(user_id) => {
-                    let user = db_ctx
+                    let user = db
                         .get_opt_user_by_id(user_id)
                         .map_err(DefaultApiError::from)?;
 
@@ -254,7 +253,7 @@ async fn get_user_and_room_from_ticket_data(
                 Participant::Sip => Participant::Sip,
             };
 
-            let room = db_ctx.get_room(room_id).map_err(DefaultApiError::from)?;
+            let room = db.get_room(room_id).map_err(DefaultApiError::from)?;
 
             let room = room.ok_or(DefaultApiError::NotFound)?;
 

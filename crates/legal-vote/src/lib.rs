@@ -57,7 +57,7 @@ pub struct TimerEvent {
 /// Holds a database interface and information about the underlying user & room. Vote information is
 /// saved and managed in redis via the private `storage` module.
 pub struct LegalVote {
-    db_ctx: Arc<Db>,
+    db: Arc<Db>,
     authz: Arc<Authz>,
     participant_id: ParticipantId,
     user_id: SerialUserId,
@@ -83,7 +83,7 @@ impl SignalingModule for LegalVote {
     ) -> anyhow::Result<Option<Self>> {
         if let Participant::User(user) = ctx.participant() {
             Ok(Some(Self {
-                db_ctx: ctx.db().clone(),
+                db: ctx.db().clone(),
                 authz: ctx.authz().clone(),
                 participant_id: ctx.participant_id(),
                 user_id: user.id,
@@ -917,13 +917,13 @@ impl LegalVote {
     ///
     /// Adds a new vote with an empty protocol to the database. Returns the [`VoteId`] of the new vote.
     async fn new_vote_in_database(&self) -> Result<LegalVoteId> {
-        let db_ctx = self.db_ctx.clone();
+        let db = self.db.clone();
 
         let user_id = self.user_id;
         let room_id = self.room_id.room_id();
 
         let legal_vote =
-            controller::block(move || db_ctx.new_legal_vote(room_id, user_id, PROTOCOL_VERSION))
+            controller::block(move || db.new_legal_vote(room_id, user_id, PROTOCOL_VERSION))
                 .await??;
 
         Ok(legal_vote.id)
@@ -939,9 +939,9 @@ impl LegalVote {
 
         let protocol = NewProtocol::new(entries);
 
-        let db_ctx = self.db_ctx.clone();
+        let db = self.db.clone();
 
-        controller::block(move || db_ctx.set_protocol(vote_id, protocol)).await??;
+        controller::block(move || db.set_protocol(vote_id, protocol)).await??;
 
         Ok(())
     }

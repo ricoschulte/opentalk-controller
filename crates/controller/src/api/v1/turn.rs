@@ -67,7 +67,7 @@ pub enum IceServer {
 #[get("/turn")]
 pub async fn get(
     settings: Data<arc_swap::ArcSwap<settings::Settings>>,
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     req: HttpRequest,
 ) -> Result<AWEither<Json<Vec<IceServer>>, NoContent>, DefaultApiError> {
@@ -78,7 +78,7 @@ pub async fn get(
     let stun_servers = &settings.stun;
 
     // This is a omniauth endpoint. AccessTokens and InviteCodes are allowed as Bearer tokens
-    match check_access_token_or_invite(&req, db_ctx, oidc_ctx).await? {
+    match check_access_token_or_invite(&req, db, oidc_ctx).await? {
         Either::Right(invite) => {
             log::trace!(
                 "Generating new turn credentials for invite {} and servers {:?}",
@@ -193,7 +193,7 @@ fn rr_servers<T: Rng + CryptoRng>(
 /// Checks for a valid access_token similar to the OIDC Middleware, but also allows invite_tokens as a valid bearer token.
 pub async fn check_access_token_or_invite(
     req: &HttpRequest,
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
 ) -> Result<Either<User, Invite>, DefaultApiError> {
     let auth = Authorization::<Bearer>::parse(req).map_err(|e| {
@@ -205,12 +205,9 @@ pub async fn check_access_token_or_invite(
     })?;
 
     let access_token = auth.into_scheme().token().to_string();
-    let current_user = check_access_token(
-        db_ctx.clone(),
-        oidc_ctx,
-        AccessToken::new(access_token.clone()),
-    )
-    .await;
+    let current_user =
+        check_access_token(db.clone(), oidc_ctx, AccessToken::new(access_token.clone())).await;
+
     match current_user {
         Ok(user) => Ok(Either::Left(user)),
         Err(DefaultApiError::Auth(_, _)) => {
@@ -223,7 +220,7 @@ pub async fn check_access_token_or_invite(
             })?;
 
             crate::block(
-                move || match db_ctx.get_invite(&InviteCodeId::from(invite_uuid)) {
+                move || match db.get_invite(&InviteCodeId::from(invite_uuid)) {
                     Ok(invite) => Ok(invite),
                     Err(DatabaseError::NotFound) => {
                         log::warn!("The requesting user could not be found in the database");
@@ -238,11 +235,7 @@ pub async fn check_access_token_or_invite(
                     }
                 },
             )
-            .await
-            .map_err(|e| {
-                log::error!("crate::block failed, {}", e);
-                DefaultApiError::Internal
-            })?
+            .await?
             .map(Either::Right)
         }
         Err(e) => Err(e),

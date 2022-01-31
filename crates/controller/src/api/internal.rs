@@ -40,7 +40,7 @@ enum TokenType {
 #[post("/introspect")]
 pub async fn introspect(
     body: Json<IntrospectRequest>,
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
 ) -> HttpResponse {
     let request = body.into_inner();
@@ -54,23 +54,23 @@ pub async fn introspect(
 
     match token_type {
         TokenType::Access => {
-            introspect_access_token(AccessToken::new(request.token), db_ctx, oidc_ctx).await
+            introspect_access_token(AccessToken::new(request.token), db, oidc_ctx).await
         }
         TokenType::Refresh => {
-            introspect_refresh_token(RefreshToken::new(request.token), db_ctx, oidc_ctx).await
+            introspect_refresh_token(RefreshToken::new(request.token), db, oidc_ctx).await
         }
         TokenType::Unknown => {
-            introspect_access_token(AccessToken::new(request.token), db_ctx, oidc_ctx).await
+            introspect_access_token(AccessToken::new(request.token), db, oidc_ctx).await
         } //try access_token decoding if we don't know
     }
 }
 
 async fn introspect_access_token(
     token: AccessToken,
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
 ) -> HttpResponse {
-    match check_access_token(db_ctx, oidc_ctx, token).await {
+    match check_access_token(db, oidc_ctx, token).await {
         Err(_e) => HttpResponse::Ok().json(IntrospectResponse {
             active: false,
             sub: None,
@@ -87,7 +87,7 @@ async fn introspect_access_token(
 
 async fn introspect_refresh_token(
     _token: RefreshToken,
-    _db_ctx: Data<Db>,
+    _db: Data<Db>,
     _oidc_ctx: Data<OidcContext>,
 ) -> HttpResponse {
     log::error!("Refresh token introspection not implemented.");

@@ -106,12 +106,12 @@ pub struct Authz {
 }
 
 impl Authz {
-    pub async fn new<T>(db_ctx: Arc<T>) -> Result<Self>
+    pub async fn new<T>(db: Arc<T>) -> Result<Self>
     where
         T: 'static + DbCasbinEx + Sync + Send,
     {
         let acl_model = internal::default_acl_model().await;
-        let adapter = internal::diesel_adapter::CasbinAdapter::new(db_ctx.clone());
+        let adapter = internal::diesel_adapter::CasbinAdapter::new(db.clone());
         let enforcer = Arc::new(tokio::sync::RwLock::new(
             SyncedEnforcer::new(acl_model, adapter).await?,
         ));
@@ -120,7 +120,7 @@ impl Authz {
     }
 
     pub async fn new_with_autoload<T>(
-        db_ctx: Arc<T>,
+        db: Arc<T>,
         shutdown_channel: Receiver<()>,
         interval: Duration,
     ) -> Result<(Self, JoinHandle<Result<()>>)>
@@ -128,7 +128,7 @@ impl Authz {
         T: 'static + DbCasbinEx + Sync + Send,
     {
         let acl_model = internal::default_acl_model().await;
-        let adapter = internal::diesel_adapter::CasbinAdapter::new(db_ctx.clone());
+        let adapter = internal::diesel_adapter::CasbinAdapter::new(db.clone());
         let enforcer = Arc::new(tokio::sync::RwLock::new(
             SyncedEnforcer::new(acl_model, adapter).await?,
         ));

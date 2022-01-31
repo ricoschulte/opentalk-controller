@@ -15,14 +15,14 @@ impl From<crate::Error> for CasbinError {
 }
 
 pub struct CasbinAdapter<D: DbCasbinEx> {
-    db_ctx: Arc<D>,
+    db: Arc<D>,
     is_filtered: bool,
 }
 
 impl<D: DbCasbinEx + Send> CasbinAdapter<D> {
-    pub fn new(db_ctx: Arc<D>) -> Self {
+    pub fn new(db: Arc<D>) -> Self {
         Self {
-            db_ctx,
+            db,
             is_filtered: false,
         }
     }
@@ -32,7 +32,7 @@ impl<D: DbCasbinEx + Send> CasbinAdapter<D> {
 impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
     #[tracing::instrument(level = "trace", skip(self, m))]
     async fn load_policy(&self, m: &mut dyn Model) -> Result<()> {
-        let conn = self.db_ctx.clone();
+        let conn = self.db.clone();
 
         let rules = block(move || conn.load_policy())
             .await
@@ -57,7 +57,7 @@ impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
     }
 
     async fn clear_policy(&mut self) -> Result<()> {
-        let conn = self.db_ctx.clone();
+        let conn = self.db.clone();
 
         block(move || conn.clear_policy())
             .await
@@ -68,7 +68,7 @@ impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
 
     #[tracing::instrument(level = "trace", skip(self, m, f), fields(filter_p = ?f.p, filter_g = ?f.g))]
     async fn load_filtered_policy<'a>(&mut self, m: &mut dyn Model, f: Filter<'a>) -> Result<()> {
-        let conn = self.db_ctx.clone();
+        let conn = self.db.clone();
 
         let rules = block(move || conn.load_policy())
             .await
@@ -97,7 +97,7 @@ impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
 
     #[tracing::instrument(level = "trace", skip(self, m))]
     async fn save_policy(&mut self, m: &mut dyn Model) -> Result<()> {
-        let conn = self.db_ctx.clone();
+        let conn = self.db.clone();
 
         let mut rules = vec![];
 
@@ -137,7 +137,7 @@ impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
     // there is not much sense, as you either get an error or a success.
     #[tracing::instrument(level = "trace", skip(self, rule))]
     async fn add_policy(&mut self, _sec: &str, ptype: &str, rule: Vec<String>) -> Result<bool> {
-        let conn = self.db_ctx.clone();
+        let conn = self.db.clone();
         let ptype_c = ptype.to_string();
 
         block(move || -> Result<bool> {
@@ -167,7 +167,7 @@ impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
         ptype: &str,
         rules: Vec<Vec<String>>,
     ) -> Result<bool> {
-        let conn = self.db_ctx.clone();
+        let conn = self.db.clone();
         let ptype_c = ptype.to_string();
 
         block(move || -> Result<bool> {
@@ -186,7 +186,7 @@ impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
 
     #[tracing::instrument(level = "trace", skip(self, rule))]
     async fn remove_policy(&mut self, _sec: &str, pt: &str, rule: Vec<String>) -> Result<bool> {
-        let conn = self.db_ctx.clone();
+        let conn = self.db.clone();
         let ptype_c = pt.to_string();
 
         block(move || conn.remove_policy(&ptype_c, rule))
@@ -203,7 +203,7 @@ impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
         pt: &str,
         rules: Vec<Vec<String>>,
     ) -> Result<bool> {
-        let conn = self.db_ctx.clone();
+        let conn = self.db.clone();
         let ptype_c = pt.to_string();
 
         block(move || conn.remove_policies(&ptype_c, rules))
@@ -222,7 +222,7 @@ impl<D: DbCasbinEx + Send + Sync + 'static> Adapter for CasbinAdapter<D> {
         field_values: Vec<String>,
     ) -> Result<bool> {
         if field_index <= 5 && !field_values.is_empty() {
-            let conn = self.db_ctx.clone();
+            let conn = self.db.clone();
             let ptype_c = pt.to_string();
 
             block(move || conn.remove_filtered_policy(&ptype_c, field_index, field_values))
@@ -406,12 +406,12 @@ mod tests {
         db_storage::migrations::migrate_from_url(&url)
             .await
             .context("Migration failed")?;
-        let db_ctx = std::sync::Arc::new(
+        let db = std::sync::Arc::new(
             Db::connect_url(&url, 10, Some(2)).context("Failed to connect to database")?,
         );
-        let conn = db_ctx.clone();
+        let conn = db.clone();
         block(move || conn.clear_policy()).await.unwrap().unwrap();
-        Ok(db_ctx)
+        Ok(db)
     }
 
     #[tokio::test]
@@ -434,8 +434,8 @@ mod tests {
         e.add_grouping_policy(vec!["alice".into(), "data2_admin".into()])
             .await
             .unwrap();
-        let db_ctx = setup().await.unwrap();
-        let mut adapter = { CasbinAdapter::new(db_ctx) };
+        let db = setup().await.unwrap();
+        let mut adapter = { CasbinAdapter::new(db) };
 
         assert!(adapter.save_policy(e.get_mut_model()).await.is_ok());
 

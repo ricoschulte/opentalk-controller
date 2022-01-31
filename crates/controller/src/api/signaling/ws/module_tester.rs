@@ -53,7 +53,7 @@ where
     /// The redis interface
     pub redis_conn: ConnectionManager,
     /// The database interface
-    pub db_ctx: Arc<Db>,
+    pub db: Arc<Db>,
     /// Authz
     pub authz: Arc<Authz>,
     /// The room that the users are inside
@@ -72,17 +72,12 @@ where
     M: SignalingModule,
 {
     /// Create a new ModuleTester instance
-    pub fn new(
-        db_ctx: Arc<Db>,
-        authz: Arc<Authz>,
-        redis_conn: ConnectionManager,
-        room: Room,
-    ) -> Self {
+    pub fn new(db: Arc<Db>, authz: Arc<Authz>, redis_conn: ConnectionManager, room: Room) -> Self {
         let (rabbitmq_sender, _) = broadcast::channel(10);
 
         Self {
             redis_conn,
-            db_ctx,
+            db,
             authz,
             room,
             // todo: add breakout room support
@@ -108,7 +103,7 @@ where
             self.breakout_room,
             participant.clone(),
             role,
-            self.db_ctx.clone(),
+            self.db.clone(),
             self.authz.clone(),
             self.redis_conn.clone(),
             params,
@@ -395,7 +390,7 @@ where
         breakout_room: Option<BreakoutRoomId>,
         mut participant: Participant<User>,
         role: Role,
-        db_ctx: Arc<Db>,
+        db: Arc<Db>,
         authz: Arc<Authz>,
         mut redis_conn: ConnectionManager,
         params: M::Params,
@@ -410,7 +405,7 @@ where
             breakout_room,
             participant: &mut participant,
             role,
-            db: &db_ctx,
+            db: &db,
             authz: &authz,
             rabbitmq_exchanges: &mut vec![],
             rabbitmq_bindings: &mut vec![],

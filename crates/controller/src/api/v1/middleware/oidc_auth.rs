@@ -26,7 +26,7 @@ use uuid::Uuid;
 ///
 /// Transforms into [`OidcAuthMiddleware`]
 pub struct OidcAuth {
-    pub db_ctx: Data<Db>,
+    pub db: Data<Db>,
     pub oidc_ctx: Data<OidcContext>,
 }
 
@@ -44,7 +44,7 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(OidcAuthMiddleware {
             service: Rc::new(service),
-            db_ctx: self.db_ctx.clone(),
+            db: self.db.clone(),
             oidc_ctx: self.oidc_ctx.clone(),
         }))
     }
@@ -56,7 +56,7 @@ where
 /// token and provide the associated user as [`ReqData`](actix_web::web::ReqData) for the subsequent services.
 pub struct OidcAuthMiddleware<S> {
     service: Rc<S>,
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
 }
 
@@ -77,7 +77,7 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
-        let db_ctx = self.db_ctx.clone();
+        let db = self.db.clone();
         let oidc_ctx = self.oidc_ctx.clone();
 
         let parse_match_span =
@@ -101,7 +101,7 @@ where
 
         Box::pin(
             async move {
-                let current_user = check_access_token(db_ctx, oidc_ctx, access_token).await?;
+                let current_user = check_access_token(db, oidc_ctx, access_token).await?;
                 let uuid = current_user.oidc_uuid;
                 req.extensions_mut().insert(current_user);
                 req.extensions_mut()
@@ -113,9 +113,9 @@ where
     }
 }
 
-#[tracing::instrument(skip(db_ctx, oidc_ctx, access_token))]
+#[tracing::instrument(skip_all)]
 pub async fn check_access_token(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     access_token: AccessToken,
 ) -> Result<User, DefaultApiError> {
@@ -139,7 +139,7 @@ pub async fn check_access_token(
         },
     };
 
-    let current_user = crate::block(move || match db_ctx.get_user_by_uuid(&uuid)? {
+    let current_user = crate::block(move || match db.get_user_by_uuid(&uuid)? {
         None => {
             log::warn!("The requesting user could not be found in the database");
             Err(DefaultApiError::Internal)

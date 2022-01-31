@@ -43,20 +43,20 @@ fn disallow_empty(modify_room: &PutSipConfig) -> Result<(), ValidationError> {
 /// Get the sip config for the specified room.
 #[get("/rooms/{room_uuid}/sip")]
 pub async fn get(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
 ) -> Result<Json<SipConfig>, DefaultApiError> {
     let room_id = room_id.into_inner();
 
     let sip_config = crate::block(move || {
-        let room = db_ctx.get_room(room_id)?.ok_or(DefaultApiError::NotFound)?;
+        let room = db.get_room(room_id)?.ok_or(DefaultApiError::NotFound)?;
 
         if room.owner != current_user.id {
             return Err(DefaultApiError::InsufficientPermission);
         }
 
-        let db_sip_config = db_ctx
+        let db_sip_config = db
             .get_sip_config(room.uuid)?
             .ok_or(DefaultApiError::NotFound)?;
 
@@ -67,11 +67,7 @@ pub async fn get(
             lobby: db_sip_config.lobby,
         })
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on GET /rooms{{room_id}}/sip - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     Ok(Json(sip_config))
 }
@@ -84,7 +80,7 @@ pub async fn get(
 /// Returns the new modified sip config.
 #[put("/rooms/{room_uuid}/sip")]
 pub async fn put(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
     modify_sip_config: Json<PutSipConfig>,
@@ -104,14 +100,14 @@ pub async fn put(
 
     let (sip_config, newly_created) = crate::block(move || {
         // Get the requested room
-        let room = db_ctx.get_room(room_id)?.ok_or(DefaultApiError::NotFound)?;
+        let room = db.get_room(room_id)?.ok_or(DefaultApiError::NotFound)?;
 
         if room.owner != current_user.id {
             return Err(DefaultApiError::InsufficientPermission);
         }
 
         // Try to modify the sip config before creating a new one
-        if let Some(db_sip_config) = db_ctx.modify_sip_config(room.uuid, &modify_sip_config)? {
+        if let Some(db_sip_config) = db.modify_sip_config(room.uuid, &modify_sip_config)? {
             let sip_config = SipConfig {
                 room: room.uuid,
                 sip_id: db_sip_config.sip_id,
@@ -130,7 +126,7 @@ pub async fn put(
                 enable_lobby: modify_sip_config.enable_lobby.unwrap_or_default(),
             };
 
-            let db_sip_config = db_ctx.new_sip_config(sip_params)?;
+            let db_sip_config = db.new_sip_config(sip_params)?;
 
             let sip_config = SipConfig {
                 room: room.uuid,
@@ -142,11 +138,7 @@ pub async fn put(
             Ok((sip_config, true))
         }
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on PUT /rooms{{room_id}}/sip - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     let mut response = if newly_created {
         HttpResponse::Created()
@@ -162,7 +154,7 @@ pub async fn put(
 /// Deletes the sip config of the provided room.
 #[delete("/rooms/{room_uuid}/sip")]
 pub async fn delete(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
 ) -> Result<HttpResponse, DefaultApiError> {
@@ -170,23 +162,18 @@ pub async fn delete(
 
     crate::block(move || {
         // Get the requested room
-        let room = db_ctx.get_room(room_id)?.ok_or(DefaultApiError::NotFound)?;
+        let room = db.get_room(room_id)?.ok_or(DefaultApiError::NotFound)?;
 
         if room.owner != current_user.id {
             return Err(DefaultApiError::InsufficientPermission);
         }
 
-        db_ctx
-            .delete_sip_config(room.uuid)?
+        db.delete_sip_config(room.uuid)?
             .ok_or(DefaultApiError::NotFound)?;
 
         Ok(())
     })
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on PUT /rooms{{room_id}}/sip - {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     Ok(HttpResponse::NoContent().finish())
 }

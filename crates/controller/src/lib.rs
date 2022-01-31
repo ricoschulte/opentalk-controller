@@ -267,18 +267,18 @@ impl Controller {
     pub async fn run(self) -> Result<()> {
         // Start internal HTTP Server
         let int_http_server = {
-            let db_ctx = Arc::downgrade(&self.db);
+            let db = Arc::downgrade(&self.db);
             let oidc_ctx = Arc::downgrade(&self.oidc);
             let shutdown = self.shutdown.clone();
 
             HttpServer::new(move || {
                 // Unwraps cannot panic. Server gets stopped before dropping the Arc.
-                let db_ctx = Data::from(db_ctx.upgrade().unwrap());
+                let db = Data::from(db.upgrade().unwrap());
                 let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
 
                 App::new()
                     .wrap(TracingLogger::<ReducedSpanBuilder>::new())
-                    .app_data(db_ctx)
+                    .app_data(db)
                     .app_data(oidc_ctx)
                     .app_data(Data::new(shutdown.clone()))
                     .service(api::internal::introspect)
@@ -294,7 +294,7 @@ impl Controller {
             let rabbitmq_channel = Data::new(self.rabbitmq_channel);
 
             let signaling_modules = Arc::downgrade(&signaling_modules);
-            let db_ctx = Arc::downgrade(&self.db);
+            let db = Arc::downgrade(&self.db);
 
             let oidc_ctx = Arc::downgrade(&self.oidc);
             let shutdown = self.shutdown.clone();
@@ -303,7 +303,7 @@ impl Controller {
 
             // TODO(r.floren) what to do with the handle
             let (enforcer, _) = kustos::Authz::new_with_autoload(
-                db_ctx.upgrade().unwrap(),
+                db.upgrade().unwrap(),
                 self.shutdown.subscribe(),
                 self.startup_settings.authz.reload_interval,
             )
@@ -318,7 +318,7 @@ impl Controller {
                 let cors = setup_cors(&cors);
 
                 // Unwraps cannot panic. Server gets stopped before dropping the Arc.
-                let db_ctx = Data::from(db_ctx.upgrade().unwrap());
+                let db = Data::from(db.upgrade().unwrap());
 
                 let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
                 let redis = Data::new(redis.clone());
@@ -333,7 +333,7 @@ impl Controller {
                     .wrap(TracingLogger::<ReducedSpanBuilder>::new())
                     .wrap(cors)
                     .app_data(Data::from(shared_settings.clone()))
-                    .app_data(db_ctx.clone())
+                    .app_data(db.clone())
                     .app_data(oidc_ctx.clone())
                     .app_data(authz)
                     .app_data(redis)
@@ -342,7 +342,7 @@ impl Controller {
                     .app_data(signaling_modules)
                     .app_data(SignalingProtocols::data())
                     .service(api::signaling::ws_service)
-                    .service(v1_scope(db_ctx, oidc_ctx, acl))
+                    .service(v1_scope(db, oidc_ctx, acl))
             })
         };
 
@@ -458,7 +458,7 @@ impl Controller {
 }
 
 fn v1_scope(
-    db_ctx: Data<Db>,
+    db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     acl: kustos::actix_web::KustosService,
 ) -> Scope {
@@ -474,7 +474,7 @@ fn v1_scope(
             // empty scope to differentiate between auth endpoints
             web::scope("")
                 .wrap(acl)
-                .wrap(api::v1::middleware::oidc_auth::OidcAuth { db_ctx, oidc_ctx })
+                .wrap(api::v1::middleware::oidc_auth::OidcAuth { db, oidc_ctx })
                 .service(api::v1::users::all)
                 .service(api::v1::users::set_current_user_profile)
                 .service(api::v1::users::current_user_profile)

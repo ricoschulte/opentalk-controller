@@ -186,6 +186,16 @@ impl DefaultApiError {
     }
 }
 
+impl<E> From<actix_web::error::BlockingError> for ApiError<E>
+where
+    E: fmt::Debug + Serialize,
+{
+    fn from(_: actix_web::error::BlockingError) -> Self {
+        log::error!("function in blocking threadpool panicked, see tracing");
+        Self::Internal
+    }
+}
+
 impl<E> From<actix_web::Error> for ApiError<E>
 where
     E: fmt::Debug + Serialize,
