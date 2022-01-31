@@ -6,7 +6,7 @@ use crate::{levenshtein, lower, soundex};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
 use database::{DatabaseError, DbInterface, Paginate, Result};
 use diesel::dsl::any;
-use diesel::r2d2::{self, ConnectionManager};
+use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::result::Error;
 use diesel::{
     BelongingToDsl, BoolExpressionMethods, Connection, ExpressionMethods, GroupedBy, Identifiable,
@@ -64,7 +64,7 @@ pub struct NewUserWithGroups {
 /// Is used in update queries. None fields will be ignored on update queries
 #[derive(AsChangeset)]
 #[table_name = "users"]
-pub struct ModifyUser {
+pub struct UpdateUser {
     pub title: Option<String>,
     pub theme: Option<String>,
     pub language: Option<String>,
@@ -85,18 +85,14 @@ pub struct ModifiedUser {
 }
 
 pub trait DbUsersEx: DbInterface + DbGroupsEx {
-    #[tracing::instrument(skip(self, new_user))]
+    #[tracing::instrument(err, skip_all)]
     fn create_user(&self, new_user: NewUserWithGroups) -> Result<User> {
         let conn = self.get_conn()?;
 
         conn.transaction::<User, DatabaseError, _>(|| {
             let user: User = diesel::insert_into(users::table)
                 .values(new_user.new_user)
-                .get_result(&conn)
-                .map_err(|e| {
-                    log::error!("Failed to create user, {}", e);
-                    DatabaseError::from(e)
-                })?;
+                .get_result(&conn)?;
 
             insert_user_into_user_groups(&conn, &user, new_user.groups)?;
 
@@ -104,11 +100,11 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
         })
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(err, skip_all)]
     fn get_users_with_groups(&self) -> Result<Vec<(User, Vec<Group>)>> {
         let conn = self.get_conn()?;
 
-        let result = || -> Result<_> {
+        let users_with_groups = || -> Result<_> {
             let user_query = users::table.order_by(users::columns::id.desc());
             let users = user_query.load::<User>(&conn)?;
 
@@ -122,18 +118,12 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
                 .zip(groups)
                 .map(|(user, groups)| (user, groups.into_iter().map(|(_, group)| group).collect()))
                 .collect::<Vec<_>>())
-        }();
+        }()?;
 
-        match result {
-            Ok(result) => Ok(result),
-            Err(e) => {
-                log::error!("Query error getting all users, {}", e);
-                Err(e)
-            }
-        }
+        Ok(users_with_groups)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(err, skip_all, fields(%limit, %page))]
     fn get_users_paginated(&self, limit: i64, page: i64) -> Result<(Vec<User>, i64)> {
         let conn = self.get_conn()?;
 
@@ -141,18 +131,12 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
             .order_by(users::columns::id.desc())
             .paginate_by(limit, page);
 
-        let query_result = query.load_and_count::<User, _>(&conn);
+        let users_with_total = query.load_and_count::<User, _>(&conn)?;
 
-        match query_result {
-            Ok(users) => Ok(users),
-            Err(e) => {
-                log::error!("Query error getting all users, {}", e);
-                Err(e.into())
-            }
-        }
+        Ok(users_with_total)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(err, skip_all, fields(%limit, %page))]
     fn get_users_by_ids_paginated(
         &self,
         ids: &[SerialUserId],
@@ -166,18 +150,12 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
             .order_by(users::columns::id.desc())
             .paginate_by(limit, page);
 
-        let query_result = query.load_and_count::<User, _>(&conn);
+        let users_with_total = query.load_and_count::<User, _>(&conn)?;
 
-        match query_result {
-            Ok(users) => Ok(users),
-            Err(e) => {
-                log::error!("Query error getting all users, {}", e);
-                Err(e.into())
-            }
-        }
+        Ok(users_with_total)
     }
 
-    #[tracing::instrument(skip(self, ids))]
+    #[tracing::instrument(err, skip_all)]
     fn get_users_by_ids(&self, ids: &[SerialUserId]) -> Result<Vec<User>> {
         let conn = self.get_conn()?;
 
@@ -188,14 +166,11 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
         match result {
             Ok(users) => Ok(users),
             Err(Error::NotFound) => Ok(vec![]),
-            Err(e) => {
-                log::error!("Query error getting user by uuid, {}", e);
-                Err(e.into())
-            }
+            Err(e) => Err(e.into()),
         }
     }
 
-    #[tracing::instrument(skip(self, uuid))]
+    #[tracing::instrument(err, skip_all)]
     fn get_user_by_uuid(&self, uuid: &Uuid) -> Result<Option<User>> {
         let conn = self.get_conn()?;
 
@@ -206,18 +181,15 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
         match result {
             Ok(user) => Ok(Some(user)),
             Err(Error::NotFound) => Ok(None),
-            Err(e) => {
-                log::error!("Query error getting user by uuid, {}", e);
-                Err(e.into())
-            }
+            Err(e) => Err(e.into()),
         }
     }
 
-    #[tracing::instrument(skip(self, user_uuid, modify, groups))]
-    fn modify_user(
+    #[tracing::instrument(err, skip_all)]
+    fn update_user(
         &self,
         user_uuid: Uuid,
-        modify: ModifyUser,
+        modify: UpdateUser,
         groups: Option<Vec<String>>,
     ) -> Result<ModifiedUser> {
         let conn = self.get_conn()?;
@@ -274,7 +246,7 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
         })
     }
 
-    #[tracing::instrument(skip(self, user_id))]
+    #[tracing::instrument(err, skip_all)]
     fn get_opt_user_by_id(&self, user_id: SerialUserId) -> Result<Option<User>> {
         let conn = self.get_conn()?;
 
@@ -285,15 +257,11 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
         match result {
             Ok(user) => Ok(Some(user)),
             Err(Error::NotFound) => Ok(None),
-            Err(e) => {
-                log::error!("Query error getting user by id, {}", e);
-
-                Err(e.into())
-            }
+            Err(e) => Err(e.into()),
         }
     }
 
-    #[tracing::instrument(skip(self, user_id))]
+    #[tracing::instrument(err, skip_all)]
     fn get_user_by_id(&self, user_id: SerialUserId) -> Result<User> {
         match self.get_opt_user_by_id(user_id) {
             Ok(Some(user)) => Ok(user),
@@ -341,8 +309,9 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
 }
 impl<T: DbInterface> DbUsersEx for T {}
 
+#[tracing::instrument(err, skip_all)]
 fn insert_user_into_user_groups(
-    con: &r2d2::PooledConnection<ConnectionManager<PgConnection>>,
+    con: &PooledConnection<ConnectionManager<PgConnection>>,
     user: &User,
     groups: Vec<String>,
 ) -> Result<()> {

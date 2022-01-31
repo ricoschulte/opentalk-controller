@@ -5,11 +5,11 @@
 //! Each key is defined in its own module with its related functions.
 use allowed_users::AllowedUsersKey;
 use anyhow::{Context, Result};
-use controller::db::legal_votes::LegalVoteId;
-use controller::db::users::SerialUserId;
 use controller::prelude::*;
 use current_legal_vote_id::CurrentVoteIdKey;
 use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, Vote, VoteEvent};
+use db_storage::legal_votes::LegalVoteId;
+use db_storage::users::SerialUserId;
 use history::VoteHistoryKey;
 use parameters::VoteParametersKey;
 use protocol::ProtocolKey;

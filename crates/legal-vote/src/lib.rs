@@ -7,8 +7,6 @@
 use anyhow::Context;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use controller::db::legal_votes::LegalVoteId;
-use controller::db::users::SerialUserId;
 use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
 use controller::prelude::uuid::Uuid;
@@ -22,6 +20,8 @@ use db_storage::legal_votes::types::{
     CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
 };
 use db_storage::legal_votes::DbLegalVoteEx;
+use db_storage::legal_votes::LegalVoteId;
+use db_storage::users::SerialUserId;
 use error::{Error, ErrorKind};
 use incoming::VoteMessage;
 use kustos::prelude::AccessMethod;

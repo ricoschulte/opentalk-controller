@@ -1,6 +1,6 @@
 //! Modules to HTTP APIs
 
-use crate::db::users::{SerialUserId, User};
+use db_storage::users::{SerialUserId, User};
 use serde::{Deserialize, Serialize};
 
 pub mod internal;

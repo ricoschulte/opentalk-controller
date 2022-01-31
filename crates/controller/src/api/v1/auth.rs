@@ -1,13 +1,11 @@
 //! Auth related API structs and Endpoints
 use super::{DefaultApiError, INVALID_ID_TOKEN};
-use crate::db;
-use crate::db::users::ModifiedUser;
 use crate::ha_sync::user_update;
 use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
 use database::Db;
-use db_storage::users::User;
+use db_storage::users::{ModifiedUser, NewUser, NewUserWithGroups, UpdateUser, User};
 use db_storage::DbUsersEx;
 use either::Either;
 use serde::{Deserialize, Serialize};
@@ -71,7 +69,7 @@ pub async fn login(
 
                     match user {
                         Some(user) => {
-                            let modify_user = db::users::ModifyUser {
+                            let modify_user = UpdateUser {
                                 title: None,
                                 theme: None,
                                 language: None,
@@ -79,12 +77,12 @@ pub async fn login(
                             };
 
                             let modified_user =
-                                db.modify_user(user.oidc_uuid, modify_user, Some(info.x_grp))?;
+                                db.update_user(user.oidc_uuid, modify_user, Some(info.x_grp))?;
 
                             Ok(Either::Left(modified_user))
                         }
                         None => {
-                            let new_user = db::users::NewUser {
+                            let new_user = NewUser {
                                 oidc_uuid: user_uuid,
                                 email: info.email,
                                 title: String::new(),
@@ -95,7 +93,7 @@ pub async fn login(
                                 language: "en-US".to_string(), // TODO: set language based on browser
                             };
 
-                            let new_user = db::users::NewUserWithGroups {
+                            let new_user = NewUserWithGroups {
                                 new_user,
                                 groups: info.x_grp.clone(),
                             };

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::LegalVoteId;
 use controller::prelude::*;
+use db_storage::legal_votes::LegalVoteId;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;

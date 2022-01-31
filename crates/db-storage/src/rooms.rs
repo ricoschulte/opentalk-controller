@@ -6,7 +6,7 @@ use crate::users::SerialUserId;
 use crate::users::User;
 use database::{DbInterface, Paginate, Result};
 use diesel::dsl::any;
-use diesel::{Connection, ExpressionMethods, QueryDsl, QueryResult};
+use diesel::{ExpressionMethods, QueryDsl, QueryResult};
 use diesel::{Identifiable, Queryable};
 
 diesel_newtype!(#[derive(Copy)] RoomId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/rooms/");
@@ -50,7 +50,7 @@ pub struct ModifyRoom {
 }
 
 pub trait DbRoomsEx: DbInterface {
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(err, skip_all)]
     fn get_rooms_with_creator(&self) -> Result<Vec<(Room, User)>> {
         let conn = self.get_conn()?;
 
@@ -58,18 +58,12 @@ pub trait DbRoomsEx: DbInterface {
             .order_by(rooms::columns::id.desc())
             .inner_join(users::table);
 
-        let query_result = query.load::<(Room, User)>(&conn);
+        let room_with_creator = query.load::<(Room, User)>(&conn)?;
 
-        match query_result {
-            Ok(rooms) => Ok(rooms),
-            Err(e) => {
-                log::error!("Query error getting rooms, {}", e);
-                Err(e.into())
-            }
-        }
+        Ok(room_with_creator)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(err, skip_all, fields(%limit, %page))]
     fn get_rooms_paginated(&self, limit: i64, page: i64) -> Result<(Vec<Room>, i64)> {
         let conn = self.get_conn()?;
 
@@ -77,18 +71,12 @@ pub trait DbRoomsEx: DbInterface {
             .order_by(rooms::columns::id.desc())
             .paginate_by(limit, page);
 
-        let query_result = query.load_and_count::<Room, _>(&conn);
+        let rooms_with_total = query.load_and_count::<Room, _>(&conn)?;
 
-        match query_result {
-            Ok(rooms) => Ok(rooms),
-            Err(e) => {
-                log::error!("Query error getting rooms, {}", e);
-                Err(e.into())
-            }
-        }
+        Ok(rooms_with_total)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(err, skip_all, fields(%limit, %page))]
     fn get_rooms_by_ids_paginated(
         &self,
         ids: &[RoomId],
@@ -102,18 +90,12 @@ pub trait DbRoomsEx: DbInterface {
             .order_by(rooms::columns::id.desc())
             .paginate_by(limit, page);
 
-        let query_result = query.load_and_count::<Room, _>(&conn);
+        let rooms_with_total = query.load_and_count::<Room, _>(&conn)?;
 
-        match query_result {
-            Ok(rooms) => Ok(rooms),
-            Err(e) => {
-                log::error!("Query error getting owned rooms, {}", e);
-                Err(e.into())
-            }
-        }
+        Ok(rooms_with_total)
     }
 
-    #[tracing::instrument(skip(self, room))]
+    #[tracing::instrument(err, skip_all)]
     fn new_room(&self, room: NewRoom) -> Result<Room> {
         let con = self.get_conn()?;
 
@@ -131,23 +113,17 @@ pub trait DbRoomsEx: DbInterface {
         }
     }
 
-    #[tracing::instrument(skip(self, room_id, room))]
-    fn modify_room(&self, room_id: RoomId, room: ModifyRoom) -> Result<Room> {
+    #[tracing::instrument(err, skip_all)]
+    fn modify_room(&self, room_id: RoomId, modify_room: ModifyRoom) -> Result<Room> {
         let con = self.get_conn()?;
 
         let target = rooms::table.filter(rooms::columns::uuid.eq(&room_id));
-        let room_result = diesel::update(target).set(&room).get_result(&con);
+        let room = diesel::update(target).set(modify_room).get_result(&con)?;
 
-        match room_result {
-            Ok(rooms) => Ok(rooms),
-            Err(e) => {
-                log::error!("Query error modifying room, {}", e);
-                Err(e.into())
-            }
-        }
+        Ok(room)
     }
 
-    #[tracing::instrument(skip(self, room_id))]
+    #[tracing::instrument(err, skip_all)]
     fn get_room(&self, room_id: RoomId) -> Result<Option<Room>> {
         let con = self.get_conn()?;
 
@@ -158,29 +134,17 @@ pub trait DbRoomsEx: DbInterface {
         match result {
             Ok(user) => Ok(Some(user)),
             Err(diesel::NotFound) => Ok(None),
-            Err(e) => {
-                log::error!("Query error getting room by uuid, {}", e);
-                Err(e.into())
-            }
+            Err(e) => Err(e.into()),
         }
     }
 
     #[tracing::instrument(skip(self, room_id))]
     fn delete_room(&self, room_id: RoomId) -> Result<()> {
         let conn = self.get_conn()?;
-        let result = conn.transaction::<_, diesel::result::Error, _>(|| {
-            diesel::delete(rooms::table.filter(rooms::columns::uuid.eq(room_id))).execute(&conn)?;
 
-            Ok(())
-        });
+        diesel::delete(rooms::table.filter(rooms::columns::uuid.eq(room_id))).execute(&conn)?;
 
-        match result {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                log::error!("Failed to delete room by uuid, {}", e);
-                Err(e.into())
-            }
-        }
+        Ok(())
     }
 }
 impl<T: DbInterface> DbRoomsEx for T {}

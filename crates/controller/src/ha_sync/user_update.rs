@@ -1,7 +1,7 @@
 //! RabbitMQ utilities related to updates of users
 
-use crate::db::users::SerialUserId;
 use anyhow::{Context, Result};
+use db_storage::users::SerialUserId;
 use serde::{Deserialize, Serialize};
 
 /// RabbitMQ exchange to send the messages to

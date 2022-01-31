@@ -2,7 +2,6 @@
 use crate::api::v1::{
     DefaultApiError, ACCESS_TOKEN_INACTIVE, INVALID_ACCESS_TOKEN, SESSION_EXPIRED,
 };
-use crate::db::users::User;
 use crate::oidc::OidcContext;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::error::Error;
@@ -12,6 +11,7 @@ use actix_web::{HttpMessage, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use core::future::ready;
 use database::Db;
+use db_storage::users::User;
 use db_storage::DbUsersEx;
 use openidconnect::AccessToken;
 use std::future::{Future, Ready};

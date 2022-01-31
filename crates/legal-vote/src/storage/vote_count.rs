@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::LegalVoteId;
 use controller::prelude::*;
 use db_storage::legal_votes::types::{VoteOption, Votes};
+use db_storage::legal_votes::LegalVoteId;
 use displaydoc::Display;
 use redis::{aio::ConnectionManager, AsyncCommands};
 use std::collections::HashMap;

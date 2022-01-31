@@ -1,11 +1,11 @@
 use crate::api::v1::DefaultApiError;
-use crate::db;
 use actix_web::web::{Data, Json, Path, ReqData};
 use actix_web::{delete, get, put, HttpResponse};
 use database::Db;
 use db_storage::rooms::{DbRoomsEx, RoomId};
-use db_storage::sip_configs::DbSipConfigsEx;
-use db_storage::sip_configs::{SipConfigParams, SipId, SipPassword};
+use db_storage::sip_configs::{
+    DbSipConfigsEx, SipConfigParams, SipId, SipPassword, UpdateSipConfig,
+};
 use db_storage::users::User;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
@@ -93,7 +93,7 @@ pub async fn put(
         return Err(DefaultApiError::ValidationFailed);
     }
 
-    let modify_sip_config = db::sip_configs::ModifySipConfig {
+    let update_sip_config = UpdateSipConfig {
         password: modify_sip_config.password,
         enable_lobby: modify_sip_config.lobby,
     };
@@ -107,7 +107,7 @@ pub async fn put(
         }
 
         // Try to modify the sip config before creating a new one
-        if let Some(db_sip_config) = db.modify_sip_config(room.uuid, &modify_sip_config)? {
+        if let Some(db_sip_config) = db.update_sip_config(room.uuid, &update_sip_config)? {
             let sip_config = SipConfig {
                 room: room.uuid,
                 sip_id: db_sip_config.sip_id,
@@ -120,10 +120,10 @@ pub async fn put(
             // Create a new sip config
             let sip_params = SipConfigParams {
                 room: room.uuid,
-                password: modify_sip_config
+                password: update_sip_config
                     .password
                     .unwrap_or_else(SipPassword::generate),
-                enable_lobby: modify_sip_config.enable_lobby.unwrap_or_default(),
+                enable_lobby: update_sip_config.enable_lobby.unwrap_or_default(),
             };
 
             let db_sip_config = db.new_sip_config(sip_params)?;

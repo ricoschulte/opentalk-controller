@@ -9,18 +9,18 @@ use crate::api::signaling::resumption::{ResumptionData, ResumptionToken};
 use crate::api::signaling::ticket::{TicketData, TicketToken};
 use crate::api::v1::{ApiError, ApiResponse, DefaultApiError, PagePaginationQuery};
 use crate::api::Participant;
-use crate::db::invites::InviteCodeId;
-use crate::db::rooms::{self as db_rooms, RoomId};
-use crate::db::sip_configs::{SipConfigParams, SipId, SipPassword};
-use crate::db::users::{SerialUserId, User};
 use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, post, put};
 use anyhow::Context;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::invites::DbInvitesEx;
+use db_storage::invites::InviteCodeId;
 use db_storage::rooms::DbRoomsEx;
+use db_storage::rooms::{self as db_rooms, RoomId};
 use db_storage::sip_configs::DbSipConfigsEx;
+use db_storage::sip_configs::{SipConfigParams, SipId, SipPassword};
+use db_storage::users::{SerialUserId, User};
 use kustos::prelude::*;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
@@ -445,7 +445,7 @@ pub async fn start_invited(
         .map_err(|_| StartError::BadRequest("bad invite_code format".to_string()))?;
 
     let room = crate::block(move || -> Result<db_rooms::Room, StartError> {
-        let invite = db.get_invite(&InviteCodeId::from(invite_code_as_uuid))?;
+        let invite = db.get_invite(InviteCodeId::from(invite_code_as_uuid))?;
 
         if !invite.active {
             return Err(StartError::AuthJson(StartRoomError::InvalidInvite.into()));

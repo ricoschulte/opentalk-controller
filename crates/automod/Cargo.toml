@@ -6,6 +6,7 @@ edition = "2018"
 [dependencies]
 controller = { path = "../controller", package = "k3k-controller-core" }
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
+db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 chrono = "0.4"
 serde = { version = "1", features = ["derive"] }
 rand = "0.8"

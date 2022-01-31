@@ -1,4 +1,3 @@
-use crate::db;
 use anyhow::{Context, Result};
 use controller_shared::settings::Settings;
 use std::path::PathBuf;
@@ -104,7 +103,7 @@ pub async fn parse_args() -> Result<Args> {
                 acl::acl(settings, subcommand).await?;
             }
             SubCommand::MigrateDb => {
-                db::migrations::migrate_from_url(&settings.database.url)
+                db_storage::migrations::migrate_from_url(&settings.database.url)
                     .await
                     .context("Failed to migrate database")?;
             }

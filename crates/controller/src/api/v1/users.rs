@@ -4,11 +4,10 @@
 //! structs are defined in the Database module [`crate::db`] for database operations.
 
 use crate::api::v1::{ApiResponse, DefaultApiError, PagePaginationQuery};
-use crate::db::users::User;
-use crate::db::users::{self as db_users, SerialUserId};
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{get, put};
 use database::Db;
+use db_storage::users::{SerialUserId, UpdateUser, User};
 use db_storage::DbUsersEx;
 use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -26,8 +25,8 @@ pub struct UserDetails {
     pub lastname: String,
 }
 
-impl From<db_users::User> for UserDetails {
-    fn from(user: db_users::User) -> Self {
+impl From<User> for UserDetails {
+    fn from(user: User) -> Self {
         UserDetails {
             id: user.id,
             email: user.email,
@@ -98,19 +97,18 @@ pub async fn all(
         .await
         .map_err(|_| DefaultApiError::Internal)?;
 
-    let (db_users, total_users) = crate::block(
-        move || -> Result<(Vec<db_users::User>, i64), DefaultApiError> {
+    let (users, total_users) =
+        crate::block(move || -> Result<(Vec<User>, i64), DefaultApiError> {
             match accessible_users {
                 kustos::AccessibleResources::All => Ok(db.get_users_paginated(per_page, page)?),
                 kustos::AccessibleResources::List(list) => {
                     Ok(db.get_users_by_ids_paginated(&list, per_page as i64, page as i64)?)
                 }
             }
-        },
-    )
-    .await??;
+        })
+        .await??;
 
-    let users = db_users
+    let users = users
         .into_iter()
         .map(|db_user| UserDetails {
             id: db_user.id,
@@ -141,15 +139,15 @@ pub async fn set_current_user_profile(
         return Err(DefaultApiError::ValidationFailed);
     }
 
-    let db_user = crate::block(move || -> Result<db_users::User, DefaultApiError> {
-        let modify_user = db_users::ModifyUser {
+    let db_user = crate::block(move || -> Result<User, DefaultApiError> {
+        let modify_user = UpdateUser {
             title: modify_user.title,
             theme: modify_user.theme,
             language: modify_user.language,
             id_token_exp: None,
         };
 
-        let modified_user = db.modify_user(current_user.oidc_uuid, modify_user, None)?;
+        let modified_user = db.update_user(current_user.oidc_uuid, modify_user, None)?;
 
         Ok(modified_user.user)
     })
@@ -198,7 +196,7 @@ pub async fn user_details(
     db: Data<Db>,
     user_id: Path<SerialUserId>,
 ) -> Result<Json<UserDetails>, DefaultApiError> {
-    let db_user = crate::block(move || -> Result<Option<db_users::User>, DefaultApiError> {
+    let db_user = crate::block(move || -> Result<Option<User>, DefaultApiError> {
         Ok(db.get_opt_user_by_id(user_id.into_inner())?)
     })
     .await??;
@@ -232,7 +230,7 @@ pub async fn find(
     db: Data<Db>,
     query: Query<FindQuery>,
 ) -> Result<Json<Vec<UserDetails>>, DefaultApiError> {
-    let found_users = crate::block(move || -> Result<Vec<db_users::User>, DefaultApiError> {
+    let found_users = crate::block(move || -> Result<Vec<User>, DefaultApiError> {
         Ok(db.find_users_by_name(&query.q)?)
     })
     .await??;

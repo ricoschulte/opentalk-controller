@@ -15,8 +15,6 @@ use crate::api::signaling::ws_modules::control::{
     incoming, outgoing, rabbitmq, storage, ControlData, ParticipationKind, NAMESPACE,
 };
 use crate::api::signaling::{Role, SignalingRoomId};
-use crate::db::rooms::Room;
-use crate::db::users::User;
 use crate::ha_sync::user_update;
 use anyhow::{bail, Context, Result};
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
@@ -25,6 +23,8 @@ use async_tungstenite::tungstenite::Message;
 use chrono::TimeZone;
 use controller_shared::ParticipantId;
 use database::Db;
+use db_storage::rooms::Room;
+use db_storage::users::User;
 use futures::stream::SelectAll;
 use futures::SinkExt;
 use kustos::Authz;

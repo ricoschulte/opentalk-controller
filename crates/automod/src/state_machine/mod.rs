@@ -96,8 +96,8 @@ pub async fn select_unchecked(
 #[cfg(test)]
 mod test {
     use chrono::{DateTime, Utc};
-    use controller::db::rooms::RoomId;
     use controller::prelude::*;
+    use db_storage::rooms::RoomId;
     use rand::rngs::StdRng;
     use rand::SeedableRng;
     use redis::aio::ConnectionManager;

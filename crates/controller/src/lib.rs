@@ -58,7 +58,6 @@ mod ha_sync;
 mod oidc;
 mod trace;
 
-pub mod db;
 pub mod settings;
 
 pub mod prelude {
@@ -201,7 +200,7 @@ impl Controller {
         let settings = Arc::new(settings);
         let shared_settings: SharedSettings = Arc::new(ArcSwap::from(settings.clone()));
 
-        db::migrations::migrate_from_url(&settings.database.url)
+        db_storage::migrations::migrate_from_url(&settings.database.url)
             .await
             .context("Failed to migrate database")?;
 

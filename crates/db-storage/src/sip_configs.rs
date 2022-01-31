@@ -1,8 +1,7 @@
 use super::rooms::RoomId;
 use super::schema::sip_configs;
 use crate::diesel::RunQueryDsl;
-use database::DbInterface;
-use database::{DatabaseError, Result};
+use database::{DatabaseError, DbInterface, Result};
 use diesel::{ExpressionMethods, QueryDsl, QueryResult};
 use diesel::{Identifiable, Queryable};
 use rand::{distributions::Slice, thread_rng, Rng};
@@ -126,13 +125,14 @@ impl SipConfigParams {
 /// Diesel struct to modify a SipConfig
 #[derive(Debug, AsChangeset)]
 #[table_name = "sip_configs"]
-pub struct ModifySipConfig {
+pub struct UpdateSipConfig {
     pub password: Option<SipPassword>,
     pub enable_lobby: Option<bool>,
 }
 
 pub trait DbSipConfigsEx: DbInterface {
     /// Create a new sip config from the provided [`SipConfigParams`]
+    #[tracing::instrument(err, skip_all)]
     fn new_sip_config(&self, params: SipConfigParams) -> Result<SipConfig> {
         let con = self.get_conn()?;
 
@@ -175,6 +175,7 @@ pub trait DbSipConfigsEx: DbInterface {
     /// Get the sip config for the specified room
     ///
     /// Returns Ok(None) when the room has no sip config set.
+    #[tracing::instrument(err, skip_all)]
     fn get_sip_config(&self, room_id: RoomId) -> Result<Option<SipConfig>> {
         let con = self.get_conn()?;
 
@@ -189,7 +190,6 @@ pub trait DbSipConfigsEx: DbInterface {
                     return Ok(None);
                 }
 
-                log::error!("Query error selecting sip config by room_id, {}", e);
                 Err(e.into())
             }
         }
@@ -198,6 +198,7 @@ pub trait DbSipConfigsEx: DbInterface {
     /// Get the sip config for the specified sip_id
     ///
     /// Returns Ok(None) when the no sip config was found.
+    #[tracing::instrument(err, skip_all)]
     fn get_sip_config_by_sip_id(&self, sip_id: SipId) -> Result<Option<SipConfig>> {
         let con = self.get_conn()?;
 
@@ -218,13 +219,14 @@ pub trait DbSipConfigsEx: DbInterface {
         }
     }
 
-    /// Modify the sip config for the specified room
+    /// Update the sip config for the specified room
     ///
     /// Returns Ok(None) when the room has no sip config set.
-    fn modify_sip_config(
+    #[tracing::instrument(err, skip_all)]
+    fn update_sip_config(
         &self,
         room_id: RoomId,
-        config: &ModifySipConfig,
+        config: &UpdateSipConfig,
     ) -> Result<Option<SipConfig>> {
         let con = self.get_conn()?;
 
@@ -247,6 +249,7 @@ pub trait DbSipConfigsEx: DbInterface {
     /// Delete the sip config for the specified room
     ///
     /// Returns Ok(None) when the room had no sip config set.
+    #[tracing::instrument(err, skip_all)]
     fn delete_sip_config(&self, room_id: RoomId) -> Result<Option<SipConfig>> {
         let con = self.get_conn()?;
 
@@ -260,7 +263,6 @@ pub trait DbSipConfigsEx: DbInterface {
                     return Ok(None);
                 }
 
-                log::error!("Query error deleting sip config by room_id, {}", e);
                 Err(e.into())
             }
         }

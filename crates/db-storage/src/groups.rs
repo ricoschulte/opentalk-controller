@@ -1,6 +1,6 @@
 use super::schema::{groups, user_groups};
 use super::users::{SerialUserId, User};
-use database::{DatabaseError, DbInterface, Result};
+use database::{DbInterface, Result};
 use diesel::{ExpressionMethods, Identifiable, Insertable, QueryDsl, Queryable, RunQueryDsl};
 use std::borrow::Borrow;
 use std::collections::HashSet;
@@ -41,7 +41,7 @@ pub struct UserGroup {
 }
 
 pub trait DbGroupsEx: DbInterface {
-    #[tracing::instrument(skip(self, user_id))]
+    #[tracing::instrument(err, skip_all)]
     fn get_groups_for_user(&self, user_id: SerialUserId) -> Result<HashSet<Group>> {
         let con = self.get_conn()?;
 
@@ -50,11 +50,7 @@ pub trait DbGroupsEx: DbInterface {
             .filter(user_groups::user_id.eq(user_id))
             .select(groups::all_columns)
             .order_by(groups::id)
-            .get_results(&con)
-            .map_err(|e| {
-                log::error!("Failed to get groups for user, {}", e);
-                DatabaseError::from(e)
-            })?;
+            .get_results(&con)?;
 
         Ok(groups.into_iter().collect())
     }

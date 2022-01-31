@@ -8,10 +8,10 @@
 
 use super::ws_modules::breakout::BreakoutRoomId;
 use crate::api::Participant;
-use crate::db::rooms::RoomId;
-use crate::db::users::SerialUserId;
 use anyhow::{bail, Context, Result};
 use controller_shared::ParticipantId;
+use db_storage::rooms::RoomId;
+use db_storage::users::SerialUserId;
 use displaydoc::Display;
 use rand::Rng;
 use redis::aio::ConnectionManager;

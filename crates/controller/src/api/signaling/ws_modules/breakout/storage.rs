@@ -1,7 +1,7 @@
 use super::BreakoutRoom;
-use crate::db::rooms::RoomId;
 use crate::prelude::*;
 use anyhow::{Context, Result};
+use db_storage::rooms::RoomId;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;

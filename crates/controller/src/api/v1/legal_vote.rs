@@ -1,5 +1,4 @@
 use super::{ApiResponse, DefaultApiError, PagePaginationQuery};
-use crate::db::legal_votes::LegalVoteId;
 use actix_web::get;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use anyhow::Result;
@@ -11,6 +10,7 @@ use db_storage::legal_votes::types::{
     FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
 };
 use db_storage::legal_votes::DbLegalVoteEx;
+use db_storage::legal_votes::LegalVoteId;
 use db_storage::rooms::RoomId;
 use db_storage::users::User;
 use db_storage::DbUsersEx;

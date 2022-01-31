@@ -1,11 +1,11 @@
 use anyhow::Result;
-use controller::db::migrations::migrate_from_url;
-use controller::db::rooms::{NewRoom, RoomId};
-use controller::db::users::SerialUserId;
 use controller::settings::Database;
 use credentials::Credentials;
 use database::Db;
+use db_storage::migrations::migrate_from_url;
 use db_storage::rooms::DbRoomsEx;
+use db_storage::rooms::{NewRoom, RoomId};
+use db_storage::users::SerialUserId;
 use db_storage::DbUsersEx;
 use provision::Provision;
 use provision::{Room, User};

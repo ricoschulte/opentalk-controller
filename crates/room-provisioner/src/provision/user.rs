@@ -1,4 +1,4 @@
-use controller::db::users::{NewUser, NewUserWithGroups};
+use db_storage::users::{NewUser, NewUserWithGroups};
 use serde::Deserialize;
 
 #[derive(Deserialize, PartialEq, Debug)]

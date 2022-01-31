@@ -1,6 +1,6 @@
-use controller::db::legal_votes::LegalVoteId;
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::{CancelReason, FinalResults, Parameters, VoteOption};
+use db_storage::legal_votes::LegalVoteId;
 use serde::{Deserialize, Serialize};
 
 /// Rabbitmq event to inform participants

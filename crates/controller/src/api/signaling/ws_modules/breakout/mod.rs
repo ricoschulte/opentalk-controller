@@ -2,12 +2,12 @@
 
 use self::storage::BreakoutConfig;
 use crate::api::signaling::SignalingRoomId;
-use crate::db::rooms::RoomId;
 use crate::prelude::*;
 use anyhow::{bail, Result};
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use chrono::{DateTime, Utc};
 use controller_shared::ParticipantId;
+use db_storage::rooms::RoomId;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

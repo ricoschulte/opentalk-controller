@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::LegalVoteId;
-use controller::db::users::SerialUserId;
 use controller::prelude::*;
+use db_storage::legal_votes::LegalVoteId;
+use db_storage::users::SerialUserId;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
