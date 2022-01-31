@@ -74,11 +74,11 @@ pub async fn add_invite(
     let current_user = current_user.into_inner();
 
     let new_invite = data.into_inner();
-    let db_ctx_clone = db.clone();
+    let db_clone = db.clone();
     let current_user_clone = current_user.clone();
     let (db_invite, created_by, updated_by) = crate::block(
         move || -> Result<db_invites::InviteWithUsers, DefaultApiError> {
-            let room = db_ctx_clone
+            let room = db_clone
                 .get_room(room_uuid)?
                 .ok_or(DefaultApiError::NotFound)?;
 
@@ -351,9 +351,9 @@ pub async fn verify_invite_code(
     }
 
     let invite_code = data.invite_code;
-    let db_ctx_clone = db.clone();
+    let db_clone = db.clone();
     let invite = crate::block(move || -> Result<db_invites::Invite, DefaultApiError> {
-        Ok(db_ctx_clone.get_invite(&InviteCodeId::from(invite_code))?)
+        Ok(db_clone.get_invite(&InviteCodeId::from(invite_code))?)
     })
     .await??;
 
