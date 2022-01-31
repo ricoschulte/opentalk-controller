@@ -9,7 +9,7 @@
 use super::ws_modules::breakout::BreakoutRoomId;
 use crate::api::Participant;
 use crate::db::rooms::RoomId;
-use crate::db::users::UserId;
+use crate::db::users::SerialUserId;
 use anyhow::{bail, Context, Result};
 use controller_shared::ParticipantId;
 use displaydoc::Display;
@@ -52,7 +52,7 @@ impl_to_redis_args!(&ResumptionRedisKey);
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ResumptionData {
     pub participant_id: ParticipantId,
-    pub participant: Participant<UserId>,
+    pub participant: Participant<SerialUserId>,
     pub room: RoomId,
     pub breakout_room: Option<BreakoutRoomId>,
 }

@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::VoteId;
-use controller::db::users::UserId;
+use controller::db::legal_votes::LegalVoteId;
+use controller::db::users::SerialUserId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
@@ -18,7 +18,7 @@ use redis::AsyncCommands;
 /// See [`VOTE_SCRIPT`](super::VOTE_SCRIPT) for more details on the vote process.
 pub(super) struct AllowedUsersKey {
     pub(super) room_id: SignalingRoomId,
-    pub(super) vote_id: VoteId,
+    pub(super) vote_id: LegalVoteId,
 }
 
 impl_to_redis_args!(AllowedUsersKey);
@@ -28,8 +28,8 @@ impl_to_redis_args!(AllowedUsersKey);
 pub(crate) async fn set(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: VoteId,
-    allowed_users: Vec<UserId>,
+    vote_id: LegalVoteId,
+    allowed_users: Vec<SerialUserId>,
 ) -> Result<()> {
     redis_conn
         .sadd(AllowedUsersKey { room_id, vote_id }, allowed_users)

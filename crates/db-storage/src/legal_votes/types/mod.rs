@@ -1,4 +1,4 @@
-use super::VoteId;
+use super::LegalVoteId;
 use chrono::{DateTime, Utc};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se, ParticipantId};
 use serde::{Deserialize, Serialize};
@@ -26,7 +26,7 @@ pub struct Parameters {
     /// The participant id of the vote initiator
     pub initiator_id: ParticipantId,
     /// The unique id of this vote
-    pub vote_id: VoteId,
+    pub vote_id: LegalVoteId,
     /// The time the vote got started
     pub start_time: DateTime<Utc>,
     /// The maximum amount of votes possible

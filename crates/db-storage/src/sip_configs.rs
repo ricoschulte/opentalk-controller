@@ -35,8 +35,8 @@ impl Validate for NumericId {
         }
 
         for c in self.inner().chars() {
-            if !NUMERIC.contains(&c) {
-                errors.add("0", ValidationError::new("Invalid id length"));
+            if !c.is_ascii_digit() {
+                errors.add("0", ValidationError::new("Non numeric character"));
                 return Err(errors);
             }
         }

@@ -9,7 +9,7 @@ use chat::MessageId;
 use chrono::{DateTime, Utc};
 use control::rabbitmq;
 use controller::db::groups::Group;
-use controller::db::users::UserId;
+use controller::db::users::SerialUserId;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::database::Db;
@@ -147,7 +147,7 @@ impl SignalingModule for Chat {
                     participants.iter().map(|(id, _)| *id).collect();
 
                 // Get all user_ids for each participant in the room
-                let user_ids: Vec<Option<UserId>> =
+                let user_ids: Vec<Option<SerialUserId>> =
                     control::storage::get_attribute_for_participants(
                         ctx.redis_conn(),
                         self.room,
@@ -157,7 +157,7 @@ impl SignalingModule for Chat {
                     .await?;
 
                 // Filter out guest/bots and map each user-id to a participant id
-                let participant_user_mappings: Vec<(UserId, ParticipantId)> = user_ids
+                let participant_user_mappings: Vec<(SerialUserId, ParticipantId)> = user_ids
                     .into_iter()
                     .enumerate()
                     .filter_map(|(i, opt_user_id)| {
@@ -207,7 +207,7 @@ impl SignalingModule for Chat {
             Event::Leaving => {}
             Event::ParticipantJoined(participant_id, peer_frontend_data) => {
                 // Get user id of the joined participant
-                let user_id: Option<UserId> = control::storage::get_attribute(
+                let user_id: Option<SerialUserId> = control::storage::get_attribute(
                     ctx.redis_conn(),
                     self.room,
                     participant_id,

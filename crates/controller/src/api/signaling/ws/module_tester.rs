@@ -16,8 +16,8 @@ use crate::api::signaling::ws_modules::control::ParticipationKind;
 use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
 use crate::db::rooms::Room;
+use crate::db::users::SerialUserId;
 use crate::db::users::User;
-use crate::db::users::UserId;
 use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
@@ -373,7 +373,7 @@ where
     room_id: SignalingRoomId,
     room: Room,
     participant_id: ParticipantId,
-    participant: Participant<UserId>,
+    participant: Participant<SerialUserId>,
     role: Role,
     control_data: Option<ControlData>,
     module: M,

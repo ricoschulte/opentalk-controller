@@ -5,8 +5,8 @@
 //! Each key is defined in its own module with its related functions.
 use allowed_users::AllowedUsersKey;
 use anyhow::{Context, Result};
-use controller::db::legal_votes::VoteId;
-use controller::db::users::UserId;
+use controller::db::legal_votes::LegalVoteId;
+use controller::db::users::SerialUserId;
 use controller::prelude::*;
 use current_vote_id::CurrentVoteIdKey;
 use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, Vote, VoteEvent};
@@ -60,7 +60,7 @@ return 1
 pub(crate) async fn end_current_vote(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: VoteId,
+    vote_id: LegalVoteId,
     end_entry: ProtocolEntry,
 ) -> Result<bool> {
     redis::Script::new(END_CURRENT_VOTE_SCRIPT)
@@ -107,7 +107,7 @@ redis.call("del", KEYS[5])
 pub(crate) async fn cleanup_vote(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: VoteId,
+    vote_id: LegalVoteId,
 ) -> Result<()> {
     redis::Script::new(CLEANUP_SCRIPT)
         .key(CurrentVoteIdKey { room_id })
@@ -211,8 +211,8 @@ impl FromRedisValue for VoteScriptResult {
 pub(crate) async fn vote(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: VoteId,
-    user_id: UserId,
+    vote_id: LegalVoteId,
+    user_id: SerialUserId,
     vote_event: Vote,
 ) -> Result<VoteScriptResult> {
     let vote_option = vote_event.option;
@@ -285,7 +285,7 @@ impl FromRedisValue for VoteStatus {
 pub(crate) async fn get_vote_status(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: VoteId,
+    vote_id: LegalVoteId,
 ) -> Result<VoteStatus> {
     redis::Script::new(VOTE_STATUS_SCRIPT)
         .key(CurrentVoteIdKey { room_id })

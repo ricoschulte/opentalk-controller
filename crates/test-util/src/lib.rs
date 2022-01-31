@@ -6,7 +6,7 @@ use controller::prelude::redis::aio::ConnectionManager;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
-use db_storage::users::UserId;
+use db_storage::users::SerialUserId;
 use kustos::Authz;
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,7 +19,7 @@ pub mod redis;
 
 #[derive(Debug)]
 pub struct TestUser {
-    pub user_id: UserId,
+    pub user_id: SerialUserId,
     pub participant_id: ParticipantId,
     pub name: &'static str,
 }
@@ -27,13 +27,13 @@ pub struct TestUser {
 pub const ROOM_ID: RoomId = RoomId::from(Uuid::from_u128(2000));
 
 pub const USER_1: TestUser = TestUser {
-    user_id: UserId::from(1),
+    user_id: SerialUserId::from(1),
     participant_id: ParticipantId::new_test(1),
     name: "user1",
 };
 
 pub const USER_2: TestUser = TestUser {
-    user_id: UserId::from(2),
+    user_id: SerialUserId::from(2),
     participant_id: ParticipantId::new_test(2),
     name: "user2",
 };

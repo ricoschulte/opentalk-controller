@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::VoteId;
+use controller::db::legal_votes::LegalVoteId;
 use controller::prelude::*;
 use db_storage::legal_votes::types::Parameters;
 use displaydoc::Display;
@@ -13,7 +13,7 @@ use redis::AsyncCommands;
 /// Contains the [`Parameters`] of the a vote.
 pub(super) struct VoteParametersKey {
     pub(super) room_id: SignalingRoomId,
-    pub(super) vote_id: VoteId,
+    pub(super) vote_id: LegalVoteId,
 }
 
 impl_to_redis_args!(VoteParametersKey);
@@ -23,7 +23,7 @@ impl_to_redis_args!(VoteParametersKey);
 pub(crate) async fn set(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: VoteId,
+    vote_id: LegalVoteId,
     parameters: &Parameters,
 ) -> Result<()> {
     redis_conn
@@ -42,7 +42,7 @@ pub(crate) async fn set(
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: VoteId,
+    vote_id: LegalVoteId,
 ) -> Result<Option<Parameters>> {
     redis_conn
         .get(VoteParametersKey { room_id, vote_id })

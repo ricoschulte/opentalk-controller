@@ -9,10 +9,10 @@ use crate::api::signaling::resumption::{ResumptionData, ResumptionToken};
 use crate::api::signaling::ticket::{TicketData, TicketToken};
 use crate::api::v1::{ApiError, ApiResponse, DefaultApiError, PagePaginationQuery};
 use crate::api::Participant;
-use crate::db::invites::InviteCodeUuid;
+use crate::db::invites::InviteCodeId;
 use crate::db::rooms::{self as db_rooms, RoomId};
 use crate::db::sip_configs::{SipConfigParams, SipId, SipPassword};
-use crate::db::users::{User, UserId};
+use crate::db::users::{SerialUserId, User};
 use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, post, put};
 use anyhow::Context;
@@ -35,7 +35,7 @@ use validator::{Validate, ValidationError};
 #[derive(Debug, Serialize)]
 pub struct Room {
     pub uuid: RoomId,
-    pub owner: UserId,
+    pub owner: SerialUserId,
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
@@ -47,7 +47,7 @@ pub struct Room {
 #[derive(Debug, Serialize)]
 pub struct RoomDetails {
     pub uuid: RoomId,
-    pub owner: UserId,
+    pub owner: SerialUserId,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
 }
@@ -470,7 +470,7 @@ pub async fn start_invited(
         .map_err(|_| StartError::BadRequest("bad invite_code format".to_string()))?;
 
     let room = crate::block(move || -> Result<db_rooms::Room, StartError> {
-        let invite = db_ctx.get_invite(&InviteCodeUuid::from(invite_code_as_uuid))?;
+        let invite = db_ctx.get_invite(&InviteCodeId::from(invite_code_as_uuid))?;
         if !invite.active {
             return Err(StartError::AuthJson(StartRoomError::InvalidInvite.into()));
         }
@@ -599,7 +599,7 @@ pub async fn sip_start(
 /// If the given resumption token is correct, a exit-msg is sent via rabbitmq to the runner of the to-resume session.
 async fn generate_response(
     redis_conn: &mut ConnectionManager,
-    participant: Participant<UserId>,
+    participant: Participant<SerialUserId>,
     room: RoomId,
     breakout_room: Option<BreakoutRoomId>,
     resumption: Option<ResumptionToken>,

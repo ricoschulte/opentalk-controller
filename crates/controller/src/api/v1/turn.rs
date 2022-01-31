@@ -4,7 +4,7 @@ use crate::api::v1::middleware::oidc_auth::check_access_token;
 use crate::api::v1::response::NoContent;
 use crate::api::v1::INVALID_ACCESS_TOKEN;
 use crate::db::invites::Invite;
-use crate::db::invites::InviteCodeUuid;
+use crate::db::invites::InviteCodeId;
 use crate::db::users::User;
 use crate::db::DatabaseError;
 use crate::oidc::OidcContext;
@@ -223,7 +223,7 @@ pub async fn check_access_token_or_invite(
             })?;
 
             crate::block(
-                move || match db_ctx.get_invite(&InviteCodeUuid::from(invite_uuid)) {
+                move || match db_ctx.get_invite(&InviteCodeId::from(invite_uuid)) {
                     Ok(invite) => Ok(invite),
                     Err(DatabaseError::NotFound) => {
                         log::warn!("The requesting user could not be found in the database");

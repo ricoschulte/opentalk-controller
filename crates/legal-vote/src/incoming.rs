@@ -1,4 +1,4 @@
-use controller::db::legal_votes::VoteId;
+use controller::db::legal_votes::LegalVoteId;
 use db_storage::legal_votes::types::{UserParameters, VoteOption};
 use serde::Deserialize;
 use validator::Validate;
@@ -32,14 +32,14 @@ impl Validate for Message {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Stop {
     /// The vote id of the targeted vote
-    pub vote_id: VoteId,
+    pub vote_id: LegalVoteId,
 }
 
 /// Cancel a vote
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct Cancel {
     /// The vote id of the targeted vote
-    pub vote_id: VoteId,
+    pub vote_id: LegalVoteId,
     /// The reason for the cancel
     #[validate(length(max = 255))]
     pub reason: String,
@@ -49,7 +49,7 @@ pub struct Cancel {
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct VoteMessage {
     /// The vote id of the targeted vote
-    pub vote_id: VoteId,
+    pub vote_id: LegalVoteId,
     /// The chosen vote option
     pub option: VoteOption,
 }
@@ -112,7 +112,7 @@ mod test {
         let stop: Message = serde_json::from_str(json_str).unwrap();
 
         if let Message::Stop(Stop { vote_id }) = stop {
-            assert_eq!(vote_id, VoteId::from(Uuid::from_u128(0)))
+            assert_eq!(vote_id, LegalVoteId::from(Uuid::from_u128(0)))
         } else {
             panic!()
         }
@@ -131,7 +131,7 @@ mod test {
         let cancel: Message = serde_json::from_str(json_str).unwrap();
 
         if let Message::Cancel(Cancel { vote_id, reason }) = cancel {
-            assert_eq!(vote_id, VoteId::from(Uuid::from_u128(0)));
+            assert_eq!(vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(reason, "Something is broken")
         } else {
             panic!()
@@ -151,7 +151,7 @@ mod test {
         let vote: Message = serde_json::from_str(json_str).unwrap();
 
         if let Message::Vote(VoteMessage { vote_id, option }) = vote {
-            assert_eq!(vote_id, VoteId::from(Uuid::from_u128(0)));
+            assert_eq!(vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::Yes);
         } else {
             panic!()
@@ -171,7 +171,7 @@ mod test {
         let vote: Message = serde_json::from_str(json_str).unwrap();
 
         if let Message::Vote(VoteMessage { vote_id, option }) = vote {
-            assert_eq!(vote_id, VoteId::from(Uuid::from_u128(0)));
+            assert_eq!(vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::No);
         } else {
             panic!()
@@ -191,7 +191,7 @@ mod test {
         let vote: Message = serde_json::from_str(json_str).unwrap();
 
         if let Message::Vote(VoteMessage { vote_id, option }) = vote {
-            assert_eq!(vote_id, VoteId::from(Uuid::from_u128(0)));
+            assert_eq!(vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::Abstain);
         } else {
             panic!()

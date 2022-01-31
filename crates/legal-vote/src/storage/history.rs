@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::VoteId;
+use controller::db::legal_votes::LegalVoteId;
 use controller::prelude::*;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
@@ -25,7 +25,7 @@ impl_to_redis_args!(VoteHistoryKey);
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-) -> Result<HashSet<VoteId>> {
+) -> Result<HashSet<LegalVoteId>> {
     redis_conn
         .smembers(VoteHistoryKey { room_id })
         .await

@@ -1,6 +1,6 @@
 use crate::rooms::{Room, RoomId};
 use crate::schema::{invites, users};
-use crate::users::{User, UserId};
+use crate::users::{SerialUserId, User};
 use chrono::{DateTime, Utc};
 use database::{DbInterface, Paginate, Result};
 use diesel::dsl::any;
@@ -9,7 +9,9 @@ use diesel::{
 };
 use std::collections::{HashMap, HashSet};
 
-diesel_newtype!(InviteCodeUuid(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/invites/");
+diesel_newtype! {
+    InviteCodeId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/invites/"
+}
 
 /// Diesel invites struct
 ///
@@ -18,11 +20,11 @@ diesel_newtype!(InviteCodeUuid(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::
 #[belongs_to(User, foreign_key = "created_by")]
 pub struct Invite {
     pub id: i64,
-    pub uuid: InviteCodeUuid,
+    pub uuid: InviteCodeId,
     pub created: DateTime<Utc>,
-    pub created_by: UserId,
+    pub created_by: SerialUserId,
     pub updated: DateTime<Utc>,
-    pub updated_by: UserId,
+    pub updated_by: SerialUserId,
     pub room: RoomId,
     pub active: bool,
     pub expiration: Option<DateTime<Utc>>,
@@ -34,11 +36,11 @@ pub struct Invite {
 #[derive(Debug, Clone, Insertable)]
 #[table_name = "invites"]
 pub struct NewInvite<'a> {
-    pub uuid: &'a InviteCodeUuid,
+    pub uuid: &'a InviteCodeId,
     pub created: &'a DateTime<Utc>,
-    pub created_by: &'a UserId,
+    pub created_by: &'a SerialUserId,
     pub updated: &'a DateTime<Utc>,
-    pub updated_by: &'a UserId,
+    pub updated_by: &'a SerialUserId,
     pub room: &'a RoomId,
     pub active: bool,
     pub expiration: Option<&'a DateTime<Utc>>,
@@ -51,7 +53,7 @@ pub struct NewInvite<'a> {
 #[table_name = "invites"]
 pub struct UpdateInvite<'a> {
     pub updated: Option<&'a DateTime<Utc>>,
-    pub updated_by: Option<&'a UserId>,
+    pub updated_by: Option<&'a SerialUserId>,
     pub room: Option<&'a RoomId>,
     pub active: Option<bool>,
     pub expiration: Option<Option<&'a DateTime<Utc>>>,
@@ -194,7 +196,7 @@ pub trait DbInvitesEx: DbInterface {
     fn get_invites_for_room_with_users_by_ids_paginated(
         &self,
         room: &Room,
-        ids: &[InviteCodeUuid],
+        ids: &[InviteCodeId],
         limit: i64,
         page: i64,
     ) -> Result<(Vec<InviteWithUsers>, i64)> {
@@ -244,7 +246,7 @@ pub trait DbInvitesEx: DbInterface {
     }
 
     #[tracing::instrument(skip(self))]
-    fn get_invite(&self, invite_code: &InviteCodeUuid) -> Result<Invite> {
+    fn get_invite(&self, invite_code: &InviteCodeId) -> Result<Invite> {
         let conn = self.get_conn()?;
 
         let query = invites::table
@@ -254,7 +256,7 @@ pub trait DbInvitesEx: DbInterface {
     }
 
     #[tracing::instrument(skip(self))]
-    fn get_invite_with_users(&self, invite_code: &InviteCodeUuid) -> Result<InviteWithUsers> {
+    fn get_invite_with_users(&self, invite_code: &InviteCodeId) -> Result<InviteWithUsers> {
         // Diesel currently does not support joining a table twice, so we need to join once and do a second select.
         // Or we need to write our handwritten SQL here.
         let conn = self.get_conn()?;
@@ -271,7 +273,7 @@ pub trait DbInvitesEx: DbInterface {
     #[tracing::instrument(skip(self))]
     fn update_invite(
         &self,
-        invite_code: &InviteCodeUuid,
+        invite_code: &InviteCodeId,
         changeset: &UpdateInvite,
     ) -> Result<Invite> {
         let conn = self.get_conn()?;
@@ -286,7 +288,7 @@ pub trait DbInvitesEx: DbInterface {
     #[tracing::instrument(skip(self))]
     fn update_invite_with_users(
         &self,
-        invite_code: &InviteCodeUuid,
+        invite_code: &InviteCodeId,
         changeset: &UpdateInvite,
     ) -> Result<InviteWithUsers> {
         let conn = self.get_conn()?;
@@ -307,7 +309,7 @@ pub trait DbInvitesEx: DbInterface {
     }
 
     #[tracing::instrument(skip(self))]
-    fn deactivate_invite(&self, invite_code: &InviteCodeUuid) -> Result<Invite> {
+    fn deactivate_invite(&self, invite_code: &InviteCodeId) -> Result<Invite> {
         let conn = self.get_conn()?;
 
         let query = diesel::update(invites::table)

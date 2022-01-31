@@ -1,5 +1,5 @@
 use crate::api::signaling::SignalingRoomId;
-use crate::db::users::UserId;
+use crate::db::users::SerialUserId;
 use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 
@@ -24,7 +24,7 @@ pub fn current_room_exchange_name(room: SignalingRoomId) -> String {
 }
 
 /// Returns the routing-key/topic used to send a message to the given user
-pub fn room_user_routing_key(id: UserId) -> String {
+pub fn room_user_routing_key(id: SerialUserId) -> String {
     format!("user.{}", id)
 }
 

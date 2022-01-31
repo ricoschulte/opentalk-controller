@@ -1,6 +1,6 @@
 //! Modules to HTTP APIs
 
-use crate::db::users::{User, UserId};
+use crate::db::users::{SerialUserId, User};
 use serde::{Deserialize, Serialize};
 
 pub mod internal;
@@ -15,8 +15,8 @@ pub enum Participant<U> {
     Sip,
 }
 
-impl From<UserId> for Participant<UserId> {
-    fn from(id: UserId) -> Self {
+impl From<SerialUserId> for Participant<SerialUserId> {
+    fn from(id: SerialUserId) -> Self {
         Participant::User(id)
     }
 }
@@ -28,8 +28,8 @@ impl From<User> for Participant<User> {
 }
 
 impl Participant<User> {
-    /// Returns the UserId when the participant
-    pub fn user_id(&self) -> Option<UserId> {
+    /// Returns the SerialUserId when the participant
+    pub fn user_id(&self) -> Option<SerialUserId> {
         match self {
             Participant::User(user) => Some(user.id),
             Participant::Guest => None,

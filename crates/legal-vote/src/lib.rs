@@ -7,8 +7,8 @@
 use anyhow::Context;
 use anyhow::Result;
 use chrono::{DateTime, Utc};
-use controller::db::legal_votes::VoteId;
-use controller::db::users::UserId;
+use controller::db::legal_votes::LegalVoteId;
+use controller::db::users::SerialUserId;
 use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
 use controller::prelude::uuid::Uuid;
@@ -49,7 +49,7 @@ const PROTOCOL_VERSION: u8 = 1;
 
 /// A TimerEvent used for the vote expiration feature
 pub struct TimerEvent {
-    vote_id: VoteId,
+    vote_id: LegalVoteId,
 }
 
 /// The legal vote [`SignalingModule`]
@@ -60,7 +60,7 @@ pub struct LegalVote {
     db_ctx: Arc<Db>,
     authz: Arc<Authz>,
     participant_id: ParticipantId,
-    user_id: UserId,
+    user_id: SerialUserId,
     user_uuid: Uuid,
     room_id: SignalingRoomId,
 }
@@ -414,7 +414,7 @@ impl LegalVote {
     async fn start_vote_routine(
         &self,
         redis_conn: &mut ConnectionManager,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
         incoming_parameters: UserParameters,
     ) -> Result<Parameters, Error> {
         let start_time = Utc::now();
@@ -451,7 +451,7 @@ impl LegalVote {
     async fn init_vote_protocol(
         &self,
         redis_conn: &mut ConnectionManager,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
         start_time: DateTime<Utc>,
         parameters: Parameters,
     ) -> Result<()> {
@@ -474,10 +474,10 @@ impl LegalVote {
     async fn init_allowed_list(
         &self,
         redis_conn: &mut ConnectionManager,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
         allowed_participants: &[ParticipantId],
     ) -> Result<u32, Error> {
-        let allowed_users = control::storage::get_attribute_for_participants::<UserId>(
+        let allowed_users = control::storage::get_attribute_for_participants::<SerialUserId>(
             redis_conn,
             self.room_id,
             "user_id",
@@ -531,7 +531,7 @@ impl LegalVote {
     async fn stop_vote_routine(
         &self,
         ctx: &mut ModuleContext<'_, LegalVote>,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
     ) -> Result<(), Error> {
         if !self.is_current_vote_id(ctx.redis_conn(), vote_id).await? {
             return Err(ErrorKind::InvalidVoteId.into());
@@ -672,7 +672,7 @@ impl LegalVote {
     async fn is_current_vote_id(
         &self,
         redis_conn: &mut ConnectionManager,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
     ) -> Result<bool, Error> {
         if let Some(current_vote_id) =
             storage::current_vote_id::get(redis_conn, self.room_id).await?
@@ -687,7 +687,7 @@ impl LegalVote {
     async fn is_vote_initiator(
         &self,
         redis_conn: &mut ConnectionManager,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
     ) -> Result<bool, Error> {
         let parameters = storage::parameters::get(redis_conn, self.room_id, vote_id)
             .await?
@@ -735,7 +735,7 @@ impl LegalVote {
     async fn get_vote_results(
         &self,
         redis_conn: &mut ConnectionManager,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
     ) -> Result<outgoing::Results, Error> {
         let parameters = storage::parameters::get(redis_conn, self.room_id, vote_id)
             .await?
@@ -764,7 +764,7 @@ impl LegalVote {
     async fn cancel_vote(
         &self,
         redis_conn: &mut ConnectionManager,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
         reason: String,
     ) -> Result<(), Error> {
         if !self.is_current_vote_id(redis_conn, vote_id).await? {
@@ -786,7 +786,7 @@ impl LegalVote {
     async fn cancel_vote_unchecked(
         &self,
         redis_conn: &mut ConnectionManager,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
         reason: CancelReason,
     ) -> Result<(), Error> {
         let cancel_entry = ProtocolEntry::new(VoteEvent::Cancel(Cancel {
@@ -805,7 +805,7 @@ impl LegalVote {
     async fn end_vote(
         &self,
         ctx: &mut ModuleContext<'_, Self>,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
         end_entry: ProtocolEntry,
         stop_kind: StopKind,
     ) -> Result<(), Error> {
@@ -839,7 +839,7 @@ impl LegalVote {
     async fn validate_vote_results(
         &self,
         ctx: &mut ModuleContext<'_, Self>,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
     ) -> Result<FinalResults, Error> {
         let parameters = storage::parameters::get(ctx.redis_conn(), self.room_id, vote_id)
             .await?
@@ -916,7 +916,7 @@ impl LegalVote {
     /// Creates a new vote in the database
     ///
     /// Adds a new vote with an empty protocol to the database. Returns the [`VoteId`] of the new vote.
-    async fn new_vote_in_database(&self) -> Result<VoteId> {
+    async fn new_vote_in_database(&self) -> Result<LegalVoteId> {
         let db_ctx = self.db_ctx.clone();
 
         let user_id = self.user_id;
@@ -933,7 +933,7 @@ impl LegalVote {
     async fn save_protocol_in_database(
         &self,
         redis_conn: &mut ConnectionManager,
-        vote_id: VoteId,
+        vote_id: LegalVoteId,
     ) -> Result<()> {
         let entries = storage::protocol::get(redis_conn, self.room_id, vote_id).await?;
 

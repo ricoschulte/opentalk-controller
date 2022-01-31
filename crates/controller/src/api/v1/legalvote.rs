@@ -1,5 +1,5 @@
 use super::{ApiResponse, DefaultApiError, PagePaginationQuery};
-use crate::db::legal_votes::VoteId;
+use crate::db::legal_votes::LegalVoteId;
 use actix_web::get;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use anyhow::Result;
@@ -24,7 +24,7 @@ use std::sync::Arc;
 #[derive(Debug, Serialize)]
 pub struct LegalvoteEntry {
     /// The vote id
-    vote_id: VoteId,
+    vote_id: LegalVoteId,
     /// The parsing result of the protocol
     #[serde(flatten)]
     protocol_result: ProtocolResult,
@@ -127,7 +127,7 @@ pub struct Success {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StopKind {
-    /// A normal vote stop issued by a user. Contains the UserId of the issuer
+    /// A normal vote stop issued by a user. Contains the SerialUserId of the issuer
     ByParticipant(ParticipantInfo),
     /// The vote has been stopped automatically because all allowed users have voted
     Auto,
@@ -156,7 +156,7 @@ pub async fn get_all_for_room(
     let room_id = room_id.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
-    let accessible_legal_votes: AccessibleResources<VoteId> = authz
+    let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
         .get_accessible_resources_for_user(current_user.oidc_uuid, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;
@@ -212,7 +212,7 @@ pub async fn get_all(
 ) -> Result<ApiResponse<Vec<LegalvoteEntry>>, DefaultApiError> {
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
-    let accessible_legal_votes: AccessibleResources<VoteId> = authz
+    let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
         .get_accessible_resources_for_user(current_user.oidc_uuid, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;
@@ -264,12 +264,12 @@ pub async fn get_all(
 pub async fn get_specific(
     db_ctx: Data<Db>,
     authz: Data<Authz>,
-    vote_id: Path<VoteId>,
+    vote_id: Path<LegalVoteId>,
     current_user: ReqData<User>,
 ) -> Result<Json<LegalvoteEntry>, DefaultApiError> {
     let vote_id = vote_id.into_inner();
 
-    let accessible_legal_votes: AccessibleResources<VoteId> = authz
+    let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
         .get_accessible_resources_for_user(current_user.oidc_uuid, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;

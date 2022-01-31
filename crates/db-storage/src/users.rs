@@ -13,17 +13,20 @@ use diesel::{
 };
 use uuid::Uuid;
 
-diesel_newtype!(#[derive(Copy)] UserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt", "/users/");
+diesel_newtype! {
+    #[derive(Copy)] SerialUserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt", "/users/",
+    #[derive(Copy)] UserId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid"
+}
 
-impl_to_redis_args_se!(UserId);
-impl_from_redis_value_de!(UserId);
+impl_to_redis_args_se!(SerialUserId);
+impl_from_redis_value_de!(SerialUserId);
 
 /// Diesel user struct
 ///
 /// Is used as a result in various queries. Represents a user column
 #[derive(Clone, Queryable, Identifiable)]
 pub struct User {
-    pub id: UserId,
+    pub id: SerialUserId,
     pub oidc_uuid: Uuid,
     pub email: String,
     pub title: String,
@@ -151,7 +154,7 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
     #[tracing::instrument(skip(self))]
     fn get_users_by_ids_paginated(
         &self,
-        ids: &[UserId],
+        ids: &[SerialUserId],
         limit: i64,
         page: i64,
     ) -> Result<(Vec<User>, i64)> {
@@ -174,7 +177,7 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
     }
 
     #[tracing::instrument(skip(self, ids))]
-    fn get_users_by_ids(&self, ids: &[UserId]) -> Result<Vec<User>> {
+    fn get_users_by_ids(&self, ids: &[SerialUserId]) -> Result<Vec<User>> {
         let conn = self.get_conn()?;
 
         let result: QueryResult<Vec<User>> = users::table
@@ -271,7 +274,7 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
     }
 
     #[tracing::instrument(skip(self, user_id))]
-    fn get_opt_user_by_id(&self, user_id: UserId) -> Result<Option<User>> {
+    fn get_opt_user_by_id(&self, user_id: SerialUserId) -> Result<Option<User>> {
         let conn = self.get_conn()?;
 
         let result: QueryResult<User> = users::table
@@ -290,7 +293,7 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
     }
 
     #[tracing::instrument(skip(self, user_id))]
-    fn get_user_by_id(&self, user_id: UserId) -> Result<User> {
+    fn get_user_by_id(&self, user_id: SerialUserId) -> Result<User> {
         match self.get_opt_user_by_id(user_id) {
             Ok(Some(user)) => Ok(user),
             Ok(None) => Err(Error::NotFound.into()),
