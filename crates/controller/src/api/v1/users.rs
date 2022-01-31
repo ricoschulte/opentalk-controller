@@ -230,3 +230,30 @@ pub async fn user_details(
         }
     }
 }
+
+#[derive(Deserialize)]
+pub struct FindQuery {
+    name: String,
+}
+
+/// API Endpoint *GET /users/find?name=$input*
+///
+/// Returns a list with a limited size of users matching the query
+#[get("/users/find")]
+pub async fn find(
+    db: Data<Db>,
+    query: Query<FindQuery>,
+) -> Result<Json<Vec<UserDetails>>, DefaultApiError> {
+    let found_users = crate::block(move || -> Result<Vec<db_users::User>, DefaultApiError> {
+        Ok(db.find_users_by_name(&query.name)?)
+    })
+    .await
+    .map_err(|e| {
+        log::error!("BlockingError on GET /users/find - {}", e);
+        DefaultApiError::Internal
+    })??;
+
+    let found_users = found_users.into_iter().map(Into::into).collect();
+
+    Ok(Json(found_users))
+}

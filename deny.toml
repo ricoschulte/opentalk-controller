@@ -196,6 +196,8 @@ skip = [
     { name = "rustc_version", version = "=0.3.3" },
     { name = "semver", version = "=0.11.0" },
     { name = "semver-parser", version = "=0.10.2" },
+    { name = "itoa", version = "=0.4.8" },
+    { name = "time", version = "=0.2.27" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive

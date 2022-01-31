@@ -2,14 +2,15 @@
 use super::groups::{DbGroupsEx, Group, UserGroup};
 use super::schema::{groups, user_groups, users};
 use crate::groups::NewUserGroup;
+use crate::{levenshtein, lower, soundex};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
 use database::{DatabaseError, DbInterface, Paginate, Result};
 use diesel::dsl::any;
 use diesel::r2d2::{self, ConnectionManager};
 use diesel::result::Error;
 use diesel::{
-    BelongingToDsl, Connection, ExpressionMethods, GroupedBy, Identifiable, Insertable,
-    PgConnection, QueryDsl, QueryResult, Queryable, RunQueryDsl,
+    BelongingToDsl, BoolExpressionMethods, Connection, ExpressionMethods, GroupedBy, Identifiable,
+    Insertable, PgConnection, QueryDsl, QueryResult, Queryable, RunQueryDsl, TextExpressionMethods,
 };
 use uuid::Uuid;
 
@@ -299,6 +300,43 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
             Ok(None) => Err(Error::NotFound.into()),
             Err(e) => Err(e),
         }
+    }
+
+    #[tracing::instrument(err, skip_all)]
+    fn find_users_by_name(&self, search_str: &str) -> Result<Vec<User>> {
+        // IMPORTANT: lowercase it to match the index of the db and
+        // remove all existing % in name and to avoid manipulation of the LIKE query.
+        let search_str = search_str.replace('%', "").trim().to_lowercase();
+
+        if search_str.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let like_query = format!("%{}%", search_str);
+
+        let conn = self.get_conn()?;
+
+        let lower_first_lastname = lower(
+            users::columns::firstname
+                .concat(" ")
+                .concat(users::columns::lastname),
+        );
+
+        let matches = users::table
+            .filter(
+                lower_first_lastname
+                    .like(&like_query)
+                    .or(lower(users::columns::email).like(&like_query))
+                    .or(soundex(lower_first_lastname)
+                        .eq(soundex(&search_str))
+                        .and(levenshtein(lower_first_lastname, &search_str).lt(5))),
+            )
+            .order_by(levenshtein(lower_first_lastname, &search_str))
+            .then_order_by(users::columns::id)
+            .limit(5)
+            .get_results(&conn)?;
+
+        Ok(matches)
     }
 }
 impl<T: DbInterface> DbUsersEx for T {}

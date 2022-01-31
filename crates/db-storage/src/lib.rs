@@ -18,6 +18,10 @@
 
 #[macro_use]
 extern crate diesel;
+
+// postgres functions
+use diesel::sql_types::{Integer, Text};
+
 #[macro_use]
 mod macros;
 mod schema;
@@ -33,3 +37,7 @@ pub mod users;
 pub use database;
 pub use rooms::DbRoomsEx;
 pub use users::DbUsersEx;
+
+sql_function!(fn lower(x: Text) -> Text);
+sql_function!(fn levenshtein(x: Text, y: Text) -> Integer);
+sql_function!(fn soundex(x: Text) -> Text);

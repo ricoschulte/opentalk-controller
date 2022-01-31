@@ -479,6 +479,7 @@ fn v1_scope(
                 .service(api::v1::users::set_current_user_profile)
                 .service(api::v1::users::current_user_profile)
                 .service(api::v1::users::user_details)
+                .service(api::v1::users::find)
                 .service(api::v1::rooms::owned)
                 .service(api::v1::rooms::new)
                 .service(api::v1::rooms::modify)
