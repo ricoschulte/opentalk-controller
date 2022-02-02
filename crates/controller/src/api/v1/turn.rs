@@ -77,14 +77,14 @@ pub async fn get(
         Either::Right(invite) => {
             log::trace!(
                 "Generating new turn credentials for invite {} and servers {:?}",
-                invite.uuid,
+                invite.id,
                 &turn_servers
             );
         }
         Either::Left(user) => {
             log::trace!(
                 "Generating new turn credentials for user {} and servers {:?}",
-                user.oidc_uuid,
+                user.id,
                 &turn_servers
             );
         }

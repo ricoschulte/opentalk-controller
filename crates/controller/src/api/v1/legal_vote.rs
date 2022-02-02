@@ -127,7 +127,7 @@ pub struct Success {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StopKind {
-    /// A normal vote stop issued by a user. Contains the SerialUserId of the issuer
+    /// A normal vote stop issued by a user. Contains the UserId of the issuer
     ByParticipant(ParticipantInfo),
     /// The vote has been stopped automatically because all allowed users have voted
     Auto,
@@ -157,7 +157,7 @@ pub async fn get_all_for_room(
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
-        .get_accessible_resources_for_user(current_user.oidc_uuid, AccessMethod::Get)
+        .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;
 
@@ -210,7 +210,7 @@ pub async fn get_all(
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
-        .get_accessible_resources_for_user(current_user.oidc_uuid, AccessMethod::Get)
+        .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;
 
@@ -263,7 +263,7 @@ pub async fn get_specific(
     let legal_vote_id = legal_vote_id.into_inner();
 
     let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
-        .get_accessible_resources_for_user(current_user.oidc_uuid, AccessMethod::Get)
+        .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;
 

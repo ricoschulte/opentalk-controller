@@ -36,13 +36,16 @@ impl OidcContext {
     /// Note: This does __not__ check if the token is active or has been revoked.
     /// See `verify_access_token_active`.
     #[tracing::instrument(name = "oidc_verify_access_token", skip(self, access_token))]
-    pub fn verify_access_token(&self, access_token: &AccessToken) -> Result<String, VerifyError> {
+    pub fn verify_access_token(
+        &self,
+        access_token: &AccessToken,
+    ) -> Result<(String, String), VerifyError> {
         let claims = jwt::verify(
             self.provider.metadata.jwks(),
             access_token.secret().as_str(),
         )?;
 
-        Ok(claims.sub)
+        Ok((claims.iss, claims.sub))
     }
 
     /// Verify that an AccessToken is active using the providers `token_introspect` endpoint.
@@ -79,6 +82,7 @@ impl OidcContext {
 
         Ok(IdTokenInfo {
             sub: claims.sub,
+            issuer: claims.iss,
             expiration: claims.exp,
             email: claims.email,
             firstname: claims.given_name,
@@ -105,6 +109,7 @@ pub struct AccessTokenIntrospectInfo {
 #[derive(Debug)]
 pub struct IdTokenInfo {
     pub sub: String,
+    pub issuer: String,
     pub expiration: DateTime<Utc>,
     pub email: String,
     pub firstname: String,

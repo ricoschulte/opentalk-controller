@@ -21,7 +21,7 @@ use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
-use db_storage::users::{SerialUserId, User};
+use db_storage::users::{User, UserId};
 use futures::stream::SelectAll;
 use kustos::Authz;
 use redis::aio::ConnectionManager;
@@ -325,7 +325,7 @@ where
     room_id: SignalingRoomId,
     room: Room,
     participant_id: ParticipantId,
-    participant: Participant<SerialUserId>,
+    participant: Participant<UserId>,
     role: Role,
     control_data: Option<ControlData>,
     module: M,
@@ -383,7 +383,7 @@ where
 
         Ok(Self {
             redis_conn,
-            room_id: SignalingRoomId(room.uuid, breakout_room),
+            room_id: SignalingRoomId(room.id, breakout_room),
             room,
             participant_id,
             participant,
@@ -704,7 +704,7 @@ where
 
         let rabbitmq_publish = RabbitMqPublish {
             exchange: control::rabbitmq::current_room_exchange_name(SignalingRoomId::new_test(
-                self.room.uuid,
+                self.room.id,
             )),
             routing_key: control::rabbitmq::room_all_routing_key().into(),
             message,

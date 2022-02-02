@@ -145,7 +145,7 @@ where
     /// ID of the room currently inside, this MUST be used when a module does not care about
     /// whether it is inside a breakout room or not.
     pub fn room_id(&self) -> SignalingRoomId {
-        SignalingRoomId(self.room.uuid, self.breakout_room)
+        SignalingRoomId(self.room.id, self.breakout_room)
     }
 
     /// Returns the ID of the breakout room, if inside one

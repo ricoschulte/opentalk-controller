@@ -11,7 +11,7 @@ use crate::api::Participant;
 use anyhow::{bail, Context, Result};
 use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
-use db_storage::users::SerialUserId;
+use db_storage::users::UserId;
 use displaydoc::Display;
 use rand::Rng;
 use redis::aio::ConnectionManager;
@@ -52,7 +52,7 @@ impl_to_redis_args!(&ResumptionRedisKey);
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ResumptionData {
     pub participant_id: ParticipantId,
-    pub participant: Participant<SerialUserId>,
+    pub participant: Participant<UserId>,
     pub room: RoomId,
     pub breakout_room: Option<BreakoutRoomId>,
 }

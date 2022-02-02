@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use refinery::embed_migrations;
+use refinery::{embed_migrations, Report};
 use refinery_core::tokio_postgres::{Config, NoTls};
 use tokio::sync::oneshot;
 use tracing::Instrument;
@@ -7,7 +7,7 @@ use tracing::Instrument;
 embed_migrations!(".");
 
 #[tracing::instrument(skip(config))]
-async fn migrate(config: Config) -> Result<()> {
+async fn migrate(config: Config) -> Result<Report> {
     log::debug!("config: {:?}", config);
 
     let (mut client, conn) = config
@@ -29,17 +29,17 @@ async fn migrate(config: Config) -> Result<()> {
     );
 
     // The runner is specified through the `include_migration_mods` macro
-    migrations::runner().run_async(&mut client).await?;
+    let report = migrations::runner().run_async(&mut client).await?;
 
     drop(client);
 
     // wait for the connection to close
     rx.await?;
 
-    Ok(())
+    Ok(report)
 }
 
-pub async fn migrate_from_url(url: &str) -> Result<()> {
+pub async fn migrate_from_url(url: &str) -> Result<Report> {
     let config = url.parse::<Config>()?;
     migrate(config).await
 }

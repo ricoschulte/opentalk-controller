@@ -13,30 +13,34 @@ table! {
 
 table! {
     groups (id) {
-        id -> Varchar,
+        id -> Uuid,
+        id_serial -> Int8,
+        oidc_issuer -> Nullable<Text>,
+        name -> Text,
     }
 }
 
 table! {
     invites (id) {
-        id -> Int8,
-        uuid -> Uuid,
+        id_serial -> Int8,
+        id -> Uuid,
         created -> Timestamptz,
-        created_by -> Int8,
         updated -> Timestamptz,
-        updated_by -> Int8,
         room -> Uuid,
         active -> Bool,
         expiration -> Nullable<Timestamptz>,
+        created_by -> Uuid,
+        updated_by -> Uuid,
     }
 }
 
 table! {
     legal_votes (id) {
         id -> Uuid,
-        initiator -> Int8,
         protocol -> Jsonb,
         room_id -> Nullable<Uuid>,
+        id_serial -> Int8,
+        initiator -> Uuid,
     }
 }
 
@@ -51,12 +55,12 @@ table! {
 
 table! {
     rooms (id) {
-        id -> Int8,
-        uuid -> Uuid,
-        owner -> Int8,
+        id_serial -> Int8,
+        id -> Uuid,
         password -> Varchar,
         wait_for_moderator -> Bool,
         listen_only -> Bool,
+        owner -> Uuid,
     }
 }
 
@@ -72,15 +76,15 @@ table! {
 
 table! {
     user_groups (user_id, group_id) {
-        user_id -> Int8,
-        group_id -> Varchar,
+        user_id -> Uuid,
+        group_id -> Uuid,
     }
 }
 
 table! {
     users (id) {
-        id -> Int8,
-        oidc_uuid -> Uuid,
+        id_serial -> Int8,
+        oidc_sub -> Varchar,
         email -> Varchar,
         title -> Varchar,
         firstname -> Varchar,
@@ -88,11 +92,16 @@ table! {
         id_token_exp -> Int8,
         theme -> Varchar,
         language -> Varchar,
+        id -> Uuid,
+        oidc_issuer -> Nullable<Text>,
     }
 }
 
+joinable!(invites -> rooms (room));
+joinable!(legal_votes -> rooms (room_id));
 joinable!(legal_votes -> users (initiator));
 joinable!(rooms -> users (owner));
+joinable!(sip_configs -> rooms (room));
 joinable!(user_groups -> groups (group_id));
 joinable!(user_groups -> users (user_id));
 

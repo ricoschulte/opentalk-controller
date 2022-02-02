@@ -1,6 +1,6 @@
 use crate::rooms::RoomId;
 use crate::schema::{invites, users};
-use crate::users::{SerialUserId, User};
+use crate::users::{User, UserId};
 use chrono::{DateTime, Utc};
 use database::{DbInterface, Paginate, Result};
 use diesel::dsl::any;
@@ -8,7 +8,8 @@ use diesel::{ExpressionMethods, Identifiable, JoinOnDsl, QueryDsl, Queryable, Ru
 use std::collections::{HashMap, HashSet};
 
 diesel_newtype! {
-    #[derive(Copy)] InviteCodeId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/invites/"
+    #[derive(Copy)] InviteCodeId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/invites/",
+    #[derive(Copy)] InviteCodeSerialId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt"
 }
 
 /// Diesel invites struct
@@ -17,15 +18,15 @@ diesel_newtype! {
 #[derive(Debug, Queryable, Identifiable, Associations)]
 #[belongs_to(User, foreign_key = "created_by")]
 pub struct Invite {
-    pub id: i64,
-    pub uuid: InviteCodeId,
+    pub id_serial: InviteCodeSerialId,
+    pub id: InviteCodeId,
     pub created: DateTime<Utc>,
-    pub created_by: SerialUserId,
     pub updated: DateTime<Utc>,
-    pub updated_by: SerialUserId,
     pub room: RoomId,
     pub active: bool,
     pub expiration: Option<DateTime<Utc>>,
+    pub created_by: UserId,
+    pub updated_by: UserId,
 }
 
 /// Diesel invites struct
@@ -33,15 +34,12 @@ pub struct Invite {
 /// Represents a new invite in the database
 #[derive(Debug, Clone, Insertable)]
 #[table_name = "invites"]
-pub struct NewInvite<'a> {
-    pub uuid: &'a InviteCodeId,
-    pub created: &'a DateTime<Utc>,
-    pub created_by: &'a SerialUserId,
-    pub updated: &'a DateTime<Utc>,
-    pub updated_by: &'a SerialUserId,
-    pub room: &'a RoomId,
+pub struct NewInvite {
+    pub created_by: UserId,
+    pub updated_by: UserId,
+    pub room: RoomId,
     pub active: bool,
-    pub expiration: Option<&'a DateTime<Utc>>,
+    pub expiration: Option<DateTime<Utc>>,
 }
 
 /// Diesel invites struct
@@ -49,12 +47,12 @@ pub struct NewInvite<'a> {
 /// Represents a changeset of in invite
 #[derive(Debug, AsChangeset)]
 #[table_name = "invites"]
-pub struct UpdateInvite<'a> {
-    pub updated: Option<&'a DateTime<Utc>>,
-    pub updated_by: Option<&'a SerialUserId>,
-    pub room: Option<&'a RoomId>,
+pub struct UpdateInvite {
+    pub updated_by: Option<UserId>,
+    pub updated: Option<DateTime<Utc>>,
+    pub room: Option<RoomId>,
     pub active: Option<bool>,
-    pub expiration: Option<Option<&'a DateTime<Utc>>>,
+    pub expiration: Option<Option<DateTime<Utc>>>,
 }
 
 pub type InviteWithUsers = (Invite, User, User);
@@ -190,7 +188,7 @@ pub trait DbInvitesEx: DbInterface {
 
         let query = invites::table
             .filter(invites::room.eq(room_id))
-            .filter(invites::uuid.eq(any(ids)))
+            .filter(invites::id.eq_any(ids))
             .inner_join(users::table.on(invites::created_by.eq(users::id)))
             .order(invites::updated.desc())
             .paginate_by(limit, page);
@@ -236,7 +234,7 @@ pub trait DbInvitesEx: DbInterface {
         let conn = self.get_conn()?;
 
         let query = invites::table
-            .filter(invites::uuid.eq(invite_code_id))
+            .filter(invites::id.eq(invite_code_id))
             .order(invites::updated.desc());
         query.first(&conn).map_err(Into::into)
     }
@@ -248,7 +246,7 @@ pub trait DbInvitesEx: DbInterface {
         let conn = self.get_conn()?;
 
         let query = invites::table
-            .filter(invites::uuid.eq(invite_code_id))
+            .filter(invites::id.eq(invite_code_id))
             .inner_join(users::table.on(invites::created_by.eq(users::id)))
             .order(invites::updated.desc());
         let (invite, created_by) = query.first::<(Invite, User)>(&conn)?;
@@ -265,7 +263,7 @@ pub trait DbInvitesEx: DbInterface {
         let conn = self.get_conn()?;
 
         let query = diesel::update(invites::table)
-            .filter(invites::uuid.eq(invite_code_id))
+            .filter(invites::id.eq(invite_code_id))
             .set(changeset)
             .returning(invites::all_columns);
         query.get_result(&conn).map_err(Into::into)
@@ -280,7 +278,7 @@ pub trait DbInvitesEx: DbInterface {
         let conn = self.get_conn()?;
 
         let query = diesel::update(invites::table)
-            .filter(invites::uuid.eq(invite_code_id))
+            .filter(invites::id.eq(invite_code_id))
             .set(changeset)
             .returning(invites::all_columns);
 
@@ -299,7 +297,7 @@ pub trait DbInvitesEx: DbInterface {
         let conn = self.get_conn()?;
 
         let query = diesel::update(invites::table)
-            .filter(invites::uuid.eq(invite_code_id))
+            .filter(invites::id.eq(invite_code_id))
             .set(&UpdateInvite {
                 active: Some(false),
                 updated: None,

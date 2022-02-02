@@ -1,6 +1,6 @@
 //! Modules to HTTP APIs
 
-use db_storage::users::{SerialUserId, User};
+use db_storage::users::{User, UserId};
 use serde::{Deserialize, Serialize};
 
 pub mod internal;
@@ -15,8 +15,8 @@ pub enum Participant<U> {
     Sip,
 }
 
-impl From<SerialUserId> for Participant<SerialUserId> {
-    fn from(id: SerialUserId) -> Self {
+impl From<UserId> for Participant<UserId> {
+    fn from(id: UserId) -> Self {
         Participant::User(id)
     }
 }
@@ -28,8 +28,8 @@ impl From<User> for Participant<User> {
 }
 
 impl Participant<User> {
-    /// Returns the SerialUserId when the participant
-    pub fn user_id(&self) -> Option<SerialUserId> {
+    /// Returns the UserId when the participant
+    pub fn user_id(&self) -> Option<UserId> {
         match self {
             Participant::User(user) => Some(user.id),
             Participant::Guest => None,

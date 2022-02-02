@@ -57,11 +57,11 @@ pub async fn get(
         }
 
         let db_sip_config = db
-            .get_sip_config(room.uuid)?
+            .get_sip_config(room.id)?
             .ok_or(DefaultApiError::NotFound)?;
 
         Ok(SipConfig {
-            room: room.uuid,
+            room: room.id,
             sip_id: db_sip_config.sip_id,
             password: db_sip_config.password,
             lobby: db_sip_config.lobby,
@@ -107,9 +107,9 @@ pub async fn put(
         }
 
         // Try to modify the sip config before creating a new one
-        if let Some(db_sip_config) = db.update_sip_config(room.uuid, &update_sip_config)? {
+        if let Some(db_sip_config) = db.update_sip_config(room.id, &update_sip_config)? {
             let sip_config = SipConfig {
-                room: room.uuid,
+                room: room.id,
                 sip_id: db_sip_config.sip_id,
                 password: db_sip_config.password,
                 lobby: db_sip_config.lobby,
@@ -119,7 +119,7 @@ pub async fn put(
         } else {
             // Create a new sip config
             let sip_params = SipConfigParams {
-                room: room.uuid,
+                room: room.id,
                 password: update_sip_config
                     .password
                     .unwrap_or_else(SipPassword::generate),
@@ -129,7 +129,7 @@ pub async fn put(
             let db_sip_config = db.new_sip_config(sip_params)?;
 
             let sip_config = SipConfig {
-                room: room.uuid,
+                room: room.id,
                 sip_id: db_sip_config.sip_id,
                 password: db_sip_config.password,
                 lobby: db_sip_config.lobby,
@@ -168,7 +168,7 @@ pub async fn delete(
             return Err(DefaultApiError::InsufficientPermission);
         }
 
-        db.delete_sip_config(room.uuid)?
+        db.delete_sip_config(room.id)?
             .ok_or(DefaultApiError::NotFound)?;
 
         Ok(())

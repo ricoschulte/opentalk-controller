@@ -20,7 +20,7 @@ use db_storage::rooms::DbRoomsEx;
 use db_storage::rooms::{self as db_rooms, RoomId};
 use db_storage::sip_configs::DbSipConfigsEx;
 use db_storage::sip_configs::{SipConfigParams, SipId, SipPassword};
-use db_storage::users::{SerialUserId, User};
+use db_storage::users::{User, UserId};
 use kustos::prelude::*;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
@@ -35,7 +35,7 @@ use validator::{Validate, ValidationError};
 #[derive(Debug, Serialize)]
 pub struct Room {
     pub uuid: RoomId,
-    pub owner: SerialUserId,
+    pub owner: UserId,
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
@@ -47,7 +47,7 @@ pub struct Room {
 #[derive(Debug, Serialize)]
 pub struct RoomDetails {
     pub uuid: RoomId,
-    pub owner: SerialUserId,
+    pub owner: UserId,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
 }
@@ -102,7 +102,7 @@ pub async fn owned(
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let accessible_rooms: kustos::AccessibleResources<RoomId> = authz
-        .get_accessible_resources_for_user(current_user.clone().oidc_uuid, AccessMethod::Get)
+        .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;
 
@@ -121,7 +121,7 @@ pub async fn owned(
     let rooms = rooms
         .into_iter()
         .map(|db_room| Room {
-            uuid: db_room.uuid,
+            uuid: db_room.id,
             owner: db_room.owner,
             password: db_room.password,
             wait_for_moderator: db_room.wait_for_moderator,
@@ -153,7 +153,6 @@ pub async fn new(
     let current_user_id = current_user.id;
     let db_room = crate::block(move || -> Result<db_rooms::Room, DefaultApiError> {
         let new_room = db_rooms::NewRoom {
-            uuid: RoomId::from(uuid::Uuid::new_v4()),
             owner: current_user_id,
             password: room_parameters.password,
             wait_for_moderator: room_parameters.wait_for_moderator,
@@ -163,7 +162,7 @@ pub async fn new(
         let room = db.new_room(new_room)?;
 
         if room_parameters.enable_sip {
-            let sip_params = SipConfigParams::generate_new(room.uuid);
+            let sip_params = SipConfigParams::generate_new(room.id);
 
             db.new_sip_config(sip_params)?;
         }
@@ -173,7 +172,7 @@ pub async fn new(
     .await??;
 
     let room = Room {
-        uuid: db_room.uuid,
+        uuid: db_room.id,
         owner: db_room.owner,
         password: db_room.password,
         wait_for_moderator: db_room.wait_for_moderator,
@@ -182,18 +181,18 @@ pub async fn new(
 
     if let Err(e) = authz
         .grant_user_access(
-            current_user.into_inner().oidc_uuid,
+            current_user.id,
             &[
                 (
-                    &db_room.uuid.resource_id(),
+                    &db_room.id.resource_id(),
                     &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
                 ),
                 (
-                    &db_room.uuid.resource_id().with_suffix("/invites"),
+                    &db_room.id.resource_id().with_suffix("/invites"),
                     &[AccessMethod::Post, AccessMethod::Get],
                 ),
                 (
-                    &db_room.uuid.resource_id().with_suffix("/start"),
+                    &db_room.id.resource_id().with_suffix("/start"),
                     &[AccessMethod::Post],
                 ),
             ],
@@ -237,7 +236,7 @@ pub async fn modify(
                     return Err(DefaultApiError::InsufficientPermission);
                 }
 
-                let change_room = db_rooms::ModifyRoom {
+                let change_room = db_rooms::UpdateRoom {
                     owner: None, // Owner can currently not be changed
                     password: modify_room.password,
                     wait_for_moderator: modify_room.wait_for_moderator,
@@ -251,7 +250,7 @@ pub async fn modify(
     .await??;
 
     let room = Room {
-        uuid: db_room.uuid,
+        uuid: db_room.id,
         owner: db_room.owner,
         password: db_room.password,
         wait_for_moderator: db_room.wait_for_moderator,
@@ -307,7 +306,7 @@ pub async fn get(
     .await??;
 
     let room_details = RoomDetails {
-        uuid: db_room.uuid,
+        uuid: db_room.id,
         owner: db_room.owner,
         wait_for_moderator: db_room.wait_for_moderator,
         listen_only: db_room.listen_only,
@@ -394,7 +393,7 @@ pub async fn start(
     let mut redis_conn = (**redis_ctx).clone();
 
     if let Some(breakout_room) = request.breakout_room {
-        let config = breakout::storage::get_config(&mut redis_conn, room.uuid).await?;
+        let config = breakout::storage::get_config(&mut redis_conn, room.id).await?;
 
         if let Some(config) = config {
             if !config.is_valid_id(breakout_room) {
@@ -476,7 +475,7 @@ pub async fn start_invited(
     let mut redis_conn = (**redis_ctx).clone();
 
     if let Some(breakout_room) = request.breakout_room {
-        let config = breakout::storage::get_config(&mut redis_conn, room.uuid).await?;
+        let config = breakout::storage::get_config(&mut redis_conn, room.id).await?;
 
         if let Some(config) = config {
             if !config.is_valid_id(breakout_room) {
@@ -537,7 +536,7 @@ pub async fn sip_start(
             if sip_config.password == request.password {
                 let room = db.get_room(sip_config.room)?.ok_or(StartError::Internal)?;
 
-                Ok(room.uuid)
+                Ok(room.id)
             } else {
                 Err(StartError::AuthJson(
                     StartRoomError::InvalidCredentials.into(),
@@ -565,7 +564,7 @@ pub async fn sip_start(
 /// If the given resumption token is correct, a exit-msg is sent via rabbitmq to the runner of the to-resume session.
 async fn generate_response(
     redis_conn: &mut ConnectionManager,
-    participant: Participant<SerialUserId>,
+    participant: Participant<UserId>,
     room: RoomId,
     breakout_room: Option<BreakoutRoomId>,
     resumption: Option<ResumptionToken>,

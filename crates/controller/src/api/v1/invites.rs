@@ -33,7 +33,7 @@ impl Invite {
         U: Into<UserDetails>,
     {
         Invite {
-            invite_code: val.uuid.to_string(),
+            invite_code: val.id.to_string(),
             created: val.created,
             created_by: created_by.into(),
             updated: val.updated,
@@ -85,17 +85,12 @@ pub async fn add_invite(
                 return Err(DefaultApiError::NotFound);
             }
 
-            let invite_code_uuid = uuid::Uuid::new_v4();
-            let now = chrono::Utc::now();
             let new_invite = db_invites::NewInvite {
-                uuid: &InviteCodeId::from(invite_code_uuid),
                 active: true,
-                created: &now,
-                created_by: &current_user_clone.id,
-                updated: &now,
-                updated_by: &current_user_clone.id,
-                room: &room.uuid,
-                expiration: new_invite.expiration.as_ref(),
+                created_by: current_user_clone.id,
+                updated_by: current_user_clone.id,
+                room: room.id,
+                expiration: new_invite.expiration,
             };
 
             db.new_invite_with_users(new_invite).map_err(Into::into)
@@ -104,12 +99,12 @@ pub async fn add_invite(
     .await??;
 
     // TODO(r.floren) Do we want to rollback if this failed?
-    let rel_invite_path = format!("/rooms/{}/invites/{}", room_uuid, db_invite.uuid).into();
-    let invite_path = db_invite.uuid.resource_id();
+    let rel_invite_path = format!("/rooms/{}/invites/{}", room_uuid, db_invite.id).into();
+    let invite_path = db_invite.id.resource_id();
 
     if let Err(e) = authz
         .grant_user_access(
-            current_user.oidc_uuid,
+            current_user.id,
             &[
                 (
                     &rel_invite_path,
@@ -147,7 +142,7 @@ pub async fn get_invites(
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let accessible_rooms: kustos::AccessibleResources<InviteCodeId> = authz
-        .get_accessible_resources_for_user(current_user.clone().oidc_uuid, AccessMethod::Get)
+        .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;
 
@@ -157,12 +152,11 @@ pub async fn get_invites(
             if let Some(room) = room {
                 match accessible_rooms {
                     kustos::AccessibleResources::All => {
-                        Ok(db
-                            .get_invites_for_room_with_users_paginated(room.uuid, per_page, page)?)
+                        Ok(db.get_invites_for_room_with_users_paginated(room.id, per_page, page)?)
                     }
                     kustos::AccessibleResources::List(list) => Ok(db
                         .get_invites_for_room_with_users_by_ids_paginated(
-                            room.uuid, &list, per_page, page,
+                            room.id, &list, per_page, page,
                         )?),
                 }
             } else {
@@ -250,9 +244,9 @@ pub async fn update_invite(
                     if check_owning_access(&invite, &current_user) {
                         let now = chrono::Utc::now();
                         let update_invite = db_invites::UpdateInvite {
-                            updated_by: Some(&current_user.id),
-                            updated: Some(&now),
-                            expiration: Some(update_invite.expiration.as_ref()),
+                            updated_by: Some(current_user.id),
+                            updated: Some(now),
+                            expiration: Some(update_invite.expiration),
                             active: None,
                             room: None,
                         };
@@ -294,8 +288,8 @@ pub async fn delete_invite(
         if room.is_some() {
             let now = chrono::Utc::now();
             let invite_update = db_invites::UpdateInvite {
-                updated_by: Some(&current_user.id),
-                updated: Some(&now),
+                updated_by: Some(current_user.id),
+                updated: Some(now),
                 expiration: None,
                 active: Some(false),
                 room: None,

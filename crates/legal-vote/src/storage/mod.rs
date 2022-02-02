@@ -9,7 +9,7 @@ use controller::prelude::*;
 use current_legal_vote_id::CurrentVoteIdKey;
 use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, Vote, VoteEvent};
 use db_storage::legal_votes::LegalVoteId;
-use db_storage::users::SerialUserId;
+use db_storage::users::UserId;
 use history::VoteHistoryKey;
 use parameters::VoteParametersKey;
 use protocol::ProtocolKey;
@@ -227,7 +227,7 @@ pub(crate) async fn vote(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
-    user_id: SerialUserId,
+    user_id: UserId,
     vote_event: Vote,
 ) -> Result<VoteScriptResult> {
     let vote_option = vote_event.option;

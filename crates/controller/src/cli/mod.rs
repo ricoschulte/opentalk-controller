@@ -103,9 +103,10 @@ pub async fn parse_args() -> Result<Args> {
                 acl::acl(settings, subcommand).await?;
             }
             SubCommand::MigrateDb => {
-                db_storage::migrations::migrate_from_url(&settings.database.url)
+                let result = db_storage::migrations::migrate_from_url(&settings.database.url)
                     .await
                     .context("Failed to migrate database")?;
+                println!("{:?}", result);
             }
         }
     }

@@ -2,7 +2,7 @@ use super::resumption::ResumptionToken;
 use crate::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
-use db_storage::users::SerialUserId;
+use db_storage::users::UserId;
 use displaydoc::Display;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
@@ -40,7 +40,7 @@ impl_to_redis_args!(TicketRedisKey<'_>);
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TicketData {
     pub participant_id: ParticipantId,
-    pub participant: Participant<SerialUserId>,
+    pub participant: Participant<UserId>,
     pub room: RoomId,
     pub breakout_room: Option<BreakoutRoomId>,
     pub resumption: ResumptionToken,

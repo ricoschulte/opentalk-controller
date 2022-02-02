@@ -5,7 +5,6 @@ use actix_web::{post, HttpResponse};
 use database::Db;
 use openidconnect::{AccessToken, RefreshToken};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 /// The JSON Body expected when making a *POST* request on `/introspect`
 #[derive(Debug, Deserialize)]
@@ -21,7 +20,7 @@ pub struct IntrospectRequest {
 #[derive(Debug, Serialize)]
 pub struct IntrospectResponse {
     active: bool,
-    sub: Option<Uuid>,
+    sub: Option<String>,
 }
 
 #[derive(Debug)]
@@ -79,7 +78,7 @@ async fn introspect_access_token(
             //TODO get AccessTokenIntrospectInfo
             HttpResponse::Ok().json(IntrospectResponse {
                 active: true,
-                sub: Some(user.oidc_uuid),
+                sub: Some(user.oidc_sub),
             })
         }
     }

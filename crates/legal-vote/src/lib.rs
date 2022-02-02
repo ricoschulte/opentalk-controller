@@ -9,7 +9,6 @@ use anyhow::Result;
 use chrono::{DateTime, Utc};
 use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
-use controller::prelude::uuid::Uuid;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::database::Db;
@@ -21,7 +20,7 @@ use db_storage::legal_votes::types::{
 };
 use db_storage::legal_votes::DbLegalVoteEx;
 use db_storage::legal_votes::LegalVoteId;
-use db_storage::users::SerialUserId;
+use db_storage::users::UserId;
 use error::{Error, ErrorKind};
 use incoming::VoteMessage;
 use kustos::prelude::AccessMethod;
@@ -60,8 +59,7 @@ pub struct LegalVote {
     db: Arc<Db>,
     authz: Arc<Authz>,
     participant_id: ParticipantId,
-    user_id: SerialUserId,
-    user_uuid: Uuid,
+    user_id: UserId,
     room_id: SignalingRoomId,
 }
 
@@ -87,7 +85,6 @@ impl SignalingModule for LegalVote {
                 authz: ctx.authz().clone(),
                 participant_id: ctx.participant_id(),
                 user_id: user.id,
-                user_uuid: user.oidc_uuid,
                 room_id: ctx.room_id(),
             }))
         } else {
@@ -254,7 +251,7 @@ impl LegalVote {
                         if let Err(e) = self
                             .authz
                             .grant_user_access(
-                                self.user_uuid,
+                                self.user_id,
                                 &[(
                                     &rabbitmq_parameters.legal_vote_id.resource_id(),
                                     &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
@@ -496,7 +493,7 @@ impl LegalVote {
         legal_vote_id: LegalVoteId,
         allowed_participants: &[ParticipantId],
     ) -> Result<u32, Error> {
-        let allowed_users = control::storage::get_attribute_for_participants::<SerialUserId>(
+        let allowed_users = control::storage::get_attribute_for_participants::<UserId>(
             redis_conn,
             self.room_id,
             "user_id",

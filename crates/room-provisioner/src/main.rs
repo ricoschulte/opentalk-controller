@@ -5,7 +5,7 @@ use database::Db;
 use db_storage::migrations::migrate_from_url;
 use db_storage::rooms::DbRoomsEx;
 use db_storage::rooms::{NewRoom, RoomId};
-use db_storage::users::SerialUserId;
+use db_storage::users::{UserId, UserId};
 use db_storage::DbUsersEx;
 use provision::Provision;
 use provision::{Room, User};
@@ -53,7 +53,7 @@ fn create_rooms(rooms: Vec<Room>, database: &Database) -> Result<()> {
 }
 
 fn try_to_create_room(room: Room, database_interface: &Db) -> Result<()> {
-    if let Some(room_owner) = database_interface.get_user_by_uuid(&room.owner)? {
+    if let Some(room_owner) = database_interface.get_user_by_id(&room.owner)? {
         return create_room(room, room_owner.id, database_interface);
     }
     println!(
@@ -63,9 +63,8 @@ fn try_to_create_room(room: Room, database_interface: &Db) -> Result<()> {
     Ok(())
 }
 
-fn create_room(room: Room, owner_id: SerialUserId, database_interface: &Db) -> Result<()> {
+fn create_room(room: Room, owner_id: UserId, database_interface: &Db) -> Result<()> {
     let new_room = NewRoom {
-        uuid: RoomId::from(room.uuid.unwrap_or_else(Uuid::new_v4)),
         owner: owner_id,
         password: room.password,
         wait_for_moderator: room.wait_for_moderator,

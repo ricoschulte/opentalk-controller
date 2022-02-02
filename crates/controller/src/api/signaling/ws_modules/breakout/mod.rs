@@ -98,7 +98,7 @@ impl SignalingModule for BreakoutRooms {
         Ok(Some(Self {
             id: ctx.participant_id(),
             role: ctx.role(),
-            parent: ctx.room().uuid,
+            parent: ctx.room().id,
             room: ctx.room_id(),
             breakout_room: ctx.breakout_room(),
         }))

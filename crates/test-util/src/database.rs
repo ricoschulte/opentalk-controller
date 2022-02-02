@@ -4,7 +4,7 @@ use controller::prelude::*;
 use database::Db;
 use db_storage::migrations::migrate_from_url;
 use db_storage::rooms::{DbRoomsEx, NewRoom, Room, RoomId};
-use db_storage::users::{DbUsersEx, NewUser, NewUserWithGroups, SerialUserId, User};
+use db_storage::users::{DbUsersEx, NewUser, NewUserWithGroups, User, UserId};
 use diesel::{Connection, PgConnection, RunQueryDsl};
 use std::sync::Arc;
 use uuid::Uuid;
@@ -62,10 +62,9 @@ impl DatabaseContext {
     }
 
     pub fn create_test_user(&self, id: SerialUserId, groups: Vec<String>) -> Result<User> {
-        let user_uuid = Uuid::from_u128(id.into_inner() as u128);
-
         let new_user = NewUser {
-            oidc_uuid: user_uuid,
+            oidc_sub: "".into(),
+            oidc_issuer: "".into(),
             email: format!("k3k_test_user{}@heinlein.de", id),
             title: "".into(),
             firstname: "test".into(),

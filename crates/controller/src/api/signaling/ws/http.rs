@@ -243,10 +243,9 @@ async fn get_user_and_room_from_ticket_data(
             let participant = match participant {
                 Participant::User(user_id) => {
                     let user = db
-                        .get_opt_user_by_id(user_id)
-                        .map_err(DefaultApiError::from)?;
+                        .get_opt_user_by_id(user_id)?
+                        .ok_or(DefaultApiError::Internal)?;
 
-                    let user = user.ok_or(DefaultApiError::Internal)?;
                     Participant::User(user)
                 }
                 Participant::Guest => Participant::Guest,

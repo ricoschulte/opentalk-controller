@@ -1,7 +1,7 @@
 use self::types::protocol::NewProtocol;
 use crate::rooms::RoomId;
 use crate::schema::legal_votes;
-use crate::users::SerialUserId;
+use crate::users::UserId;
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
 use database::{DatabaseError, DbInterface, Paginate, Result};
 use diesel::dsl::any;
@@ -10,12 +10,12 @@ use diesel::{
     Connection, ExpressionMethods, Identifiable, QueryDsl, QueryResult, Queryable, RunQueryDsl,
 };
 use types::protocol::Protocol;
-use uuid::Uuid;
 
 pub mod types;
 
 diesel_newtype! {
-    #[derive(Copy)] LegalVoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/legal_vote/"
+    #[derive(Copy)] LegalVoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/legal_vote/",
+    #[derive(Copy)] SerialLegalVoteId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt"
 }
 
 impl_to_redis_args_se!(LegalVoteId);
@@ -27,9 +27,10 @@ impl_from_redis_value_de!(LegalVoteId);
 #[derive(Debug, Queryable, Identifiable)]
 pub struct LegalVote {
     pub id: LegalVoteId,
-    pub initiator: SerialUserId,
     pub protocol: Protocol,
     pub room_id: Option<RoomId>,
+    pub id_serial: SerialLegalVoteId,
+    pub initiator: UserId,
 }
 
 /// Diesel legal_vote struct
@@ -38,8 +39,7 @@ pub struct LegalVote {
 #[derive(Debug, Clone, Insertable)]
 #[table_name = "legal_votes"]
 pub struct NewLegalVote {
-    pub id: LegalVoteId,
-    pub initiator: SerialUserId,
+    pub initiator: UserId,
     pub protocol: NewProtocol,
     pub room_id: Option<RoomId>,
 }
@@ -53,7 +53,7 @@ pub trait DbLegalVoteEx: DbInterface {
     fn new_legal_vote(
         &self,
         room_id: RoomId,
-        initiator: SerialUserId,
+        initiator: UserId,
         protocol_version: u8,
     ) -> Result<LegalVote> {
         let conn = self.get_conn()?;
@@ -68,7 +68,6 @@ pub trait DbLegalVoteEx: DbInterface {
         // 3 times, something is wrong with our randomness or our database.
         for _ in 0..3 {
             let new_legal_vote = NewLegalVote {
-                id: LegalVoteId::from(Uuid::new_v4()),
                 initiator,
                 protocol: protocol.clone(),
                 room_id: Some(room_id),
