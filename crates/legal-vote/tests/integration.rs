@@ -22,7 +22,7 @@ use uuid::Uuid;
 #[serial]
 async fn basic_vote() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -81,7 +81,7 @@ async fn basic_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, USER_1.user_id);
+    assert_eq!(legal_vote.initiator, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     assert_eq!(protocol_entries, Value::Array(vec![]));
@@ -231,7 +231,7 @@ async fn basic_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, USER_1.user_id);
+    assert_eq!(legal_vote.initiator, user1.id);
 
     let protocol_entries = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     if let Value::Array(entries) = protocol_entries {
@@ -243,7 +243,7 @@ async fn basic_vote() {
 #[serial]
 async fn basic_vote_abstain() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -302,7 +302,7 @@ async fn basic_vote_abstain() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, USER_1.user_id);
+    assert_eq!(legal_vote.initiator, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     assert_eq!(protocol_entries, Value::Array(vec![]));
@@ -452,7 +452,8 @@ async fn basic_vote_abstain() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, USER_1.user_id);
+    assert_eq!(legal_vote.initiator, user1.id);
+
     let protocol_entries = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     if let Value::Array(protocol) = protocol_entries {
         assert_eq!(protocol.len(), 5);
@@ -463,7 +464,7 @@ async fn basic_vote_abstain() {
 #[serial]
 async fn expired_vote() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -522,7 +523,7 @@ async fn expired_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, USER_1.user_id);
+    assert_eq!(legal_vote.initiator, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     assert_eq!(protocol_entries, Value::Array(vec![]));
@@ -566,7 +567,7 @@ async fn expired_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, USER_1.user_id);
+    assert_eq!(legal_vote.initiator, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     if let Value::Array(entries) = protocol_entries {
@@ -578,7 +579,7 @@ async fn expired_vote() {
 #[serial]
 async fn auto_stop_vote() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -637,7 +638,7 @@ async fn auto_stop_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, USER_1.user_id);
+    assert_eq!(legal_vote.initiator, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     assert_eq!(protocol_entries, Value::Array(vec![]));
@@ -784,7 +785,7 @@ async fn auto_stop_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, USER_1.user_id);
+    assert_eq!(legal_vote.initiator, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     if let Value::Array(entries) = protocol_entries {
@@ -798,7 +799,7 @@ async fn auto_stop_vote() {
 #[serial]
 async fn start_with_one_participant() {
     let test_ctx = TestContext::new().await;
-    let module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -825,7 +826,7 @@ async fn start_with_one_participant() {
 #[serial]
 async fn start_with_empty_participants() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
@@ -864,7 +865,7 @@ async fn start_with_empty_participants() {
 #[serial]
 async fn initiator_left() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     default_start_setup(&mut module_tester).await;
 
@@ -900,7 +901,7 @@ async fn initiator_left() {
 #[serial]
 async fn ineligible_voter() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
@@ -953,7 +954,7 @@ async fn ineligible_voter() {
 #[serial]
 async fn start_with_allowed_guest() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     // start the vote with a guest as an allowed participant
     let guest = ParticipantId::new_test(11311);
@@ -996,7 +997,7 @@ async fn start_with_allowed_guest() {
 #[serial]
 async fn vote_on_nonexistent_vote() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let legal_vote_id = LegalVoteId::from(Uuid::from_u128(11311));
 
@@ -1030,7 +1031,7 @@ async fn vote_on_nonexistent_vote() {
 #[serial]
 async fn vote_on_completed_vote() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let legal_vote_id = default_start_setup(&mut module_tester).await;
 
@@ -1084,7 +1085,7 @@ async fn vote_on_completed_vote() {
 #[serial]
 async fn vote_twice() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
@@ -1198,7 +1199,7 @@ async fn vote_twice() {
 #[serial]
 async fn ineligible_stop() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let legal_vote_id = default_start_setup(&mut module_tester).await;
 
@@ -1226,7 +1227,7 @@ async fn ineligible_stop() {
 #[serial]
 async fn ineligible_cancel() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let legal_vote_id = default_start_setup(&mut module_tester).await;
 
@@ -1257,16 +1258,13 @@ async fn ineligible_cancel() {
 #[serial]
 async fn join_as_guest() {
     let test_ctx = TestContext::new().await;
-    test_ctx
+    let user1 = test_ctx
         .db_ctx
-        .create_test_user(USER_1.user_id, Vec::new())
+        .create_test_user(USER_1.n, Vec::new())
         .unwrap();
     let guest = ParticipantId::new_test(11311);
 
-    let room = test_ctx
-        .db_ctx
-        .create_test_room(ROOM_ID, USER_1.user_id)
-        .unwrap();
+    let room = test_ctx.db_ctx.create_test_room(ROOM_ID, user1.id).unwrap();
 
     let mut module_tester = ModuleTester::<LegalVote>::new(
         test_ctx.db_ctx.db_conn.clone(),

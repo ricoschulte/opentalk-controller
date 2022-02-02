@@ -209,6 +209,7 @@ mod test {
             r#"{{
                 "sub": "admin",
                 "iat": {},
+                "iss": "https://example.org/realms/Test",
                 "exp": {},
                 "x_grp": ["/admin"],
                 "preferred_username": "admin",

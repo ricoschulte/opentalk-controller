@@ -7,7 +7,6 @@ use db_storage::rooms::{DbRoomsEx, NewRoom, Room, RoomId};
 use db_storage::users::{DbUsersEx, NewUser, NewUserWithGroups, User, UserId};
 use diesel::{Connection, PgConnection, RunQueryDsl};
 use std::sync::Arc;
-use uuid::Uuid;
 
 /// Contains the [`Db`] as well as information about the test database
 pub struct DatabaseContext {
@@ -61,11 +60,11 @@ impl DatabaseContext {
         }
     }
 
-    pub fn create_test_user(&self, id: SerialUserId, groups: Vec<String>) -> Result<User> {
+    pub fn create_test_user(&self, n: u32, groups: Vec<String>) -> Result<User> {
         let new_user = NewUser {
-            oidc_sub: "".into(),
+            oidc_sub: format!("oidc_sub{}", n),
             oidc_issuer: "".into(),
-            email: format!("k3k_test_user{}@heinlein.de", id),
+            email: format!("k3k_test_user{}@heinlein.de", n),
             title: "".into(),
             firstname: "test".into(),
             lastname: "tester".into(),
@@ -76,17 +75,13 @@ impl DatabaseContext {
 
         let new_user_with_groups = NewUserWithGroups { new_user, groups };
 
-        self.db_conn.create_user(new_user_with_groups)?;
+        let user = self.db_conn.create_user(new_user_with_groups)?;
 
-        Ok(self
-            .db_conn
-            .get_user_by_uuid(&user_uuid)
-            .map(|user| user.expect("Expected user1 to exist"))?)
+        Ok(user)
     }
 
-    pub fn create_test_room(&self, room_id: RoomId, owner: SerialUserId) -> Result<Room> {
+    pub fn create_test_room(&self, _room_id: RoomId, owner: UserId) -> Result<Room> {
         let new_room = NewRoom {
-            uuid: room_id,
             owner,
             password: "".into(),
             wait_for_moderator: false,
