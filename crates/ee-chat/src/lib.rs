@@ -15,7 +15,6 @@ use db_storage::groups::{DbGroupsEx, Group, GroupId};
 use db_storage::users::UserId;
 use r3dlock::Mutex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::sync::Arc;
 use storage::StoredMessage;
 mod storage;
@@ -48,7 +47,7 @@ pub struct Chat {
 
     db: Arc<Db>,
 
-    groups: HashSet<Group>,
+    groups: Vec<Group>,
 }
 
 impl Chat {
@@ -65,7 +64,7 @@ pub struct FrontendDataEntry {
 
 #[derive(Serialize)]
 pub struct PeerFrontendData {
-    groups: HashSet<String>,
+    groups: Vec<String>,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -173,7 +172,7 @@ impl SignalingModule for Chat {
 
                 // Inquire the database about each user's groups
                 let participant_to_common_groups_mappings =
-                    controller::block(move || -> Result<Vec<(ParticipantId, HashSet<String>)>> {
+                    controller::block(move || -> Result<Vec<(ParticipantId, Vec<String>)>> {
                         let mut participant_to_common_groups_mappings = vec![];
 
                         for (user_id, participant_id) in participant_user_mappings {
@@ -183,7 +182,8 @@ impl SignalingModule for Chat {
                             // Intersect our groups and the groups of the user and collect their id/name
                             // as strings into a set
                             let common_groups = self_groups
-                                .intersection(&groups)
+                                .iter()
+                                .filter(|self_group| groups.contains(self_group))
                                 .map(|group| group.name.clone())
                                 .collect();
 
@@ -222,14 +222,15 @@ impl SignalingModule for Chat {
                     let db = self.db.clone();
                     let self_groups = self.groups.clone();
 
-                    let common_groups = controller::block(move || -> Result<HashSet<String>> {
+                    let common_groups = controller::block(move || -> Result<Vec<String>> {
                         // Get the user's groups
                         let groups = db.get_groups_for_user(user_id)?;
 
                         // Intersect our groups and the groups of the user and collect their id/name
                         // as strings into a set
                         let common_groups = self_groups
-                            .intersection(&groups)
+                            .iter()
+                            .filter(|self_group| groups.contains(self_group))
                             .map(|group| group.name.clone())
                             .collect();
 

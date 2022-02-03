@@ -7,8 +7,6 @@ use diesel::{
     OptionalExtension, QueryDsl, Queryable, RunQueryDsl,
 };
 use kustos::subject::PolicyGroup;
-use std::borrow::Borrow;
-use std::collections::HashSet;
 
 diesel_newtype! {
     #[derive(Copy)] GroupId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid",
@@ -31,18 +29,6 @@ pub struct Group {
     pub id_serial: SerialGroupId,
     pub oidc_issuer: Option<String>,
     pub name: String,
-}
-
-impl Borrow<String> for Group {
-    fn borrow(&self) -> &String {
-        &self.name
-    }
-}
-
-impl Borrow<str> for Group {
-    fn borrow(&self) -> &str {
-        &self.name
-    }
 }
 
 #[derive(Debug, Insertable)]
@@ -99,7 +85,7 @@ pub trait DbGroupsEx: DbInterface {
     }
 
     #[tracing::instrument(err, skip_all)]
-    fn get_groups_for_user(&self, user_id: UserId) -> Result<HashSet<Group>> {
+    fn get_groups_for_user(&self, user_id: UserId) -> Result<Vec<Group>> {
         let conn = self.get_conn()?;
 
         let groups: Vec<Group> = user_groups::table
@@ -109,7 +95,7 @@ pub trait DbGroupsEx: DbInterface {
             .order_by(groups::id_serial)
             .get_results(&conn)?;
 
-        Ok(groups.into_iter().collect())
+        Ok(groups)
     }
 }
 

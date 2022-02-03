@@ -240,7 +240,7 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
 
                 let added = groups
                     .iter()
-                    .filter(|(_, name)| !curr_groups.contains(name))
+                    .filter(|(_, name)| !curr_groups.iter().any(|curr_grp| curr_grp.name == *name))
                     .map(|(id, _)| *id)
                     .collect::<Vec<_>>();
 
