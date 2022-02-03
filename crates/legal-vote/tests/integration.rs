@@ -81,7 +81,7 @@ async fn basic_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, user1.id);
+    assert_eq!(legal_vote.created_by, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     assert_eq!(protocol_entries, Value::Array(vec![]));
@@ -231,7 +231,7 @@ async fn basic_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, user1.id);
+    assert_eq!(legal_vote.created_by, user1.id);
 
     let protocol_entries = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     if let Value::Array(entries) = protocol_entries {
@@ -302,7 +302,7 @@ async fn basic_vote_abstain() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, user1.id);
+    assert_eq!(legal_vote.created_by, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     assert_eq!(protocol_entries, Value::Array(vec![]));
@@ -452,7 +452,7 @@ async fn basic_vote_abstain() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, user1.id);
+    assert_eq!(legal_vote.created_by, user1.id);
 
     let protocol_entries = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     if let Value::Array(protocol) = protocol_entries {
@@ -523,7 +523,7 @@ async fn expired_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, user1.id);
+    assert_eq!(legal_vote.created_by, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     assert_eq!(protocol_entries, Value::Array(vec![]));
@@ -567,7 +567,7 @@ async fn expired_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, user1.id);
+    assert_eq!(legal_vote.created_by, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     if let Value::Array(entries) = protocol_entries {
@@ -638,7 +638,7 @@ async fn auto_stop_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, user1.id);
+    assert_eq!(legal_vote.created_by, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     assert_eq!(protocol_entries, Value::Array(vec![]));
@@ -785,7 +785,7 @@ async fn auto_stop_vote() {
         .unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
-    assert_eq!(legal_vote.initiator, user1.id);
+    assert_eq!(legal_vote.created_by, user1.id);
 
     let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
     if let Value::Array(entries) = protocol_entries {

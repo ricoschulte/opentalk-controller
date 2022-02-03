@@ -122,7 +122,7 @@ pub async fn owned(
         .into_iter()
         .map(|db_room| Room {
             uuid: db_room.id,
-            owner: db_room.owner,
+            owner: db_room.created_by,
             password: db_room.password,
             wait_for_moderator: db_room.wait_for_moderator,
             listen_only: db_room.listen_only,
@@ -153,7 +153,7 @@ pub async fn new(
     let current_user_id = current_user.id;
     let db_room = crate::block(move || -> Result<db_rooms::Room, DefaultApiError> {
         let new_room = db_rooms::NewRoom {
-            owner: current_user_id,
+            created_by: current_user_id,
             password: room_parameters.password,
             wait_for_moderator: room_parameters.wait_for_moderator,
             listen_only: room_parameters.listen_only,
@@ -173,7 +173,7 @@ pub async fn new(
 
     let room = Room {
         uuid: db_room.id,
-        owner: db_room.owner,
+        owner: db_room.created_by,
         password: db_room.password,
         wait_for_moderator: db_room.wait_for_moderator,
         listen_only: db_room.listen_only,
@@ -232,12 +232,11 @@ pub async fn modify(
             None => Err(DefaultApiError::NotFound),
             Some(room) => {
                 // TODO: check user permissions when implemented
-                if room.owner != current_user.id {
+                if room.created_by != current_user.id {
                     return Err(DefaultApiError::InsufficientPermission);
                 }
 
                 let change_room = db_rooms::UpdateRoom {
-                    owner: None, // Owner can currently not be changed
                     password: modify_room.password,
                     wait_for_moderator: modify_room.wait_for_moderator,
                     listen_only: modify_room.listen_only,
@@ -251,7 +250,7 @@ pub async fn modify(
 
     let room = Room {
         uuid: db_room.id,
-        owner: db_room.owner,
+        owner: db_room.created_by,
         password: db_room.password,
         wait_for_moderator: db_room.wait_for_moderator,
         listen_only: db_room.listen_only,
@@ -307,7 +306,7 @@ pub async fn get(
 
     let room_details = RoomDetails {
         uuid: db_room.id,
-        owner: db_room.owner,
+        owner: db_room.created_by,
         wait_for_moderator: db_room.wait_for_moderator,
         listen_only: db_room.listen_only,
     };

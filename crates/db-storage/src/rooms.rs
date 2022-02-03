@@ -3,6 +3,7 @@ use crate::diesel::RunQueryDsl;
 use crate::schema::rooms;
 use crate::schema::users;
 use crate::users::{User, UserId};
+use chrono::{DateTime, Utc};
 use database::{DbInterface, Paginate, Result};
 use diesel::{ExpressionMethods, QueryDsl, QueryResult};
 use diesel::{Identifiable, Queryable};
@@ -17,12 +18,13 @@ diesel_newtype! {
 /// Is used as a result in various queries. Represents a room column
 #[derive(Debug, Clone, Queryable, Identifiable)]
 pub struct Room {
-    pub id_serial: SerialRoomId,
     pub id: RoomId,
+    pub id_serial: SerialRoomId,
+    pub created_by: UserId,
+    pub created_at: DateTime<Utc>,
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
-    pub owner: UserId,
 }
 
 /// Diesel insertable room struct
@@ -31,10 +33,10 @@ pub struct Room {
 #[derive(Debug, Insertable)]
 #[table_name = "rooms"]
 pub struct NewRoom {
+    pub created_by: UserId,
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
-    pub owner: UserId,
 }
 
 /// Diesel room struct for updates
@@ -43,7 +45,6 @@ pub struct NewRoom {
 #[derive(Debug, AsChangeset)]
 #[table_name = "rooms"]
 pub struct UpdateRoom {
-    pub owner: Option<UserId>,
     pub password: Option<String>,
     pub wait_for_moderator: Option<bool>,
     pub listen_only: Option<bool>,

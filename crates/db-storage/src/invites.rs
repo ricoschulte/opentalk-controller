@@ -18,15 +18,15 @@ diesel_newtype! {
 #[derive(Debug, Queryable, Identifiable, Associations)]
 #[belongs_to(User, foreign_key = "created_by")]
 pub struct Invite {
-    pub id_serial: InviteCodeSerialId,
     pub id: InviteCodeId,
-    pub created: DateTime<Utc>,
-    pub updated: DateTime<Utc>,
+    pub id_serial: InviteCodeSerialId,
+    pub created_by: UserId,
+    pub created_at: DateTime<Utc>,
+    pub updated_by: UserId,
+    pub updated_at: DateTime<Utc>,
     pub room: RoomId,
     pub active: bool,
     pub expiration: Option<DateTime<Utc>>,
-    pub created_by: UserId,
-    pub updated_by: UserId,
 }
 
 /// Diesel invites struct
@@ -49,7 +49,7 @@ pub struct NewInvite {
 #[table_name = "invites"]
 pub struct UpdateInvite {
     pub updated_by: Option<UserId>,
-    pub updated: Option<DateTime<Utc>>,
+    pub updated_at: Option<DateTime<Utc>>,
     pub room: Option<RoomId>,
     pub active: Option<bool>,
     pub expiration: Option<Option<DateTime<Utc>>>,
@@ -108,7 +108,7 @@ pub trait DbInvitesEx: DbInterface {
 
         let query = invites::table
             .filter(invites::room.eq(room_id))
-            .order(invites::updated.desc())
+            .order(invites::updated_at.desc())
             .paginate_by(limit, page);
         let invites_with_total = query.load_and_count::<Invite, _>(&conn)?;
 
@@ -131,7 +131,7 @@ pub trait DbInvitesEx: DbInterface {
         let query = invites::table
             .filter(invites::room.eq(room_id))
             .inner_join(users::table.on(invites::created_by.eq(users::id)))
-            .order(invites::updated.desc())
+            .order(invites::updated_at.desc())
             .paginate_by(limit, page);
         let (query_result, total) = query.load_and_count::<(Invite, User), _>(&conn)?;
 
@@ -190,7 +190,7 @@ pub trait DbInvitesEx: DbInterface {
             .filter(invites::room.eq(room_id))
             .filter(invites::id.eq_any(ids))
             .inner_join(users::table.on(invites::created_by.eq(users::id)))
-            .order(invites::updated.desc())
+            .order(invites::updated_at.desc())
             .paginate_by(limit, page);
         let (query_result, total) = query.load_and_count::<(Invite, User), _>(&conn)?;
 
@@ -235,7 +235,7 @@ pub trait DbInvitesEx: DbInterface {
 
         let query = invites::table
             .filter(invites::id.eq(invite_code_id))
-            .order(invites::updated.desc());
+            .order(invites::updated_at.desc());
         query.first(&conn).map_err(Into::into)
     }
 
@@ -248,7 +248,7 @@ pub trait DbInvitesEx: DbInterface {
         let query = invites::table
             .filter(invites::id.eq(invite_code_id))
             .inner_join(users::table.on(invites::created_by.eq(users::id)))
-            .order(invites::updated.desc());
+            .order(invites::updated_at.desc());
         let (invite, created_by) = query.first::<(Invite, User)>(&conn)?;
         let query = users::table.filter(users::id.eq(invite.updated_by));
         Ok((invite, created_by, query.first(&conn)?))
@@ -300,7 +300,7 @@ pub trait DbInvitesEx: DbInterface {
             .filter(invites::id.eq(invite_code_id))
             .set(&UpdateInvite {
                 active: Some(false),
-                updated: None,
+                updated_at: None,
                 updated_by: None,
                 room: None,
                 expiration: None,

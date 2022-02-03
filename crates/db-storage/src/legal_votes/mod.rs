@@ -2,6 +2,7 @@ use self::types::protocol::NewProtocol;
 use crate::rooms::RoomId;
 use crate::schema::legal_votes;
 use crate::users::UserId;
+use chrono::{DateTime, Utc};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
 use database::{DatabaseError, DbInterface, Paginate, Result};
 use diesel::dsl::any;
@@ -27,10 +28,11 @@ impl_from_redis_value_de!(LegalVoteId);
 #[derive(Debug, Queryable, Identifiable)]
 pub struct LegalVote {
     pub id: LegalVoteId,
-    pub protocol: Protocol,
-    pub room_id: Option<RoomId>,
     pub id_serial: SerialLegalVoteId,
-    pub initiator: UserId,
+    pub created_by: UserId,
+    pub created_at: DateTime<Utc>,
+    pub room: Option<RoomId>,
+    pub protocol: Protocol,
 }
 
 /// Diesel legal_vote struct
@@ -39,9 +41,9 @@ pub struct LegalVote {
 #[derive(Debug, Clone, Insertable)]
 #[table_name = "legal_votes"]
 pub struct NewLegalVote {
-    pub initiator: UserId,
+    pub created_by: UserId,
     pub protocol: NewProtocol,
-    pub room_id: Option<RoomId>,
+    pub room: Option<RoomId>,
 }
 
 pub trait DbLegalVoteEx: DbInterface {
@@ -68,9 +70,9 @@ pub trait DbLegalVoteEx: DbInterface {
         // 3 times, something is wrong with our randomness or our database.
         for _ in 0..3 {
             let new_legal_vote = NewLegalVote {
-                initiator,
+                created_by: initiator,
                 protocol: protocol.clone(),
-                room_id: Some(room_id),
+                room: Some(room_id),
             };
 
             let query_result: QueryResult<LegalVote> = conn.transaction(|| {
@@ -156,7 +158,7 @@ pub trait DbLegalVoteEx: DbInterface {
         let conn = self.get_conn()?;
 
         let query = legal_votes::table
-            .filter(legal_votes::columns::room_id.eq(room_id))
+            .filter(legal_votes::columns::room.eq(room_id))
             .filter(legal_votes::columns::id.eq(any(accessible_ids)))
             .paginate_by(limit, page);
 
@@ -228,7 +230,7 @@ pub trait DbLegalVoteEx: DbInterface {
         let conn = self.get_conn()?;
 
         let query = legal_votes::table
-            .filter(legal_votes::columns::room_id.eq(room_id))
+            .filter(legal_votes::columns::room.eq(room_id))
             .paginate_by(limit, page);
 
         let query_result = query.load_and_count::<LegalVote, _>(&conn);

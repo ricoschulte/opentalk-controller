@@ -32,8 +32,11 @@ impl From<UserId> for PolicyUser {
 /// Is used as a result in various queries. Represents a user column
 #[derive(Clone, Queryable, Identifiable)]
 pub struct User {
+    pub id: UserId,
     pub id_serial: SerialUserId,
     pub oidc_sub: String,
+    // TODO make this non-null
+    pub oidc_issuer: Option<String>,
     pub email: String,
     pub title: String,
     pub firstname: String,
@@ -41,9 +44,6 @@ pub struct User {
     pub id_token_exp: i64,
     pub theme: String,
     pub language: String,
-    pub id: UserId,
-    // TODO make this non-null
-    pub oidc_issuer: Option<String>,
 }
 
 /// Diesel insertable user struct

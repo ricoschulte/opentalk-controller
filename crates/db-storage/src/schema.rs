@@ -22,25 +22,26 @@ table! {
 
 table! {
     invites (id) {
-        id_serial -> Int8,
         id -> Uuid,
-        created -> Timestamptz,
-        updated -> Timestamptz,
+        id_serial -> Int8,
+        created_by -> Uuid,
+        created_at -> Timestamptz,
+        updated_by -> Uuid,
+        updated_at -> Timestamptz,
         room -> Uuid,
         active -> Bool,
         expiration -> Nullable<Timestamptz>,
-        created_by -> Uuid,
-        updated_by -> Uuid,
     }
 }
 
 table! {
     legal_votes (id) {
         id -> Uuid,
-        protocol -> Jsonb,
-        room_id -> Nullable<Uuid>,
         id_serial -> Int8,
-        initiator -> Uuid,
+        created_by -> Uuid,
+        created_at -> Timestamptz,
+        room -> Nullable<Uuid>,
+        protocol -> Jsonb,
     }
 }
 
@@ -55,12 +56,13 @@ table! {
 
 table! {
     rooms (id) {
-        id_serial -> Int8,
         id -> Uuid,
+        id_serial -> Int8,
+        created_by -> Uuid,
+        created_at -> Timestamptz,
         password -> Varchar,
         wait_for_moderator -> Bool,
         listen_only -> Bool,
-        owner -> Uuid,
     }
 }
 
@@ -83,8 +85,10 @@ table! {
 
 table! {
     users (id) {
+        id -> Uuid,
         id_serial -> Int8,
         oidc_sub -> Varchar,
+        oidc_issuer -> Nullable<Text>,
         email -> Varchar,
         title -> Varchar,
         firstname -> Varchar,
@@ -92,15 +96,13 @@ table! {
         id_token_exp -> Int8,
         theme -> Varchar,
         language -> Varchar,
-        id -> Uuid,
-        oidc_issuer -> Nullable<Text>,
     }
 }
 
 joinable!(invites -> rooms (room));
-joinable!(legal_votes -> rooms (room_id));
-joinable!(legal_votes -> users (initiator));
-joinable!(rooms -> users (owner));
+joinable!(legal_votes -> rooms (room));
+joinable!(legal_votes -> users (created_by));
+joinable!(rooms -> users (created_by));
 joinable!(sip_configs -> rooms (room));
 joinable!(user_groups -> groups (group_id));
 joinable!(user_groups -> users (user_id));

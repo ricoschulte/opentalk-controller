@@ -52,7 +52,7 @@ pub async fn get(
     let sip_config = crate::block(move || {
         let room = db.get_room(room_id)?.ok_or(DefaultApiError::NotFound)?;
 
-        if room.owner != current_user.id {
+        if room.created_by != current_user.id {
             return Err(DefaultApiError::InsufficientPermission);
         }
 
@@ -102,7 +102,7 @@ pub async fn put(
         // Get the requested room
         let room = db.get_room(room_id)?.ok_or(DefaultApiError::NotFound)?;
 
-        if room.owner != current_user.id {
+        if room.created_by != current_user.id {
             return Err(DefaultApiError::InsufficientPermission);
         }
 
@@ -164,7 +164,7 @@ pub async fn delete(
         // Get the requested room
         let room = db.get_room(room_id)?.ok_or(DefaultApiError::NotFound)?;
 
-        if room.owner != current_user.id {
+        if room.created_by != current_user.id {
             return Err(DefaultApiError::InsufficientPermission);
         }
 

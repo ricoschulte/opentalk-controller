@@ -77,12 +77,12 @@ impl DatabaseContext {
 
         let user = self.db_conn.create_user(new_user_with_groups)?;
 
-        Ok(user)
+        Ok(user.0)
     }
 
-    pub fn create_test_room(&self, _room_id: RoomId, owner: UserId) -> Result<Room> {
+    pub fn create_test_room(&self, _room_id: RoomId, created_by: UserId) -> Result<Room> {
         let new_room = NewRoom {
-            owner,
+            created_by,
             password: "".into(),
             wait_for_moderator: false,
             listen_only: false,

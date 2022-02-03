@@ -34,9 +34,9 @@ impl Invite {
     {
         Invite {
             invite_code: val.id.to_string(),
-            created: val.created,
+            created: val.created_at,
             created_by: created_by.into(),
-            updated: val.updated,
+            updated: val.updated_at,
             updated_by: updated_by.into(),
             room_id: val.room,
             active: val.active,
@@ -80,7 +80,7 @@ pub async fn add_invite(
                 .get_room(room_uuid)?
                 .ok_or(DefaultApiError::NotFound)?;
 
-            if room.owner != current_user_clone.id {
+            if room.created_by != current_user_clone.id {
                 // Avoid leaking rooms the user has no access to.
                 return Err(DefaultApiError::NotFound);
             }
@@ -245,7 +245,7 @@ pub async fn update_invite(
                         let now = chrono::Utc::now();
                         let update_invite = db_invites::UpdateInvite {
                             updated_by: Some(current_user.id),
-                            updated: Some(now),
+                            updated_at: Some(now),
                             expiration: Some(update_invite.expiration),
                             active: None,
                             room: None,
@@ -289,7 +289,7 @@ pub async fn delete_invite(
             let now = chrono::Utc::now();
             let invite_update = db_invites::UpdateInvite {
                 updated_by: Some(current_user.id),
-                updated: Some(now),
+                updated_at: Some(now),
                 expiration: None,
                 active: Some(false),
                 room: None,

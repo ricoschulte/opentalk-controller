@@ -9,13 +9,13 @@ use tokio::task::JoinError;
 pub enum Error {
     #[error("Not Authorized")]
     NotAuthorized,
-    #[error("Failed to convert string to type")]
+    #[error("Failed to convert string to type, {0}")]
     ParsingError(#[from] ParsingError),
-    #[error("Failed to convert Resource to type")]
+    #[error("Failed to convert Resource to type, {0}")]
     ResourceParsingError(#[from] ResourceParseError),
-    #[error("Blocking error")]
+    #[error("Blocking error, {0}")]
     BlockingError(#[from] JoinError),
-    #[error("Casbin error")]
+    #[error("Casbin error {0}")]
     CasbinError(#[from] casbin::Error),
     #[error("Tried to start already running authz enforcer autoload")]
     AutoloadRunning,

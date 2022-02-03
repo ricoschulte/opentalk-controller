@@ -407,7 +407,7 @@ impl Runner {
         // TODO(r.floren) Change this when the permissions system gets introduced
         let role = match &participant {
             api::Participant::User(user) => {
-                if user.id == room.owner {
+                if user.id == room.created_by {
                     Role::Moderator
                 } else {
                     Role::User
