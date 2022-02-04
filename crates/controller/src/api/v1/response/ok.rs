@@ -14,6 +14,7 @@ use url::Url;
 #[derive(Debug, Clone, Serialize)]
 pub struct PagePaginationLinks {
     page: i64,
+    per_page: i64,
     first: Option<i64>,
     prev: Option<i64>,
     next: Option<i64>,
@@ -40,6 +41,7 @@ impl PagePaginationLinks {
 
         Self {
             page,
+            per_page,
             first,
             prev,
             next,
@@ -110,12 +112,10 @@ pub struct CursorPaginationLinks {
 }
 
 impl CursorPaginationLinks {
-    pub fn new<'a>(before: Option<&'a str>, after: Option<&'a str>) -> Self {
-        Self {
-            before: before.map(String::from),
-            after: after.map(String::from),
-        }
+    pub fn new(before: Option<String>, after: Option<String>) -> Self {
+        Self { before, after }
     }
+
     pub fn as_links_vec(&self, url: &Url) -> Vec<(String, String)> {
         let mut headers = Vec::new();
         let mut query = url
@@ -123,6 +123,8 @@ impl CursorPaginationLinks {
             .into_owned()
             .collect::<HashMap<String, String>>();
         query.remove("page");
+        query.remove("before");
+        query.remove("after");
 
         let mut url = url.clone();
         let base = url
@@ -187,13 +189,11 @@ impl<T: Serialize> ApiResponse<T> {
     /// Transforms [`ApiResponse`] to also return cursor based pagination links
     ///
     /// This is mutually exclusive to [ApiResponse::with_page_pagination]
-    #[allow(dead_code)]
-    pub fn with_cursor_pagination<'a>(
-        mut self,
-        before: Option<&'a str>,
-        after: Option<&'a str>,
-    ) -> Self {
-        self.links.pagination = Some(Either::Right(CursorPaginationLinks::new(before, after)));
+    pub fn with_cursor_pagination(mut self, before: Option<String>, after: Option<String>) -> Self {
+        if before.is_some() || after.is_some() {
+            self.links.pagination = Some(Either::Right(CursorPaginationLinks::new(before, after)));
+        }
+
         self
     }
 }

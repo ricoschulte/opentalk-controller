@@ -41,6 +41,7 @@ tracing = { version = "0.1" }
 ### For migration
 tokio = { version = "1", features = ["signal"] }
 chrono = { version = "0.4" }
+chrono-tz = { version = "0.6", features = ["serde"] }
 
 ### Redis
 redis = { version = "0.21", features = ["tokio-comp", "connection-manager"] }

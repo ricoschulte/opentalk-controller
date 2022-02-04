@@ -18,7 +18,7 @@ pub struct PagePaginationQuery {
     pub page: i64,
 }
 
-fn default_pagination_per_page() -> i64 {
+pub(crate) const fn default_pagination_per_page() -> i64 {
     30
 }
 
@@ -37,7 +37,7 @@ where
     }
 }
 
-fn default_pagination_page() -> i64 {
+pub(crate) const fn default_pagination_page() -> i64 {
     1
 }
 

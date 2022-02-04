@@ -136,3 +136,47 @@ macro_rules! diesel_newtype {
         }
     };
 }
+
+macro_rules! sql_enum {
+    ($(#[$enum_meta:meta])* $enum_ident:ident,
+    $sql_type_lit:literal,
+     $(#[$type_meta:meta])* $type_ident:ident,
+     $type_lit:literal,
+     {$($variant_ident:ident = $variant_lit:literal),* $(,)?}
+    ) => {
+
+        $(#[$type_meta])*
+        #[derive(SqlType, QueryId)]
+        #[postgres(type_name = $sql_type_lit)]
+        pub struct $type_ident;
+
+        $(#[$enum_meta])*
+        #[derive(Debug, Copy, Clone, FromSqlRow, AsExpression)]
+        #[sql_type = $type_lit]
+        pub enum $enum_ident {
+            $($variant_ident),*
+        }
+
+
+        impl ToSql<$type_ident, Pg> for $enum_ident {
+            fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
+                match *self {
+                    $(
+                        Self::$variant_ident => out.write_all($variant_lit)?,
+                    )*
+                }
+
+                Ok(IsNull::No)
+            }
+        }
+
+        impl FromSql<$type_ident, Pg> for $enum_ident {
+            fn from_sql(bytes: Option<&<Pg as Backend>::RawValue>) -> deserialize::Result<Self> {
+                match not_none!(bytes) {
+                    $($variant_lit => Ok(Self::$variant_ident),)*
+                    _ => Err("unknown enum variant".into()),
+                }
+            }
+        }
+    };
+}
