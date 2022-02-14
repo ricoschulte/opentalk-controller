@@ -49,6 +49,7 @@ pub trait DbGroupsEx: DbInterface {
             .inner_join(groups::table)
             .filter(user_groups::user_id.eq(user_id))
             .select(groups::all_columns)
+            .order_by(groups::id)
             .get_results(&con)
             .map_err(|e| {
                 log::error!("Failed to get groups for user, {}", e);

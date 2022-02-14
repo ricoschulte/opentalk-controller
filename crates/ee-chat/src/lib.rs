@@ -16,7 +16,7 @@ use db_storage::database::Db;
 use db_storage::groups::DbGroupsEx;
 use r3dlock::Mutex;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::sync::Arc;
 use storage::StoredMessage;
 mod storage;
@@ -59,6 +59,12 @@ impl Chat {
 }
 
 #[derive(Serialize)]
+pub struct FrontendDataEntry {
+    name: String,
+    history: Vec<StoredMessage>,
+}
+
+#[derive(Serialize)]
 pub struct PeerFrontendData {
     groups: HashSet<String>,
 }
@@ -71,7 +77,7 @@ impl SignalingModule for Chat {
     type Outgoing = Message;
     type RabbitMqMessage = Message;
     type ExtEvent = ();
-    type FrontendData = HashMap<String, Vec<StoredMessage>>;
+    type FrontendData = Vec<FrontendDataEntry>;
     type PeerFrontendData = PeerFrontendData;
 
     async fn init(
@@ -122,9 +128,13 @@ impl SignalingModule for Chat {
                 participants,
             } => {
                 // ==== Collect group message history ====
-                let mut group_messages = HashMap::new();
+                let mut group_messages = Vec::new();
 
-                for group in &self.groups {
+                // FIXME Remove with the DB rework
+                let mut groups: Vec<_> = self.groups.iter().cloned().collect();
+                groups.sort_by(|a, b| a.id.cmp(&b.id));
+
+                for group in &groups {
                     storage::add_participant_to_set(
                         ctx.redis_conn(),
                         self.room,
@@ -137,7 +147,10 @@ impl SignalingModule for Chat {
                         storage::get_group_chat_history(ctx.redis_conn(), self.room, &group.id)
                             .await?;
 
-                    group_messages.insert(group.id.clone(), history);
+                    group_messages.push(FrontendDataEntry {
+                        name: group.id.clone(),
+                        history,
+                    });
                 }
 
                 *frontend_data = Some(group_messages);

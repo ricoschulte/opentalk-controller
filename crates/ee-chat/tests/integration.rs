@@ -57,7 +57,10 @@ async fn common_groups_on_join() {
             // check own groups
             let ee_chat_data = module_data.get("ee_chat").unwrap();
             let json = serde_json::to_string(&ee_chat_data).unwrap();
-            assert_eq!(json, r#"{"group1":[],"group2":[]}"#);
+            assert_eq!(
+                json,
+                r#"[{"history":[],"name":"group1"},{"history":[],"name":"group2"}]"#
+            );
         }
         _ => panic!(),
     }
@@ -90,7 +93,10 @@ async fn common_groups_on_join() {
             // check own groups
             let ee_chat_data = module_data.get("ee_chat").unwrap();
             let json = serde_json::to_string(&ee_chat_data).unwrap();
-            assert_eq!(json, r#"{"group1":[],"group3":[]}"#);
+            assert_eq!(
+                json,
+                r#"[{"history":[],"name":"group1"},{"history":[],"name":"group3"}]"#
+            );
         }
         _ => panic!(),
     }
