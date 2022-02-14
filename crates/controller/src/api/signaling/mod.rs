@@ -124,6 +124,10 @@ impl fmt::Display for SignalingRoomId {
 pub struct Timestamp(chrono::DateTime<chrono::Utc>);
 
 impl Timestamp {
+    fn unix_epoch() -> Self {
+        Self(chrono::DateTime::from(std::time::UNIX_EPOCH))
+    }
+
     fn now() -> Timestamp {
         Timestamp(chrono::Utc::now())
     }

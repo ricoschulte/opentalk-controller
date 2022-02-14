@@ -112,48 +112,6 @@ where
         )
         .await?;
 
-        match &participant {
-            Participant::User(user) => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    runner.room_id,
-                    participant_id,
-                    "kind",
-                    ParticipationKind::User,
-                )
-                .await?;
-
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    runner.room_id,
-                    participant_id,
-                    "user_id",
-                    user.id,
-                )
-                .await?;
-            }
-            Participant::Guest => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    runner.room_id,
-                    participant_id,
-                    "kind",
-                    ParticipationKind::Guest,
-                )
-                .await?;
-            }
-            Participant::Sip => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    runner.room_id,
-                    participant_id,
-                    "kind",
-                    ParticipationKind::Sip,
-                )
-                .await?;
-            }
-        }
-
         let runner_handle = task::spawn_local(runner.run());
 
         runner_interface.ws.send(WsMessageIncoming::Control(
@@ -511,8 +469,53 @@ where
         mut ctx: ModuleContext<'_, M>,
         control_message: control::incoming::Message,
     ) -> Result<()> {
+        let mut lock = storage::room_mutex(self.room_id);
+        let guard = lock.lock(&mut self.redis_conn).await?;
+
         match control_message {
             control::incoming::Message::Join(join) => {
+                match &self.participant {
+                    Participant::User(user) => {
+                        storage::set_attribute(
+                            &mut self.redis_conn,
+                            self.room_id,
+                            self.participant_id,
+                            "kind",
+                            ParticipationKind::User,
+                        )
+                        .await?;
+
+                        storage::set_attribute(
+                            &mut self.redis_conn,
+                            self.room_id,
+                            self.participant_id,
+                            "user_id",
+                            user,
+                        )
+                        .await?;
+                    }
+                    Participant::Guest => {
+                        storage::set_attribute(
+                            &mut self.redis_conn,
+                            self.room_id,
+                            self.participant_id,
+                            "kind",
+                            ParticipationKind::Guest,
+                        )
+                        .await?;
+                    }
+                    Participant::Sip => {
+                        storage::set_attribute(
+                            &mut self.redis_conn,
+                            self.room_id,
+                            self.participant_id,
+                            "kind",
+                            ParticipationKind::Sip,
+                        )
+                        .await?;
+                    }
+                }
+
                 storage::set_attribute(
                     &mut self.redis_conn,
                     self.room_id,
@@ -555,6 +558,8 @@ where
                 )
                 .await
                 .context("Failed to add self to participants set")?;
+
+                guard.unlock(&mut self.redis_conn).await?;
 
                 let mut participants = vec![];
 

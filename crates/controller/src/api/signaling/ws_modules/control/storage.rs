@@ -108,18 +108,10 @@ pub async fn add_participant_to_set(
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<usize> {
-    let mut room_mutex = room_mutex(room);
-
-    let guard = room_mutex.lock(redis_conn).await?;
-
-    let sadd_result = redis_conn
+    redis_conn
         .sadd(RoomParticipants { room }, participant)
         .await
-        .context("Failed to add own participant id to set");
-
-    guard.unlock(redis_conn).await?;
-
-    sadd_result
+        .context("Failed to add own participant id to set")
 }
 
 /// Mark the given participant in the given room as left.
