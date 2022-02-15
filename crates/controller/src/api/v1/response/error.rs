@@ -200,7 +200,8 @@ impl<E> From<actix_web::Error> for ApiError<E>
 where
     E: fmt::Debug + Serialize,
 {
-    fn from(_: actix_web::Error) -> Self {
+    fn from(e: actix_web::Error) -> Self {
+        log::error!("API internal error: {:?}", e);
         Self::Internal
     }
 }
@@ -209,7 +210,8 @@ impl<E> From<anyhow::Error> for ApiError<E>
 where
     E: fmt::Debug + Serialize,
 {
-    fn from(_: anyhow::Error) -> Self {
+    fn from(e: anyhow::Error) -> Self {
+        log::error!("API internal error: {:?}", e);
         Self::Internal
     }
 }
