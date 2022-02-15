@@ -133,6 +133,11 @@ pub struct TargetConfigure {
 
 #[derive(Debug, Deserialize)]
 pub struct SubscriberConfiguration {
+    /// Video Feed
+    ///
+    /// If true, will configure the the connection to receive the video stream.
+    /// If false, will disable the video feed relaying.
+    pub video: Option<bool>,
     /// Substream
     ///
     /// If enabled, the selected substream of the three (0-2) available

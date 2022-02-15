@@ -877,6 +877,7 @@ impl JanusSubscriber {
     async fn configure_subscriber(&self, configuration: SubscriberConfiguration) -> Result<()> {
         let configure_request = VideoRoomPluginConfigureSubscriber::builder()
             .substream(configuration.substream)
+            .video(configuration.video)
             .build();
 
         match self.handle.send(configure_request).await {
