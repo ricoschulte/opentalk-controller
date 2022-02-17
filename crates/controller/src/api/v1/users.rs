@@ -221,7 +221,7 @@ pub async fn user_details(
 
 #[derive(Deserialize)]
 pub struct FindQuery {
-    name: String,
+    q: String,
 }
 
 /// API Endpoint *GET /users/find?name=$input*
@@ -233,7 +233,7 @@ pub async fn find(
     query: Query<FindQuery>,
 ) -> Result<Json<Vec<UserDetails>>, DefaultApiError> {
     let found_users = crate::block(move || -> Result<Vec<db_users::User>, DefaultApiError> {
-        Ok(db.find_users_by_name(&query.name)?)
+        Ok(db.find_users_by_name(&query.q)?)
     })
     .await??;
 
