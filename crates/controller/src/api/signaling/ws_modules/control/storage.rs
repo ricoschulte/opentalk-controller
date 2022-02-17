@@ -204,6 +204,60 @@ where
     Ok(())
 }
 
+pub struct AttrPipeline {
+    room: SignalingRoomId,
+    participant: ParticipantId,
+    pipe: redis::Pipeline,
+}
+
+// FIXME: Make the type inference better. e.g. by passing the type to get and letting get extend the final type.
+impl AttrPipeline {
+    pub fn new(room: SignalingRoomId, participant: ParticipantId) -> Self {
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+
+        Self {
+            room,
+            participant,
+            pipe: redis::pipe(),
+        }
+    }
+
+    pub fn set<V: ToRedisArgs>(&mut self, name: &str, value: V) -> &mut Self {
+        self.pipe
+            .hset(
+                RoomParticipantAttributes {
+                    room: self.room,
+                    attribute_name: name,
+                },
+                self.participant,
+                value,
+            )
+            .ignore();
+
+        self
+    }
+
+    pub fn get(&mut self, name: &str) -> &mut Self {
+        self.pipe.hget(
+            RoomParticipantAttributes {
+                room: self.room,
+                attribute_name: name,
+            },
+            self.participant,
+        );
+
+        self
+    }
+
+    pub async fn query_async<T: FromRedisValue>(
+        &mut self,
+        redis_conn: &mut ConnectionManager,
+    ) -> redis::RedisResult<T> {
+        self.pipe.query_async(redis_conn).await
+    }
+}
+
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_attribute<V>(
     redis_conn: &mut ConnectionManager,

@@ -795,22 +795,11 @@ impl Runner {
                     .await;
             }
             incoming::Message::RaiseHand => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "hand_is_up",
-                    true,
-                )
-                .await?;
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "hand_updated_at",
-                    timestamp,
-                )
-                .await?;
+                storage::AttrPipeline::new(self.room_id, self.id)
+                    .set("hand_is_up", true)
+                    .set("hand_updated_at", timestamp)
+                    .query_async(&mut self.redis_conn)
+                    .await?;
 
                 let actions = self
                     .handle_module_broadcast_event(timestamp, DynBroadcastEvent::RaiseHand, true)
@@ -820,22 +809,11 @@ impl Runner {
                     .await;
             }
             incoming::Message::LowerHand => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "hand_is_up",
-                    false,
-                )
-                .await?;
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "hand_updated",
-                    timestamp,
-                )
-                .await?;
+                storage::AttrPipeline::new(self.room_id, self.id)
+                    .set("hand_is_up", false)
+                    .set("hand_updated_at", timestamp)
+                    .query_async(&mut self.redis_conn)
+                    .await?;
 
                 let actions = self
                     .handle_module_broadcast_event(timestamp, DynBroadcastEvent::LowerHand, true)
@@ -854,74 +832,28 @@ impl Runner {
         timestamp: Timestamp,
         display_name: &str,
     ) -> Result<Vec<ParticipantId>> {
+        let mut pipe_attrs = storage::AttrPipeline::new(self.room_id, self.id);
+
         match &self.participant {
             api::Participant::User(ref user) => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "kind",
-                    ParticipationKind::User,
-                )
-                .await?;
-
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "user_id",
-                    user.id,
-                )
-                .await?;
+                pipe_attrs
+                    .set("kind", ParticipationKind::User)
+                    .set("user_id", user.id);
             }
             api::Participant::Guest => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "kind",
-                    ParticipationKind::Guest,
-                )
-                .await?;
+                pipe_attrs.set("kind", ParticipationKind::Guest);
             }
             api::Participant::Sip => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "kind",
-                    ParticipationKind::Sip,
-                )
-                .await?;
+                pipe_attrs.set("kind", ParticipationKind::Sip);
             }
         }
 
-        storage::set_attribute(
-            &mut self.redis_conn,
-            self.room_id,
-            self.id,
-            "hand_updated_at",
-            Timestamp::now(),
-        )
-        .await?;
-
-        storage::set_attribute(
-            &mut self.redis_conn,
-            self.room_id,
-            self.id,
-            "display_name",
-            &display_name,
-        )
-        .await?;
-
-        storage::set_attribute(
-            &mut self.redis_conn,
-            self.room_id,
-            self.id,
-            "joined_at",
-            timestamp,
-        )
-        .await?;
+        pipe_attrs
+            .set("hand_updated_at", timestamp)
+            .set("display_name", display_name)
+            .set("joined_at", timestamp)
+            .query_async(&mut self.redis_conn)
+            .await?;
 
         // Remove left_at attribute for in case that this is a session resumption
         storage::remove_attribute(&mut self.redis_conn, self.room_id, self.id, "left_at").await?;
@@ -950,21 +882,23 @@ impl Runner {
             module_data: Default::default(),
         };
 
-        let display_name: Option<String> =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "display_name").await?;
-        let joined_at: Option<Timestamp> =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "joined_at").await?;
-        let left_at: Option<Timestamp> =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "left_at").await?;
-
-        let hand_is_up: Option<bool> =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_is_up").await?;
-        let hand_updated_at: Option<Timestamp> =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_updated_at")
-                .await?;
-
-        let participation_kind: Option<ParticipationKind> =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "kind").await?;
+        #[allow(clippy::type_complexity)]
+        let (display_name, joined_at, left_at, hand_is_up, hand_updated_at, participation_kind): (
+            Option<String>,
+            Option<Timestamp>,
+            Option<Timestamp>,
+            Option<bool>,
+            Option<Timestamp>,
+            Option<ParticipationKind>,
+        ) = storage::AttrPipeline::new(self.room_id, self.id)
+            .get("display_name")
+            .get("joined_at")
+            .get("left_at")
+            .get("hand_is_up")
+            .get("hand_updated_at")
+            .get("kind")
+            .query_async(&mut self.redis_conn)
+            .await?;
 
         if display_name.is_none()
             || joined_at.is_none()
