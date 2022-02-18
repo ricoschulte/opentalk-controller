@@ -32,14 +32,14 @@ impl Validate for Message {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Stop {
     /// The vote id of the targeted vote
-    pub vote_id: LegalVoteId,
+    pub legal_vote_id: LegalVoteId,
 }
 
 /// Cancel a vote
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct Cancel {
     /// The vote id of the targeted vote
-    pub vote_id: LegalVoteId,
+    pub legal_vote_id: LegalVoteId,
     /// The reason for the cancel
     #[validate(length(max = 255))]
     pub reason: String,
@@ -49,7 +49,7 @@ pub struct Cancel {
 #[derive(Debug, Clone, Copy, Deserialize)]
 pub struct VoteMessage {
     /// The vote id of the targeted vote
-    pub vote_id: LegalVoteId,
+    pub legal_vote_id: LegalVoteId,
     /// The chosen vote option
     pub option: VoteOption,
 }
@@ -105,14 +105,14 @@ mod test {
         let json_str = r#"
         {
             "action": "stop",
-            "vote_id": "00000000-0000-0000-0000-000000000000"
+            "legal_vote_id": "00000000-0000-0000-0000-000000000000"
         }
         "#;
 
         let stop: Message = serde_json::from_str(json_str).unwrap();
 
-        if let Message::Stop(Stop { vote_id }) = stop {
-            assert_eq!(vote_id, LegalVoteId::from(Uuid::from_u128(0)))
+        if let Message::Stop(Stop { legal_vote_id }) = stop {
+            assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)))
         } else {
             panic!()
         }
@@ -123,15 +123,19 @@ mod test {
         let json_str = r#"
         {
             "action": "cancel",
-            "vote_id": "00000000-0000-0000-0000-000000000000",
+            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
             "reason": "Something is broken"
         }
         "#;
 
         let cancel: Message = serde_json::from_str(json_str).unwrap();
 
-        if let Message::Cancel(Cancel { vote_id, reason }) = cancel {
-            assert_eq!(vote_id, LegalVoteId::from(Uuid::from_u128(0)));
+        if let Message::Cancel(Cancel {
+            legal_vote_id,
+            reason,
+        }) = cancel
+        {
+            assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(reason, "Something is broken")
         } else {
             panic!()
@@ -143,15 +147,19 @@ mod test {
         let json_str = r#"
         {
             "action": "vote",
-            "vote_id": "00000000-0000-0000-0000-000000000000",
+            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
             "option": "yes"
         }
         "#;
 
         let vote: Message = serde_json::from_str(json_str).unwrap();
 
-        if let Message::Vote(VoteMessage { vote_id, option }) = vote {
-            assert_eq!(vote_id, LegalVoteId::from(Uuid::from_u128(0)));
+        if let Message::Vote(VoteMessage {
+            legal_vote_id,
+            option,
+        }) = vote
+        {
+            assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::Yes);
         } else {
             panic!()
@@ -163,15 +171,19 @@ mod test {
         let json_str = r#"
         {
             "action": "vote",
-            "vote_id": "00000000-0000-0000-0000-000000000000",
+            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
             "option": "no"
         }
         "#;
 
         let vote: Message = serde_json::from_str(json_str).unwrap();
 
-        if let Message::Vote(VoteMessage { vote_id, option }) = vote {
-            assert_eq!(vote_id, LegalVoteId::from(Uuid::from_u128(0)));
+        if let Message::Vote(VoteMessage {
+            legal_vote_id,
+            option,
+        }) = vote
+        {
+            assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::No);
         } else {
             panic!()
@@ -183,15 +195,19 @@ mod test {
         let json_str = r#"
         {
             "action": "vote",
-            "vote_id": "00000000-0000-0000-0000-000000000000",
+            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
             "option": "abstain"
         }
         "#;
 
         let vote: Message = serde_json::from_str(json_str).unwrap();
 
-        if let Message::Vote(VoteMessage { vote_id, option }) = vote {
-            assert_eq!(vote_id, LegalVoteId::from(Uuid::from_u128(0)));
+        if let Message::Vote(VoteMessage {
+            legal_vote_id,
+            option,
+        }) = vote
+        {
+            assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::Abstain);
         } else {
             panic!()
@@ -245,7 +261,7 @@ mod test {
             r#"
         {{
             "action": "cancel",
-            "vote_id": "00000000-0000-0000-0000-000000000000",
+            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
             "reason": "{}"
         }}
         "#,

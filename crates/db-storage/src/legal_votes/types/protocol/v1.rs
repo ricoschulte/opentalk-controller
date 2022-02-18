@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se, ParticipantId};
 use serde::{Deserialize, Serialize};
 
-/// A legalvote protocol entry
+/// A legal vote protocol entry
 ///
 /// Contains the event that will be logged in the vote protocol with some meta data.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize)]

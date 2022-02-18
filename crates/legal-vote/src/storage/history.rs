@@ -21,7 +21,7 @@ pub(super) struct VoteHistoryKey {
 impl_to_redis_args!(VoteHistoryKey);
 
 /// Get the vote history as a hashset
-#[tracing::instrument(name = "legalvote_get_history", skip(redis_conn))]
+#[tracing::instrument(name = "legal_vote_get_history", skip(redis_conn))]
 pub(crate) async fn get(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
@@ -33,7 +33,7 @@ pub(crate) async fn get(
 }
 
 /// Delete the vote history key
-#[tracing::instrument(name = "legalvote_delete_history", skip(redis_conn))]
+#[tracing::instrument(name = "legal_vote_delete_history", skip(redis_conn))]
 pub(crate) async fn delete(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,

@@ -27,7 +27,7 @@ pub enum Event {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VoteSuccess {
     /// The vote id
-    pub vote_id: LegalVoteId,
+    pub legal_vote_id: LegalVoteId,
     /// The participant that issued the vote cast
     pub issuer: ParticipantId,
     /// The chosen vote option
@@ -38,7 +38,7 @@ pub struct VoteSuccess {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Stop {
     /// The id of the stopped vote
-    pub vote_id: LegalVoteId,
+    pub legal_vote_id: LegalVoteId,
     /// The kind of stop
     #[serde(flatten)]
     pub kind: StopKind,
@@ -62,7 +62,7 @@ pub enum StopKind {
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub struct Canceled {
     /// The id of the canceled vote
-    pub vote_id: LegalVoteId,
+    pub legal_vote_id: LegalVoteId,
     /// The reason for the cancel
     #[serde(flatten)]
     pub reason: CancelReason,
@@ -72,5 +72,5 @@ pub struct Canceled {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct VoteUpdate {
     /// The id of the affected vote
-    pub vote_id: LegalVoteId,
+    pub legal_vote_id: LegalVoteId,
 }

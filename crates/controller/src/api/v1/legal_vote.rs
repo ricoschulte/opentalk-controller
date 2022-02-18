@@ -22,9 +22,9 @@ use std::sync::Arc;
 
 /// Wrapper struct to display invalid protocols to the API caller
 #[derive(Debug, Serialize)]
-pub struct LegalvoteEntry {
-    /// The vote id
-    vote_id: LegalVoteId,
+pub struct LegalVoteEntry {
+    /// The legal vote id
+    legal_vote_id: LegalVoteId,
     /// The parsing result of the protocol
     #[serde(flatten)]
     protocol_result: ProtocolResult,
@@ -34,7 +34,7 @@ pub struct LegalvoteEntry {
 #[serde(untagged)]
 pub enum ProtocolResult {
     /// Successfully parsed protocol
-    Ok(LegalvoteDetails),
+    Ok(LegalVoteDetails),
     /// Failed to parse protocol
     Error(ProtocolError),
 }
@@ -42,25 +42,25 @@ pub enum ProtocolResult {
 #[derive(thiserror::Error, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "error")]
 pub enum ProtocolError {
-    #[error("Legalvote protocol is invalid")]
+    #[error("LegalVote protocol is invalid")]
     InvalidProtocol,
-    #[error("An internal server error occurred while parsing the legalvote protocol")]
+    #[error("An internal server error occurred while parsing the legal vote protocol")]
     InternalError,
 }
 
 /// Details of a passed legal vote
 #[derive(Debug, Serialize)]
-pub struct LegalvoteDetails {
-    /// The legalvote settings
+pub struct LegalVoteDetails {
+    /// The legal vote settings
     #[serde(flatten)]
     pub settings: Settings,
-    /// A list of participants that voted on the legalvote
+    /// A list of participants that voted on the legal vote
     pub voters: Vec<Voter>,
-    /// The results of the legalvote
+    /// The results of the legal vote
     pub vote_result: VoteResult,
 }
 
-/// Settings of a legalvote
+/// Settings of a legal vote
 #[derive(Debug, Serialize)]
 pub struct Settings {
     /// The participant id of the vote initiator
@@ -83,7 +83,7 @@ pub struct Settings {
     pub duration: Option<u64>,
 }
 
-/// Represents a participant in a legalvote
+/// Represents a participant in a legal vote
 #[derive(Debug, Serialize)]
 pub struct ParticipantInfo {
     firstname: String,
@@ -101,7 +101,7 @@ impl From<User> for ParticipantInfo {
     }
 }
 
-/// A participant that voted in a legalvote
+/// A participant that voted in a legal vote
 #[derive(Debug, Serialize)]
 pub struct Voter {
     participant: ParticipantInfo,
@@ -109,7 +109,7 @@ pub struct Voter {
     vote_option: VoteOption,
 }
 
-/// The results of a legalvote
+/// The results of a legal vote
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum VoteResult {
@@ -141,17 +141,17 @@ pub enum FailReason {
     InvalidResults(Invalid),
 }
 
-/// API Endpoint *GET /rooms/{room_id}/legalvote*
+/// API Endpoint *GET /rooms/{room_id}/legal_votes*
 ///
-/// Returns a JSON array of the legalvotes created in this room that the user can access
-#[get("/rooms/{room_id}/legalvote")]
+/// Returns a JSON array of the legal votes created in this room that the user can access
+#[get("/rooms/{room_id}/legal_votes")]
 pub async fn get_all_for_room(
     db: Data<Db>,
     authz: Data<Authz>,
     pagination: Query<PagePaginationQuery>,
     room_id: Path<RoomId>,
     current_user: ReqData<User>,
-) -> Result<ApiResponse<Vec<LegalvoteEntry>>, DefaultApiError> {
+) -> Result<ApiResponse<Vec<LegalVoteEntry>>, DefaultApiError> {
     let db = db.into_inner();
     let room_id = room_id.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
@@ -162,7 +162,7 @@ pub async fn get_all_for_room(
         .map_err(|_| DefaultApiError::Internal)?;
 
     let (legal_votes, count) = crate::block(
-        move || -> Result<(Vec<LegalvoteEntry>, i64), DefaultApiError> {
+        move || -> Result<(Vec<LegalVoteEntry>, i64), DefaultApiError> {
             let (legal_votes, count) = match accessible_legal_votes {
                 AccessibleResources::List(vote_ids) => {
                     db.get_legal_votes_by_id_for_room_paginated(room_id, &vote_ids, per_page, page)?
@@ -176,13 +176,13 @@ pub async fn get_all_for_room(
 
             for legal_vote in legal_votes {
                 match parse_protocol(legal_vote.protocol, db.clone()) {
-                    Ok(legalvote_detailed) => detailed_votes.push(LegalvoteEntry {
-                        vote_id: legal_vote.id,
-                        protocol_result: ProtocolResult::Ok(legalvote_detailed),
+                    Ok(legal_vote_detailed) => detailed_votes.push(LegalVoteEntry {
+                        legal_vote_id: legal_vote.id,
+                        protocol_result: ProtocolResult::Ok(legal_vote_detailed),
                     }),
                     Err(protocol_error) => {
-                        detailed_votes.push(LegalvoteEntry {
-                            vote_id: legal_vote.id,
+                        detailed_votes.push(LegalVoteEntry {
+                            legal_vote_id: legal_vote.id,
                             protocol_result: ProtocolResult::Error(protocol_error),
                         });
                     }
@@ -197,16 +197,16 @@ pub async fn get_all_for_room(
     Ok(ApiResponse::new(legal_votes).with_page_pagination(per_page, page, count))
 }
 
-/// API Endpoint *GET /legalvote*
+/// API Endpoint *GET /legal_votes*
 ///
-/// Returns a JSON array of the legalvotes that the user can access
-#[get("/legalvote")]
+/// Returns a JSON array of the legal votes that the user can access
+#[get("/legal_votes")]
 pub async fn get_all(
     db: Data<Db>,
     authz: Data<Authz>,
     pagination: Query<PagePaginationQuery>,
     current_user: ReqData<User>,
-) -> Result<ApiResponse<Vec<LegalvoteEntry>>, DefaultApiError> {
+) -> Result<ApiResponse<Vec<LegalVoteEntry>>, DefaultApiError> {
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
@@ -217,7 +217,7 @@ pub async fn get_all(
     let db = db.into_inner();
 
     let (legal_votes, count) = crate::block(
-        move || -> Result<(Vec<LegalvoteEntry>, i64), DefaultApiError> {
+        move || -> Result<(Vec<LegalVoteEntry>, i64), DefaultApiError> {
             let (legal_votes, count) = match accessible_legal_votes {
                 AccessibleResources::List(vote_ids) => {
                     db.get_legal_votes_by_id_paginated(&vote_ids, per_page, page)?
@@ -229,13 +229,13 @@ pub async fn get_all(
 
             for legal_vote in legal_votes {
                 match parse_protocol(legal_vote.protocol, db.clone()) {
-                    Ok(legalvote_detailed) => detailed_votes.push(LegalvoteEntry {
-                        vote_id: legal_vote.id,
-                        protocol_result: ProtocolResult::Ok(legalvote_detailed),
+                    Ok(legal_vote_detailed) => detailed_votes.push(LegalVoteEntry {
+                        legal_vote_id: legal_vote.id,
+                        protocol_result: ProtocolResult::Ok(legal_vote_detailed),
                     }),
                     Err(protocol_error) => {
-                        detailed_votes.push(LegalvoteEntry {
-                            vote_id: legal_vote.id,
+                        detailed_votes.push(LegalVoteEntry {
+                            legal_vote_id: legal_vote.id,
                             protocol_result: ProtocolResult::Error(protocol_error),
                         });
                     }
@@ -250,17 +250,17 @@ pub async fn get_all(
     Ok(ApiResponse::new(legal_votes).with_page_pagination(per_page, page, count))
 }
 
-/// API Endpoint *GET /legalvote/{vote_id}*
+/// API Endpoint *GET /legal_votes/{legal_vote_id}*
 ///
-/// Returns the specified legalvote as [`LegalvoteEntry`]
-#[get("/legalvote/{vote_id}")]
+/// Returns the specified legal vote as [`LegalVoteEntry`]
+#[get("/legal_votes/{legal_vote_id}")]
 pub async fn get_specific(
     db: Data<Db>,
     authz: Data<Authz>,
-    vote_id: Path<LegalVoteId>,
+    legal_vote_id: Path<LegalVoteId>,
     current_user: ReqData<User>,
-) -> Result<Json<LegalvoteEntry>, DefaultApiError> {
-    let vote_id = vote_id.into_inner();
+) -> Result<Json<LegalVoteEntry>, DefaultApiError> {
+    let legal_vote_id = legal_vote_id.into_inner();
 
     let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
         .get_accessible_resources_for_user(current_user.oidc_uuid, AccessMethod::Get)
@@ -269,37 +269,37 @@ pub async fn get_specific(
 
     match accessible_legal_votes {
         kustos::AccessibleResources::List(vote_ids) => {
-            if !vote_ids.contains(&vote_id) {
+            if !vote_ids.contains(&legal_vote_id) {
                 return Err(DefaultApiError::InsufficientPermission);
             }
         }
         kustos::AccessibleResources::All => (),
     }
 
-    let legal_vote_detailed = crate::block(move || -> Result<LegalvoteEntry, DefaultApiError> {
+    let legal_vote_detailed = crate::block(move || -> Result<LegalVoteEntry, DefaultApiError> {
         let legal_vote = db
-            .get_legal_vote(vote_id)?
+            .get_legal_vote(legal_vote_id)?
             .ok_or(DefaultApiError::NotFound)?;
 
-        let legalvote_entry = match parse_protocol(legal_vote.protocol, db.into_inner()) {
-            Ok(legalvote_detailed) => LegalvoteEntry {
-                vote_id: legal_vote.id,
-                protocol_result: ProtocolResult::Ok(legalvote_detailed),
+        let legal_vote_entry = match parse_protocol(legal_vote.protocol, db.into_inner()) {
+            Ok(legal_vote_detailed) => LegalVoteEntry {
+                legal_vote_id: legal_vote.id,
+                protocol_result: ProtocolResult::Ok(legal_vote_detailed),
             },
-            Err(protocol_error) => LegalvoteEntry {
-                vote_id: legal_vote.id,
+            Err(protocol_error) => LegalVoteEntry {
+                legal_vote_id: legal_vote.id,
                 protocol_result: ProtocolResult::Error(protocol_error),
             },
         };
 
-        Ok(legalvote_entry)
+        Ok(legal_vote_entry)
     })
     .await??;
 
     Ok(Json(legal_vote_detailed))
 }
 
-fn parse_protocol(protocol: Protocol, db: Arc<Db>) -> Result<LegalvoteDetails, ProtocolError> {
+fn parse_protocol(protocol: Protocol, db: Arc<Db>) -> Result<LegalVoteDetails, ProtocolError> {
     match protocol.version {
         1 => {
             let entries: Vec<v1::ProtocolEntry> = serde_json::from_str(protocol.entries.get())
@@ -311,7 +311,7 @@ fn parse_protocol(protocol: Protocol, db: Arc<Db>) -> Result<LegalvoteDetails, P
             parse_v1_entries(entries, db)
         }
         unknown => {
-            log::error!("Unknown legalvote protocol version '{}'", unknown);
+            log::error!("Unknown legal vote protocol version '{}'", unknown);
             Err(ProtocolError::InvalidProtocol)
         }
     }
@@ -321,9 +321,9 @@ fn parse_protocol(protocol: Protocol, db: Arc<Db>) -> Result<LegalvoteDetails, P
 fn parse_v1_entries(
     entries: Vec<v1::ProtocolEntry>,
     db: Arc<Db>,
-) -> Result<LegalvoteDetails, ProtocolError> {
+) -> Result<LegalVoteDetails, ProtocolError> {
     if entries.is_empty() {
-        log::error!("Legalvote protocol is empty");
+        log::error!("legal vote protocol is empty");
         return Err(ProtocolError::InvalidProtocol);
     }
 
@@ -340,7 +340,7 @@ fn parse_v1_entries(
             VoteEvent::Start(start) => {
                 let Parameters {
                     initiator_id: _,
-                    vote_id: _,
+                    legal_vote_id: _,
                     start_time,
                     max_votes,
                     inner:
@@ -359,7 +359,7 @@ fn parse_v1_entries(
                     .get_user_by_id(start.issuer)
                     .map_err(|e| {
                         log::error!(
-                            "Failed to resolve vote initiator in legalvote protocol, {}",
+                            "Failed to resolve vote initiator in legal vote protocol, {}",
                             e
                         );
                         ProtocolError::InternalError
@@ -391,7 +391,7 @@ fn parse_v1_entries(
                             .get_user_by_id(user_id)
                             .map_err(|e| {
                                 log::error!(
-                                    "Failed to resolve stop issuer in legalvote protocol, {}",
+                                    "Failed to resolve stop issuer in legal vote protocol, {}",
                                     e
                                 );
                                 ProtocolError::InternalError
@@ -420,24 +420,24 @@ fn parse_v1_entries(
                 }
             }
         } else {
-            log::error!("Missing final results in legalvote protocol");
+            log::error!("Missing final results in legal vote protocol");
             return Err(ProtocolError::InvalidProtocol);
         }
     } else {
-        log::error!("Missing `Stop` or `Cancel` entry in legalvote protocol");
+        log::error!("Missing `Stop` or `Cancel` entry in legal vote protocol");
         return Err(ProtocolError::InvalidProtocol);
     };
 
     let users = db.get_users_by_ids(&user_ids).map_err(|e| {
         log::error!(
-            "Failed to get users by id while parsing legalvote protocol {}",
+            "Failed to get users by id while parsing legal vote protocol {}",
             e
         );
         ProtocolError::InternalError
     })?;
 
     if users.len() != raw_voters.len() {
-        log::error!("Could not resolve all voters in legalvote protocol");
+        log::error!("Could not resolve all voters in legal vote protocol");
         return Err(ProtocolError::InternalError);
     }
 
@@ -462,11 +462,11 @@ fn parse_v1_entries(
     }
 
     let settings = settings.ok_or_else(|| {
-        log::error!("Missing settings in legalvote protocol");
+        log::error!("Missing settings in legal vote protocol");
         ProtocolError::InvalidProtocol
     })?;
 
-    Ok(LegalvoteDetails {
+    Ok(LegalVoteDetails {
         settings,
         voters,
         vote_result,

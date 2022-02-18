@@ -7,7 +7,7 @@ use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
-/// k3k-signaling:room={room_id}:vote={vote_id}:allowed_users
+/// k3k-signaling:room={room_id}:vote={legal_vote_id}:allowed_users
 #[ignore_extra_doc_attributes]
 ///
 /// A set of users that are allowed to vote.
@@ -18,26 +18,32 @@ use redis::AsyncCommands;
 /// See [`VOTE_SCRIPT`](super::VOTE_SCRIPT) for more details on the vote process.
 pub(super) struct AllowedUsersKey {
     pub(super) room_id: SignalingRoomId,
-    pub(super) vote_id: LegalVoteId,
+    pub(super) legal_vote_id: LegalVoteId,
 }
 
 impl_to_redis_args!(AllowedUsersKey);
 
-/// Set the list of allowed users for the provided `vote_id`
-#[tracing::instrument(name = "legalvote_set_allowed_users", skip(redis_conn, allowed_users))]
+/// Set the list of allowed users for the provided `legal_vote_id`
+#[tracing::instrument(name = "legal_vote_set_allowed_users", skip(redis_conn, allowed_users))]
 pub(crate) async fn set(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
-    vote_id: LegalVoteId,
+    legal_vote_id: LegalVoteId,
     allowed_users: Vec<SerialUserId>,
 ) -> Result<()> {
     redis_conn
-        .sadd(AllowedUsersKey { room_id, vote_id }, allowed_users)
+        .sadd(
+            AllowedUsersKey {
+                room_id,
+                legal_vote_id,
+            },
+            allowed_users,
+        )
         .await
         .with_context(|| {
             format!(
-                "Failed to set the allowed users for room_id:{} vote_id:{}",
-                room_id, vote_id
+                "Failed to set the allowed users for room_id:{} legal_vote_id:{}",
+                room_id, legal_vote_id
             )
         })
 }
