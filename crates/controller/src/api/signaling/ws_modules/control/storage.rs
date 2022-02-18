@@ -108,18 +108,10 @@ pub async fn add_participant_to_set(
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<usize> {
-    let mut room_mutex = room_mutex(room);
-
-    let guard = room_mutex.lock(redis_conn).await?;
-
-    let sadd_result = redis_conn
+    redis_conn
         .sadd(RoomParticipants { room }, participant)
         .await
-        .context("Failed to add own participant id to set");
-
-    guard.unlock(redis_conn).await?;
-
-    sadd_result
+        .context("Failed to add own participant id to set")
 }
 
 /// Mark the given participant in the given room as left.
@@ -210,6 +202,60 @@ where
         .with_context(|| format!("Failed to set attribute {}", name))?;
 
     Ok(())
+}
+
+pub struct AttrPipeline {
+    room: SignalingRoomId,
+    participant: ParticipantId,
+    pipe: redis::Pipeline,
+}
+
+// FIXME: Make the type inference better. e.g. by passing the type to get and letting get extend the final type.
+impl AttrPipeline {
+    pub fn new(room: SignalingRoomId, participant: ParticipantId) -> Self {
+        let mut pipe = redis::pipe();
+        pipe.atomic();
+
+        Self {
+            room,
+            participant,
+            pipe: redis::pipe(),
+        }
+    }
+
+    pub fn set<V: ToRedisArgs>(&mut self, name: &str, value: V) -> &mut Self {
+        self.pipe
+            .hset(
+                RoomParticipantAttributes {
+                    room: self.room,
+                    attribute_name: name,
+                },
+                self.participant,
+                value,
+            )
+            .ignore();
+
+        self
+    }
+
+    pub fn get(&mut self, name: &str) -> &mut Self {
+        self.pipe.hget(
+            RoomParticipantAttributes {
+                room: self.room,
+                attribute_name: name,
+            },
+            self.participant,
+        );
+
+        self
+    }
+
+    pub async fn query_async<T: FromRedisValue>(
+        &mut self,
+        redis_conn: &mut ConnectionManager,
+    ) -> redis::RedisResult<T> {
+        self.pipe.query_async(redis_conn).await
+    }
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]

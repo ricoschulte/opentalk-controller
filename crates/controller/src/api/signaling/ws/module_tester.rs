@@ -112,48 +112,6 @@ where
         )
         .await?;
 
-        match &participant {
-            Participant::User(user) => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    runner.room_id,
-                    participant_id,
-                    "kind",
-                    ParticipationKind::User,
-                )
-                .await?;
-
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    runner.room_id,
-                    participant_id,
-                    "user_id",
-                    user.id,
-                )
-                .await?;
-            }
-            Participant::Guest => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    runner.room_id,
-                    participant_id,
-                    "kind",
-                    ParticipationKind::Guest,
-                )
-                .await?;
-            }
-            Participant::Sip => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    runner.room_id,
-                    participant_id,
-                    "kind",
-                    ParticipationKind::Sip,
-                )
-                .await?;
-            }
-        }
-
         let runner_handle = task::spawn_local(runner.run());
 
         runner_interface.ws.send(WsMessageIncoming::Control(
@@ -511,37 +469,33 @@ where
         mut ctx: ModuleContext<'_, M>,
         control_message: control::incoming::Message,
     ) -> Result<()> {
+        let mut lock = storage::room_mutex(self.room_id);
+        let guard = lock.lock(&mut self.redis_conn).await?;
+
         match control_message {
             control::incoming::Message::Join(join) => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.participant_id,
-                    "display_name",
-                    &join.display_name,
-                )
-                .await
-                .context("Failed to set display_name")?;
+                let mut attr_pipe = storage::AttrPipeline::new(self.room_id, self.participant_id);
 
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.participant_id,
-                    "joined_at",
-                    ctx.timestamp,
-                )
-                .await
-                .context("Failed to set joined timestamp")?;
+                match &self.participant {
+                    Participant::User(user) => {
+                        attr_pipe
+                            .set("kind", ParticipationKind::User)
+                            .set("user_id", user);
+                    }
+                    Participant::Guest => {
+                        attr_pipe.set("kind", ParticipationKind::Guest);
+                    }
+                    Participant::Sip => {
+                        attr_pipe.set("kind", ParticipationKind::Sip);
+                    }
+                }
 
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.participant_id,
-                    "hand_updated_at",
-                    ctx.timestamp,
-                )
-                .await
-                .context("Failed to set joined timestamp")?;
+                attr_pipe
+                    .set("display_name", &join.display_name)
+                    .set("joined_at", ctx.timestamp)
+                    .set("hand_updated_at", ctx.timestamp)
+                    .query_async(&mut self.redis_conn)
+                    .await?;
 
                 let participant_set =
                     storage::get_all_participants(&mut self.redis_conn, self.room_id)
@@ -555,6 +509,8 @@ where
                 )
                 .await
                 .context("Failed to add self to participants set")?;
+
+                guard.unlock(&mut self.redis_conn).await?;
 
                 let mut participants = vec![];
 
@@ -630,22 +586,11 @@ where
                 Ok(())
             }
             control::incoming::Message::RaiseHand => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.participant_id,
-                    "hand_is_up",
-                    true,
-                )
-                .await?;
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.participant_id,
-                    "hand_updated_at",
-                    ctx.timestamp,
-                )
-                .await?;
+                storage::AttrPipeline::new(self.room_id, self.participant_id)
+                    .set("hand_is_up", true)
+                    .set("hand_updated_at", ctx.timestamp)
+                    .query_async(&mut self.redis_conn)
+                    .await?;
 
                 ctx.invalidate_data();
 
@@ -654,22 +599,11 @@ where
                 Ok(())
             }
             control::incoming::Message::LowerHand => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.participant_id,
-                    "hand_is_up",
-                    false,
-                )
-                .await?;
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.participant_id,
-                    "hand_updated_at",
-                    ctx.timestamp,
-                )
-                .await?;
+                storage::AttrPipeline::new(self.room_id, self.participant_id)
+                    .set("hand_is_up", false)
+                    .set("hand_updated_at", ctx.timestamp)
+                    .query_async(&mut self.redis_conn)
+                    .await?;
 
                 ctx.invalidate_data();
 
@@ -917,19 +851,23 @@ where
             module_data: Default::default(),
         };
 
-        let display_name: String =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "display_name").await?;
-        let joined_at: Timestamp =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "joined_at").await?;
-
-        let hand_is_up: bool =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_is_up").await?;
-        let hand_updated_at: Timestamp =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_updated_at")
-                .await?;
-
-        let participation_kind: ParticipationKind =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "kind").await?;
+        #[allow(clippy::type_complexity)]
+        let (display_name, joined_at, left_at, hand_is_up, hand_updated_at, participation_kind): (
+            String,
+            Timestamp,
+            Option<Timestamp>,
+            bool,
+            Timestamp,
+            ParticipationKind,
+        ) = storage::AttrPipeline::new(self.room_id, self.participant_id)
+            .get("display_name")
+            .get("joined_at")
+            .get("left_at")
+            .get("hand_is_up")
+            .get("hand_updated_at")
+            .get("kind")
+            .query_async(&mut self.redis_conn)
+            .await?;
 
         participant.module_data.insert(
             NAMESPACE,
@@ -939,7 +877,7 @@ where
                 hand_is_up,
                 joined_at,
                 hand_updated_at,
-                left_at: None,
+                left_at,
             })
             .expect("Failed to convert ControlData to serde_json::Value"),
         );

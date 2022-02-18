@@ -290,53 +290,6 @@ impl Builder {
             )
             .await?;
 
-        match &self.participant {
-            api::Participant::User(ref user) => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    room_id,
-                    self.id,
-                    "kind",
-                    ParticipationKind::User,
-                )
-                .await?;
-                storage::set_attribute(&mut self.redis_conn, room_id, self.id, "user_id", user.id)
-                    .await?;
-            }
-            api::Participant::Guest => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    room_id,
-                    self.id,
-                    "kind",
-                    ParticipationKind::Guest,
-                )
-                .await?;
-            }
-            api::Participant::Sip => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    room_id,
-                    self.id,
-                    "kind",
-                    ParticipationKind::Sip,
-                )
-                .await?;
-            }
-        }
-
-        storage::set_attribute(
-            &mut self.redis_conn,
-            room_id,
-            self.id,
-            "hand_updated_at",
-            Timestamp::now(),
-        )
-        .await?;
-
-        // Remove left_at attribute for in case that this is a session resumption
-        storage::remove_attribute(&mut self.redis_conn, room_id, self.id, "left_at").await?;
-
         self.resumption_keep_alive
             .set_initial(&mut self.redis_conn)
             .await?;
@@ -764,45 +717,26 @@ impl Runner {
                     return Ok(());
                 }
 
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "display_name",
-                    &join.display_name,
-                )
-                .await
-                .context("Failed to set display_name")?;
+                let mut lock = storage::room_mutex(self.room_id);
 
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "joined_at",
-                    timestamp,
-                )
-                .await
-                .context("Failed to set joined timestamp")?;
+                let guard = lock.lock(&mut self.redis_conn).await?;
 
-                let participant_set =
-                    storage::get_all_participants(&mut self.redis_conn, self.room_id)
-                        .await
-                        .context("Failed to get all active participants")?;
+                let res = self.join_room_locked(timestamp, &join.display_name).await;
 
-                let num_added =
-                    storage::add_participant_to_set(&mut self.redis_conn, self.room_id, self.id)
-                        .await
-                        .context("Failed to add self to participants set")?;
+                let unlock_res = guard.unlock(&mut self.redis_conn).await;
 
-                // Check that SADD doesn't return 0. That would mean that the participant id would be a
-                // duplicate which cannot be allowed. Since this should never happen just error and exit.
-                if num_added == 0 {
-                    bail!("participant-id is already taken inside participant set");
-                }
+                let participant_ids = match res {
+                    Ok(participants) => participants,
+                    Err(e) => {
+                        bail!("Failed to join room, {e:?}\nUnlocked room lock, {unlock_res:?}");
+                    }
+                };
+
+                unlock_res?;
 
                 let mut participants = vec![];
 
-                for id in participant_set {
+                for id in participant_ids {
                     match self.build_participant(id).await {
                         Ok(participant) => participants.push(participant),
                         Err(e) => log::error!("Failed to build participant {}, {}", id, e),
@@ -861,22 +795,11 @@ impl Runner {
                     .await;
             }
             incoming::Message::RaiseHand => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "hand_is_up",
-                    true,
-                )
-                .await?;
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "hand_updated_at",
-                    timestamp,
-                )
-                .await?;
+                storage::AttrPipeline::new(self.room_id, self.id)
+                    .set("hand_is_up", true)
+                    .set("hand_updated_at", timestamp)
+                    .query_async(&mut self.redis_conn)
+                    .await?;
 
                 let actions = self
                     .handle_module_broadcast_event(timestamp, DynBroadcastEvent::RaiseHand, true)
@@ -886,22 +809,11 @@ impl Runner {
                     .await;
             }
             incoming::Message::LowerHand => {
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "hand_is_up",
-                    false,
-                )
-                .await?;
-                storage::set_attribute(
-                    &mut self.redis_conn,
-                    self.room_id,
-                    self.id,
-                    "hand_updated",
-                    timestamp,
-                )
-                .await?;
+                storage::AttrPipeline::new(self.room_id, self.id)
+                    .set("hand_is_up", false)
+                    .set("hand_updated_at", timestamp)
+                    .query_async(&mut self.redis_conn)
+                    .await?;
 
                 let actions = self
                     .handle_module_broadcast_event(timestamp, DynBroadcastEvent::LowerHand, true)
@@ -915,36 +827,97 @@ impl Runner {
         Ok(())
     }
 
+    async fn join_room_locked(
+        &mut self,
+        timestamp: Timestamp,
+        display_name: &str,
+    ) -> Result<Vec<ParticipantId>> {
+        let mut pipe_attrs = storage::AttrPipeline::new(self.room_id, self.id);
+
+        match &self.participant {
+            api::Participant::User(ref user) => {
+                pipe_attrs
+                    .set("kind", ParticipationKind::User)
+                    .set("user_id", user.id);
+            }
+            api::Participant::Guest => {
+                pipe_attrs.set("kind", ParticipationKind::Guest);
+            }
+            api::Participant::Sip => {
+                pipe_attrs.set("kind", ParticipationKind::Sip);
+            }
+        }
+
+        pipe_attrs
+            .set("hand_updated_at", timestamp)
+            .set("display_name", display_name)
+            .set("joined_at", timestamp)
+            .query_async(&mut self.redis_conn)
+            .await?;
+
+        // Remove left_at attribute for in case that this is a session resumption
+        storage::remove_attribute(&mut self.redis_conn, self.room_id, self.id, "left_at").await?;
+
+        let participants = storage::get_all_participants(&mut self.redis_conn, self.room_id)
+            .await
+            .context("Failed to get all active participants")?;
+
+        let num_added =
+            storage::add_participant_to_set(&mut self.redis_conn, self.room_id, self.id)
+                .await
+                .context("Failed to add self to participants set")?;
+
+        // Check that SADD doesn't return 0. That would mean that the participant id would be a
+        // duplicate which cannot be allowed. Since this should never happen just error and exit.
+        if num_added == 0 {
+            bail!("participant-id is already taken inside participant set");
+        }
+
+        Ok(participants)
+    }
+
     async fn build_participant(&mut self, id: ParticipantId) -> Result<Participant> {
         let mut participant = outgoing::Participant {
             id,
             module_data: Default::default(),
         };
 
-        let display_name: String =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "display_name").await?;
-        let joined_at: Timestamp =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "joined_at").await?;
-        let left_at: Option<Timestamp> =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "left_at").await?;
+        #[allow(clippy::type_complexity)]
+        let (display_name, joined_at, left_at, hand_is_up, hand_updated_at, participation_kind): (
+            Option<String>,
+            Option<Timestamp>,
+            Option<Timestamp>,
+            Option<bool>,
+            Option<Timestamp>,
+            Option<ParticipationKind>,
+        ) = storage::AttrPipeline::new(self.room_id, self.id)
+            .get("display_name")
+            .get("joined_at")
+            .get("left_at")
+            .get("hand_is_up")
+            .get("hand_updated_at")
+            .get("kind")
+            .query_async(&mut self.redis_conn)
+            .await?;
 
-        let hand_is_up: bool =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_is_up").await?;
-        let hand_updated_at: Timestamp =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "hand_updated_at")
-                .await?;
-
-        let participation_kind: ParticipationKind =
-            storage::get_attribute(&mut self.redis_conn, self.room_id, id, "kind").await?;
+        if display_name.is_none()
+            || joined_at.is_none()
+            || hand_is_up.is_none()
+            || hand_updated_at.is_none()
+        {
+            log::error!("failed to fetch some attribute, using fallback defaults");
+        }
 
         participant.module_data.insert(
             NAMESPACE,
             serde_json::to_value(ControlData {
-                display_name,
-                participation_kind,
-                hand_is_up,
-                hand_updated_at,
-                joined_at,
+                display_name: display_name.unwrap_or_else(|| "Participant".into()),
+                participation_kind: participation_kind.unwrap_or(ParticipationKind::Guest),
+                hand_is_up: hand_is_up.unwrap_or_default(),
+                hand_updated_at: hand_updated_at.unwrap_or_else(Timestamp::unix_epoch),
+                joined_at: joined_at.unwrap_or_else(Timestamp::unix_epoch),
+                // no default for left_at. If its not found by error,
+                // worst case we have a ghost participant,
                 left_at,
             })
             .expect("Failed to convert ControlData to serde_json::Value"),
