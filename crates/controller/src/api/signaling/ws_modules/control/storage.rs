@@ -250,6 +250,20 @@ impl AttrPipeline {
         self
     }
 
+    pub fn del(&mut self, name: &str) -> &mut Self {
+        self.pipe
+            .hdel(
+                RoomParticipantAttributes {
+                    room: self.room,
+                    attribute_name: name,
+                },
+                self.participant,
+            )
+            .ignore();
+
+        self
+    }
+
     pub async fn query_async<T: FromRedisValue>(
         &mut self,
         redis_conn: &mut ConnectionManager,
