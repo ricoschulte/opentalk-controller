@@ -858,7 +858,7 @@ where
             bool,
             Timestamp,
             ParticipationKind,
-        ) = storage::AttrPipeline::new(self.room_id, self.participant_id)
+        ) = storage::AttrPipeline::new(self.room_id, id)
             .get("display_name")
             .get("joined_at")
             .get("left_at")

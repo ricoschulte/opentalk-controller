@@ -849,14 +849,13 @@ impl Runner {
         }
 
         pipe_attrs
+            .set("hand_is_up", false)
             .set("hand_updated_at", timestamp)
             .set("display_name", display_name)
             .set("joined_at", timestamp)
+            .del("left_at")
             .query_async(&mut self.redis_conn)
             .await?;
-
-        // Remove left_at attribute for in case that this is a session resumption
-        storage::remove_attribute(&mut self.redis_conn, self.room_id, self.id, "left_at").await?;
 
         let participants = storage::get_all_participants(&mut self.redis_conn, self.room_id)
             .await
@@ -890,7 +889,7 @@ impl Runner {
             Option<bool>,
             Option<Timestamp>,
             Option<ParticipationKind>,
-        ) = storage::AttrPipeline::new(self.room_id, self.id)
+        ) = storage::AttrPipeline::new(self.room_id, id)
             .get("display_name")
             .get("joined_at")
             .get("left_at")
@@ -900,10 +899,10 @@ impl Runner {
             .query_async(&mut self.redis_conn)
             .await?;
 
-        if display_name.is_none()
-            || joined_at.is_none()
-            || hand_is_up.is_none()
-            || hand_updated_at.is_none()
+        if dbg!(display_name.is_none())
+            || dbg!(joined_at.is_none())
+            || dbg!(hand_is_up.is_none())
+            || dbg!(hand_updated_at.is_none())
         {
             log::error!("failed to fetch some attribute, using fallback defaults");
         }
