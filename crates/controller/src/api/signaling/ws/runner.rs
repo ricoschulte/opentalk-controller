@@ -899,10 +899,10 @@ impl Runner {
             .query_async(&mut self.redis_conn)
             .await?;
 
-        if dbg!(display_name.is_none())
-            || dbg!(joined_at.is_none())
-            || dbg!(hand_is_up.is_none())
-            || dbg!(hand_updated_at.is_none())
+        if display_name.is_none()
+            || joined_at.is_none()
+            || hand_is_up.is_none()
+            || hand_updated_at.is_none()
         {
             log::error!("failed to fetch some attribute, using fallback defaults");
         }

@@ -492,6 +492,7 @@ where
                 attr_pipe
                     .set("display_name", &join.display_name)
                     .set("joined_at", ctx.timestamp)
+                    .set("hand_is_up", false)
                     .set("hand_updated_at", ctx.timestamp)
                     .query_async(&mut self.redis_conn)
                     .await?;
