@@ -1,5 +1,5 @@
-use controller::db::legal_votes::LegalVoteId;
 use db_storage::legal_votes::types::{UserParameters, VoteOption};
+use db_storage::legal_votes::LegalVoteId;
 use serde::Deserialize;
 use validator::Validate;
 

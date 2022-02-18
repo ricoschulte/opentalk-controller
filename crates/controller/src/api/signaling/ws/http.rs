@@ -6,8 +6,6 @@ use crate::api::signaling::resumption::{ResumptionData, ResumptionTokenKeepAlive
 use crate::api::signaling::ticket::{TicketData, TicketRedisKey};
 use crate::api::v1::{ApiError, DefaultApiError};
 use crate::api::Participant;
-use crate::db::rooms::Room;
-use crate::db::users::User;
 use actix_web::get;
 use actix_web::http::{header, HeaderValue};
 use actix_web::web::Data;
@@ -17,6 +15,8 @@ use async_tungstenite::tungstenite::protocol::Role;
 use async_tungstenite::WebSocketStream;
 use database::Db;
 use db_storage::rooms::DbRoomsEx;
+use db_storage::rooms::Room;
+use db_storage::users::User;
 use db_storage::DbUsersEx;
 use kustos::Authz;
 use redis::aio::ConnectionManager;
@@ -243,10 +243,9 @@ async fn get_user_and_room_from_ticket_data(
             let participant = match participant {
                 Participant::User(user_id) => {
                     let user = db
-                        .get_opt_user_by_id(user_id)
-                        .map_err(DefaultApiError::from)?;
+                        .get_opt_user_by_id(user_id)?
+                        .ok_or(DefaultApiError::Internal)?;
 
-                    let user = user.ok_or(DefaultApiError::Internal)?;
                     Participant::User(user)
                 }
                 Participant::Guest => Participant::Guest,

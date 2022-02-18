@@ -33,6 +33,8 @@ pub struct VerifyClaims {
     /// Issued at
     #[serde(with = "time")]
     pub iat: DateTime<Utc>,
+    /// Issuer (URL to the OIDC Provider)
+    pub iss: String,
     /// Subject (User ID)
     pub sub: String,
     /// The users email
@@ -207,6 +209,7 @@ mod test {
             r#"{{
                 "sub": "admin",
                 "iat": {},
+                "iss": "https://example.org/realms/Test",
                 "exp": {},
                 "x_grp": ["/admin"],
                 "preferred_username": "admin",

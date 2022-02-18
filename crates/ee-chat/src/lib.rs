@@ -8,15 +8,13 @@ use anyhow::{Context, Result};
 use chat::MessageId;
 use chrono::{DateTime, Utc};
 use control::rabbitmq;
-use controller::db::groups::Group;
-use controller::db::users::SerialUserId;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::database::Db;
-use db_storage::groups::DbGroupsEx;
+use db_storage::groups::{DbGroupsEx, Group, GroupId};
+use db_storage::users::UserId;
 use r3dlock::Mutex;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
 use std::sync::Arc;
 use storage::StoredMessage;
 mod storage;
@@ -39,8 +37,8 @@ pub struct Message {
     content: String,
 }
 
-fn group_routing_key(group: &str) -> String {
-    format!("group.{}", group)
+fn group_routing_key(group_id: GroupId) -> String {
+    format!("group.{}", group_id)
 }
 
 pub struct Chat {
@@ -49,12 +47,12 @@ pub struct Chat {
 
     db: Arc<Db>,
 
-    groups: HashSet<Group>,
+    groups: Vec<Group>,
 }
 
 impl Chat {
-    fn is_in_group(&self, id: &str) -> bool {
-        self.groups.contains(id)
+    fn get_group(&self, name: &str) -> Option<&Group> {
+        self.groups.iter().find(|group| group.name == name)
     }
 }
 
@@ -66,7 +64,7 @@ pub struct FrontendDataEntry {
 
 #[derive(Serialize)]
 pub struct PeerFrontendData {
-    groups: HashSet<String>,
+    groups: Vec<String>,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -98,7 +96,7 @@ impl SignalingModule for Chat {
                 log::debug!("Group: {}", group.id);
 
                 ctx.add_rabbitmq_binding(
-                    group_routing_key(&group.id),
+                    group_routing_key(group.id),
                     rabbitmq::current_room_exchange_name(ctx.room_id()),
                     Default::default(),
                 );
@@ -130,25 +128,16 @@ impl SignalingModule for Chat {
                 // ==== Collect group message history ====
                 let mut group_messages = Vec::new();
 
-                // FIXME Remove with the DB rework
-                let mut groups: Vec<_> = self.groups.iter().cloned().collect();
-                groups.sort_by(|a, b| a.id.cmp(&b.id));
-
-                for group in &groups {
-                    storage::add_participant_to_set(
-                        ctx.redis_conn(),
-                        self.room,
-                        &group.id,
-                        self.id,
-                    )
-                    .await?;
+                for group in &self.groups {
+                    storage::add_participant_to_set(ctx.redis_conn(), self.room, group.id, self.id)
+                        .await?;
 
                     let history =
-                        storage::get_group_chat_history(ctx.redis_conn(), self.room, &group.id)
+                        storage::get_group_chat_history(ctx.redis_conn(), self.room, group.id)
                             .await?;
 
                     group_messages.push(FrontendDataEntry {
-                        name: group.id.clone(),
+                        name: group.name.clone(),
                         history,
                     });
                 }
@@ -160,7 +149,7 @@ impl SignalingModule for Chat {
                     participants.iter().map(|(id, _)| *id).collect();
 
                 // Get all user_ids for each participant in the room
-                let user_ids: Vec<Option<SerialUserId>> =
+                let user_ids: Vec<Option<UserId>> =
                     control::storage::get_attribute_for_participants(
                         ctx.redis_conn(),
                         self.room,
@@ -170,7 +159,7 @@ impl SignalingModule for Chat {
                     .await?;
 
                 // Filter out guest/bots and map each user-id to a participant id
-                let participant_user_mappings: Vec<(SerialUserId, ParticipantId)> = user_ids
+                let participant_user_mappings: Vec<(UserId, ParticipantId)> = user_ids
                     .into_iter()
                     .enumerate()
                     .filter_map(|(i, opt_user_id)| {
@@ -183,7 +172,7 @@ impl SignalingModule for Chat {
 
                 // Inquire the database about each user's groups
                 let participant_to_common_groups_mappings =
-                    controller::block(move || -> Result<Vec<(ParticipantId, HashSet<String>)>> {
+                    controller::block(move || -> Result<Vec<(ParticipantId, Vec<String>)>> {
                         let mut participant_to_common_groups_mappings = vec![];
 
                         for (user_id, participant_id) in participant_user_mappings {
@@ -193,8 +182,9 @@ impl SignalingModule for Chat {
                             // Intersect our groups and the groups of the user and collect their id/name
                             // as strings into a set
                             let common_groups = self_groups
-                                .intersection(&groups)
-                                .map(|group| group.id.clone())
+                                .iter()
+                                .filter(|self_group| groups.contains(self_group))
+                                .map(|group| group.name.clone())
                                 .collect();
 
                             participant_to_common_groups_mappings
@@ -220,7 +210,7 @@ impl SignalingModule for Chat {
             Event::Leaving => {}
             Event::ParticipantJoined(participant_id, peer_frontend_data) => {
                 // Get user id of the joined participant
-                let user_id: Option<SerialUserId> = control::storage::get_attribute(
+                let user_id: Option<UserId> = control::storage::get_attribute(
                     ctx.redis_conn(),
                     self.room,
                     participant_id,
@@ -232,15 +222,16 @@ impl SignalingModule for Chat {
                     let db = self.db.clone();
                     let self_groups = self.groups.clone();
 
-                    let common_groups = controller::block(move || -> Result<HashSet<String>> {
+                    let common_groups = controller::block(move || -> Result<Vec<String>> {
                         // Get the user's groups
                         let groups = db.get_groups_for_user(user_id)?;
 
                         // Intersect our groups and the groups of the user and collect their id/name
                         // as strings into a set
                         let common_groups = self_groups
-                            .intersection(&groups)
-                            .map(|group| group.id.clone())
+                            .iter()
+                            .filter(|self_group| groups.contains(self_group))
+                            .map(|group| group.name.clone())
                             .collect();
 
                         Ok(common_groups)
@@ -274,7 +265,7 @@ impl SignalingModule for Chat {
                     msg.content.truncate(last_idx);
                 }
 
-                if self.is_in_group(&msg.group) {
+                if let Some(group) = self.get_group(&msg.group) {
                     let id = MessageId::new();
 
                     let stored_msg = StoredMessage {
@@ -287,14 +278,14 @@ impl SignalingModule for Chat {
                     storage::add_message_to_group_chat_history(
                         ctx.redis_conn(),
                         self.room,
-                        &msg.group,
+                        group.id,
                         &stored_msg,
                     )
                     .await?;
 
                     ctx.rabbitmq_publish(
                         rabbitmq::current_room_exchange_name(self.room),
-                        group_routing_key(&msg.group),
+                        group_routing_key(group.id),
                         Message {
                             id,
                             source: self.id,
@@ -306,7 +297,7 @@ impl SignalingModule for Chat {
                 }
             }
             Event::RabbitMq(msg) => {
-                if self.is_in_group(&msg.group) {
+                if self.get_group(&msg.group).is_some() {
                     ctx.ws_send(msg);
                 }
             }
@@ -320,7 +311,7 @@ impl SignalingModule for Chat {
         for group in self.groups {
             let mut mutex = Mutex::new(storage::RoomGroupParticipantsLock {
                 room: self.room,
-                group: &group.id,
+                group: group.id,
             });
 
             let guard = match mutex.lock(ctx.redis_conn()).await {
@@ -340,7 +331,7 @@ impl SignalingModule for Chat {
                 &guard,
                 ctx.redis_conn(),
                 self.room,
-                &group.id,
+                group.id,
                 self.id,
             )
             .await
@@ -354,7 +345,7 @@ impl SignalingModule for Chat {
 
             if remove_history {
                 if let Err(e) =
-                    storage::delete_group_chat_history(ctx.redis_conn(), self.room, &group.id).await
+                    storage::delete_group_chat_history(ctx.redis_conn(), self.room, group.id).await
                 {
                     log::error!("Failed to remove room group chat histroy, {}", e);
                 }

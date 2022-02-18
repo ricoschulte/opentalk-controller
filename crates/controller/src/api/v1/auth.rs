@@ -1,18 +1,16 @@
 //! Auth related API structs and Endpoints
 use super::{DefaultApiError, INVALID_ID_TOKEN};
-use crate::db;
-use crate::db::users::ModifiedUser;
 use crate::ha_sync::user_update;
 use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
 use database::Db;
-use db_storage::users::User;
+use db_storage::groups::GroupId;
+use db_storage::users::{ModifiedUser, NewUser, NewUserWithGroups, UpdateUser, User};
 use db_storage::DbUsersEx;
 use either::Either;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::str::FromStr;
 
 /// The JSON Body expected when making a *POST* request on `/auth/login`
 #[derive(Debug, Deserialize)]
@@ -52,26 +50,15 @@ pub async fn login(
             ))
         }
         Ok(info) => {
-            let user_uuid = match uuid::Uuid::from_str(&info.sub) {
-                Ok(uuid) => uuid,
-                Err(_) => {
-                    log::error!("Unable to parse UUID from id token sub '{}'", &info.sub);
-                    return Err(DefaultApiError::auth_bearer_invalid_token(
-                        INVALID_ID_TOKEN,
-                        "Unable to parse UUID from id token".into(),
-                    ));
-                }
-            };
-
             // TODO(r.floren): Find a neater way for relaying the information here.
 
             let db_result = crate::block(
-                move || -> Result<Either<ModifiedUser, (User, Vec<String>)>, DefaultApiError> {
-                    let user = db.get_user_by_uuid(&user_uuid)?;
+                move || -> Result<Either<ModifiedUser, (User, Vec<GroupId>)>, DefaultApiError> {
+                    let user = db.get_user_by_oidc_sub(&info.issuer, &info.sub)?;
 
                     match user {
                         Some(user) => {
-                            let modify_user = db::users::ModifyUser {
+                            let modify_user = UpdateUser {
                                 title: None,
                                 theme: None,
                                 language: None,
@@ -79,13 +66,14 @@ pub async fn login(
                             };
 
                             let modified_user =
-                                db.modify_user(user.oidc_uuid, modify_user, Some(info.x_grp))?;
+                                db.update_user(user.id, modify_user, Some(info.x_grp))?;
 
                             Ok(Either::Left(modified_user))
                         }
                         None => {
-                            let new_user = db::users::NewUser {
-                                oidc_uuid: user_uuid,
+                            let new_user = NewUser {
+                                oidc_sub: info.sub,
+                                oidc_issuer: info.issuer,
                                 email: info.email,
                                 title: String::new(),
                                 firstname: info.firstname,
@@ -95,14 +83,14 @@ pub async fn login(
                                 language: "en-US".to_string(), // TODO: set language based on browser
                             };
 
-                            let new_user = db::users::NewUserWithGroups {
+                            let new_user = NewUserWithGroups {
                                 new_user,
                                 groups: info.x_grp.clone(),
                             };
 
-                            let created_user = db.create_user(new_user)?;
+                            let created = db.create_user(new_user)?;
 
-                            Ok(Either::Right((created_user, info.x_grp)))
+                            Ok(Either::Right(created))
                         }
                     }
                 },
@@ -160,7 +148,7 @@ pub async fn oidc_provider(oidc_ctx: Data<OidcContext>) -> Json<Provider> {
 
 async fn update_core_user_permissions(
     authz: &kustos::Authz,
-    db_result: Either<ModifiedUser, (User, Vec<String>)>,
+    db_result: Either<ModifiedUser, (User, Vec<GroupId>)>,
 ) -> Result<(), DefaultApiError> {
     match db_result {
         Either::Left(modified_user) => {
@@ -168,7 +156,7 @@ async fn update_core_user_permissions(
             // But this is currently not a hot path.
             for group in modified_user.groups_added {
                 authz
-                    .add_user_to_group(modified_user.user.oidc_uuid, group)
+                    .add_user_to_group(modified_user.user.id, group)
                     .await
                     .map_err(|e| {
                         log::error!("Failed to add user to group - {}", e);
@@ -178,7 +166,7 @@ async fn update_core_user_permissions(
 
             for group in modified_user.groups_removed {
                 authz
-                    .remove_user_from_group(modified_user.user.oidc_uuid, group)
+                    .remove_user_from_group(modified_user.user.id, group)
                     .await
                     .map_err(|e| {
                         log::error!("Failed to remove user from group  - {}", e);
@@ -187,21 +175,16 @@ async fn update_core_user_permissions(
             }
         }
         Either::Right((user, groups)) => {
-            authz
-                .add_user_to_role(user.oidc_uuid, "user")
-                .await
-                .map_err(|e| {
-                    log::error!("Failed to add user to user role - {}", e);
+            authz.add_user_to_role(user.id, "user").await.map_err(|e| {
+                log::error!("Failed to add user to user role - {}", e);
+                DefaultApiError::Internal
+            })?;
+
+            for group in groups {
+                authz.add_user_to_group(user.id, group).await.map_err(|e| {
+                    log::error!("Failed to remove user from group  - {}", e);
                     DefaultApiError::Internal
                 })?;
-            for group in groups {
-                authz
-                    .add_user_to_group(user.oidc_uuid, group)
-                    .await
-                    .map_err(|e| {
-                        log::error!("Failed to remove user from group  - {}", e);
-                        DefaultApiError::Internal
-                    })?;
             }
         }
     }

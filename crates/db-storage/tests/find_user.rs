@@ -1,12 +1,10 @@
 use database::Db;
 use k3k_db_storage::users::{DbUsersEx, NewUser, NewUserWithGroups};
 use serial_test::serial;
-use uuid::Uuid;
 
 fn make_user(db: &Db, firstname: &str, lastname: &str) {
     db.create_user(NewUserWithGroups {
         new_user: NewUser {
-            oidc_uuid: Uuid::new_v4(),
             email: format!(
                 "{}.{}@example.org",
                 firstname.to_lowercase(),
@@ -18,6 +16,8 @@ fn make_user(db: &Db, firstname: &str, lastname: &str) {
             id_token_exp: 0,
             theme: "".into(),
             language: "".into(),
+            oidc_sub: format!("{}{}", firstname, lastname),
+            oidc_issuer: "".into(),
         },
         groups: vec![],
     })

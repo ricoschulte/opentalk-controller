@@ -6,13 +6,12 @@
 use anyhow::{Context, Error, Result};
 use controller_shared::settings::Settings;
 use database::Db;
-use db_storage::{DbRoomsEx, DbUsersEx};
+use db_storage::{users::UserId, DbRoomsEx, DbUsersEx};
 use kustos::{
     prelude::{AccessMethod, PolicyUser},
     Resource,
 };
 use std::sync::Arc;
-use uuid::Uuid;
 
 pub(crate) struct FixAclConfig {
     pub(crate) user_roles: bool,
@@ -56,7 +55,7 @@ async fn fix_user(
     let users = db.get_users_with_groups().context("Failed to load users")?;
     for (user, groups) in users {
         if config.user_roles {
-            let needs_addition = !match authz.is_user_in_role(user.oidc_uuid, "user").await {
+            let needs_addition = !match authz.is_user_in_role(user.id, "user").await {
                 Ok(in_role) => in_role,
                 Err(e) => {
                     errors.push(e.into());
@@ -65,7 +64,7 @@ async fn fix_user(
             };
 
             if needs_addition {
-                match authz.add_user_to_role(user.oidc_uuid, "user").await {
+                match authz.add_user_to_role(user.id, "user").await {
                     Ok(_) => {}
                     Err(e) => errors.push(e.into()),
                 }
@@ -74,9 +73,9 @@ async fn fix_user(
         if config.user_groups {
             for group in groups {
                 let needs_addition = !match authz
-                    .is_user_in_group(user.oidc_uuid, group.id.clone())
+                    .is_user_in_group(user.id, group.id)
                     .await
-                    .with_context(|| format!("User: {}, Group: {}", user.oidc_uuid, group.id))
+                    .with_context(|| format!("User: {}, Group: {}", user.id, group.id))
                 {
                     Ok(in_group) => in_group,
                     Err(e) => {
@@ -87,9 +86,9 @@ async fn fix_user(
 
                 if needs_addition {
                     match authz
-                        .add_user_to_group(user.oidc_uuid, group.id.clone())
+                        .add_user_to_group(user.id, group.id)
                         .await
-                        .with_context(|| format!("User: {}, Group: {}", user.oidc_uuid, group.id))
+                        .with_context(|| format!("User: {}, Group: {}", user.id, group.id))
                     {
                         Ok(_) => {}
                         Err(e) => errors.push(e),
@@ -113,8 +112,8 @@ async fn fix_rooms(
     for (room, user) in rooms {
         match maybe_grant_access_to_user(
             authz,
-            user.oidc_uuid,
-            room.uuid.resource_id(),
+            user.id,
+            room.id.resource_id(),
             &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
         )
         .await
@@ -124,8 +123,8 @@ async fn fix_rooms(
         }
         match maybe_grant_access_to_user(
             authz,
-            user.oidc_uuid,
-            room.uuid.resource_id().with_suffix("/invites"),
+            user.id,
+            room.id.resource_id().with_suffix("/invites"),
             &[AccessMethod::Post, AccessMethod::Get],
         )
         .await
@@ -135,8 +134,8 @@ async fn fix_rooms(
         }
         match maybe_grant_access_to_user(
             authz,
-            user.oidc_uuid,
-            room.uuid.resource_id().with_suffix("/start"),
+            user.id,
+            room.id.resource_id().with_suffix("/start"),
             &[AccessMethod::Post],
         )
         .await
@@ -150,7 +149,7 @@ async fn fix_rooms(
 
 async fn maybe_grant_access_to_user(
     authz: &kustos::Authz,
-    user: Uuid,
+    user: UserId,
     res: kustos::ResourceId,
     access: &[AccessMethod],
 ) -> Result<()> {

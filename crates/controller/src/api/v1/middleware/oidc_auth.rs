@@ -2,7 +2,6 @@
 use crate::api::v1::{
     DefaultApiError, ACCESS_TOKEN_INACTIVE, INVALID_ACCESS_TOKEN, SESSION_EXPIRED,
 };
-use crate::db::users::User;
 use crate::oidc::OidcContext;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::error::Error;
@@ -12,15 +11,14 @@ use actix_web::{HttpMessage, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use core::future::ready;
 use database::Db;
+use db_storage::users::User;
 use db_storage::DbUsersEx;
 use openidconnect::AccessToken;
 use std::future::{Future, Ready};
 use std::pin::Pin;
 use std::rc::Rc;
-use std::str::FromStr;
 use std::task::{Context, Poll};
 use tracing_futures::Instrument;
-use uuid::Uuid;
 
 /// Middleware factory
 ///
@@ -102,10 +100,9 @@ where
         Box::pin(
             async move {
                 let current_user = check_access_token(db, oidc_ctx, access_token).await?;
-                let uuid = current_user.oidc_uuid;
-                req.extensions_mut().insert(current_user);
                 req.extensions_mut()
-                    .insert(kustos::actix_web::User::from(uuid));
+                    .insert(kustos::actix_web::User::from(current_user.id.into_inner()));
+                req.extensions_mut().insert(current_user);
                 service.call(req).await
             }
             .instrument(tracing::trace_span!("OidcAuthMiddleware::async::call")),
@@ -119,7 +116,8 @@ pub async fn check_access_token(
     oidc_ctx: Data<OidcContext>,
     access_token: AccessToken,
 ) -> Result<User, DefaultApiError> {
-    let uuid = match oidc_ctx.verify_access_token(&access_token) {
+    let (issuer, sub) = match oidc_ctx.verify_access_token(&access_token) {
+        Ok(sub) => sub,
         Err(e) => {
             log::error!("Invalid access token, {}", e);
             return Err(DefaultApiError::auth_bearer_invalid_token(
@@ -127,30 +125,16 @@ pub async fn check_access_token(
                 e.to_string(),
             ));
         }
-        Ok(sub) => match Uuid::from_str(&sub) {
-            Ok(uuid) => uuid,
-            Err(e) => {
-                log::error!("Unable to parse UUID from sub '{}', {}", &sub, e);
-                return Err(DefaultApiError::auth_bearer_invalid_token(
-                    INVALID_ACCESS_TOKEN,
-                    "Unable to parse UUID from access token".into(),
-                ));
-            }
-        },
     };
 
-    let current_user = crate::block(move || match db.get_user_by_uuid(&uuid)? {
+    let current_user = crate::block(move || match db.get_user_by_oidc_sub(&issuer, &sub)? {
         None => {
             log::warn!("The requesting user could not be found in the database");
             Err(DefaultApiError::Internal)
         }
         Some(user) => Ok(user),
     })
-    .await
-    .map_err(|e| {
-        log::error!("crate::block failed, {}", e);
-        DefaultApiError::Internal
-    })??;
+    .await??;
 
     // check if the id token is expired
     if chrono::Utc::now().timestamp() > current_user.id_token_exp {

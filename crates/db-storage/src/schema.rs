@@ -13,18 +13,21 @@ table! {
 
 table! {
     groups (id) {
-        id -> Varchar,
+        id -> Uuid,
+        id_serial -> Int8,
+        oidc_issuer -> Nullable<Text>,
+        name -> Text,
     }
 }
 
 table! {
     invites (id) {
-        id -> Int8,
-        uuid -> Uuid,
-        created -> Timestamptz,
-        created_by -> Int8,
-        updated -> Timestamptz,
-        updated_by -> Int8,
+        id -> Uuid,
+        id_serial -> Int8,
+        created_by -> Uuid,
+        created_at -> Timestamptz,
+        updated_by -> Uuid,
+        updated_at -> Timestamptz,
         room -> Uuid,
         active -> Bool,
         expiration -> Nullable<Timestamptz>,
@@ -34,9 +37,11 @@ table! {
 table! {
     legal_votes (id) {
         id -> Uuid,
-        initiator -> Int8,
+        id_serial -> Int8,
+        created_by -> Uuid,
+        created_at -> Timestamptz,
+        room -> Nullable<Uuid>,
         protocol -> Jsonb,
-        room_id -> Nullable<Uuid>,
     }
 }
 
@@ -51,9 +56,10 @@ table! {
 
 table! {
     rooms (id) {
-        id -> Int8,
-        uuid -> Uuid,
-        owner -> Int8,
+        id -> Uuid,
+        id_serial -> Int8,
+        created_by -> Uuid,
+        created_at -> Timestamptz,
         password -> Varchar,
         wait_for_moderator -> Bool,
         listen_only -> Bool,
@@ -72,15 +78,17 @@ table! {
 
 table! {
     user_groups (user_id, group_id) {
-        user_id -> Int8,
-        group_id -> Varchar,
+        user_id -> Uuid,
+        group_id -> Uuid,
     }
 }
 
 table! {
     users (id) {
-        id -> Int8,
-        oidc_uuid -> Uuid,
+        id -> Uuid,
+        id_serial -> Int8,
+        oidc_sub -> Varchar,
+        oidc_issuer -> Nullable<Text>,
         email -> Varchar,
         title -> Varchar,
         firstname -> Varchar,
@@ -91,8 +99,11 @@ table! {
     }
 }
 
-joinable!(legal_votes -> users (initiator));
-joinable!(rooms -> users (owner));
+joinable!(invites -> rooms (room));
+joinable!(legal_votes -> rooms (room));
+joinable!(legal_votes -> users (created_by));
+joinable!(rooms -> users (created_by));
+joinable!(sip_configs -> rooms (room));
 joinable!(user_groups -> groups (group_id));
 joinable!(user_groups -> users (user_id));
 

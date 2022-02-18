@@ -1,15 +1,13 @@
 //! Contains invite related REST endpoints.
 use crate::api::v1::ApiResponse;
 use crate::api::v1::{users::UserDetails, DefaultApiError, DefaultApiResult, PagePaginationQuery};
-use crate::db::invites::{self as db_invites, InviteCodeId};
-use crate::db::rooms::RoomId;
-use crate::db::users::{self as db_users, User};
-use crate::db::DatabaseError;
 use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, post, put, HttpResponse};
-use database::Db;
+use database::{DatabaseError, Db};
 use db_storage::invites::DbInvitesEx;
-use db_storage::rooms::DbRoomsEx;
+use db_storage::invites::{self as db_invites, InviteCodeId};
+use db_storage::rooms::{DbRoomsEx, RoomId};
+use db_storage::users::User;
 use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -35,10 +33,10 @@ impl Invite {
         U: Into<UserDetails>,
     {
         Invite {
-            invite_code: val.uuid.to_string(),
-            created: val.created,
+            invite_code: val.id.to_string(),
+            created: val.created_at,
             created_by: created_by.into(),
-            updated: val.updated,
+            updated: val.updated_at,
             updated_by: updated_by.into(),
             room_id: val.room,
             active: val.active,
@@ -82,22 +80,17 @@ pub async fn add_invite(
                 .get_room(room_uuid)?
                 .ok_or(DefaultApiError::NotFound)?;
 
-            if room.owner != current_user_clone.id {
+            if room.created_by != current_user_clone.id {
                 // Avoid leaking rooms the user has no access to.
                 return Err(DefaultApiError::NotFound);
             }
 
-            let invite_code_uuid = uuid::Uuid::new_v4();
-            let now = chrono::Utc::now();
             let new_invite = db_invites::NewInvite {
-                uuid: &InviteCodeId::from(invite_code_uuid),
                 active: true,
-                created: &now,
-                created_by: &current_user_clone.id,
-                updated: &now,
-                updated_by: &current_user_clone.id,
-                room: &room.uuid,
-                expiration: new_invite.expiration.as_ref(),
+                created_by: current_user_clone.id,
+                updated_by: current_user_clone.id,
+                room: room.id,
+                expiration: new_invite.expiration,
             };
 
             db.new_invite_with_users(new_invite).map_err(Into::into)
@@ -106,12 +99,12 @@ pub async fn add_invite(
     .await??;
 
     // TODO(r.floren) Do we want to rollback if this failed?
-    let rel_invite_path = format!("/rooms/{}/invites/{}", room_uuid, db_invite.uuid).into();
-    let invite_path = db_invite.uuid.resource_id();
+    let rel_invite_path = format!("/rooms/{}/invites/{}", room_uuid, db_invite.id).into();
+    let invite_path = db_invite.id.resource_id();
 
     if let Err(e) = authz
         .grant_user_access(
-            current_user.oidc_uuid,
+            current_user.id,
             &[
                 (
                     &rel_invite_path,
@@ -149,7 +142,7 @@ pub async fn get_invites(
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let accessible_rooms: kustos::AccessibleResources<InviteCodeId> = authz
-        .get_accessible_resources_for_user(current_user.clone().oidc_uuid, AccessMethod::Get)
+        .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
         .await
         .map_err(|_| DefaultApiError::Internal)?;
 
@@ -159,11 +152,11 @@ pub async fn get_invites(
             if let Some(room) = room {
                 match accessible_rooms {
                     kustos::AccessibleResources::All => {
-                        Ok(db.get_invites_for_room_with_users_paginated(&room, per_page, page)?)
+                        Ok(db.get_invites_for_room_with_users_paginated(room.id, per_page, page)?)
                     }
                     kustos::AccessibleResources::List(list) => Ok(db
                         .get_invites_for_room_with_users_by_ids_paginated(
-                            &room, &list, per_page, page,
+                            room.id, &list, per_page, page,
                         )?),
                 }
             } else {
@@ -204,12 +197,11 @@ pub async fn get_invite(
         invite_code,
     } = path_params.into_inner();
 
-    let invite_code_clone = invite_code.clone();
     let (db_invite, created_by, updated_by) = crate::block(
-        move || -> Result<(db_invites::Invite, db_users::User, db_users::User), DefaultApiError> {
+        move || -> Result<(db_invites::Invite, User, User), DefaultApiError> {
             let room = db.get_room(room_uuid)?;
             if room.is_some() {
-                let result = db.get_invite_with_users(&invite_code_clone)?;
+                let result = db.get_invite_with_users(invite_code)?;
                 if !check_owning_access(&result.0, &current_user.into_inner()) {
                     return Err(DefaultApiError::NotFound);
                 }
@@ -243,24 +235,23 @@ pub async fn update_invite(
     } = path_params.into_inner();
     let update_invite = update_invite.into_inner();
 
-    let invite_code_clone = invite_code.clone();
     let (db_invite, created_by, updated_by) = crate::block(
-        move || -> Result<(db_invites::Invite, db_users::User, db_users::User), DefaultApiError> {
+        move || -> Result<(db_invites::Invite, User, User), DefaultApiError> {
             let room = db.get_room(room_uuid)?;
             if room.is_some() {
-                Ok(db.get_invite(&invite_code_clone).and_then(|invite| {
+                Ok(db.get_invite(invite_code).and_then(|invite| {
                     let current_user = current_user.into_inner();
                     if check_owning_access(&invite, &current_user) {
                         let now = chrono::Utc::now();
                         let update_invite = db_invites::UpdateInvite {
-                            updated_by: Some(&current_user.id),
-                            updated: Some(&now),
-                            expiration: Some(update_invite.expiration.as_ref()),
+                            updated_by: Some(current_user.id),
+                            updated_at: Some(now),
+                            expiration: Some(update_invite.expiration),
                             active: None,
                             room: None,
                         };
 
-                        db.update_invite_with_users(&invite_code_clone, &update_invite)
+                        db.update_invite_with_users(invite_code, &update_invite)
                     } else {
                         Err(DatabaseError::NotFound)
                     }
@@ -291,26 +282,25 @@ pub async fn delete_invite(
         room_uuid,
         invite_code,
     } = path_params.into_inner();
-    let invite_code_clone = invite_code.clone();
 
     crate::block(move || -> Result<db_invites::Invite, DefaultApiError> {
         let room = db.get_room(room_uuid)?;
         if room.is_some() {
             let now = chrono::Utc::now();
             let invite_update = db_invites::UpdateInvite {
-                updated_by: Some(&current_user.id),
-                updated: Some(&now),
+                updated_by: Some(current_user.id),
+                updated_at: Some(now),
                 expiration: None,
                 active: Some(false),
                 room: None,
             };
-            Ok(db.get_invite(&invite_code_clone).and_then(|invite| {
+            Ok(db.get_invite(invite_code).and_then(|invite| {
                 if check_owning_access(&invite, &current_user) {
                     // Make sure to mimic a not found when trying to delete a inactive invite, for now.
                     if !invite.active {
                         return Err(DatabaseError::NotFound);
                     }
-                    db.update_invite(&invite_code_clone, &invite_update)
+                    db.update_invite(invite_code, &invite_update)
                 } else {
                     Err(DatabaseError::NotFound)
                 }
@@ -326,7 +316,7 @@ pub async fn delete_invite(
 
 #[derive(Debug, Validate, Deserialize)]
 pub struct VerifyBody {
-    invite_code: uuid::Uuid,
+    invite_code: InviteCodeId,
 }
 
 #[derive(Debug, Serialize)]
@@ -350,10 +340,9 @@ pub async fn verify_invite_code(
         return Err(DefaultApiError::ValidationFailed);
     }
 
-    let invite_code = data.invite_code;
     let db_clone = db.clone();
     let invite = crate::block(move || -> Result<db_invites::Invite, DefaultApiError> {
-        Ok(db_clone.get_invite(&InviteCodeId::from(invite_code))?)
+        Ok(db_clone.get_invite(data.invite_code)?)
     })
     .await??;
 

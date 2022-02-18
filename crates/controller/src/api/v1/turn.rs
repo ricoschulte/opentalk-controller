@@ -3,10 +3,6 @@ use super::DefaultApiError;
 use crate::api::v1::middleware::oidc_auth::check_access_token;
 use crate::api::v1::response::NoContent;
 use crate::api::v1::INVALID_ACCESS_TOKEN;
-use crate::db::invites::Invite;
-use crate::db::invites::InviteCodeId;
-use crate::db::users::User;
-use crate::db::DatabaseError;
 use crate::oidc::OidcContext;
 use crate::settings;
 use crate::settings::{Settings, TurnServer};
@@ -16,17 +12,16 @@ use actix_web::web::Data;
 use actix_web::web::Json;
 use actix_web::Either as AWEither;
 use actix_web::HttpRequest;
-use actix_web_httpauth::headers::authorization::Authorization;
-use actix_web_httpauth::headers::authorization::Bearer;
+use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use arc_swap::ArcSwap;
-use database::Db;
-use db_storage::invites::DbInvitesEx;
+use database::{DatabaseError, Db};
+use db_storage::invites::{DbInvitesEx, Invite, InviteCodeId};
+use db_storage::users::User;
 use either::Either;
 use openidconnect::AccessToken;
 use rand::distributions::{Distribution, Uniform};
 use rand::prelude::SliceRandom;
-use rand::CryptoRng;
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 use ring::hmac;
 use serde::Serialize;
 use std::str::FromStr;
@@ -82,14 +77,14 @@ pub async fn get(
         Either::Right(invite) => {
             log::trace!(
                 "Generating new turn credentials for invite {} and servers {:?}",
-                invite.uuid,
+                invite.id,
                 &turn_servers
             );
         }
         Either::Left(user) => {
             log::trace!(
                 "Generating new turn credentials for user {} and servers {:?}",
-                user.oidc_uuid,
+                user.id,
                 &turn_servers
             );
         }
@@ -220,7 +215,7 @@ pub async fn check_access_token_or_invite(
             })?;
 
             crate::block(
-                move || match db.get_invite(&InviteCodeId::from(invite_uuid)) {
+                move || match db.get_invite(InviteCodeId::from(invite_uuid)) {
                     Ok(invite) => Ok(invite),
                     Err(DatabaseError::NotFound) => {
                         log::warn!("The requesting user could not be found in the database");

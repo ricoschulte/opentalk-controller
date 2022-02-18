@@ -1,6 +1,6 @@
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
-use crate::db::rooms::RoomId;
 use chrono::TimeZone;
+use db_storage::rooms::RoomId;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::Deref;

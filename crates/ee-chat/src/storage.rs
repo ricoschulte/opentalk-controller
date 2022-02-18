@@ -3,6 +3,7 @@ use chat::MessageId;
 use chrono::{DateTime, Utc};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
+use db_storage::groups::GroupId;
 use displaydoc::Display;
 use r3dlock::{Mutex, MutexGuard};
 use redis::aio::ConnectionManager;
@@ -13,37 +14,37 @@ use serde::{Deserialize, Serialize};
 /// k3k-signaling:room={room}:group={group}:participants
 #[ignore_extra_doc_attributes]
 /// A set of group members inside a room
-struct RoomGroupParticipants<'s> {
+struct RoomGroupParticipants {
     room: SignalingRoomId,
-    group: &'s str,
+    group: GroupId,
 }
 
 #[derive(Display)]
 /// k3k-signaling:room={room}:group={group}:participants.lock
 #[ignore_extra_doc_attributes]
 /// A lock for the set of group members inside a room
-pub struct RoomGroupParticipantsLock<'s> {
+pub struct RoomGroupParticipantsLock {
     pub room: SignalingRoomId,
-    pub group: &'s str,
+    pub group: GroupId,
 }
 
 #[derive(Display)]
 /// k3k-signaling:room={room}:group={group}:chat:history
 #[ignore_extra_doc_attributes]
 /// A lock for the set of group members inside a room
-struct RoomGroupChatHistory<'s> {
+struct RoomGroupChatHistory {
     room: SignalingRoomId,
-    group: &'s str,
+    group: GroupId,
 }
 
-impl_to_redis_args!(RoomGroupParticipants<'_>);
-impl_to_redis_args!(RoomGroupParticipantsLock<'_>);
-impl_to_redis_args!(RoomGroupChatHistory<'_>);
+impl_to_redis_args!(RoomGroupParticipants);
+impl_to_redis_args!(RoomGroupParticipantsLock);
+impl_to_redis_args!(RoomGroupChatHistory);
 
 pub async fn add_participant_to_set(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
-    group: &str,
+    group: GroupId,
     participant: ParticipantId,
 ) -> Result<()> {
     let mut mutex = Mutex::new(RoomGroupParticipantsLock { room, group });
@@ -67,10 +68,10 @@ pub async fn add_participant_to_set(
 }
 
 pub async fn remove_participant_from_set(
-    _set_guard: &MutexGuard<'_, RoomGroupParticipantsLock<'_>>,
+    _set_guard: &MutexGuard<'_, RoomGroupParticipantsLock>,
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
-    group: &str,
+    group: GroupId,
     participant: ParticipantId,
 ) -> Result<usize> {
     redis_conn
@@ -100,7 +101,7 @@ impl_to_redis_args_se!(&StoredMessage);
 pub async fn get_group_chat_history(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
-    group: &str,
+    group: GroupId,
 ) -> Result<Vec<StoredMessage>> {
     redis_conn
         .lrange(RoomGroupChatHistory { room, group }, 0, -1)
@@ -112,7 +113,7 @@ pub async fn get_group_chat_history(
 pub async fn add_message_to_group_chat_history(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
-    group: &str,
+    group: GroupId,
     message: &StoredMessage,
 ) -> Result<()> {
     redis_conn
@@ -130,7 +131,7 @@ pub async fn add_message_to_group_chat_history(
 pub async fn delete_group_chat_history(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
-    group: &str,
+    group: GroupId,
 ) -> Result<()> {
     redis_conn
         .del(RoomGroupChatHistory { room, group })

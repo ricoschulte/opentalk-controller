@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::LegalVoteId;
-use controller::db::users::SerialUserId;
 use controller::prelude::*;
+use db_storage::legal_votes::LegalVoteId;
+use db_storage::users::UserId;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
@@ -29,7 +29,7 @@ pub(crate) async fn set(
     redis_conn: &mut ConnectionManager,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
-    allowed_users: Vec<SerialUserId>,
+    allowed_users: Vec<UserId>,
 ) -> Result<()> {
     redis_conn
         .sadd(

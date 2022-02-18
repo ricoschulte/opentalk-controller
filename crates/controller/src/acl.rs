@@ -1,19 +1,28 @@
 use anyhow::{Context, Result};
+use db_storage::groups::Group;
 use kustos::prelude::*;
 
 /// Checks whether the default permissions are present. These are the mandatory permissions.
 ///
 /// If you introduce new endpoints that need user post access, add these permissions here.
-pub(crate) async fn check_or_create_kustos_default_permissions(authz: &Authz) -> Result<()> {
-    if !authz
-        .is_group_in_role("/OpenTalk_Administrator", "administrator")
-        .await?
-    {
-        authz
-            .add_group_to_role("/OpenTalk_Administrator", "administrator")
-            .await
-            .context("Adding default administrator role to /OpenTalk_Administrator")?;
+pub(crate) async fn check_or_create_kustos_default_permissions(
+    authz: &Authz,
+    admin_groups: Vec<Group>,
+) -> Result<()> {
+    for group in admin_groups {
+        if !authz.is_group_in_role(group.id, "administrator").await? {
+            authz
+                .add_group_to_role(group.id, "administrator")
+                .await
+                .with_context(|| {
+                    format!(
+                        "Adding default administrator role to {}, {:?}",
+                        group.name, group.oidc_issuer
+                    )
+                })?;
+        }
     }
+
     check_or_create_kustos_role_policy(authz, "administrator", "/*", AccessMethod::all_http())
         .await?;
     check_or_create_kustos_role_policy(

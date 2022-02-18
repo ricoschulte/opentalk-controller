@@ -2,14 +2,14 @@ use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::ControlData;
 use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
-use crate::db::rooms::Room;
-use crate::db::users::User;
 use adapter::ActixTungsteniteAdapter;
 use anyhow::Result;
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use async_tungstenite::WebSocketStream;
 use controller_shared::ParticipantId;
 use database::Db;
+use db_storage::rooms::Room;
+use db_storage::users::User;
 use futures::stream::SelectAll;
 use kustos::Authz;
 use lapin::options::{ExchangeDeclareOptions, QueueBindOptions};
@@ -145,7 +145,7 @@ where
     /// ID of the room currently inside, this MUST be used when a module does not care about
     /// whether it is inside a breakout room or not.
     pub fn room_id(&self) -> SignalingRoomId {
-        SignalingRoomId(self.room.uuid, self.breakout_room)
+        SignalingRoomId(self.room.id, self.breakout_room)
     }
 
     /// Returns the ID of the breakout room, if inside one

@@ -11,7 +11,8 @@ use test_util::*;
 #[serial]
 async fn reject_start_empty_allow_or_playlist() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<automod::AutoMod>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) =
+        common::setup_users::<automod::AutoMod>(&test_ctx, ()).await;
 
     module_tester
         .send_ws_message(
@@ -51,7 +52,8 @@ async fn reject_start_empty_allow_or_playlist() {
 #[serial]
 async fn reject_start_invalid_allow_list() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<automod::AutoMod>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) =
+        common::setup_users::<automod::AutoMod>(&test_ctx, ()).await;
 
     module_tester
         .send_ws_message(
@@ -95,7 +97,8 @@ async fn reject_start_invalid_allow_list() {
 #[serial]
 async fn reject_start_invalid_allow_list_with_some_correct() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<automod::AutoMod>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) =
+        common::setup_users::<automod::AutoMod>(&test_ctx, ()).await;
 
     module_tester
         .send_ws_message(
@@ -141,7 +144,8 @@ async fn reject_start_invalid_allow_list_with_some_correct() {
 #[serial]
 async fn accept_valid_edit() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<automod::AutoMod>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) =
+        common::setup_users::<automod::AutoMod>(&test_ctx, ()).await;
 
     module_tester
         .send_ws_message(
@@ -204,7 +208,8 @@ async fn accept_valid_edit() {
 #[serial]
 async fn reject_invalid_edit() {
     let test_ctx = TestContext::new().await;
-    let mut module_tester = common::setup_users::<automod::AutoMod>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) =
+        common::setup_users::<automod::AutoMod>(&test_ctx, ()).await;
 
     module_tester
         .send_ws_message(

@@ -1,6 +1,6 @@
 use crate::api::signaling::SignalingRoomId;
-use crate::db::users::SerialUserId;
 use controller_shared::ParticipantId;
+use db_storage::users::UserId;
 use serde::{Deserialize, Serialize};
 
 /// Control messages sent between controller modules to communicate changes inside a room
@@ -24,7 +24,7 @@ pub fn current_room_exchange_name(room: SignalingRoomId) -> String {
 }
 
 /// Returns the routing-key/topic used to send a message to the given user
-pub fn room_user_routing_key(id: SerialUserId) -> String {
+pub fn room_user_routing_key(id: UserId) -> String {
     format!("user.{}", id)
 }
 

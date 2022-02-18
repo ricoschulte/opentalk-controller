@@ -1,7 +1,7 @@
 use crate::rabbitmq::{Canceled, StopKind};
-use controller::db::legal_votes::LegalVoteId;
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::{Invalid, Parameters, VoteOption, Votes};
+use db_storage::legal_votes::LegalVoteId;
 use serde::Serialize;
 use std::collections::HashMap;
 

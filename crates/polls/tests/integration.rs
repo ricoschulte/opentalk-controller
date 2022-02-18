@@ -70,7 +70,7 @@ async fn start_poll(module_tester: &mut ModuleTester<Polls>, live_poll: bool) ->
 async fn full_poll_with_2sec_duration() {
     let test_ctx = TestContext::new().await;
 
-    let mut module_tester = common::setup_users::<Polls>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<Polls>(&test_ctx, ()).await;
 
     let started = start_poll(&mut module_tester, true).await;
 

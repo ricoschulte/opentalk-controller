@@ -1,9 +1,9 @@
 use anyhow::{Context, Result};
-use controller::db::legal_votes::LegalVoteId;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, VoteEvent};
 use db_storage::legal_votes::types::VoteOption;
+use db_storage::legal_votes::LegalVoteId;
 use displaydoc::Display;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;

@@ -15,8 +15,6 @@ use crate::api::signaling::ws_modules::control::{
     incoming, outgoing, rabbitmq, storage, ControlData, ParticipationKind, NAMESPACE,
 };
 use crate::api::signaling::{Role, SignalingRoomId};
-use crate::db::rooms::Room;
-use crate::db::users::User;
 use crate::ha_sync::user_update;
 use anyhow::{bail, Context, Result};
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
@@ -25,6 +23,8 @@ use async_tungstenite::tungstenite::Message;
 use chrono::TimeZone;
 use controller_shared::ParticipantId;
 use database::Db;
+use db_storage::rooms::Room;
+use db_storage::users::User;
 use futures::stream::SelectAll;
 use futures::SinkExt;
 use kustos::Authz;
@@ -116,13 +116,13 @@ impl Builder {
         self.aquire_participant_id().await?;
         // ==== CONTROL MODULE DECLARATIONS ====
 
-        let room_id = SignalingRoomId(self.room.uuid, self.breakout_room);
+        let room_id = SignalingRoomId(self.room.id, self.breakout_room);
 
         // The name of the room exchange
         let room_exchange = rabbitmq::current_room_exchange_name(room_id);
 
         // The name of the room's global exchange
-        let global_room_exchange = breakout::rabbitmq::global_exchange_name(self.room.uuid);
+        let global_room_exchange = breakout::rabbitmq::global_exchange_name(self.room.id);
 
         // Routing key to receive messages directed to all participants
         let all_routing_key = rabbitmq::room_all_routing_key();
@@ -163,7 +163,7 @@ impl Builder {
         self.rabbitmq_exchanges.insert(
             1,
             RabbitMqExchange {
-                name: breakout::rabbitmq::global_exchange_name(self.room.uuid),
+                name: breakout::rabbitmq::global_exchange_name(self.room.id),
                 kind: ExchangeKind::Topic,
                 options: ExchangeDeclareOptions {
                     auto_delete: true,
@@ -407,7 +407,7 @@ impl Runner {
         // TODO(r.floren) Change this when the permissions system gets introduced
         let role = match &participant {
             api::Participant::User(user) => {
-                if user.id == room.owner {
+                if user.id == room.created_by {
                     Role::Moderator
                 } else {
                     Role::User

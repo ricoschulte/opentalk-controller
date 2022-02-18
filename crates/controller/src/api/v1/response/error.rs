@@ -8,10 +8,9 @@ use actix_web::{
 };
 use actix_web_httpauth::headers::www_authenticate::bearer::{Bearer, Error};
 use actix_web_httpauth::headers::www_authenticate::Challenge;
+use database::DatabaseError;
 use serde::Serialize;
 use std::fmt;
-
-use crate::db::DatabaseError;
 
 /// The default ApiError
 pub type DefaultApiError = ApiError<StandardErrorKind>;
@@ -216,7 +215,7 @@ where
     }
 }
 
-impl<E> From<crate::db::DatabaseError> for ApiError<E>
+impl<E> From<DatabaseError> for ApiError<E>
 where
     E: fmt::Debug + Serialize,
 {

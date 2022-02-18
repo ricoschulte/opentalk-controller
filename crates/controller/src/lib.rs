@@ -31,6 +31,7 @@ use anyhow::{anyhow, Context, Result};
 use arc_swap::ArcSwap;
 use breakout::BreakoutRooms;
 use database::Db;
+use db_storage::groups::{DbGroupsEx, NewGroup};
 use oidc::OidcContext;
 use prelude::*;
 use redis::aio::ConnectionManager;
@@ -58,7 +59,6 @@ mod ha_sync;
 mod oidc;
 mod trace;
 
-pub mod db;
 pub mod settings;
 
 pub mod prelude {
@@ -201,7 +201,7 @@ impl Controller {
         let settings = Arc::new(settings);
         let shared_settings: SharedSettings = Arc::new(ArcSwap::from(settings.clone()));
 
-        db::migrations::migrate_from_url(&settings.database.url)
+        db_storage::migrations::migrate_from_url(&settings.database.url)
             .await
             .context("Failed to migrate database")?;
 
@@ -310,7 +310,16 @@ impl Controller {
             .await?;
 
             log::info!("Making sure the default permissions are set");
-            check_or_create_kustos_default_permissions(&enforcer).await?;
+            // This gets the groupId (uuid) from the DB for the respective Group, and then uses
+            // kustos to assign this group to the administrator role.
+            // TODO(r.floren): When we support multiple issuers, this logic needs some rework,
+            // either by creating one admin Group per issuer or making the role assignment a manual task for more security.
+            let admin_group = self.db.get_or_create_group(NewGroup {
+                oidc_issuer: Some(shared_settings.load().oidc.provider.issuer.to_string()),
+                name: "/OpenTalk_Administrator".into(),
+            })?;
+
+            check_or_create_kustos_default_permissions(&enforcer, vec![admin_group]).await?;
 
             let authz_middleware = enforcer.actix_web_middleware(true).await?;
 

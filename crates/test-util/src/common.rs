@@ -1,25 +1,17 @@
 use super::*;
 use control::outgoing::{JoinSuccess, Message};
+use db_storage::users::User;
 use std::collections::HashMap;
 
 /// Creates a new [`ModuleTester`] with two users
 pub async fn setup_users<M: SignalingModule>(
     test_ctx: &TestContext,
     params: M::Params,
-) -> ModuleTester<M> {
-    let user1 = test_ctx
-        .db_ctx
-        .create_test_user(USER_1.user_id, vec![])
-        .unwrap();
-    let user2 = test_ctx
-        .db_ctx
-        .create_test_user(USER_2.user_id, vec![])
-        .unwrap();
+) -> (ModuleTester<M>, User, User) {
+    let user1 = test_ctx.db_ctx.create_test_user(USER_1.n, vec![]).unwrap();
+    let user2 = test_ctx.db_ctx.create_test_user(USER_2.n, vec![]).unwrap();
 
-    let room = test_ctx
-        .db_ctx
-        .create_test_room(ROOM_ID, USER_1.user_id)
-        .unwrap();
+    let room = test_ctx.db_ctx.create_test_room(ROOM_ID, user1.id).unwrap();
 
     let mut module_tester = ModuleTester::new(
         test_ctx.db_ctx.db_conn.clone(),
@@ -32,7 +24,7 @@ pub async fn setup_users<M: SignalingModule>(
     module_tester
         .join_user(
             USER_1.participant_id,
-            user1,
+            user1.clone(),
             Role::Moderator,
             USER_1.name,
             params.clone(),
@@ -60,7 +52,7 @@ pub async fn setup_users<M: SignalingModule>(
     module_tester
         .join_user(
             USER_2.participant_id,
-            user2,
+            user2.clone(),
             Role::User,
             USER_2.name,
             params.clone(),
@@ -92,5 +84,5 @@ pub async fn setup_users<M: SignalingModule>(
         panic!("Expected ParticipantJoined Event ")
     }
 
-    module_tester
+    (module_tester, user1, user2)
 }

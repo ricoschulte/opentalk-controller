@@ -2,12 +2,12 @@
 
 use self::storage::BreakoutConfig;
 use crate::api::signaling::SignalingRoomId;
-use crate::db::rooms::RoomId;
 use crate::prelude::*;
 use anyhow::{bail, Result};
 use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use chrono::{DateTime, Utc};
 use controller_shared::ParticipantId;
+use db_storage::rooms::RoomId;
 use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -98,7 +98,7 @@ impl SignalingModule for BreakoutRooms {
         Ok(Some(Self {
             id: ctx.participant_id(),
             role: ctx.role(),
-            parent: ctx.room().uuid,
+            parent: ctx.room().id,
             room: ctx.room_id(),
             breakout_room: ctx.breakout_room(),
         }))

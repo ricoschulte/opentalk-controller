@@ -9,7 +9,7 @@ async fn common_groups_on_join() {
     let user1 = test_ctx
         .db_ctx
         .create_test_user(
-            USER_1.user_id,
+            USER_1.n,
             vec![String::from("group1"), String::from("group2")],
         )
         .unwrap();
@@ -17,15 +17,12 @@ async fn common_groups_on_join() {
     let user2 = test_ctx
         .db_ctx
         .create_test_user(
-            USER_2.user_id,
+            USER_2.n,
             vec![String::from("group1"), String::from("group3")],
         )
         .unwrap();
 
-    let room = test_ctx
-        .db_ctx
-        .create_test_room(ROOM_ID, USER_1.user_id)
-        .unwrap();
+    let room = test_ctx.db_ctx.create_test_room(ROOM_ID, user1.id).unwrap();
 
     let mut module_tester = ModuleTester::<Chat>::new(
         test_ctx.db_ctx.db_conn.clone(),

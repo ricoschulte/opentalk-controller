@@ -1,5 +1,5 @@
 use super::super::{CancelReason, FinalResults, Parameters, VoteOption};
-use crate::users::SerialUserId;
+use crate::users::UserId;
 use chrono::{DateTime, Utc};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se, ParticipantId};
 use serde::{Deserialize, Serialize};
@@ -51,7 +51,7 @@ impl_to_redis_args_se!(VoteEvent);
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Start {
     /// User id of the initiator
-    pub issuer: SerialUserId,
+    pub issuer: UserId,
     /// Vote parameters
     pub parameters: Parameters,
 }
@@ -60,7 +60,7 @@ pub struct Start {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Vote {
     /// The user id of the voting user
-    pub issuer: SerialUserId,
+    pub issuer: UserId,
     /// The users participant id, used when reducing the protocol for the frontend
     pub participant_id: ParticipantId,
     /// The chosen vote option
@@ -70,8 +70,8 @@ pub struct Vote {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum StopKind {
-    /// A normal vote stop issued by a user. Contains the SerialUserId of the issuer
-    ByUser(SerialUserId),
+    /// A normal vote stop issued by a user. Contains the UserId of the issuer
+    ByUser(UserId),
     /// The vote has been stopped automatically because all allowed users have voted
     Auto,
     /// The vote expired due to a set duration
@@ -81,7 +81,7 @@ pub enum StopKind {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Cancel {
     /// The user id of the entry issuer
-    pub issuer: SerialUserId,
+    pub issuer: UserId,
     /// The reason for the cancel
     #[serde(flatten)]
     pub reason: CancelReason,
