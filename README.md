@@ -93,12 +93,6 @@ After the build, execute the following commands in the project dir.
 docker build -f ci/Dockerfile . --tag <your-image-name>:<your-image-tag>
 ```
 
-```bash
-# Build the room provisioner image
-docker build -f crates/room-provisioner/ci/Dockerfile . --tag <your-image-name>:<your-image-tag>
-```
-
-
 ## Upgrading
 
 After installing/deploying the new version you can run the `fix-acl` subcommand to update the authz rules/ACLs to match the newest version. This is most certainly needed when new endpoints are added for already present resources.
@@ -144,5 +138,4 @@ Inside the crates folder following crates can be found:
     - janus client library for interfacing with the [Janus WebRTC Server](https://janus.conf.meetecho.com/)
 * [kustos](crates/kustos)
     - authz abstraction based on casbin-rs
-* [room-provisioner](crates/room-provisioner)
 * [test-util](crates/test-util)

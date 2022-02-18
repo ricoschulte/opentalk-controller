@@ -101,7 +101,6 @@ build:
   artifacts:
     paths:
       - target/release/k3k-controller
-      - target/release/k3k-room-provisioner
     expire_in: 1 week
   before_script:
     - apt-get update && apt-get install -y libpq-dev musl-tools
@@ -128,26 +127,4 @@ package:controller-container:
       --dockerfile $CI_PROJECT_DIR/ci/Dockerfile
       --destination $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
       --destination $CI_REGISTRY_IMAGE:latest
-      --force
-
-package:room-provisioner-container:
-  rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-    - if: $CI_COMMIT_TAG != null
-  stage: package
-  image:
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: ['']
-  script:
-    - mkdir -p /kaniko/.docker
-    - >
-      echo
-      "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" >
-      /kaniko/.docker/config.json
-    - >
-      /kaniko/executor
-      --context $CI_PROJECT_DIR
-      --dockerfile $CI_PROJECT_DIR/crates/room-provisioner/ci/Dockerfile
-      --destination $CI_REGISTRY_IMAGE/room-provisioner:$CI_COMMIT_TAG
-      --destination $CI_REGISTRY_IMAGE/room-provisioner:latest
       --force
