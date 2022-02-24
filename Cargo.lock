@@ -1590,6 +1590,7 @@ dependencies = [
  "k3k-legal-vote",
  "k3k-polls",
  "kustos",
+ "protocol",
 ]
 
 [[package]]
@@ -2463,6 +2464,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7342d5883fbccae1cc37a2353b09c87c9b0f3afd73f5fb9bba687a1f733b029"
 dependencies = [
  "unicode-xid",
+]
+
+[[package]]
+name = "protocol"
+version = "0.1.0"
+dependencies = [
+ "etherpad-client",
+ "k3k-controller-core",
+ "k3k-controller-shared",
+ "k3k-db-storage",
+ "serde",
 ]
 
 [[package]]

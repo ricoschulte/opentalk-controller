@@ -111,3 +111,9 @@ from_routing_key = "from-janus-2"
 # The reload interval of the permissions in seconds.
 # Used to propagate updates from one controller to the other.
 # reload_interval = 10
+
+# The etherpad configuration for the protocol module
+#[etherpad]
+#url = "http://localhost:9001"
+# Etherpads api key
+#api_key = "secret"

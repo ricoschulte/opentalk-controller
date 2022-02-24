@@ -58,6 +58,8 @@ pub struct Settings {
     pub authz: Authz,
     #[serde(default)]
     pub avatar: Avatar,
+    #[serde(default)]
+    pub etherpad: Option<Etherpad>,
 
     #[serde(flatten)]
     pub extensions: HashMap<String, config::Value>,
@@ -281,6 +283,12 @@ impl Default for Authz {
 
 fn default_authz_reload_interval() -> Duration {
     Duration::from_secs(10)
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Etherpad {
+    pub url: url::Url,
+    pub api_key: String,
 }
 
 fn duration_from_secs<'de, D>(deserializer: D) -> Result<Duration, D::Error>
