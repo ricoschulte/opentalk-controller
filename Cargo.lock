@@ -1052,6 +1052,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "etherpad-client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "chrono",
+ "percent-encoding",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "event-listener"
 version = "2.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
