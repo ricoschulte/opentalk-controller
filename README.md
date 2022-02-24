@@ -32,12 +32,12 @@ SUBCOMMANDS:
 
 ## Build the container image
 
-The `Dockerfile` is located in `ci/Dockerfile`.
+The `Dockerfile` is located at `container/Dockerfile`.
 
 To build the image, execute in the root of the repository:
 
 ```bash
- docker build -f ci/Dockerfile . --tag <your tag>
+ docker build -f container/Dockerfile . --tag <your tag>
 ```
 
 
@@ -70,28 +70,6 @@ K3K_CTRL_DATABASE__MAX_CONNECTIONS=5
 ```
 ### Note
 Fields set via environment variables do not affect the underlying config file.
-
-## Building the container image(s)
-
-Building the container image(s) is split in two steps.
-
-### 1. Build the controller binaries itself
-
-Run the following command in the project dir.
-
-```bash
-cargo build --release --locked --workspace --target x86_64-unknown-linux-gnu
-```
-
-### 2. Build the container image
-
-The Dockerfiles expect the binaries in `./target/release`.
-After the build, execute the following commands in the project dir.
-
-```bash
-# Build the controller image
-docker build -f ci/Dockerfile . --tag <your-image-name>:<your-image-tag>
-```
 
 ## Upgrading
 

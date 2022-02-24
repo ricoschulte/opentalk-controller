@@ -93,6 +93,28 @@ test:cargo_test:
     # Verify that the HEAD schema.rs matches the actual HEAD migration database schema.
     - RUST_LOG=error cargo xtask verify-db-schema --postgres-url="${POSTGRES_BASE_URL}"
 
+test:container:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE == 'schedule'
+    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
+  stage: test
+  image:
+    name: gcr.io/kaniko-project/executor:debug
+    entrypoint: ['']
+  script:
+    - mkdir -p /kaniko/.docker
+    - >
+      echo
+      "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n ${CI_REGISTRY_USER}:${CI_REGISTRY_PASSWORD} | base64)\"}}}" >
+      /kaniko/.docker/config.json
+    - >
+      /kaniko/executor
+      --context $CI_PROJECT_DIR
+      --dockerfile $CI_PROJECT_DIR/container/Dockerfile
+      --no-push
+      --force
+
 build:
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
