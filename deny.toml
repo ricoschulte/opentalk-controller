@@ -194,7 +194,6 @@ skip = [
     { name = "parking_lot", version = "=0.11.2" },
     { name = "parking_lot_core", version = "=0.8.5" },
     { name = "rustc_version", version = "=0.2.3" },
-    { name = "rustls-pemfile", version = "=0.2.1" },
     { name = "semver", version = "=0.9.0" },
     { name = "sha2", version = "=0.9.9" },
     { name = "spin", version = "=0.5.2" },

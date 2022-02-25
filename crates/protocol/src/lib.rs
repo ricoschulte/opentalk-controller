@@ -143,6 +143,8 @@ impl Protocol {
                         if let Err(e) = self.init_etherpad(redis_conn).await {
                             log::error!("Failed to init etherpad for room {}, {}", self.room_id, e);
 
+                            storage::init::del(redis_conn, self.room_id).await?;
+
                             ctx.ws_send(outgoing::Message::Error(
                                 outgoing::Error::FailedInitialization,
                             ));
