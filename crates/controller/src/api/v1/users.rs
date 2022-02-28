@@ -10,7 +10,6 @@ use actix_web::{get, patch};
 use controller_shared::settings::Settings;
 use database::Db;
 use db_storage::users::{UpdateUser, User, UserId};
-use db_storage::DbUsersEx;
 use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
 use validator::{Validate, ValidationError};
@@ -111,16 +110,17 @@ pub async fn all(
         .await
         .map_err(|_| DefaultApiError::Internal)?;
 
-    let (users, total_users) =
-        crate::block(move || -> Result<(Vec<User>, i64), DefaultApiError> {
-            match accessible_users {
-                kustos::AccessibleResources::All => Ok(db.get_users_paginated(per_page, page)?),
-                kustos::AccessibleResources::List(list) => {
-                    Ok(db.get_users_by_ids_paginated(&list, per_page as i64, page as i64)?)
-                }
+    let (users, total_users) = crate::block(move || {
+        let conn = db.get_conn()?;
+
+        match accessible_users {
+            kustos::AccessibleResources::All => User::get_all_paginated(&conn, per_page, page),
+            kustos::AccessibleResources::List(list) => {
+                User::get_by_ids_paginated(&conn, &list, per_page, page)
             }
-        })
-        .await??;
+        }
+    })
+    .await??;
 
     let users = users
         .into_iter()
@@ -186,7 +186,9 @@ pub async fn patch_me(
     }
 
     let db_user = crate::block(move || -> Result<User, DefaultApiError> {
-        let modify_user = UpdateUser {
+        let conn = db.get_conn()?;
+
+        let changeset = UpdateUser {
             title: patch.title,
             display_name: patch.display_name,
             language: patch.language,
@@ -195,9 +197,9 @@ pub async fn patch_me(
             id_token_exp: None,
         };
 
-        let modified_user = db.update_user(current_user.id, modify_user, None)?;
+        let updated_info = changeset.apply(&conn, current_user.id, None)?;
 
-        Ok(modified_user.user)
+        Ok(updated_info.user)
     })
     .await??;
 
@@ -233,7 +235,12 @@ pub async fn get_user(
 ) -> Result<Json<PublicUserProfile>, DefaultApiError> {
     let settings = settings.load_full();
 
-    let user = crate::block(move || db.get_user_by_id(user_id.into_inner())).await??;
+    let user = crate::block(move || {
+        let conn = db.get_conn()?;
+
+        User::get(&conn, user_id.into_inner())
+    })
+    .await??;
 
     let user_profile = PublicUserProfile::from_db(&settings, user);
 
@@ -256,8 +263,10 @@ pub async fn find(
 ) -> Result<Json<Vec<PublicUserProfile>>, DefaultApiError> {
     let settings = settings.load_full();
 
-    let found_users = crate::block(move || -> Result<Vec<User>, DefaultApiError> {
-        Ok(db.find_users_by_name(&query.q)?)
+    let found_users = crate::block(move || {
+        let conn = db.get_conn()?;
+
+        User::find(&conn, &query.q)
     })
     .await??;
 

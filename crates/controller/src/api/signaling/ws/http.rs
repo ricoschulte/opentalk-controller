@@ -12,10 +12,8 @@ use actix_web::{get, HttpMessage};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use database::Db;
-use db_storage::rooms::DbRoomsEx;
 use db_storage::rooms::Room;
 use db_storage::users::User;
-use db_storage::DbUsersEx;
 use kustos::Authz;
 use redis::aio::ConnectionManager;
 use std::marker::PhantomData;
@@ -232,30 +230,22 @@ async fn get_user_and_room_from_ticket_data(
     let participant = ticket_data.participant;
     let room_id = ticket_data.room;
 
-    crate::block(
-        move || -> Result<(Participant<User>, Room), DefaultApiError> {
-            let participant = match participant {
-                Participant::User(user_id) => {
-                    let user = db
-                        .get_opt_user_by_id(user_id)?
-                        .ok_or(DefaultApiError::Internal)?;
+    crate::block(move || {
+        let conn = db.get_conn()?;
 
-                    Participant::User(user)
-                }
-                Participant::Guest => Participant::Guest,
-                Participant::Sip => Participant::Sip,
-            };
+        let participant = match participant {
+            Participant::User(user_id) => {
+                let user = User::get(&conn, user_id)?;
 
-            let room = db.get_room(room_id).map_err(DefaultApiError::from)?;
+                Participant::User(user)
+            }
+            Participant::Guest => Participant::Guest,
+            Participant::Sip => Participant::Sip,
+        };
 
-            let room = room.ok_or(DefaultApiError::NotFound)?;
+        let room = Room::get(&conn, room_id)?;
 
-            Ok((participant, room))
-        },
-    )
-    .await
-    .map_err(|e| {
-        log::error!("BlockingError on ws_service - {}", e);
-        DefaultApiError::Internal
-    })?
+        Ok((participant, room))
+    })
+    .await?
 }

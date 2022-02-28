@@ -13,13 +13,10 @@ use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, post, put};
 use anyhow::Context;
 use controller_shared::ParticipantId;
-use database::Db;
-use db_storage::invites::DbInvitesEx;
-use db_storage::invites::InviteCodeId;
-use db_storage::rooms::DbRoomsEx;
-use db_storage::rooms::{self as db_rooms, RoomId};
-use db_storage::sip_configs::DbSipConfigsEx;
-use db_storage::sip_configs::{SipConfigParams, SipId, SipPassword};
+use database::{Db, OptionalExt};
+use db_storage::invites::{Invite, InviteCodeId};
+use db_storage::rooms::{self as db_rooms, Room, RoomId};
+use db_storage::sip_configs::{NewSipConfig, SipConfig, SipId, SipPassword};
 use db_storage::users::{User, UserId};
 use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
 use kustos::prelude::*;
@@ -34,7 +31,7 @@ use validator::{Validate, ValidationError};
 /// Contains all room information. Is only be accessible to the owner and users with
 /// appropriate permissions.
 #[derive(Debug, Serialize)]
-pub struct Room {
+pub struct RoomResource {
     pub uuid: RoomId,
     pub owner: UserId,
     pub password: String,
@@ -98,7 +95,7 @@ pub async fn owned(
     current_user: ReqData<User>,
     pagination: web::Query<PagePaginationQuery>,
     authz: Data<Authz>,
-) -> Result<ApiResponse<Vec<Room>>, DefaultApiError> {
+) -> Result<ApiResponse<Vec<RoomResource>>, DefaultApiError> {
     let current_user = current_user.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
@@ -107,28 +104,28 @@ pub async fn owned(
         .await
         .map_err(|_| DefaultApiError::Internal)?;
 
-    let (rooms, room_count) = crate::block(
-        move || -> Result<(Vec<db_rooms::Room>, i64), DefaultApiError> {
-            match accessible_rooms {
-                kustos::AccessibleResources::All => Ok(db.get_rooms_paginated(per_page, page)?),
-                kustos::AccessibleResources::List(list) => {
-                    Ok(db.get_rooms_by_ids_paginated(&list, per_page as i64, page as i64)?)
-                }
+    let (rooms, room_count) = crate::block(move || {
+        let conn = db.get_conn()?;
+
+        match accessible_rooms {
+            kustos::AccessibleResources::All => Room::get_all_paginated(&conn, per_page, page),
+            kustos::AccessibleResources::List(list) => {
+                Room::get_by_ids_paginated(&conn, &list, per_page, page)
             }
-        },
-    )
+        }
+    })
     .await??;
 
     let rooms = rooms
         .into_iter()
-        .map(|db_room| Room {
+        .map(|db_room| RoomResource {
             uuid: db_room.id,
             owner: db_room.created_by,
             password: db_room.password,
             wait_for_moderator: db_room.wait_for_moderator,
             listen_only: db_room.listen_only,
         })
-        .collect::<Vec<Room>>();
+        .collect::<Vec<RoomResource>>();
 
     Ok(ApiResponse::new(rooms).with_page_pagination(per_page, page, room_count))
 }
@@ -143,7 +140,7 @@ pub async fn new(
     current_user: ReqData<User>,
     room_parameters: Json<NewRoom>,
     authz: Data<Authz>,
-) -> Result<Json<Room>, DefaultApiError> {
+) -> Result<Json<RoomResource>, DefaultApiError> {
     let room_parameters = room_parameters.into_inner();
 
     if let Err(e) = room_parameters.validate() {
@@ -152,7 +149,10 @@ pub async fn new(
     }
 
     let current_user_id = current_user.id;
-    let db_room = crate::block(move || -> Result<db_rooms::Room, DefaultApiError> {
+
+    let db_room = crate::block(move || -> database::Result<_> {
+        let conn = db.get_conn()?;
+
         let new_room = db_rooms::NewRoom {
             created_by: current_user_id,
             password: room_parameters.password,
@@ -160,19 +160,17 @@ pub async fn new(
             listen_only: room_parameters.listen_only,
         };
 
-        let room = db.new_room(new_room)?;
+        let room = new_room.insert(&conn)?;
 
         if room_parameters.enable_sip {
-            let sip_params = SipConfigParams::generate_new(room.id);
-
-            db.new_sip_config(sip_params)?;
+            NewSipConfig::new(room.id, false).insert(&conn)?;
         }
 
         Ok(room)
     })
     .await??;
 
-    let room = Room {
+    let room = RoomResource {
         uuid: db_room.id,
         owner: db_room.created_by,
         password: db_room.password,
@@ -194,17 +192,16 @@ pub async fn new(
     Ok(Json(room))
 }
 
-/// API Endpoint *PUT /rooms/{room_uuid}*
+/// API Endpoint *PUT /rooms/{room_id}*
 ///
 /// Uses the provided [`ModifyRoom`] to modify a specified room.
 /// Returns the modified [`Room`]
-#[put("/rooms/{room_uuid}")]
+#[put("/rooms/{room_id}")]
 pub async fn modify(
     db: Data<Db>,
-    current_user: ReqData<User>,
     room_id: Path<RoomId>,
     modify_room: Json<ModifyRoom>,
-) -> Result<Json<Room>, DefaultApiError> {
+) -> Result<Json<RoomResource>, DefaultApiError> {
     let room_id = room_id.into_inner();
     let modify_room = modify_room.into_inner();
 
@@ -214,29 +211,19 @@ pub async fn modify(
     }
 
     let db_room = crate::block(move || {
-        let room = db.get_room(room_id)?;
+        let conn = db.get_conn()?;
 
-        match room {
-            None => Err(DefaultApiError::NotFound),
-            Some(room) => {
-                // TODO: check user permissions when implemented
-                if room.created_by != current_user.id {
-                    return Err(DefaultApiError::InsufficientPermission);
-                }
+        let changeset = db_rooms::UpdateRoom {
+            password: modify_room.password,
+            wait_for_moderator: modify_room.wait_for_moderator,
+            listen_only: modify_room.listen_only,
+        };
 
-                let change_room = db_rooms::UpdateRoom {
-                    password: modify_room.password,
-                    wait_for_moderator: modify_room.wait_for_moderator,
-                    listen_only: modify_room.listen_only,
-                };
-
-                Ok(db.modify_room(room_id, change_room)?)
-            }
-        }
+        changeset.apply(&conn, room_id)
     })
     .await??;
 
-    let room = Room {
+    let room = RoomResource {
         uuid: db_room.id,
         owner: db_room.created_by,
         password: db_room.password,
@@ -247,10 +234,10 @@ pub async fn modify(
     Ok(Json(room))
 }
 
-/// API Endpoint *DELETE /rooms/{room_uuid}*
+/// API Endpoint *DELETE /rooms/{room_id}*
 ///
 /// Deletes the room and owned resources.
-#[delete("/rooms/{room_uuid}")]
+#[delete("/rooms/{room_id}")]
 pub async fn delete(
     db: Data<Db>,
     room_id: Path<RoomId>,
@@ -259,7 +246,12 @@ pub async fn delete(
     let room_id = room_id.into_inner();
     let room_path = format!("/rooms/{}", room_id);
 
-    crate::block(move || db.delete_room(room_id)).await??;
+    crate::block(move || {
+        let conn = db.get_conn()?;
+
+        Room::delete_by_id(&conn, room_id)
+    })
+    .await??;
 
     if !authz
         .remove_explicit_resource_permissions(room_path.clone())
@@ -272,10 +264,10 @@ pub async fn delete(
     Ok(NoContent {})
 }
 
-/// API Endpoint *GET /rooms/{room_uuid}*
+/// API Endpoint *GET /rooms/{room_id}*
 ///
 /// Returns the specified Room as [`RoomDetails`].
-#[get("/rooms/{room_uuid}")]
+#[get("/rooms/{room_id}")]
 pub async fn get(
     db: Data<Db>,
     room_id: Path<RoomId>,
@@ -283,12 +275,9 @@ pub async fn get(
     let room_id = room_id.into_inner();
 
     let db_room = crate::block(move || {
-        let room = db.get_room(room_id)?;
+        let conn = db.get_conn()?;
 
-        match room {
-            None => Err(DefaultApiError::NotFound),
-            Some(room) => Ok(room),
-        }
+        Room::get(&conn, room_id)
     })
     .await??;
 
@@ -302,7 +291,7 @@ pub async fn get(
     Ok(Json(room_details))
 }
 
-/// The JSON body expected when making a *POST /rooms/{room_uuid}/start*
+/// The JSON body expected when making a *POST /rooms/{room_id}/start*
 #[derive(Debug, Deserialize)]
 pub struct StartRequest {
     password: Option<String>,
@@ -356,10 +345,10 @@ pub async fn start(
     let request = request.into_inner();
     let room_id = room_id.into_inner();
 
-    let room = crate::block(move || -> Result<db_rooms::Room, StartError> {
-        let room = db.get_room(room_id)?.ok_or(StartError::NotFound)?;
+    let room = crate::block(move || {
+        let conn = db.get_conn()?;
 
-        Ok(room)
+        Room::get(&conn, room_id)
     })
     .await??;
 
@@ -405,7 +394,7 @@ pub async fn start(
     Ok(Json(response))
 }
 
-/// The JSON body expected when making a *POST /rooms/{room_uuid}/start_invited*
+/// The JSON body expected when making a *POST /rooms/{room_id}/start_invited*
 #[derive(Debug, Deserialize)]
 pub struct InvitedStartRequest {
     password: Option<String>,
@@ -431,7 +420,9 @@ pub async fn start_invited(
         .map_err(|_| StartError::BadRequest("bad invite_code format".to_string()))?;
 
     let room = crate::block(move || -> Result<db_rooms::Room, StartError> {
-        let invite = db.get_invite(InviteCodeId::from(invite_code_as_uuid))?;
+        let conn = db.get_conn()?;
+
+        let invite = Invite::get(&conn, InviteCodeId::from(invite_code_as_uuid))?;
 
         if !invite.active {
             return Err(StartError::AuthJson(StartRoomError::InvalidInvite.into()));
@@ -439,7 +430,8 @@ pub async fn start_invited(
         if invite.room != room_id {
             return Err(StartError::BadRequest("RoomId mismatch".to_string()));
         }
-        let room = db.get_room(invite.room)?.ok_or(StartError::NotFound)?;
+
+        let room = Room::get(&conn, invite.room)?;
 
         Ok(room)
     })
@@ -519,11 +511,11 @@ pub async fn sip_start(
         .map_err(|_| StartError::BadRequest("bad sip_password format".to_string()))?;
 
     let room_id = crate::block(move || -> Result<RoomId, StartError> {
-        if let Some(sip_config) = db.get_sip_config_by_sip_id(request.sip_id)? {
-            if sip_config.password == request.password {
-                let room = db.get_room(sip_config.room)?.ok_or(StartError::Internal)?;
+        let conn = db.get_conn()?;
 
-                Ok(room.id)
+        if let Some(sip_config) = SipConfig::get(&conn, request.sip_id).optional()? {
+            if sip_config.password == request.password {
+                Ok(sip_config.room)
             } else {
                 Err(StartError::AuthJson(
                     StartRoomError::InvalidCredentials.into(),

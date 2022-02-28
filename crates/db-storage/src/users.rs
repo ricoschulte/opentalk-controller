@@ -1,15 +1,13 @@
 //! Contains the user specific database structs amd queries
-use super::groups::{DbGroupsEx, Group, UserGroup};
+use super::groups::{Group, UserGroupRelation};
 use super::schema::{groups, user_groups, users};
-use crate::groups::{GroupId, NewGroup, NewUserGroup};
+use crate::groups::{GroupId, NewGroup, NewUserGroupRelation};
 use crate::{levenshtein, lower, soundex};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
-use database::{DatabaseError, DbInterface, Paginate, Result};
-use diesel::r2d2::{ConnectionManager, PooledConnection};
-use diesel::result::Error;
+use database::{DatabaseError, DbConnection, Paginate, Result};
 use diesel::{
     BelongingToDsl, BoolExpressionMethods, Connection, ExpressionMethods, GroupedBy, Identifiable,
-    Insertable, PgConnection, QueryDsl, QueryResult, Queryable, RunQueryDsl, TextExpressionMethods,
+    Insertable, PgConnection, QueryDsl, Queryable, RunQueryDsl, TextExpressionMethods,
 };
 use kustos::subject::PolicyUser;
 
@@ -48,6 +46,141 @@ pub struct User {
     pub conference_theme: String,
 }
 
+impl User {
+    /// Get a user with the given id
+    #[tracing::instrument(err, skip_all)]
+    pub fn get(conn: &DbConnection, user_id: UserId) -> Result<User> {
+        let user = users::table
+            .filter(users::id.eq(user_id))
+            .get_result(conn)?;
+
+        Ok(user)
+    }
+
+    /// Get all users alongside their current groups
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_all_with_groups(conn: &DbConnection) -> Result<Vec<(User, Vec<Group>)>> {
+        let users_query = users::table.order_by(users::id.desc());
+        let users = users_query.load(conn)?;
+
+        let groups_query = UserGroupRelation::belonging_to(&users).inner_join(groups::table);
+        let groups: Vec<Vec<(UserGroupRelation, Group)>> = groups_query
+            .load::<(UserGroupRelation, Group)>(conn)?
+            .grouped_by(&users);
+
+        let users_with_groups = users
+            .into_iter()
+            .zip(groups)
+            .map(|(user, groups)| (user, groups.into_iter().map(|(_, group)| group).collect()))
+            .collect();
+
+        Ok(users_with_groups)
+    }
+
+    /// Get all users paginated
+    #[tracing::instrument(err, skip_all, fields(%limit, %page))]
+    pub fn get_all_paginated(
+        conn: &DbConnection,
+        limit: i64,
+        page: i64,
+    ) -> Result<(Vec<User>, i64)> {
+        let query = users::table
+            .order_by(users::id.desc())
+            .paginate_by(limit, page);
+
+        let users_with_total = query.load_and_count(conn)?;
+
+        Ok(users_with_total)
+    }
+
+    /// Get Users paginated and filtered by ids
+    #[tracing::instrument(err, skip_all, fields(%limit, %page))]
+    pub fn get_by_ids_paginated(
+        conn: &DbConnection,
+        ids: &[UserId],
+        limit: i64,
+        page: i64,
+    ) -> Result<(Vec<User>, i64)> {
+        let query = users::table
+            .filter(users::id.eq_any(ids))
+            .order_by(users::id.desc())
+            .paginate_by(limit, page);
+
+        let users_with_total = query.load_and_count::<User, _>(conn)?;
+
+        Ok(users_with_total)
+    }
+
+    /// Returns all `User`s filtered by id
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_all_by_ids(conn: &DbConnection, ids: &[UserId]) -> Result<Vec<User>> {
+        let query = users::table.filter(users::id.eq_any(ids));
+        let users = query.load(conn)?;
+
+        Ok(users)
+    }
+
+    /// Get user with the given issuer and sub
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_by_oidc_sub(conn: &DbConnection, issuer: &str, sub: &str) -> Result<User> {
+        let user = users::table
+            .filter(users::oidc_issuer.eq(issuer).and(users::oidc_sub.eq(sub)))
+            .get_result(conn)?;
+
+        Ok(user)
+    }
+
+    /// Find users by search string
+    ///
+    /// This looks for similarities of the search_str in the display_name, first+lastname and email
+    #[tracing::instrument(err, skip_all)]
+    pub fn find(conn: &DbConnection, search_str: &str) -> Result<Vec<User>> {
+        // IMPORTANT: lowercase it to match the index of the db and
+        // remove all existing % in name and to avoid manipulation of the LIKE query.
+        let search_str = search_str.replace('%', "").trim().to_lowercase();
+
+        if search_str.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let like_query = format!("%{}%", search_str);
+
+        let lower_display_name = lower(users::display_name);
+
+        let lower_first_lastname = lower(users::firstname.concat(" ").concat(users::lastname));
+
+        let matches = users::table
+            .filter(
+                // First try LIKE query on display_name
+                lower_display_name.like(&like_query).or(
+                    // Then try LIKE query with first+last name
+                    lower_first_lastname
+                        .like(&like_query)
+                        // Then try LIKE query on email
+                        .or(lower(users::email).like(&like_query))
+                        //
+                        // Then SOUNDEX on display_name
+                        .or(soundex(lower_display_name)
+                            .eq(soundex(&search_str))
+                            // only take SOUNDEX results with a levenshtein score of lower than 5
+                            .and(levenshtein(lower_display_name, &search_str).lt(5)))
+                        //
+                        // Then SOUNDEX on first+last name
+                        .or(soundex(lower_first_lastname)
+                            .eq(soundex(&search_str))
+                            // only take SOUNDEX results with a levenshtein score of lower than 5
+                            .and(levenshtein(lower_first_lastname, &search_str).lt(5))),
+                ),
+            )
+            .order_by(levenshtein(lower_display_name, &search_str))
+            .then_order_by(levenshtein(lower_first_lastname, &search_str))
+            .then_order_by(users::id)
+            .limit(5)
+            .load(conn)?;
+
+        Ok(matches)
+    }
+}
 /// Diesel insertable user struct
 ///
 /// Represents fields that have to be provided on user insertion.
@@ -70,10 +203,30 @@ pub struct NewUserWithGroups {
     pub groups: Vec<String>,
 }
 
+impl NewUserWithGroups {
+    /// Inserts a new user
+    ///
+    /// Returns the inserted users with the respective GroupIds
+    #[tracing::instrument(err, skip_all)]
+    pub fn insert(self, conn: &DbConnection) -> Result<(User, Vec<GroupId>)> {
+        conn.transaction::<_, DatabaseError, _>(|| {
+            let user: User = diesel::insert_into(users::table)
+                .values(self.new_user)
+                .get_result(conn)?;
+
+            let groups = get_ids_for_group_names(conn, &user, self.groups)?;
+            let group_ids = groups.iter().map(|(id, _)| *id).collect();
+            insert_user_into_user_groups(conn, &user, groups)?;
+
+            Ok((user, group_ids))
+        })
+    }
+}
+
 /// Diesel user struct for updates
 ///
 /// Is used in update queries. None fields will be ignored on update queries
-#[derive(AsChangeset)]
+#[derive(Default, AsChangeset)]
 #[table_name = "users"]
 pub struct UpdateUser {
     pub title: Option<String>,
@@ -84,8 +237,8 @@ pub struct UpdateUser {
     pub conference_theme: Option<String>,
 }
 
-/// Ok type of [`DbUsersEx::modify_user`]
-pub struct ModifiedUser {
+/// Ok type of [`UpdateUser::apply`]
+pub struct UserUpdatedInfo {
     /// The user after the modification
     pub user: User,
 
@@ -97,150 +250,23 @@ pub struct ModifiedUser {
     pub groups_removed: Vec<GroupId>,
 }
 
-pub trait DbUsersEx: DbInterface + DbGroupsEx {
+impl UpdateUser {
     #[tracing::instrument(err, skip_all)]
-    fn create_user(&self, new_user: NewUserWithGroups) -> Result<(User, Vec<GroupId>)> {
-        let conn = self.get_conn()?;
-
-        conn.transaction::<_, DatabaseError, _>(|| {
-            let user: User = diesel::insert_into(users::table)
-                .values(new_user.new_user)
-                .get_result(&conn)?;
-
-            let groups = get_ids_for_group_names(&conn, &user, new_user.groups)?;
-            let group_ids = groups.iter().map(|(id, _)| *id).collect();
-            insert_user_into_user_groups(&conn, &user, groups)?;
-
-            Ok((user, group_ids))
-        })
-    }
-
-    #[tracing::instrument(err, skip_all)]
-    fn get_users_with_groups(&self) -> Result<Vec<(User, Vec<Group>)>> {
-        let conn = self.get_conn()?;
-
-        let users_with_groups = || -> Result<_> {
-            let user_query = users::table.order_by(users::columns::id.desc());
-            let users = user_query.load::<User>(&conn)?;
-
-            let groups: Vec<Vec<(UserGroup, Group)>> = UserGroup::belonging_to(&users)
-                .inner_join(groups::table)
-                .load::<(UserGroup, Group)>(&conn)?
-                .grouped_by(&users);
-
-            Ok(users
-                .into_iter()
-                .zip(groups)
-                .map(|(user, groups)| (user, groups.into_iter().map(|(_, group)| group).collect()))
-                .collect::<Vec<_>>())
-        }()?;
-
-        Ok(users_with_groups)
-    }
-
-    #[tracing::instrument(err, skip_all, fields(%limit, %page))]
-    fn get_users_paginated(&self, limit: i64, page: i64) -> Result<(Vec<User>, i64)> {
-        let conn = self.get_conn()?;
-
-        let query = users::table
-            .order_by(users::columns::id.desc())
-            .paginate_by(limit, page);
-
-        let users_with_total = query.load_and_count::<User, _>(&conn)?;
-
-        Ok(users_with_total)
-    }
-
-    #[tracing::instrument(err, skip_all, fields(%limit, %page))]
-    fn get_users_by_ids_paginated(
-        &self,
-        ids: &[UserId],
-        limit: i64,
-        page: i64,
-    ) -> Result<(Vec<User>, i64)> {
-        let conn = self.get_conn()?;
-
-        let query = users::table
-            .filter(users::columns::id.eq_any(ids))
-            .order_by(users::columns::id.desc())
-            .paginate_by(limit, page);
-
-        let users_with_total = query.load_and_count::<User, _>(&conn)?;
-
-        Ok(users_with_total)
-    }
-
-    #[tracing::instrument(err, skip_all)]
-    fn get_users_by_ids(&self, ids: &[UserId]) -> Result<Vec<User>> {
-        let conn = self.get_conn()?;
-
-        let result: QueryResult<Vec<User>> = users::table
-            .filter(users::columns::id.eq_any(ids))
-            .get_results(&conn);
-
-        match result {
-            Ok(users) => Ok(users),
-            Err(Error::NotFound) => Ok(vec![]),
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    #[tracing::instrument(err, skip_all)]
-    fn get_user_by_oidc_sub(&self, issuer: &str, sub: &str) -> Result<Option<User>> {
-        let conn = self.get_conn()?;
-
-        let result: QueryResult<User> = users::table
-            .filter(
-                users::columns::oidc_issuer
-                    .eq(issuer)
-                    .and(users::columns::oidc_sub.eq(sub)),
-            )
-            .get_result(&conn);
-
-        match result {
-            Ok(user) => Ok(Some(user)),
-            Err(Error::NotFound) => Ok(None),
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    #[tracing::instrument(err, skip_all)]
-    fn get_user_by_id(&self, user_id: UserId) -> Result<User> {
-        let conn = self.get_conn()?;
-
-        let user = users::table
-            .filter(users::columns::id.eq(user_id))
-            .get_result(&conn)?;
-
-        Ok(user)
-    }
-
-    fn get_opt_user_by_id(&self, user_id: UserId) -> Result<Option<User>> {
-        match self.get_user_by_id(user_id) {
-            Ok(user) => Ok(Some(user)),
-            Err(DatabaseError::NotFound) => Ok(None),
-            Err(e) => Err(e),
-        }
-    }
-
-    #[tracing::instrument(err, skip_all)]
-    fn update_user(
-        &self,
+    pub fn apply(
+        self,
+        conn: &DbConnection,
         user_id: UserId,
-        modify: UpdateUser,
         groups: Option<Vec<String>>,
-    ) -> Result<ModifiedUser> {
-        let conn = self.get_conn()?;
-
-        conn.transaction::<ModifiedUser, DatabaseError, _>(|| {
-            let target = users::table.filter(users::columns::id.eq(user_id));
-            let user: User = diesel::update(target).set(modify).get_result(&conn)?;
+    ) -> Result<UserUpdatedInfo> {
+        conn.transaction::<UserUpdatedInfo, DatabaseError, _>(move || {
+            let query = diesel::update(users::table.filter(users::id.eq(user_id))).set(self);
+            let user: User = query.get_result(conn)?;
 
             // modify groups if parameter exists
             if let Some(groups) = groups {
-                let groups = get_ids_for_group_names(&conn, &user, groups)?;
+                let groups = get_ids_for_group_names(conn, &user, groups)?;
 
-                let curr_groups = self.get_groups_for_user(user.id)?;
+                let curr_groups = Group::get_all_for_user(conn, user.id)?;
 
                 let added = groups
                     .iter()
@@ -258,24 +284,23 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
 
                 if groups_changed {
                     // Remove user from user_groups table
-                    let target =
-                        user_groups::table.filter(user_groups::columns::user_id.eq(user.id));
-                    diesel::delete(target).execute(&conn).map_err(|e| {
+                    let target = user_groups::table.filter(user_groups::user_id.eq(user.id));
+                    diesel::delete(target).execute(conn).map_err(|e| {
                         log::error!("Failed to remove user's groups from user_groups, {}", e);
                         DatabaseError::from(e)
                     })?;
 
-                    insert_user_into_user_groups(&conn, &user, groups)?
+                    insert_user_into_user_groups(conn, &user, groups)?
                 }
 
-                Ok(ModifiedUser {
+                Ok(UserUpdatedInfo {
                     user,
                     groups_changed,
                     groups_added: added,
                     groups_removed: removed,
                 })
             } else {
-                Ok(ModifiedUser {
+                Ok(UserUpdatedInfo {
                     user,
                     groups_changed: false,
                     groups_added: vec![],
@@ -284,68 +309,13 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
             }
         })
     }
-
-    #[tracing::instrument(err, skip_all)]
-    fn find_users_by_name(&self, search_str: &str) -> Result<Vec<User>> {
-        // IMPORTANT: lowercase it to match the index of the db and
-        // remove all existing % in name and to avoid manipulation of the LIKE query.
-        let search_str = search_str.replace('%', "").trim().to_lowercase();
-
-        if search_str.is_empty() {
-            return Ok(vec![]);
-        }
-
-        let like_query = format!("%{}%", search_str);
-
-        let conn = self.get_conn()?;
-
-        let lower_display_name = lower(users::display_name);
-
-        let lower_first_lastname = lower(
-            users::columns::firstname
-                .concat(" ")
-                .concat(users::columns::lastname),
-        );
-
-        let matches = users::table
-            .filter(
-                // First try LIKE query on display_name
-                lower_display_name.like(&like_query).or(
-                    // Then try LIKE query with first+last name
-                    lower_first_lastname
-                        .like(&like_query)
-                        // Then try LIKE query on email
-                        .or(lower(users::columns::email).like(&like_query))
-                        //
-                        // Then SOUNDEX on display_name
-                        .or(soundex(lower_display_name)
-                            .eq(soundex(&search_str))
-                            // only take SOUNDEX results with a levenshtein score of lower than 5
-                            .and(levenshtein(lower_display_name, &search_str).lt(5)))
-                        //
-                        // Then SOUNDEX on first+last name
-                        .or(soundex(lower_first_lastname)
-                            .eq(soundex(&search_str))
-                            // only take SOUNDEX results with a levenshtein score of lower than 5
-                            .and(levenshtein(lower_first_lastname, &search_str).lt(5))),
-                ),
-            )
-            .order_by(levenshtein(lower_display_name, &search_str))
-            .then_order_by(levenshtein(lower_first_lastname, &search_str))
-            .then_order_by(users::columns::id)
-            .limit(5)
-            .get_results(&conn)?;
-
-        Ok(matches)
-    }
 }
-impl<T: DbInterface> DbUsersEx for T {}
 
 // Returns ids of groups
 // If the group is currently not stored, create a new group and returns the ID along the already present ones.
 // Does not preserve the order of groups passed to the function
 fn get_ids_for_group_names(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &PgConnection,
     user: &User,
     groups: Vec<String>,
 ) -> Result<Vec<(GroupId, String)>> {
@@ -356,7 +326,7 @@ fn get_ids_for_group_names(
                 .eq(user.oidc_issuer.as_ref())
                 .and(groups::name.eq_any(&groups)),
         )
-        .get_results(conn)?;
+        .load(conn)?;
 
     let new_groups: Vec<NewGroup> = groups
         .into_iter()
@@ -380,13 +350,13 @@ fn get_ids_for_group_names(
 
 #[tracing::instrument(err, skip_all)]
 fn insert_user_into_user_groups(
-    conn: &PooledConnection<ConnectionManager<PgConnection>>,
+    conn: &PgConnection,
     user: &User,
     groups: Vec<(GroupId, String)>,
 ) -> Result<()> {
     let new_user_groups = groups
         .into_iter()
-        .map(|(id, _)| NewUserGroup {
+        .map(|(id, _)| NewUserGroupRelation {
             user_id: user.id,
             group_id: id,
         })

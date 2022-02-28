@@ -7,6 +7,7 @@ edition = "2018"
 controller = { path = "../controller", package = "k3k-controller-core" }
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
+database = { path = "../database", package = "k3k-database" }
 chat = { path = "../chat", package = "k3k-chat" }
 serde = { version = "1", features = ["derive"] }
 

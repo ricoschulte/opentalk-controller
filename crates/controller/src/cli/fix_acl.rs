@@ -5,12 +5,12 @@
 // depending on the memory footprint
 use anyhow::{Context, Error, Result};
 use controller_shared::settings::Settings;
-use database::Db;
-use db_storage::{users::UserId, DbRoomsEx, DbUsersEx};
-use kustos::{
-    prelude::{AccessMethod, PolicyUser},
-    Resource,
+use database::{Db, DbConnection};
+use db_storage::{
+    rooms::Room,
+    users::{User, UserId},
 };
+use kustos::prelude::*;
 use std::sync::Arc;
 
 pub(crate) struct FixAclConfig {
@@ -21,15 +21,19 @@ pub(crate) struct FixAclConfig {
 
 pub(crate) async fn fix_acl(settings: Settings, config: FixAclConfig) -> Result<()> {
     let db = Arc::new(Db::connect(&settings.database).context("Failed to connect to database")?);
+    let conn = db
+        .get_conn()
+        .context("Failed to get connection from connection pool")?;
+
     let authz = kustos::Authz::new(db.clone()).await?;
 
     // Used to collect errors during looped operations
     let mut errors: Vec<Error> = Vec::new();
     if config.user_groups || config.user_roles {
-        fix_user(&config, db.clone(), &authz, &mut errors).await?;
+        fix_user(&config, &conn, &authz, &mut errors).await?;
     }
     if config.room_creators {
-        fix_rooms(&config, db, &authz, &mut errors).await?;
+        fix_rooms(&config, &conn, &authz, &mut errors).await?;
     }
 
     if errors.is_empty() {
@@ -48,11 +52,11 @@ pub(crate) async fn fix_acl(settings: Settings, config: FixAclConfig) -> Result<
 
 async fn fix_user(
     config: &FixAclConfig,
-    db: Arc<Db>,
+    conn: &DbConnection,
     authz: &kustos::Authz,
     errors: &mut Vec<Error>,
 ) -> Result<()> {
-    let users = db.get_users_with_groups().context("Failed to load users")?;
+    let users = User::get_all_with_groups(conn).context("Failed to load users")?;
     for (user, groups) in users {
         if config.user_roles {
             let needs_addition = !match authz.is_user_in_role(user.id, "user").await {
@@ -102,13 +106,12 @@ async fn fix_user(
 
 async fn fix_rooms(
     _config: &FixAclConfig,
-    db: Arc<Db>,
+    conn: &DbConnection,
     authz: &kustos::Authz,
     errors: &mut Vec<Error>,
 ) -> Result<()> {
-    let rooms = db
-        .get_rooms_with_creator()
-        .context("failed to load rooms")?;
+    let rooms = Room::get_all_with_creator(conn).context("failed to load rooms")?;
+
     for (room, user) in rooms {
         match maybe_grant_access_to_user(
             authz,

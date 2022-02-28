@@ -11,14 +11,16 @@ use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use db_storage::database::Db;
+use database::Db;
+use db_storage::legal_votes::set_protocol;
 use db_storage::legal_votes::types::protocol as db_protocol;
 use db_storage::legal_votes::types::protocol::v1::{Cancel, ProtocolEntry, Start, Vote, VoteEvent};
 use db_storage::legal_votes::types::protocol::NewProtocol;
 use db_storage::legal_votes::types::{
     CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
 };
-use db_storage::legal_votes::DbLegalVoteEx;
+use db_storage::legal_votes::NewLegalVote;
+
 use db_storage::legal_votes::LegalVoteId;
 use db_storage::users::UserId;
 use error::{Error, ErrorKind};
@@ -43,8 +45,6 @@ pub mod incoming;
 pub mod outgoing;
 pub mod rabbitmq;
 mod storage;
-
-const PROTOCOL_VERSION: u8 = 1;
 
 /// A TimerEvent used for the vote expiration feature
 pub struct TimerEvent {
@@ -952,9 +952,12 @@ impl LegalVote {
         let user_id = self.user_id;
         let room_id = self.room_id.room_id();
 
-        let legal_vote =
-            controller::block(move || db.new_legal_vote(room_id, user_id, PROTOCOL_VERSION))
-                .await??;
+        let legal_vote = controller::block(move || {
+            let conn = db.get_conn()?;
+
+            NewLegalVote::new(user_id, room_id).insert(&conn)
+        })
+        .await??;
 
         Ok(legal_vote.id)
     }
@@ -971,7 +974,12 @@ impl LegalVote {
 
         let db = self.db.clone();
 
-        controller::block(move || db.set_protocol(legal_vote_id, protocol)).await??;
+        controller::block(move || {
+            let conn = db.get_conn()?;
+
+            set_protocol(&conn, legal_vote_id, protocol)
+        })
+        .await??;
 
         Ok(())
     }

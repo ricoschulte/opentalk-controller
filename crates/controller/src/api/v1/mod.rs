@@ -2,11 +2,11 @@
 //!
 //! Current Endpoints. See their respective function:
 //! - `/rooms` ([GET](rooms::owned), [POST](rooms::new))
-//! - `/rooms/{room_uuid}` ([GET](rooms::get), [PUT](rooms::modify))
-//! - `/rooms/{room_uuid}/start` ([POST](rooms::start))
-//! - `/rooms/{room_uuid}/start_invited` ([POST](rooms::start_invited))
-//! - `/rooms/{room_uuid}/invites ([GET](invites::get_invites), [POST](invites::add_invite))
-//! - `/rooms/{room_uuid}/invites/{invite_code} ([GET](invites::get_invite), [PUT](invites::update_invite), [DELETE](invites::delete_invite)])
+//! - `/rooms/{room_id}` ([GET](rooms::get), [PUT](rooms::modify))
+//! - `/rooms/{room_id}/start` ([POST](rooms::start))
+//! - `/rooms/{room_id}/start_invited` ([POST](rooms::start_invited))
+//! - `/rooms/{room_id}/invites ([GET](invites::get_invites), [POST](invites::add_invite))
+//! - `/rooms/{room_id}/invites/{invite_code} ([GET](invites::get_invite), [PUT](invites::update_invite), [DELETE](invites::delete_invite)])
 //! - `/turn` ([GET](turn::get))
 //! - `/users` ([GET](users::all))
 //! - `/users/me`([GET](users::current_user_profile), [PUT](users::set_current_user_profile))

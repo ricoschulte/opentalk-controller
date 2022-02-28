@@ -15,7 +15,7 @@ use actix_web::HttpRequest;
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use arc_swap::ArcSwap;
 use database::{DatabaseError, Db};
-use db_storage::invites::{DbInvitesEx, Invite, InviteCodeId};
+use db_storage::invites::{Invite, InviteCodeId};
 use db_storage::users::User;
 use either::Either;
 use openidconnect::AccessToken;
@@ -185,6 +185,7 @@ fn rr_servers<T: Rng + CryptoRng>(
             .collect::<Result<Vec<_>, DefaultApiError>>(),
     }
 }
+
 /// Checks for a valid access_token similar to the OIDC Middleware, but also allows invite_tokens as a valid bearer token.
 pub async fn check_access_token_or_invite(
     req: &HttpRequest,
@@ -214,8 +215,10 @@ pub async fn check_access_token_or_invite(
                 )
             })?;
 
-            crate::block(
-                move || match db.get_invite(InviteCodeId::from(invite_uuid)) {
+            crate::block(move || {
+                let conn = db.get_conn()?;
+
+                match Invite::get(&conn, InviteCodeId::from(invite_uuid)) {
                     Ok(invite) => Ok(invite),
                     Err(DatabaseError::NotFound) => {
                         log::warn!("The requesting user could not be found in the database");
@@ -228,8 +231,8 @@ pub async fn check_access_token_or_invite(
                         log::warn!("The requesting user could not be found in the database");
                         Err(DefaultApiError::Internal)
                     }
-                },
-            )
+                }
+            })
             .await?
             .map(Either::Right)
         }

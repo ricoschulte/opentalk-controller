@@ -59,7 +59,7 @@ impl TestContext {
         let (shutdown, _) = tokio::sync::broadcast::channel(10);
 
         let (enforcer, _) = kustos::Authz::new_with_autoload(
-            db_ctx.db_conn.clone(),
+            db_ctx.db.clone(),
             shutdown.subscribe(),
             Duration::from_secs(5),
         )

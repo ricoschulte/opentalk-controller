@@ -1,9 +1,9 @@
-use database::Db;
-use k3k_db_storage::users::{DbUsersEx, NewUser, NewUserWithGroups};
+use database::DbConnection;
+use k3k_db_storage::users::{NewUser, NewUserWithGroups, User};
 use serial_test::serial;
 
-fn make_user(db: &Db, firstname: &str, lastname: &str, display_name: &str) {
-    db.create_user(NewUserWithGroups {
+fn make_user(conn: &DbConnection, firstname: &str, lastname: &str, display_name: &str) {
+    NewUserWithGroups {
         new_user: NewUser {
             email: format!(
                 "{}.{}@example.org",
@@ -20,7 +20,8 @@ fn make_user(db: &Db, firstname: &str, lastname: &str, display_name: &str) {
             oidc_issuer: "".into(),
         },
         groups: vec![],
-    })
+    }
+    .insert(conn)
     .unwrap();
 }
 
@@ -28,49 +29,49 @@ fn make_user(db: &Db, firstname: &str, lastname: &str, display_name: &str) {
 #[serial]
 async fn test() {
     let db_ctx = test_util::database::DatabaseContext::new(true).await;
-    let db = &db_ctx.db_conn;
+    let conn = db_ctx.db.get_conn().unwrap();
 
     // generate some random users with some made up names
-    make_user(db, "Aileen", "Strange", "Spectre");
-    make_user(db, "Laura", "Rutherford", "Jakiro");
-    make_user(db, "Cheryl", "Lazarus", "Kaolin");
+    make_user(&conn, "Aileen", "Strange", "Spectre");
+    make_user(&conn, "Laura", "Rutherford", "Jakiro");
+    make_user(&conn, "Cheryl", "Lazarus", "Kaolin");
 
-    let users = db.find_users_by_name("La").unwrap();
+    let users = User::find(&conn, "La").unwrap();
     assert_eq!(users.len(), 2);
     assert_eq!(users[0].firstname, "Cheryl");
     assert_eq!(users[1].firstname, "Laura");
 
-    let users = db.find_users_by_name("Ru").unwrap();
+    let users = User::find(&conn, "Ru").unwrap();
     assert_eq!(users.len(), 2);
     assert_eq!(users[0].firstname, "Laura");
     assert_eq!(users[1].firstname, "Cheryl");
 
     // Try the levenshtein/soundex matching with worse input each time
-    let users = db.find_users_by_name("Cheril Lazarus").unwrap();
+    let users = User::find(&conn, "Cheril Lazarus").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Cheryl");
 
-    let users = db.find_users_by_name("Cheril Lasarus").unwrap();
+    let users = User::find(&conn, "Cheril Lasarus").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Cheryl");
 
-    let users = db.find_users_by_name("Cherill Lasarus").unwrap();
+    let users = User::find(&conn, "Cherill Lasarus").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Cheryl");
 
-    let users = db.find_users_by_name("Cherill Lasaruz").unwrap();
+    let users = User::find(&conn, "Cherill Lasaruz").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Cheryl");
 
-    let users = db.find_users_by_name("Spectre").unwrap();
+    let users = User::find(&conn, "Spectre").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Aileen");
 
-    let users = db.find_users_by_name("Spektre").unwrap();
+    let users = User::find(&conn, "Spektre").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Aileen");
 
-    let users = db.find_users_by_name("Schpecktre").unwrap();
+    let users = User::find(&conn, "Schpecktre").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Aileen");
 }

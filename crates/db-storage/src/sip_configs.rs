@@ -1,8 +1,9 @@
 use super::rooms::RoomId;
 use super::schema::sip_configs;
 use crate::diesel::RunQueryDsl;
-use database::{DatabaseError, DbInterface, Result};
-use diesel::{ExpressionMethods, QueryDsl, QueryResult};
+use database::{DatabaseError, DbConnection, Result};
+use diesel::prelude::*;
+use diesel::{ExpressionMethods, QueryDsl};
 use diesel::{Identifiable, Queryable};
 use rand::{distributions::Slice, thread_rng, Rng};
 use validator::{Validate, ValidationError, ValidationErrors};
@@ -78,6 +79,40 @@ pub struct SipConfig {
     pub lobby: bool,
 }
 
+impl SipConfig {
+    /// Get the sip config for the specified sip_id
+    #[tracing::instrument(err, skip_all)]
+    pub fn get(conn: &DbConnection, sip_id: SipId) -> Result<SipConfig> {
+        let query = sip_configs::table.filter(sip_configs::sip_id.eq(&sip_id));
+        let sip_config = query.get_result(conn)?;
+
+        Ok(sip_config)
+    }
+
+    /// Get the sip config for the specified room
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_by_room(conn: &DbConnection, room_id: RoomId) -> Result<SipConfig> {
+        let query = sip_configs::table.filter(sip_configs::room.eq(&room_id));
+        let sip_config = query.get_result(conn)?;
+
+        Ok(sip_config)
+    }
+
+    /// Delete the sip config for the specified room
+    #[tracing::instrument(err, skip_all)]
+    pub fn delete_by_room(conn: &DbConnection, room_id: RoomId) -> Result<()> {
+        let query = diesel::delete(sip_configs::table.filter(sip_configs::room.eq(&room_id)));
+
+        query.execute(conn)?;
+
+        Ok(())
+    }
+
+    pub fn delete(&self, conn: &DbConnection) -> Result<()> {
+        Self::delete_by_room(conn, self.room)
+    }
+}
+
 /// Diesel insertable SipConfig struct
 ///
 /// Represents fields that have to be provided on insertion.
@@ -90,35 +125,44 @@ pub struct NewSipConfig {
     pub enable_lobby: bool,
 }
 
-impl From<SipConfigParams> for NewSipConfig {
-    fn from(params: SipConfigParams) -> Self {
-        Self {
-            room: params.room,
-            sip_id: SipId::generate(),
-            password: params.password,
-            enable_lobby: params.enable_lobby,
-        }
-    }
-}
-
-/// Parameters for creating a new sip config
-#[derive(Debug, Clone)]
-pub struct SipConfigParams {
-    pub room: RoomId,
-    pub password: SipPassword,
-    pub enable_lobby: bool,
-}
-
-impl SipConfigParams {
-    /// Create new SipConfigParams
-    ///
-    /// Generates a random password and disables the SIP lobby
-    pub fn generate_new(room_id: RoomId) -> Self {
+impl NewSipConfig {
+    pub fn new(room_id: RoomId, enable_lobby: bool) -> Self {
         Self {
             room: room_id,
+            sip_id: SipId::generate(),
             password: SipPassword::generate(),
-            enable_lobby: false,
+            enable_lobby,
         }
+    }
+
+    fn re_generate_id(&mut self) {
+        self.sip_id = SipId::generate();
+    }
+
+    #[tracing::instrument(err, skip_all)]
+    pub fn insert(mut self, conn: &DbConnection) -> Result<SipConfig> {
+        for _ in 0..3 {
+            let query = self.clone().insert_into(sip_configs::table);
+
+            let config = match query.get_result(conn) {
+                Ok(config) => config,
+                Err(diesel::result::Error::DatabaseError(
+                    diesel::result::DatabaseErrorKind::UniqueViolation,
+                    _,
+                )) => {
+                    self.re_generate_id();
+                    continue;
+                }
+                Err(e) => return Err(e.into()),
+            };
+
+            return Ok(config);
+        }
+
+        Err(DatabaseError::Custom(format!(
+            "Failed to insert new sip config for room {room} 3 times (collision)",
+            room = self.room
+        )))
     }
 }
 
@@ -130,143 +174,13 @@ pub struct UpdateSipConfig {
     pub enable_lobby: Option<bool>,
 }
 
-pub trait DbSipConfigsEx: DbInterface {
-    /// Create a new sip config from the provided [`SipConfigParams`]
-    #[tracing::instrument(err, skip_all)]
-    fn new_sip_config(&self, params: SipConfigParams) -> Result<SipConfig> {
-        let con = self.get_conn()?;
+impl UpdateSipConfig {
+    pub fn apply(self, conn: &DbConnection, room_id: RoomId) -> Result<SipConfig> {
+        let query =
+            diesel::update(sip_configs::table.filter(sip_configs::room.eq(&room_id))).set(self);
 
-        // Attempt a maximum of 3 times to insert a new sip config when a sip_id collision occurs
-        for _ in 0..3 {
-            let sip_config_result: QueryResult<SipConfig> = diesel::insert_into(sip_configs::table)
-                .values(NewSipConfig::from(params.clone()))
-                .get_result(&con);
+        let config = query.get_result(conn)?;
 
-            match sip_config_result {
-                Ok(sip_config) => return Ok(sip_config),
-                Err(error) => {
-                    let mut retry = false;
-
-                    // Check if the error comes from a sip_id collision
-                    if let diesel::result::Error::DatabaseError(
-                        diesel::result::DatabaseErrorKind::UniqueViolation,
-                        info,
-                    ) = &error
-                    {
-                        if let Some(constraint) = info.constraint_name() {
-                            if constraint == "sip_configs_sip_id_key" {
-                                retry = true
-                            }
-                        }
-                    }
-
-                    if !retry {
-                        return Err(error.into());
-                    }
-                }
-            }
-        }
-
-        Err(DatabaseError::Custom(
-            "Unable to insert sip config after 3 attempts with sip_id collision".into(),
-        ))
-    }
-
-    /// Get the sip config for the specified room
-    ///
-    /// Returns Ok(None) when the room has no sip config set.
-    #[tracing::instrument(err, skip_all)]
-    fn get_sip_config(&self, room_id: RoomId) -> Result<Option<SipConfig>> {
-        let con = self.get_conn()?;
-
-        let config_result = sip_configs::table
-            .filter(sip_configs::columns::room.eq(&room_id))
-            .get_result(&con);
-
-        match config_result {
-            Ok(sip_config) => Ok(Some(sip_config)),
-            Err(e) => {
-                if let diesel::result::Error::NotFound = e {
-                    return Ok(None);
-                }
-
-                Err(e.into())
-            }
-        }
-    }
-
-    /// Get the sip config for the specified sip_id
-    ///
-    /// Returns Ok(None) when the no sip config was found.
-    #[tracing::instrument(err, skip_all)]
-    fn get_sip_config_by_sip_id(&self, sip_id: SipId) -> Result<Option<SipConfig>> {
-        let con = self.get_conn()?;
-
-        let config_result = sip_configs::table
-            .filter(sip_configs::columns::sip_id.eq(&sip_id))
-            .get_result(&con);
-
-        match config_result {
-            Ok(sip_config) => Ok(Some(sip_config)),
-            Err(e) => {
-                if let diesel::result::Error::NotFound = e {
-                    return Ok(None);
-                }
-
-                log::error!("Query error selecting sip config by sip_id, {}", e);
-                Err(e.into())
-            }
-        }
-    }
-
-    /// Update the sip config for the specified room
-    ///
-    /// Returns Ok(None) when the room has no sip config set.
-    #[tracing::instrument(err, skip_all)]
-    fn update_sip_config(
-        &self,
-        room_id: RoomId,
-        config: &UpdateSipConfig,
-    ) -> Result<Option<SipConfig>> {
-        let con = self.get_conn()?;
-
-        let target = sip_configs::table.filter(sip_configs::columns::room.eq(&room_id));
-        let config_result = diesel::update(target).set(config).get_result(&con);
-
-        match config_result {
-            Ok(sip_config) => Ok(Some(sip_config)),
-            Err(e) => {
-                if let diesel::result::Error::NotFound = e {
-                    return Ok(None);
-                }
-
-                log::error!("Query error modifying sip config by room_id, {}", e);
-                Err(e.into())
-            }
-        }
-    }
-
-    /// Delete the sip config for the specified room
-    ///
-    /// Returns Ok(None) when the room had no sip config set.
-    #[tracing::instrument(err, skip_all)]
-    fn delete_sip_config(&self, room_id: RoomId) -> Result<Option<SipConfig>> {
-        let con = self.get_conn()?;
-
-        let target = sip_configs::table.filter(sip_configs::columns::room.eq(&room_id));
-        let config_result = diesel::delete(target).get_result(&con);
-
-        match config_result {
-            Ok(sip_config) => Ok(Some(sip_config)),
-            Err(e) => {
-                if let diesel::result::Error::NotFound = e {
-                    return Ok(None);
-                }
-
-                Err(e.into())
-            }
-        }
+        Ok(config)
     }
 }
-
-impl<T: DbInterface> DbSipConfigsEx for T {}

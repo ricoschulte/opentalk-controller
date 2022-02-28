@@ -5,15 +5,16 @@
 //! Example:
 //! ```rust
 //! # use anyhow::Result;
-//! # use database::DbInterface;
-//! pub trait DbExampleEx: DbInterface {
-//!     fn create_user(&self, new_user: ()) -> Result<()> {
-//!         let con = self.get_conn()?;
-//!         // Do query and Return result
-//!         Ok(())
+//! # use diesel::PgConnection;
+//! trait DbFeatureExt {
+//!     fn feature_a(&self, x: bool) -> Result<bool>;
+//! }
+//! impl DbFeatureExt for PgConnection {
+//!     fn feature_a(&self, x: bool) -> Result<bool> {
+//!         // Do stuff with self and x
+//!         Ok(true)
 //!     }
 //! }
-//! impl<T: DbInterface> DbExampleEx for T {}
 //! ```
 
 #[macro_use]
@@ -33,10 +34,6 @@ pub mod migrations;
 pub mod rooms;
 pub mod sip_configs;
 pub mod users;
-
-pub use database;
-pub use rooms::DbRoomsEx;
-pub use users::DbUsersEx;
 
 sql_function!(fn lower(x: Text) -> Text);
 sql_function!(fn levenshtein(x: Text, y: Text) -> Integer);
