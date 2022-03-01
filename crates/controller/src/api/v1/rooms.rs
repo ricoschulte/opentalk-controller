@@ -21,6 +21,7 @@ use db_storage::rooms::{self as db_rooms, RoomId};
 use db_storage::sip_configs::DbSipConfigsEx;
 use db_storage::sip_configs::{SipConfigParams, SipId, SipPassword};
 use db_storage::users::{User, UserId};
+use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
 use kustos::prelude::*;
 use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
@@ -179,27 +180,14 @@ pub async fn new(
         listen_only: db_room.listen_only,
     };
 
-    if let Err(e) = authz
-        .grant_user_access(
-            current_user.id,
-            &[
-                (
-                    &db_room.id.resource_id(),
-                    &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
-                ),
-                (
-                    &db_room.id.resource_id().with_suffix("/invites"),
-                    &[AccessMethod::Post, AccessMethod::Get],
-                ),
-                (
-                    &db_room.id.resource_id().with_suffix("/start"),
-                    &[AccessMethod::Post],
-                ),
-            ],
-        )
-        .await
-    {
-        log::error!("Failed to add RBAC policy: {}", e);
+    let policies = PoliciesBuilder::new()
+        .grant_user_access(current_user.id)
+        .room_read_access(room.uuid)
+        .room_write_access(room.uuid)
+        .finish();
+
+    if let Err(e) = authz.add_policies(policies).await {
+        log::error!("Failed to add RBAC policies: {}", e);
         return Err(DefaultApiError::Internal);
     }
 
@@ -637,4 +625,37 @@ async fn generate_response(
         })?;
 
     Ok(StartResponse { ticket, resumption })
+}
+
+pub trait RoomsPoliciesBuilderExt {
+    fn room_read_access(self, room_id: RoomId) -> Self;
+    fn room_write_access(self, room_id: RoomId) -> Self;
+}
+
+impl<T> RoomsPoliciesBuilderExt for PoliciesBuilder<GrantingAccess<T>>
+where
+    T: IsSubject + Clone,
+{
+    fn room_read_access(self, room_id: RoomId) -> Self {
+        self.add_resource(room_id.resource_id(), [AccessMethod::Get])
+            .add_resource(
+                room_id.resource_id().with_suffix("/invites"),
+                [AccessMethod::Get],
+            )
+            .add_resource(
+                room_id.resource_id().with_suffix("/start"),
+                [AccessMethod::Post],
+            )
+    }
+
+    fn room_write_access(self, room_id: RoomId) -> Self {
+        self.add_resource(
+            room_id.resource_id(),
+            [AccessMethod::Put, AccessMethod::Delete],
+        )
+        .add_resource(
+            room_id.resource_id().with_suffix("/invites"),
+            [AccessMethod::Post],
+        )
+    }
 }

@@ -88,6 +88,7 @@ pub mod actix_web;
 pub mod db;
 mod error;
 mod internal;
+pub mod policies_builder;
 pub mod policy;
 pub mod prelude;
 pub mod resource;
@@ -167,6 +168,28 @@ impl Authz {
             .await
             .add_policies(policies.to_casbin_policies())
             .await?;
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn add_policies(&self, policies: impl ToCasbinMultiple) -> Result<()> {
+        self.inner
+            .write()
+            .await
+            .add_policies(policies.to_casbin_policies())
+            .await?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn remove_policies(&self, policies: impl ToCasbinMultiple) -> Result<()> {
+        self.inner
+            .write()
+            .await
+            .remove_policies(policies.to_casbin_policies())
+            .await?;
+
         Ok(())
     }
 
@@ -454,11 +477,14 @@ impl Authz {
 
     /// Removes all rules that explicitly name the given resource
     #[tracing::instrument(level = "debug", skip(self, resource))]
-    pub async fn remove_explicit_resource_permissions(&self, resource: String) -> Result<bool> {
+    pub async fn remove_explicit_resource_permissions<R>(&self, resource: R) -> Result<bool>
+    where
+        R: Into<ResourceId>,
+    {
         self.inner
             .write()
             .await
-            .remove_filtered_policy(1, vec![resource])
+            .remove_filtered_policy(1, vec![resource.into().0])
             .await
             .map_err(Into::into)
     }
