@@ -1782,6 +1782,8 @@ dependencies = [
  "k3k-database",
  "k3k-db-storage",
  "kustos",
+ "serde",
+ "serde_json",
  "tokio",
 ]
 

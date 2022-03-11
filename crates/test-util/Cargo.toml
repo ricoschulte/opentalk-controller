@@ -7,6 +7,9 @@ edition = "2018"
 controller = { path = "../controller", package = "k3k-controller-core" }
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
 
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+
 kustos = { path = "../kustos", package = "kustos" }
 database = { path = "../database", package = "k3k-database" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }

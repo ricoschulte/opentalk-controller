@@ -4,10 +4,10 @@ use actix_web::web::{Data, Json, Path, Query, ReqData};
 use anyhow::Result;
 use chrono::{DateTime, Utc};
 use database::Db;
-use db_storage::legal_votes::types::protocol::v1::{self, Cancel, VoteEvent};
+use db_storage::legal_votes::types::protocol::v1::{self, VoteEvent};
 use db_storage::legal_votes::types::protocol::{self, Protocol};
 use db_storage::legal_votes::types::{
-    FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
+    CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
 };
 use db_storage::legal_votes::DbLegalVoteEx;
 use db_storage::legal_votes::LegalVoteId;
@@ -63,8 +63,8 @@ pub struct LegalVoteDetails {
 /// Settings of a legal vote
 #[derive(Debug, Serialize)]
 pub struct Settings {
-    /// The participant id of the vote initiator
-    pub initiator: ParticipantInfo,
+    /// The participant info of the legal vote creator
+    pub created_by: ParticipantInfo,
     /// The time the vote got started
     pub start_time: DateTime<Utc>,
     /// The maximum amount of votes possible
@@ -80,11 +80,12 @@ pub struct Settings {
     /// The vote will automatically stop when every participant voted
     pub auto_stop: bool,
     /// The vote will stop when the duration (in seconds) has passed
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<u64>,
 }
 
 /// Represents a participant in a legal vote
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ParticipantInfo {
     firstname: String,
     lastname: String,
@@ -104,6 +105,7 @@ impl From<User> for ParticipantInfo {
 /// A participant that voted in a legal vote
 #[derive(Debug, Serialize)]
 pub struct Voter {
+    #[serde(flatten)]
     participant: ParticipantInfo,
     /// The chosen vote option
     vote_option: VoteOption,
@@ -111,7 +113,7 @@ pub struct Voter {
 
 /// The results of a legal vote
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "status")]
 pub enum VoteResult {
     Success(Success),
     Failed(FailReason),
@@ -120,12 +122,14 @@ pub enum VoteResult {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Success {
+    #[serde(flatten)]
     stop_kind: StopKind,
+    #[serde(flatten)]
     votes: Votes,
 }
 
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", tag = "stop_kind", content = "stopped_by")]
 pub enum StopKind {
     /// A normal vote stop issued by a user. Contains the UserId of the issuer
     ByParticipant(ParticipantInfo),
@@ -136,9 +140,20 @@ pub enum StopKind {
 }
 
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case", tag = "cause")]
 pub enum FailReason {
-    Canceled(Cancel),
+    Canceled(CancelInfo),
     InvalidResults(Invalid),
+}
+
+/// Cancel struct that contains the `[ParticipantInfo]` instead of a `[UserId]` of the cancel issuer
+#[derive(Debug, Clone, Serialize)]
+pub struct CancelInfo {
+    /// The participant info of the cancel issuer
+    pub canceled_by: ParticipantInfo,
+    /// The reason for the cancel
+    #[serde(flatten)]
+    pub reason: CancelReason,
 }
 
 /// API Endpoint *GET /rooms/{room_id}/legal_votes*
@@ -367,7 +382,7 @@ fn parse_v1_entries(
                     .into();
 
                 settings = Some(Settings {
-                    initiator,
+                    created_by: initiator,
                     start_time,
                     max_votes,
                     name,
@@ -410,7 +425,21 @@ fn parse_v1_entries(
     }
 
     let vote_result = if let Some(cancel) = cancel {
-        VoteResult::Failed(FailReason::Canceled(cancel))
+        let participant_info = db
+            .get_user_by_id(cancel.issuer)
+            .map_err(|e| {
+                log::error!(
+                    "Failed to resolve stop issuer in legal vote protocol, {}",
+                    e
+                );
+                ProtocolError::InternalError
+            })?
+            .into();
+
+        VoteResult::Failed(FailReason::Canceled(CancelInfo {
+            canceled_by: participant_info,
+            reason: cancel.reason,
+        }))
     } else if let Some(stop_kind) = stop_kind {
         if let Some(final_results) = final_results {
             match final_results {
@@ -471,4 +500,227 @@ fn parse_v1_entries(
         voters,
         vote_result,
     })
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use chrono::TimeZone;
+    use test_util::assert_eq_json;
+    use uuid::Uuid;
+
+    #[test]
+    fn successful_legal_vote_entry() {
+        let test_participant = ParticipantInfo {
+            firstname: "test".into(),
+            lastname: "tester".into(),
+            email: "test.tester@heinlein-video.de".into(),
+        };
+
+        let legal_vote_entry = LegalVoteEntry {
+            legal_vote_id: LegalVoteId::from(Uuid::from_u128(1)),
+            protocol_result: ProtocolResult::Ok(LegalVoteDetails {
+                settings: Settings {
+                    created_by: test_participant.clone(),
+                    start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+                    max_votes: 1,
+                    name: "Test Vote".into(),
+                    subtitle: "A subtitle".into(),
+                    topic: "Does the test work".into(),
+                    enable_abstain: false,
+                    auto_stop: false,
+                    duration: Some(60),
+                },
+                voters: vec![Voter {
+                    participant: test_participant.clone(),
+                    vote_option: VoteOption::Yes,
+                }],
+                vote_result: VoteResult::Success(Success {
+                    stop_kind: StopKind::ByParticipant(test_participant),
+                    votes: Votes {
+                        yes: 1,
+                        no: 0,
+                        abstain: None,
+                    },
+                }),
+            }),
+        };
+
+        assert_eq_json!(
+            legal_vote_entry,
+            {
+                "legal_vote_id": "00000000-0000-0000-0000-000000000001",
+                "created_by": {
+                  "firstname": "test",
+                  "lastname": "tester",
+                  "email": "test.tester@heinlein-video.de"
+                },
+                "start_time": "1970-01-01T00:00:00Z",
+                "max_votes": 1,
+                "name": "Test Vote",
+                "subtitle": "A subtitle",
+                "topic": "Does the test work",
+                "enable_abstain": false,
+                "auto_stop": false,
+                "duration": 60,
+                "voters": [
+                  {
+                    "firstname": "test",
+                    "lastname": "tester",
+                    "email": "test.tester@heinlein-video.de",
+                    "vote_option": "yes"
+                  }
+                ],
+                "vote_result": {
+                  "status": "success",
+                  "stop_kind": "by_participant",
+                  "stopped_by": {
+                    "firstname": "test",
+                    "lastname": "tester",
+                    "email": "test.tester@heinlein-video.de"
+                  },
+                  "yes": 1,
+                  "no": 0
+                }
+              }
+        );
+    }
+
+    #[test]
+    fn canceled_legal_vote_entry() {
+        let test_participant = ParticipantInfo {
+            firstname: "test".into(),
+            lastname: "tester".into(),
+            email: "test.tester@heinlein-video.de".into(),
+        };
+
+        let legal_vote_entry = LegalVoteEntry {
+            legal_vote_id: LegalVoteId::from(Uuid::from_u128(1)),
+            protocol_result: ProtocolResult::Ok(LegalVoteDetails {
+                settings: Settings {
+                    created_by: test_participant.clone(),
+                    start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+                    max_votes: 1,
+                    name: "Test Vote".into(),
+                    subtitle: "A subtitle".into(),
+                    topic: "Does the test work".into(),
+                    enable_abstain: false,
+                    auto_stop: false,
+                    duration: None,
+                },
+                voters: vec![Voter {
+                    participant: test_participant.clone(),
+                    vote_option: VoteOption::Yes,
+                }],
+                vote_result: VoteResult::Failed(FailReason::Canceled(CancelInfo {
+                    canceled_by: test_participant,
+                    reason: CancelReason::Custom("Some custom reason".into()),
+                })),
+            }),
+        };
+
+        assert_eq_json!(
+            legal_vote_entry,
+            {
+                "legal_vote_id": "00000000-0000-0000-0000-000000000001",
+                "created_by": {
+                  "firstname": "test",
+                  "lastname": "tester",
+                  "email": "test.tester@heinlein-video.de"
+                },
+                "start_time": "1970-01-01T00:00:00Z",
+                "max_votes": 1,
+                "name": "Test Vote",
+                "subtitle": "A subtitle",
+                "topic": "Does the test work",
+                "enable_abstain": false,
+                "auto_stop": false,
+                "voters": [
+                  {
+                    "firstname": "test",
+                    "lastname": "tester",
+                    "email": "test.tester@heinlein-video.de",
+                    "vote_option": "yes"
+                  }
+                ],
+                "vote_result": {
+                  "status": "failed",
+                  "cause": "canceled",
+                  "canceled_by": {
+                    "firstname": "test",
+                    "lastname": "tester",
+                    "email": "test.tester@heinlein-video.de"
+                  },
+                  "reason": "custom",
+                  "custom": "Some custom reason"
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn invalid_legal_vote_entry() {
+        let test_participant = ParticipantInfo {
+            firstname: "test".into(),
+            lastname: "tester".into(),
+            email: "test.tester@heinlein-video.de".into(),
+        };
+
+        let legal_vote_entry = LegalVoteEntry {
+            legal_vote_id: LegalVoteId::from(Uuid::from_u128(1)),
+            protocol_result: ProtocolResult::Ok(LegalVoteDetails {
+                settings: Settings {
+                    created_by: test_participant.clone(),
+                    start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+                    max_votes: 1,
+                    name: "Test Vote".into(),
+                    subtitle: "A subtitle".into(),
+                    topic: "Does the test work".into(),
+                    enable_abstain: false,
+                    auto_stop: false,
+                    duration: Some(60),
+                },
+                voters: vec![Voter {
+                    participant: test_participant,
+                    vote_option: VoteOption::Yes,
+                }],
+                vote_result: VoteResult::Failed(FailReason::InvalidResults(
+                    Invalid::VoteCountInconsistent,
+                )),
+            }),
+        };
+
+        assert_eq_json!(
+            legal_vote_entry,
+            {
+                "legal_vote_id": "00000000-0000-0000-0000-000000000001",
+                "created_by": {
+                    "firstname": "test",
+                    "lastname": "tester",
+                    "email": "test.tester@heinlein-video.de"
+                },
+                "start_time": "1970-01-01T00:00:00Z",
+                "max_votes": 1,
+                "name": "Test Vote",
+                "subtitle": "A subtitle",
+                "topic": "Does the test work",
+                "enable_abstain": false,
+                "auto_stop": false,
+                "duration": 60,
+                "voters": [
+                    {
+                        "firstname": "test",
+                        "lastname": "tester",
+                        "email": "test.tester@heinlein-video.de",
+                        "vote_option": "yes"
+                    }
+                ],
+                "vote_result": {
+                    "status": "failed",
+                    "cause": "invalid_results",
+                    "reason": "vote_count_inconsistent"
+                }
+            }
+        );
+    }
 }

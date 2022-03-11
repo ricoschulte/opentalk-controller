@@ -6,12 +6,13 @@ use controller::prelude::redis::aio::ConnectionManager;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
-
 use kustos::Authz;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use uuid::Uuid;
+
+pub use ::serde_json;
 
 pub mod common;
 pub mod database;
@@ -88,4 +89,44 @@ pub fn setup_logging() -> Result<()> {
         .chain(std::io::stdout())
         .apply()
         .context("Failed to setup logging utility")
+}
+
+/// Helper macro to compare a `[Serialize]` implementor with a JSON literal
+///
+/// Asserts that the left expression equals the right JSON literal when serialized.
+///
+/// # Examples
+///
+/// ```
+/// use serde::Serialize;
+///
+/// #[derive(Debug, Serialize)]
+/// struct User {
+///     name: String,
+///     age: u64,
+/// }
+///
+/// #[test]
+/// fn test_user() {
+///     let bob = User {
+///         name: "bob".into(),
+///         age: 42,
+///     };
+///
+///     assert_eq_json!(
+///         bob,
+///         {
+///             "name": "bob",
+///             "age": 42,
+///         }
+///     );
+/// }
+/// ```
+#[macro_export]
+macro_rules! assert_eq_json {
+    ($val:expr,$($json:tt)+) => {
+        let val: $crate::serde_json::Value = $crate::serde_json::to_value(&$val).expect("Expected value to be serializable");
+
+        assert_eq!(val, $crate::serde_json::json!($($json)+));
+    };
 }
