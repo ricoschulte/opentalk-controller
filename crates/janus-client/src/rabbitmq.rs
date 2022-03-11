@@ -114,7 +114,7 @@ impl RabbitMqConnection {
     ///
     /// Returns the correlationID, which can be in principle be ignored. We already use a transaction_id.
     // todo, can we use the same correlationId and TXId
-    pub(crate) async fn send<T: Into<Vec<u8>>>(&self, msg: T) -> Result<String, error::Error> {
+    pub(crate) async fn send<T: AsRef<[u8]>>(&self, msg: T) -> Result<String, error::Error> {
         let correlation_id = rand::random::<u64>().to_string();
 
         // routing_key is the queue we are targeting
@@ -123,7 +123,7 @@ impl RabbitMqConnection {
                 &self.janus_exchange,
                 &self.to_janus_routing_key,
                 BasicPublishOptions::default(),
-                msg.into(),
+                msg.as_ref(),
                 BasicProperties::default().with_correlation_id(correlation_id.clone().into()),
             )
             .await?;

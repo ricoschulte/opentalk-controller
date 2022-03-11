@@ -29,7 +29,7 @@ impl Message {
                 EXCHANGE,
                 &routing_key(user_id),
                 Default::default(),
-                message,
+                &message,
                 Default::default(),
             )
             .await

@@ -661,7 +661,7 @@ async fn rabbitmq_event_handling_loop(
                     Err(e) => {
                         log::error!("Encountered error while receiving from RabbitMQ: {}", e);
                     }
-                    Ok((_, delivery)) => {
+                    Ok(delivery) => {
                         let msg = String::from_utf8_lossy(&delivery.data);
 
                         let res = event_handling_loop_inner(

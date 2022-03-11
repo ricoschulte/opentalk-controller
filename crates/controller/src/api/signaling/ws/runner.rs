@@ -440,10 +440,10 @@ impl Runner {
     ///
     /// After calling this function the runner will no longer receive rabbitmq messages
     fn delegate_consumer(&mut self) {
-        let result = self.consumer.set_delegate(|delivery: DeliveryResult| {
+        self.consumer.set_delegate(|delivery: DeliveryResult| {
             Box::pin(async move {
                 match delivery {
-                    Ok(Some((_, delivery))) => {
+                    Ok(Some(delivery)) => {
                         if let Err(e) = delivery.acker.nack(Default::default()).await {
                             log::error!("Consumer delegate failed to acknowledge, {}", e);
                         }
@@ -456,11 +456,7 @@ impl Runner {
             })
         });
 
-        if let Err(e) = result {
-            log::error!("Failed to delegate consumer, {}", e);
-        } else {
-            self.consumer_delegated = true;
-        }
+        self.consumer_delegated = true;
     }
 
     /// Destroys the runner and all associated resources
@@ -583,7 +579,7 @@ impl Runner {
                 }
                 res = self.consumer.next() => {
                     match res {
-                        Some(Ok((channel, delivery))) => self.handle_rabbitmq_msg(channel, delivery).await,
+                        Some(Ok(delivery)) => self.handle_rabbitmq_msg(delivery).await,
                         _ => {
                             // None or Some(Err(_)), either way its an error to us
                             log::error!("Failed to receive RabbitMQ message, exiting");
@@ -635,7 +631,7 @@ impl Runner {
         let value: Result<Namespaced<'_, Value>, _> = match message {
             Message::Text(ref text) => serde_json::from_str(text),
             Message::Binary(ref binary) => serde_json::from_slice(binary),
-            Message::Ping(_) | Message::Pong(_) | Message::Close(_) => {
+            Message::Frame(_) | Message::Ping(_) | Message::Pong(_) | Message::Close(_) => {
                 unreachable!()
             }
         };
@@ -926,7 +922,7 @@ impl Runner {
     }
 
     #[tracing::instrument(skip(self, delivery), fields(id = %self.id))]
-    async fn handle_rabbitmq_msg(&mut self, _: lapin::Channel, delivery: lapin::message::Delivery) {
+    async fn handle_rabbitmq_msg(&mut self, delivery: lapin::message::Delivery) {
         if let Err(e) = delivery.acker.ack(Default::default()).await {
             log::warn!("Failed to ACK incoming delivery, {}", e);
         }
@@ -1152,7 +1148,7 @@ impl Runner {
                 exchange.unwrap_or(&self.room_exchange),
                 routing_key,
                 Default::default(),
-                message.into_bytes(),
+                message.as_bytes(),
                 properties,
             )
             .await

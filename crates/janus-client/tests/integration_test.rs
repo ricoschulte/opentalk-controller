@@ -5,7 +5,7 @@ use janus_client::*;
 use lapin::Connection;
 use lapin::ConnectionProperties;
 use std::sync::Arc;
-use test_env_log::test;
+use test_log::test;
 use tokio::sync::mpsc;
 
 #[test(tokio::test)]

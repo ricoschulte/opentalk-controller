@@ -1,7 +1,6 @@
 //! Handles the application settings via a config file and environment variables.
 use crate::cli::Args;
 use config::ConfigError;
-use std::path::Path;
 use std::sync::Arc;
 
 pub use controller_shared::settings::*;
@@ -12,7 +11,7 @@ pub use controller_shared::settings::*;
 /// controller is running.
 pub(crate) fn reload_settings(
     shared_settings: SharedSettings,
-    config_path: &Path,
+    config_path: &str,
 ) -> Result<(), ConfigError> {
     let new_settings = Settings::load(config_path)?;
     let mut current_settings = (*shared_settings.load_full()).clone();
@@ -40,11 +39,10 @@ pub fn load_settings(args: &Args) -> Result<Settings, ConfigError> {
 mod test {
     use config::ConfigError;
     use controller_shared::settings::Settings;
-    use std::path::Path;
 
     #[test]
     fn example_toml() -> Result<(), ConfigError> {
-        Settings::load(Path::new("../../extra/example.toml"))?;
+        Settings::load("../../extra/example.toml")?;
         Ok(())
     }
 }

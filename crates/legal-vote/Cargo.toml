@@ -13,7 +13,7 @@ kustos = { path = "../kustos" }
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util" }
-serial_test = "0.5"
+serial_test = "0.6"
 diesel = { version = "1.4.6", features = [
     "postgres",
     "uuid",

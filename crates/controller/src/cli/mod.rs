@@ -1,6 +1,5 @@
 use anyhow::{Context, Result};
 use controller_shared::settings::Settings;
-use std::path::PathBuf;
 use structopt::StructOpt;
 
 mod acl;
@@ -16,7 +15,7 @@ pub struct Args {
         default_value = "config.toml",
         help = "Specify path to configuration file"
     )]
-    pub config: PathBuf,
+    pub config: String,
 
     /// Triggers a reload of the Janus Server configuration
     #[structopt(long)]

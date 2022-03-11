@@ -6,9 +6,9 @@ use crate::api::signaling::resumption::{ResumptionData, ResumptionTokenKeepAlive
 use crate::api::signaling::ticket::{TicketData, TicketRedisKey};
 use crate::api::v1::{ApiError, DefaultApiError};
 use crate::api::Participant;
-use actix_web::get;
-use actix_web::http::{header, HeaderValue};
+use actix_web::http::header;
 use actix_web::web::Data;
+use actix_web::{get, HttpMessage};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
 use async_tungstenite::tungstenite::protocol::Role;
@@ -136,10 +136,7 @@ pub(crate) async fn ws_service(
     // Spawn the runner task
     task::spawn_local(runner.run());
 
-    response.insert_header((
-        header::SEC_WEBSOCKET_PROTOCOL,
-        HeaderValue::from_str(protocol).unwrap(),
-    ));
+    response.insert_header((header::SEC_WEBSOCKET_PROTOCOL, protocol));
 
     Ok(response.streaming(actix_stream))
 }
@@ -161,7 +158,7 @@ fn read_request_header<'t>(
 
         for value in values {
             if value.starts_with("ticket#") {
-                let (_, tmp_ticket) = value.split_once("#").unwrap();
+                let (_, tmp_ticket) = value.split_once('#').unwrap();
                 ticket = Some(tmp_ticket);
                 continue;
             } else if protocol.is_some() {
