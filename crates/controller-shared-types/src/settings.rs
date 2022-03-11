@@ -28,12 +28,12 @@
 /// Setting categories, in which all properties implement a default value, should also implement the [`Default`] trait.
 ///
 use arc_swap::ArcSwap;
-use config::{Config, ConfigError, Environment, File};
+use config::{Config, ConfigError, Environment, File, FileFormat};
 use openidconnect::{ClientId, ClientSecret, IssuerUrl};
 use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -64,16 +64,12 @@ pub struct Settings {
 impl Settings {
     /// Creates a new Settings instance from the provided TOML file.
     /// Specific fields can be set or overwritten with environment variables (See struct level docs for more details).
-    pub fn load(file_name: &Path) -> Result<Self, ConfigError> {
-        let mut cfg = Config::new();
-
-        cfg.merge(File::from(file_name))?;
-
-        let env = Environment::with_prefix("K3K_CTRL").separator("__");
-
-        cfg.merge(env)?;
-
-        cfg.try_into()
+    pub fn load(file_name: &str) -> Result<Self, ConfigError> {
+        Config::builder()
+            .add_source(File::new(file_name, FileFormat::Toml))
+            .add_source(Environment::with_prefix("K3K_CTRL").separator("__"))
+            .build()?
+            .try_deserialize()
     }
 }
 

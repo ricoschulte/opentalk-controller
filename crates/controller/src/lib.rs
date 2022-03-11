@@ -35,7 +35,6 @@ use db_storage::groups::{DbGroupsEx, NewGroup};
 use oidc::OidcContext;
 use prelude::*;
 use redis::aio::ConnectionManager;
-use rustls::internal::pemfile::{certs, rsa_private_keys};
 use std::fs::File;
 use std::io::BufReader;
 use std::net::Ipv6Addr;
@@ -45,7 +44,8 @@ use tokio::signal::ctrl_c;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::broadcast;
 use tokio::time::sleep;
-use tokio_amqp::LapinTokioExt;
+use tokio_executor_trait::Tokio as TokioExecutor;
+use tokio_reactor_trait::Tokio as TokioReactor;
 use tracing_actix_web::TracingLogger;
 
 #[cfg(not(doc))]
@@ -86,8 +86,12 @@ pub mod prelude {
     pub use uuid;
 }
 
+#[derive(Debug, thiserror::Error)]
+#[error("Blocking thread has panicked")]
+pub struct BlockingError;
+
 /// Custom version of `actix_web::web::block` which retains the current tracing span
-pub async fn block<F, R>(f: F) -> Result<R, actix_web::error::BlockingError>
+pub async fn block<F, R>(f: F) -> Result<R, BlockingError>
 where
     F: FnOnce() -> R + Send + 'static,
     R: Send + 'static,
@@ -96,7 +100,7 @@ where
 
     let fut = actix_rt::task::spawn_blocking(move || span.in_scope(f));
 
-    fut.await.map_err(|_| actix_web::error::BlockingError)
+    fut.await.map_err(|_| BlockingError)
 }
 
 /// Wrapper of the main function. Correctly outputs the error to the logging utility or stderr.
@@ -208,7 +212,9 @@ impl Controller {
         let rabbitmq = Arc::new(
             lapin::Connection::connect(
                 &settings.rabbit_mq.url,
-                lapin::ConnectionProperties::default().with_tokio(),
+                lapin::ConnectionProperties::default()
+                    .with_executor(TokioExecutor::current())
+                    .with_reactor(TokioReactor),
             )
             .await
             .context("failed to connect to rabbitmq")?,
@@ -392,23 +398,21 @@ impl Controller {
 
         log::info!("Startup finished");
 
-        let mut ext_server = ext_http_server.disable_signals().run();
-        let mut int_server = int_http_server.disable_signals().run();
+        let ext_server = ext_http_server.disable_signals().run();
+        let int_server = int_http_server.disable_signals().run();
+
+        let ext_server_handle = ext_server.handle();
+        let int_server_handle = int_server.handle();
 
         let mut reload_signal =
             signal(SignalKind::hangup()).context("Failed to register SIGHUP signal handler")?;
 
-        // Select over both http servers a SIGTERM event and SIGHUP event
+        actix_rt::spawn(ext_server);
+        actix_rt::spawn(int_server);
+
+        // Wait for either SIGTERM or SIGHUP and handle them accordingly
         loop {
             tokio::select! {
-                _ = &mut ext_server => {
-                    log::error!("Http server returned, exiting");
-                    break;
-                }
-                _ = &mut int_server => {
-                    log::error!("Internal http server returned, exiting");
-                    break;
-                }
                 _ = ctrl_c() => {
                     log::info!("Got termination signal, exiting");
                     break;
@@ -433,8 +437,8 @@ impl Controller {
         let _ = self.shutdown.send(());
 
         // then stop HTTP servers
-        ext_server.stop(true).await;
-        int_server.stop(true).await;
+        ext_server_handle.stop(true).await;
+        int_server_handle.stop(true).await;
 
         // Check in a 1 second interval for 10 seconds if all tasks have exited
         // by inspecting the receiver count of the broadcast-channel
@@ -522,12 +526,11 @@ fn setup_cors(settings: &settings::HttpCors) -> Cors {
 }
 
 fn setup_rustls(tls: &settings::HttpTls) -> Result<rustls::ServerConfig> {
-    let mut config = rustls::ServerConfig::new(rustls::NoClientAuth::new());
-
     let cert_file = File::open(&tls.certificate)
         .with_context(|| format!("Failed to open certificate file {:?}", &tls.certificate))?;
-    let certs =
-        certs(&mut BufReader::new(cert_file)).map_err(|_| anyhow!("Invalid certificate"))?;
+    let certs = rustls_pemfile::certs(&mut BufReader::new(cert_file))
+        .map_err(|_| anyhow!("Invalid certificate"))?;
+    let certs = certs.into_iter().map(rustls::Certificate).collect();
 
     let private_key_file = File::open(&tls.private_key).with_context(|| {
         format!(
@@ -535,10 +538,13 @@ fn setup_rustls(tls: &settings::HttpTls) -> Result<rustls::ServerConfig> {
             &tls.private_key
         )
     })?;
-    let mut key = rsa_private_keys(&mut BufReader::new(private_key_file))
+    let mut key = rustls_pemfile::rsa_private_keys(&mut BufReader::new(private_key_file))
         .map_err(|_| anyhow!("Invalid pkcs8 private key"))?;
 
-    config.set_single_cert(certs, key.remove(0))?;
+    let config = rustls::ServerConfig::builder()
+        .with_safe_defaults()
+        .with_no_client_auth()
+        .with_single_cert(certs, rustls::PrivateKey(key.remove(0)))?;
 
     Ok(config)
 }

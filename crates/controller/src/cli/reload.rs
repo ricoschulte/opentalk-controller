@@ -1,6 +1,9 @@
 use anyhow::{Context, Error, Result};
 use nix::sys::signal::{kill, SIGHUP};
-use sysinfo::{self, get_current_pid, Pid, Process, ProcessExt, RefreshKind, System, SystemExt};
+use sysinfo::{
+    self, get_current_pid, Pid, PidExt, Process, ProcessExt, ProcessRefreshKind, RefreshKind,
+    System, SystemExt,
+};
 
 /// Sends SIGHUP to all process with a different pid and the same name
 pub fn trigger_reload() -> Result<()> {
@@ -15,7 +18,9 @@ pub fn trigger_reload() -> Result<()> {
 
 /// Looks for a proccess with the same name and a different pid, returns [`Option<Pid>`]
 fn find_target_processes() -> Result<Vec<Pid>> {
-    let system = System::new_with_specifics(RefreshKind::default().with_processes());
+    let system = System::new_with_specifics(
+        RefreshKind::default().with_processes(ProcessRefreshKind::everything()),
+    );
     let current_process = get_current_process(&system)?;
     Ok(search_for_target_processes(&system, current_process))
 }
@@ -24,7 +29,7 @@ fn find_target_processes() -> Result<Vec<Pid>> {
 fn send_sighup_to_proccesses(processes: Vec<Pid>) -> Result<()> {
     processes
         .into_iter()
-        .try_for_each(|pid| kill(nix::unistd::Pid::from_raw(pid), SIGHUP))
+        .try_for_each(|pid| kill(nix::unistd::Pid::from_raw(pid.as_u32() as i32), SIGHUP))
         .map_err(Error::from)
 }
 

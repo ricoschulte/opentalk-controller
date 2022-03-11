@@ -2,7 +2,7 @@
 //!
 //! TODO(r.floren): Make all errors return a JSON body with at least {error: string}
 use actix_web::{
-    body::Body,
+    body::BoxBody,
     http::{header, StatusCode},
     HttpResponse, ResponseError,
 };
@@ -95,7 +95,7 @@ where
         }
     }
 
-    fn error_response(&self) -> HttpResponse<Body> {
+    fn error_response(&self) -> HttpResponse {
         let mut response = HttpResponse::new(self.status_code());
 
         match self {
@@ -121,7 +121,7 @@ where
                     header::HeaderValue::from_static("text/plain; charset=utf-8"),
                 );
 
-                response.set_body(Body::from(self.to_string()))
+                response.set_body(BoxBody::new(self.to_string()))
             }
             Self::AuthJson(json) => {
                 response.headers_mut().insert(
@@ -129,7 +129,7 @@ where
                     header::HeaderValue::from_static("text/json; charset=utf-8"),
                 );
 
-                response.set_body(Body::from(json.to_string()))
+                response.set_body(BoxBody::new(json.to_string()))
             }
             _ => {
                 response.headers_mut().insert(
@@ -137,7 +137,7 @@ where
                     header::HeaderValue::from_static("text/plain; charset=utf-8"),
                 );
 
-                response.set_body(Body::from(self.to_string()))
+                response.set_body(BoxBody::new(self.to_string()))
             }
         }
     }
@@ -185,11 +185,11 @@ impl DefaultApiError {
     }
 }
 
-impl<E> From<actix_web::error::BlockingError> for ApiError<E>
+impl<E> From<crate::BlockingError> for ApiError<E>
 where
     E: fmt::Debug + Serialize,
 {
-    fn from(_: actix_web::error::BlockingError) -> Self {
+    fn from(_: crate::BlockingError) -> Self {
         log::error!("function in blocking threadpool panicked, see tracing");
         Self::Internal
     }

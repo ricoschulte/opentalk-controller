@@ -39,7 +39,7 @@ impl JanusMcuConfig {
             .context("missing room server")?;
 
         value
-            .try_into()
+            .try_deserialize()
             .context("failed to deserialize room_server config")
     }
 }

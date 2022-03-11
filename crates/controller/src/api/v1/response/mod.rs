@@ -1,7 +1,7 @@
 //! Response types for REST APIv1
 //!
 //! These all implement the [`Responder`] trait.
-use actix_web::{HttpResponse, Responder};
+use actix_web::{body::BoxBody, HttpResponse, Responder};
 
 mod error;
 mod ok;
@@ -16,6 +16,8 @@ pub type DefaultApiResult<T> = Result<ApiResponse<T>, DefaultApiError>;
 pub struct NoContent;
 
 impl Responder for NoContent {
+    type Body = BoxBody;
+
     fn respond_to(self, _: &actix_web::HttpRequest) -> HttpResponse {
         HttpResponse::NoContent().finish()
     }

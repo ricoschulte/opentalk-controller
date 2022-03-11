@@ -13,19 +13,19 @@ db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 log = { version = "0.4", features = ["serde"] }
 tracing = { version = "0.1" }
 tracing-futures = "0.2"
-tracing-subscriber = { version = "0.2", features = ["parking_lot"] }
-tracing-opentelemetry = "0.15"
-opentelemetry = { version = "0.16", default-features = false, features = [
+tracing-subscriber = { version = "0.3", features = ["parking_lot", "env-filter"] }
+tracing-opentelemetry = "0.17"
+opentelemetry = { version = "0.17", default-features = false, features = [
     "trace",
     "rt-tokio-current-thread",
 ] }
-opentelemetry-jaeger = { version = "0.15", features = [
+opentelemetry-jaeger = { version = "0.16", features = [
     "rt-tokio-current-thread",
 ] }
-tracing-actix-web = { version = "0.4.0-beta.10" }
+tracing-actix-web = { version = "0.5" }
 
 ### Config
-config = { version = "0.11", default-features = false, features = ["toml"] }
+config = { version = "0.12", default-features = false, features = ["toml"] }
 serde = { version = "1", features = ["derive"] }
 structopt = "0.3"
 arc-swap = "1.3"
@@ -49,26 +49,22 @@ uuid = { version = "0.8.2", features = ["serde", "v4"] }
 ### Web Framework & Runtime
 tokio = { version = "1", features = ["signal"] }
 tokio-stream = { version = "0.1.5", features = ["sync"] }
-actix-web = { default-features = false, version = "= 4.0.0-beta.9", features = [
-    "rustls",
-    "compress-gzip",
-    "compress-zstd",
-    "cookies",
-] }
+actix-web = { version = "4", features = ["rustls"] }
 actix-rt = "2.2"
-actix-web-httpauth = "0.6.0-beta.2"
-actix-cors = "0.6.0-beta.2"
+actix-web-httpauth = "0.6"
+actix-cors = "0.6"
 futures-util = "0.3"
 async-trait = "0.1"
 futures = "0.3"
 bytes = "1"
 serde_json = "1"
-parking_lot = "0.11"
+parking_lot = "0.12"
 mime = "0.3.16"
 
 ### RabbitMQ
-lapin = { version = "1.8.1", default-features = false }
-tokio-amqp = { version = "1", default-features = false }
+lapin = { version = "2", default-features = false }
+tokio-reactor-trait = "1"
+tokio-executor-trait = "2"
 
 ### Redis
 redis = { version = "0.21", features = ["tokio-comp", "connection-manager"] }
@@ -82,24 +78,25 @@ base64 = "0.13"
 chrono = "0.4"
 
 ### Websockets
-async-tungstenite = "0.13"
-actix-web-actors = { git = "https://github.com/actix/actix-web.git", tag = "web-v4.0.0-beta.8" }
+async-tungstenite = "0.17"
+actix-web-actors = "4.1"
 
 ### Rust Encryption
 ring = "0.16"
-rustls = "0.19"
+rustls = "0.20"
+rustls-pemfile = "0.3"
 
 ### QoL
 displaydoc = "0.2"
 either = "1.6.1"
-itertools = "0.9"
+itertools = "0.10"
 
 # Random Distributions etc. Used for RR
 rand = "0.8.3"
 
 ### Reload controller process
-sysinfo = { version = "0.20.0", default-features = false }
-nix = "0.22.0"
+sysinfo = { version = "0.23", default-features = false }
+nix = "0.23.0"
 
 ### Access Control
 casbin = { version = "2.0.9", default-features = false, features = [
@@ -114,5 +111,5 @@ regex = "1.5"
 fern = "0.6"
 k3k-controller-client = { path = "../client" }
 tokio-postgres = "0.7"
-serial_test = "0.5"
+serial_test = "0.6"
 test-util = { path = "../test-util", package = "k3k-test-util" }

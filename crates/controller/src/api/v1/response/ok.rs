@@ -3,10 +3,9 @@
 //! These all implement the [`Responder`] trait.
 //! The current Pagination support follows the GitHub REST APIv3, i.e. page hints are included inside the Link HTTP header.
 
-use actix_web::{
-    http::{header, HeaderMap},
-    HttpResponse, Responder,
-};
+use actix_web::body::BoxBody;
+use actix_web::http::header::{self, HeaderMap};
+use actix_web::{HttpResponse, Responder};
 use either::Either;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -200,6 +199,8 @@ impl<T: Serialize> ApiResponse<T> {
 }
 
 impl<T: Serialize> Responder for ApiResponse<T> {
+    type Body = BoxBody;
+
     fn respond_to(self, req: &actix_web::HttpRequest) -> HttpResponse {
         match serde_json::to_string(&self.data) {
             Ok(body) => {
