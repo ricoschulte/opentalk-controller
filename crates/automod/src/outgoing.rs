@@ -96,13 +96,11 @@ pub enum Error {
 mod test {
     use super::*;
     use crate::config::{FrontendConfig, Parameter, SelectionStrategy};
-    use controller::prelude::*;
     use std::time::Duration;
+    use test_util::assert_eq_json;
 
     #[test]
     fn started_message() {
-        let json_str = r#"{"message":"started","selection_strategy":"none","show_list":true,"consider_hand_raise":false,"time_limit":5000,"allow_double_selection":false,"animation_on_random":true,"history":["00000000-0000-0000-0000-000000000000"],"remaining":["00000000-0000-0000-0000-000000000000"]}"#;
-
         let message = Message::Started(
             FrontendConfig {
                 parameter: Parameter {
@@ -119,69 +117,100 @@ mod test {
             .into_public(),
         );
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "started",
+                "selection_strategy": "none",
+                "show_list": true,
+                "consider_hand_raise": false,
+                "time_limit": 5000,
+                "allow_double_selection": false,
+                "animation_on_random": true,
+                "history": [
+                    "00000000-0000-0000-0000-000000000000"
+                ],
+                "remaining": [
+                    "00000000-0000-0000-0000-000000000000"
+                ]
+              }
+        );
     }
 
     #[test]
     fn stopped_message() {
-        let json_str = r#"{"message":"stopped"}"#;
-
         let message = Message::Stopped;
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "stopped"
+            }
+        );
     }
 
     #[test]
     fn speaker_update_message() {
-        let json_str = r#"{"message":"speaker_updated","speaker":"00000000-0000-0000-0000-000000000000","history":[],"remaining":["00000000-0000-0000-0000-000000000000"]}"#;
-
         let message = Message::SpeakerUpdated(SpeakerUpdated {
             speaker: Some(ParticipantId::nil()),
             history: Some(vec![]),
             remaining: Some(vec![ParticipantId::nil()]),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "speaker_updated",
+                "speaker": "00000000-0000-0000-0000-000000000000",
+                "history": [],
+                "remaining": [
+                    "00000000-0000-0000-0000-000000000000"
+                ]
+            }
+        );
     }
 
     #[test]
     fn remaining_update_message() {
-        let json_str = r#"{"message":"remaining_updated","remaining":["00000000-0000-0000-0000-000000000001","00000000-0000-0000-0000-000000000002"]}"#;
-
         let message = Message::RemainingUpdated(RemainingUpdated {
             remaining: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "remaining_updated",
+                "remaining": [
+                    "00000000-0000-0000-0000-000000000001",
+                    "00000000-0000-0000-0000-000000000002"
+                ]
+            }
+        );
     }
 
     #[test]
     fn error_invalid_selection_message() {
-        let json_str = r#"{"message":"error","error":"invalid_selection"}"#;
-
         let message = Message::Error(Error::InvalidSelection);
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message":"error",
+                "error":"invalid_selection"
+            }
+        );
     }
 
     #[test]
     fn error_invalid_insufficient_permissions() {
-        let json_str = r#"{"message":"error","error":"insufficient_permissions"}"#;
-
         let message = Message::Error(Error::InsufficientPermissions);
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message":"error",
+                "error":"insufficient_permissions"
+            }
+        );
     }
 }

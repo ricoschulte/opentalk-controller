@@ -114,44 +114,53 @@ mod test {
     use super::*;
     use crate::rabbitmq::RequestMute;
     use controller::prelude::*;
+    use test_util::assert_eq_json;
 
     #[test]
     fn sdp_offer() {
-        let expected = r#"{"message":"sdp_offer","sdp":"v=0...","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
-
-        let produced = serde_json::to_string(&Message::SdpOffer(Sdp {
+        let sdp_offer = Message::SdpOffer(Sdp {
             sdp: "v=0...".into(),
             source: Source {
                 source: ParticipantId::nil(),
                 media_session_type: MediaSessionType::Video,
             },
-        }))
-        .unwrap();
+        });
 
-        assert_eq!(expected, produced);
+        assert_eq_json!(
+            sdp_offer,
+            {
+                "message": "sdp_offer",
+                "sdp": "v=0...",
+                "source": "00000000-0000-0000-0000-000000000000",
+                "media_session_type": "video"
+            }
+        );
     }
 
     #[test]
     fn sdp_answer() {
-        let expected = r#"{"message":"sdp_answer","sdp":"v=0...","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
-
-        let produced = serde_json::to_string(&Message::SdpAnswer(Sdp {
+        let sdp_answer = Message::SdpAnswer(Sdp {
             sdp: "v=0...".into(),
             source: Source {
                 source: ParticipantId::nil(),
                 media_session_type: MediaSessionType::Video,
             },
-        }))
-        .unwrap();
+        });
 
-        assert_eq!(expected, produced);
+        assert_eq_json!(
+            sdp_answer,
+            {
+                "message": "sdp_answer",
+                "sdp": "v=0...",
+                "source": "00000000-0000-0000-0000-000000000000",
+                "media_session_type": "video"
+            }
+        );
     }
 
     #[test]
     fn sdp_candidate() {
-        let expected = r#"{"message":"sdp_candidate","candidate":{"sdpMLineIndex":1,"candidate":"candidate:4 1 UDP 123456 192.168.178.1 123456 typ host"},"source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
-
-        let produced = serde_json::to_string(&Message::SdpCandidate(SdpCandidate {
+        let sdp_candidate = Message::SdpCandidate(SdpCandidate {
             candidate: TrickleCandidate {
                 sdp_m_line_index: 1,
                 candidate: "candidate:4 1 UDP 123456 192.168.178.1 123456 typ host".into(),
@@ -160,65 +169,92 @@ mod test {
                 source: ParticipantId::nil(),
                 media_session_type: MediaSessionType::Video,
             },
-        }))
-        .unwrap();
+        });
 
-        assert_eq!(expected, produced);
+        assert_eq_json!(
+            sdp_candidate,
+            {
+                "message": "sdp_candidate",
+                "candidate": {
+                    "sdpMLineIndex": 1,
+                    "candidate": "candidate:4 1 UDP 123456 192.168.178.1 123456 typ host"
+                },
+                "source": "00000000-0000-0000-0000-000000000000",
+                "media_session_type": "video"
+              }
+        );
     }
 
     #[test]
     fn test_webrtc_up() {
-        let expected = r#"{"message":"webrtc_up","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
-
-        let produced = serde_json::to_string(&Message::WebRtcUp(Source {
+        let webrtc_up = Message::WebRtcUp(Source {
             source: ParticipantId::nil(),
             media_session_type: MediaSessionType::Video,
-        }))
-        .unwrap();
+        });
 
-        assert_eq!(expected, produced);
+        assert_eq_json!(
+            webrtc_up,
+            {
+                "message": "webrtc_up",
+                "source": "00000000-0000-0000-0000-000000000000",
+                "media_session_type": "video"
+            }
+        );
     }
 
     #[test]
     fn test_webrtc_down() {
-        let expected = r#"{"message":"webrtc_down","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
-
-        let produced = serde_json::to_string(&Message::WebRtcDown(Source {
+        let webrtc_down = Message::WebRtcDown(Source {
             source: ParticipantId::nil(),
             media_session_type: MediaSessionType::Video,
-        }))
-        .unwrap();
+        });
 
-        assert_eq!(expected, produced);
+        assert_eq_json!(
+            webrtc_down,
+            {
+                "message": "webrtc_down",
+                "source": "00000000-0000-0000-0000-000000000000",
+                "media_session_type": "video"
+            }
+        );
     }
 
     #[test]
     fn test_webrtc_slow() {
-        let expected = r#"{"message":"webrtc_slow","direction":"upstream","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#;
-
-        let produced = serde_json::to_string(&Message::WebRtcSlow(Link {
+        let web_rtc_slow = Message::WebRtcSlow(Link {
             direction: LinkDirection::Upstream,
             source: Source {
                 source: ParticipantId::nil(),
                 media_session_type: MediaSessionType::Video,
             },
-        }))
-        .unwrap();
+        });
 
-        assert_eq!(expected, produced);
+        assert_eq_json!(
+            web_rtc_slow,
+            {
+                "message": "webrtc_slow",
+                "direction": "upstream",
+                "source": "00000000-0000-0000-0000-000000000000",
+                "media_session_type": "video"
+            }
+        );
     }
 
     #[test]
     fn test_request_mute() {
-        let expected = r#"{"message":"request_mute","issuer":"00000000-0000-0000-0000-000000000000","force":false}"#;
-
-        let produced = serde_json::to_string(&Message::RequestMute(RequestMute {
+        let request_mute = Message::RequestMute(RequestMute {
             issuer: ParticipantId::nil(),
             force: false,
-        }))
-        .unwrap();
+        });
 
-        assert_eq!(expected, produced);
+        assert_eq_json!(
+            request_mute,
+            {
+                "message": "request_mute",
+                "issuer": "00000000-0000-0000-0000-000000000000",
+                "force": false
+            }
+        );
     }
 
     #[test]

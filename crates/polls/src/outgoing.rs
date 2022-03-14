@@ -51,6 +51,7 @@ pub enum Error {
 mod test {
     use super::*;
     use controller::prelude::*;
+    use test_util::assert_eq_json;
     use uuid::Uuid;
 
     #[test]
@@ -72,32 +73,31 @@ mod test {
             duration: Duration::from_millis(10000),
         });
 
-        let json = serde_json::to_string_pretty(&started).unwrap();
-
-        let expected = r#"{
-  "message": "started",
-  "id": "00000000-0000-0000-0000-000000000000",
-  "topic": "polling",
-  "live": true,
-  "choices": [
-    {
-      "id": 0,
-      "content": "yes"
-    },
-    {
-      "id": 1,
-      "content": "no"
-    }
-  ],
-  "duration": 10
-}"#;
-
-        assert_eq!(json, expected);
+        assert_eq_json!(
+          started,
+          {
+              "message": "started",
+              "id": "00000000-0000-0000-0000-000000000000",
+              "topic": "polling",
+              "live": true,
+              "choices": [
+                  {
+                      "id": 0,
+                      "content": "yes"
+                  },
+                  {
+                      "id": 1,
+                      "content": "no"
+                  }
+              ],
+              "duration": 10
+          }
+        );
     }
 
     #[test]
     fn live_update() {
-        let started = Message::LiveUpdate(Results {
+        let live_update = Message::LiveUpdate(Results {
             id: PollId(Uuid::nil()),
             results: vec![
                 Item {
@@ -111,29 +111,28 @@ mod test {
             ],
         });
 
-        let json = serde_json::to_string_pretty(&started).unwrap();
-
-        let expected = r#"{
-  "message": "live_update",
-  "id": "00000000-0000-0000-0000-000000000000",
-  "results": [
-    {
-      "id": 0,
-      "count": 32
-    },
-    {
-      "id": 1,
-      "count": 64
-    }
-  ]
-}"#;
-
-        assert_eq!(json, expected);
+        assert_eq_json!(
+          live_update,
+          {
+              "message": "live_update",
+              "id": "00000000-0000-0000-0000-000000000000",
+              "results": [
+                  {
+                      "id": 0,
+                      "count": 32
+                  },
+                  {
+                      "id": 1,
+                      "count": 64
+                  }
+              ]
+          }
+        );
     }
 
     #[test]
     fn done() {
-        let started = Message::Done(Results {
+        let done = Message::Done(Results {
             id: PollId(Uuid::nil()),
             results: vec![
                 Item {
@@ -147,23 +146,22 @@ mod test {
             ],
         });
 
-        let json = serde_json::to_string_pretty(&started).unwrap();
-
-        let expected = r#"{
-  "message": "done",
-  "id": "00000000-0000-0000-0000-000000000000",
-  "results": [
-    {
-      "id": 0,
-      "count": 32
-    },
-    {
-      "id": 1,
-      "count": 64
-    }
-  ]
-}"#;
-
-        assert_eq!(json, expected);
+        assert_eq_json!(
+          done,
+          {
+              "message": "done",
+              "id": "00000000-0000-0000-0000-000000000000",
+              "results": [
+                  {
+                      "id": 0,
+                      "count": 32
+                  },
+                  {
+                      "id": 1,
+                      "count": 64
+                  }
+              ]
+          }
+        );
     }
 }

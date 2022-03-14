@@ -345,48 +345,48 @@ impl TryFrom<Jsep> for SdpAnswer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::assert_eq_json;
     use outgoing::{AttachToPlugin, JanusRequest, KeepAlive};
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn create() {
-        assert_eq!(
-            serde_json::json!({
+        assert_eq_json!(
+            JanusRequest::CreateSession,
+            {
                 "janus": "create",
-            })
-            .to_string(),
-            serde_json::to_string(&JanusRequest::CreateSession).unwrap()
+            }
         );
     }
 
     #[test]
     fn attach() {
-        assert_eq!(
-            serde_json::json!({
+        let attach = JanusRequest::AttachToPlugin(AttachToPlugin {
+            plugin: JanusPlugin::VideoRoom,
+            session_id: SessionId::new(123),
+        });
+
+        assert_eq_json!(
+            attach,
+            {
                 "janus": "attach",
                 "plugin": JanusPlugin::VideoRoom,
                 "session_id": 123
-            })
-            .to_string(),
-            serde_json::to_string(&JanusRequest::AttachToPlugin(AttachToPlugin {
-                plugin: JanusPlugin::VideoRoom,
-                session_id: SessionId::new(123)
-            }))
-            .unwrap()
+            }
         );
     }
+
     #[test]
     fn keepalive() {
-        assert_eq!(
-            serde_json::json!({
+        let keepalive = JanusRequest::KeepAlive(KeepAlive {
+            session_id: SessionId::new(134),
+        });
+
+        assert_eq_json!(
+            keepalive,
+            {
                 "janus": "keepalive",
                 "session_id": 134,
-            })
-            .to_string(),
-            serde_json::to_string(&JanusRequest::KeepAlive(KeepAlive {
-                session_id: SessionId::new(134),
-            }))
-            .unwrap()
+            }
         );
     }
 }

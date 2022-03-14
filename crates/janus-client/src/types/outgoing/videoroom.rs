@@ -710,6 +710,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::assert_eq_json;
     use crate::types::{
         outgoing::{JanusRequest, PluginBody, PluginMessage},
         HandleId, Jsep, JsepType, SessionId, VideoCodec,
@@ -719,22 +720,7 @@ mod tests {
     #[test]
     #[cfg(feature = "videoroom")]
     fn video_room_create() {
-        let reference = r#"{
-            "janus":"message",
-            "handle_id":234,
-            "session_id":123,
-            "body":{
-                "request":"create",
-                "description":"TestRoom|StreamType",
-                "publishers":1,
-                "videoorient_ext":false
-            }
-        }"#;
-        let reference = reference
-            .lines()
-            .map(|s| s.trim_start())
-            .collect::<String>();
-        let our = JanusRequest::PluginMessage(PluginMessage {
+        let plugin_message = JanusRequest::PluginMessage(PluginMessage {
             session_id: SessionId::new(123),
             handle_id: HandleId::new(234),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Create(VideoRoomPluginCreate {
@@ -746,29 +732,26 @@ mod tests {
             })),
             jsep: None,
         });
-        // print!("{}", serde_json::to_string_pretty(&our).unwrap());
-        assert_eq!(reference, serde_json::to_string(&our).unwrap());
+
+        assert_eq_json!(
+            plugin_message,
+            {
+                "janus": "message",
+                "handle_id": 234,
+                "session_id": 123,
+                "body": {
+                    "request": "create",
+                    "description": "TestRoom|StreamType",
+                    "publishers": 1,
+                    "videoorient_ext": false
+                }
+            }
+        );
     }
 
     #[test]
     fn test_configure() {
-        let reference = r#"{
-            "janus":"message",
-            "handle_id":2123,
-            "session_id":234,
-            "body":{
-              "request":"configure",
-              "audio":true,
-              "video":true,
-              "data":true
-            },
-            "jsep":{"type":"offer","sdp":"v=0"}
-          }"#;
-        let reference = reference
-            .lines()
-            .map(|s| s.trim_start())
-            .collect::<String>();
-        let our = JanusRequest::PluginMessage(PluginMessage {
+        let plugin_message = JanusRequest::PluginMessage(PluginMessage {
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Configure(
@@ -786,7 +769,25 @@ mod tests {
                 trickle: None,
             }),
         });
-        assert_eq!(reference, serde_json::to_string(&our).unwrap());
+
+        assert_eq_json!(
+            plugin_message,
+            {
+                "janus": "message",
+                "handle_id": 2123,
+                "session_id": 234,
+                "body": {
+                  "request": "configure",
+                  "audio": true,
+                  "video": true,
+                  "data": true
+                },
+                "jsep": {
+                    "type": "offer",
+                    "sdp": "v=0"
+                }
+            }
+        );
     }
 
     #[test]
@@ -818,20 +819,7 @@ mod tests {
 
     #[test]
     fn test_start() {
-        let reference = r#"{
-            "janus":"message",
-            "handle_id":2123,
-            "session_id":234,
-            "body":{
-              "request":"start"
-            },
-            "jsep":{"type":"offer","sdp":"v=0"}
-          }"#;
-        let reference = reference
-            .lines()
-            .map(|s| s.trim_start())
-            .collect::<String>();
-        let our = JanusRequest::PluginMessage(PluginMessage {
+        let plugin_message = JanusRequest::PluginMessage(PluginMessage {
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Start(VideoRoomPluginStart {})),
@@ -841,28 +829,27 @@ mod tests {
                 trickle: None,
             }),
         });
-        assert_eq!(reference, serde_json::to_string(&our).unwrap());
+
+        assert_eq_json!(
+            plugin_message,
+            {
+                "janus": "message",
+                "handle_id": 2123,
+                "session_id": 234,
+                "body": {
+                    "request":"start"
+                },
+                "jsep": {
+                    "type": "offer",
+                    "sdp": "v=0"
+                }
+            }
+        );
     }
 
     #[test]
     fn test_join_sub() {
-        let reference = r#"{
-            "janus":"message",
-            "handle_id":2123,
-            "session_id":234,
-            "body":{
-              "request":"join",
-              "ptype":"subscriber",
-              "room":5,
-              "feed":1
-            },
-            "jsep":{"type":"offer","sdp":"v=0"}
-          }"#;
-        let reference = reference
-            .lines()
-            .map(|s| s.trim_start())
-            .collect::<String>();
-        let our = JanusRequest::PluginMessage(PluginMessage {
+        let plugin_message = JanusRequest::PluginMessage(PluginMessage {
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Join(
@@ -876,7 +863,25 @@ mod tests {
                 trickle: None,
             }),
         });
-        assert_eq!(reference, serde_json::to_string(&our).unwrap());
+
+        assert_eq_json!(
+            plugin_message,
+            {
+                "janus": "message",
+                "handle_id": 2123,
+                "session_id": 234,
+                "body": {
+                    "request": "join",
+                    "ptype": "subscriber",
+                    "room": 5,
+                    "feed": 1
+                },
+                "jsep": {
+                    "type": "offer",
+                    "sdp": "v=0"
+                }
+            }
+        );
     }
 
     #[test]
@@ -912,46 +917,29 @@ mod tests {
 
     #[test]
     fn test_list() {
-        let reference = r#"{
-            "janus":"message",
-            "handle_id":2123,
-            "session_id":234,
-            "body":{
-              "request":"list"
-            }
-          }"#;
-        let reference = reference
-            .lines()
-            .map(|s| s.trim_start())
-            .collect::<String>();
-        let our = JanusRequest::PluginMessage(PluginMessage {
+        let plugin_message = JanusRequest::PluginMessage(PluginMessage {
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::ListRooms(VideoRoomPluginListRooms)),
             jsep: None,
         });
-        assert_eq!(reference, serde_json::to_string(&our).unwrap());
+
+        assert_eq_json!(
+            plugin_message,
+            {
+                "janus": "message",
+                "handle_id": 2123,
+                "session_id": 234,
+                "body": {
+                  "request": "list"
+                }
+            }
+        );
     }
 
     #[test]
     fn test_join_pub() {
-        let reference = r#"{
-            "janus":"message",
-            "handle_id":2123,
-            "session_id":234,
-            "body":{
-              "request":"join",
-              "ptype":"publisher",
-              "room":5,
-              "id":1
-            },
-            "jsep":{"type":"offer","sdp":"v=0"}
-          }"#;
-        let reference = reference
-            .lines()
-            .map(|s| s.trim_start())
-            .collect::<String>();
-        let our = JanusRequest::PluginMessage(PluginMessage {
+        let plugin_message = JanusRequest::PluginMessage(PluginMessage {
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Join(VideoRoomPluginJoin::Publisher(
@@ -968,25 +956,29 @@ mod tests {
                 trickle: None,
             }),
         });
-        assert_eq!(reference, serde_json::to_string(&our).unwrap());
+
+        assert_eq_json!(
+            plugin_message,
+            {
+                "janus": "message",
+                "handle_id": 2123,
+                "session_id": 234,
+                "body": {
+                  "request": "join",
+                  "ptype": "publisher",
+                  "room": 5,
+                  "id": 1
+                },
+                "jsep": {
+                    "type": "offer",
+                    "sdp": "v=0"
+                }
+            }
+        );
     }
     #[test]
     fn test_destroy() {
-        let reference = r#"{
-            "janus":"message",
-            "handle_id":2123,
-            "session_id":234,
-            "body":{
-              "request":"destroy",
-              "room":1
-            },
-            "jsep":{"type":"offer","sdp":"v=0"}
-          }"#;
-        let reference = reference
-            .lines()
-            .map(|s| s.trim_start())
-            .collect::<String>();
-        let our = JanusRequest::PluginMessage(PluginMessage {
+        let plugin_message = JanusRequest::PluginMessage(PluginMessage {
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Destroy(VideoRoomPluginDestroy {
@@ -1001,30 +993,28 @@ mod tests {
                 trickle: None,
             }),
         });
-        assert_eq!(reference, serde_json::to_string(&our).unwrap());
+
+        assert_eq_json!(
+            plugin_message,
+            {
+                "janus": "message",
+                "handle_id": 2123,
+                "session_id": 234,
+                "body": {
+                  "request": "destroy",
+                  "room": 1
+                },
+                "jsep": {
+                    "type": "offer",
+                    "sdp": "v=0"
+                }
+            }
+        );
     }
 
     #[test]
     fn test_full_room_config() {
-        let reference = r#"{
-            "janus":"message",
-            "handle_id":234,
-            "session_id":123,
-            "body":{
-                "request":"create",
-                "description":"TestRoom|StreamType",
-                "publishers":1,
-                "videoorient_ext":false,
-                "audiocodec":"g722",
-                "videocodec":"av1,vp8"
-
-            }
-        }"#;
-        let reference = reference
-            .lines()
-            .map(|s| s.trim_start())
-            .collect::<String>();
-        let our = JanusRequest::PluginMessage(PluginMessage {
+        let plugin_message = JanusRequest::PluginMessage(PluginMessage {
             session_id: SessionId::new(123),
             handle_id: HandleId::new(234),
             body: PluginBody::VideoRoom(VideoRoomPluginBody::Create(VideoRoomPluginCreate {
@@ -1037,7 +1027,22 @@ mod tests {
             })),
             jsep: None,
         });
-        // print!("{}", serde_json::to_string_pretty(&our).unwrap());
-        assert_eq!(reference, serde_json::to_string(&our).unwrap());
+
+        assert_eq_json!(
+            plugin_message,
+            {
+                "janus": "message",
+                "handle_id": 234,
+                "session_id": 123,
+                "body": {
+                    "request": "create",
+                    "description": "TestRoom|StreamType",
+                    "publishers": 1,
+                    "videoorient_ext": false,
+                    "audiocodec": "g722",
+                    "videocodec": "av1,vp8"
+                }
+            }
+        );
     }
 }
