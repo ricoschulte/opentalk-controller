@@ -19,8 +19,6 @@ lint:fmt:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     # Run on scheduled pipeline runs
     - if: $CI_PIPELINE_SOURCE == 'schedule'
-    # Run on feature branches
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   stage: lint
   script:
     - cargo fmt -- --check
@@ -29,7 +27,6 @@ lint:clippy:
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_PIPELINE_SOURCE == 'schedule'
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   stage: lint
   script: cargo clippy --workspace --all-features --tests -- --deny warnings
 
@@ -38,7 +35,6 @@ lint:dependency_check:
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_PIPELINE_SOURCE == 'schedule'
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   stage: lint
   script: cargo-deny check
 
@@ -46,7 +42,6 @@ lint:yaml:
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_PIPELINE_SOURCE == 'schedule'
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   stage: lint
   image: archlinux:latest
   before_script:
@@ -57,7 +52,6 @@ test:cargo_test:
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_PIPELINE_SOURCE == 'schedule'
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   stage: test
   variables:
     # Set ENV vars for services
@@ -97,7 +91,6 @@ test:container:
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_PIPELINE_SOURCE == 'schedule'
-    - if: $CI_COMMIT_BRANCH != $CI_DEFAULT_BRANCH
   stage: test
   image:
     name: gcr.io/kaniko-project/executor:debug
