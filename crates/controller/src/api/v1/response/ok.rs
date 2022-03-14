@@ -134,7 +134,7 @@ impl CursorPaginationLinks {
             let before = base
                 .clone()
                 .query_pairs_mut()
-                .append_pair("before", &before.to_string())
+                .append_pair("before", before)
                 .finish()
                 .to_string();
             headers.push(("before".to_string(), before));
@@ -144,7 +144,7 @@ impl CursorPaginationLinks {
             let after = base
                 .clone()
                 .query_pairs_mut()
-                .append_pair("after", &after.to_string())
+                .append_pair("after", after)
                 .finish()
                 .to_string();
             headers.push(("after".to_string(), after));

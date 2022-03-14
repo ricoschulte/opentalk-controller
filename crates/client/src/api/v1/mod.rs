@@ -77,8 +77,7 @@ impl K3KSession {
             let request_id = response
                 .headers()
                 .get("X-Request-Id")
-                .map(|s| s.to_str().map(|s| s.to_owned()).ok())
-                .flatten()
+                .and_then(|s| s.to_str().map(|s| s.to_owned()).ok())
                 .unwrap_or_else(|| "n/a".to_string());
 
             return Err(ApiError::NonSuccess(
