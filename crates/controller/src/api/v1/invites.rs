@@ -1,8 +1,12 @@
 //! Contains invite related REST endpoints.
 use crate::api::v1::ApiResponse;
-use crate::api::v1::{users::UserDetails, DefaultApiError, DefaultApiResult, PagePaginationQuery};
-use actix_web::web::{self, Data, Json, Path, ReqData};
+use crate::api::v1::{
+    users::PublicUserProfile, DefaultApiError, DefaultApiResult, PagePaginationQuery,
+};
+use crate::settings::SharedSettingsActix;
+use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{delete, get, post, put, HttpResponse};
+use chrono::{DateTime, Utc};
 use database::{DatabaseError, Db};
 use db_storage::invites::DbInvitesEx;
 use db_storage::invites::{self as db_invites, InviteCodeId};
@@ -18,27 +22,28 @@ use validator::Validate;
 /// Contains general public information about a room.
 #[derive(Debug, Serialize)]
 pub struct Invite {
-    pub invite_code: String,
-    pub created: chrono::DateTime<chrono::Utc>,
-    pub created_by: UserDetails,
-    pub updated: chrono::DateTime<chrono::Utc>,
-    pub updated_by: UserDetails,
+    pub invite_code: InviteCodeId,
+    pub created: DateTime<Utc>,
+    pub created_by: PublicUserProfile,
+    pub updated: DateTime<Utc>,
+    pub updated_by: PublicUserProfile,
     pub room_id: RoomId,
     pub active: bool,
-    pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub expiration: Option<DateTime<Utc>>,
 }
 
 impl Invite {
-    fn from_with_user<U>(val: db_invites::Invite, created_by: U, updated_by: U) -> Self
-    where
-        U: Into<UserDetails>,
-    {
+    fn from_with_user(
+        val: db_invites::Invite,
+        created_by: PublicUserProfile,
+        updated_by: PublicUserProfile,
+    ) -> Self {
         Invite {
-            invite_code: val.id.to_string(),
+            invite_code: val.id,
             created: val.created_at,
-            created_by: created_by.into(),
+            created_by,
             updated: val.updated_at,
-            updated_by: updated_by.into(),
+            updated_by,
             room_id: val.room,
             active: val.active,
             expiration: val.expiration,
@@ -46,30 +51,32 @@ impl Invite {
     }
 }
 
-/// Body for *POST /rooms/{room_uuid}/invites*
+/// Body for *POST /rooms/{room_id}/invites*
 #[derive(Debug, Deserialize)]
 pub struct NewInvite {
-    pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub expiration: Option<DateTime<Utc>>,
 }
 
-/// Body for *PUT /rooms/{room_uuid}/invites/{invite_code}*
+/// Body for *PUT /rooms/{room_id}/invites/{invite_code}*
 #[derive(Debug, Deserialize)]
 pub struct UpdateInvite {
-    pub expiration: Option<chrono::DateTime<chrono::Utc>>,
+    pub expiration: Option<DateTime<Utc>>,
 }
 
-/// API Endpoint *POST /rooms/{room_uuid}/invites*
+/// API Endpoint *POST /rooms/{room_id}/invites*
 ///
 /// Uses the provided [`NewInvite`] to create a new invite.
-#[post("/rooms/{room_uuid}/invites")]
+#[post("/rooms/{room_id}/invites")]
 pub async fn add_invite(
+    settings: SharedSettingsActix,
     db: Data<Db>,
-    authz: Data<kustos::Authz>,
+    authz: Data<Authz>,
     current_user: ReqData<User>,
-    room_uuid: Path<RoomId>,
+    room_id: Path<RoomId>,
     data: Json<NewInvite>,
 ) -> DefaultApiResult<Invite> {
-    let room_uuid = room_uuid.into_inner();
+    let settings = settings.load_full();
+    let room_id = room_id.into_inner();
     let current_user = current_user.into_inner();
 
     let new_invite = data.into_inner();
@@ -78,7 +85,7 @@ pub async fn add_invite(
     let (db_invite, created_by, updated_by) = crate::block(
         move || -> Result<db_invites::InviteWithUsers, DefaultApiError> {
             let room = db_clone
-                .get_room(room_uuid)?
+                .get_room(room_id)?
                 .ok_or(DefaultApiError::NotFound)?;
 
             if room.created_by != current_user_clone.id {
@@ -100,7 +107,7 @@ pub async fn add_invite(
     .await??;
 
     // TODO(r.floren) Do we want to rollback if this failed?
-    let rel_invite_path = format!("/rooms/{}/invites/{}", room_uuid, db_invite.id);
+    let rel_invite_path = format!("/rooms/{}/invites/{}", room_id, db_invite.id);
     let invite_path = db_invite.id.resource_id();
 
     let policies = PoliciesBuilder::new()
@@ -120,22 +127,28 @@ pub async fn add_invite(
         return Err(DefaultApiError::Internal);
     }
 
-    let output = ApiResponse::new(Invite::from_with_user(db_invite, created_by, updated_by));
-    Ok(output)
+    let created_by = PublicUserProfile::from_db(&settings, created_by);
+    let updated_by = PublicUserProfile::from_db(&settings, updated_by);
+
+    let invite = Invite::from_with_user(db_invite, created_by, updated_by);
+
+    Ok(ApiResponse::new(invite))
 }
 
-/// API Endpoint *GET /rooms/{room_uuid}/invites*
+/// API Endpoint *GET /rooms/{room_id}/invites*
 ///
 /// Returns a JSON array of all accessible invites for the given room
-#[get("/rooms/{room_uuid}/invites")]
+#[get("/rooms/{room_id}/invites")]
 pub async fn get_invites(
+    settings: SharedSettingsActix,
     db: Data<Db>,
-    authz: Data<kustos::Authz>,
-    room_uuid: Path<RoomId>,
+    authz: Data<Authz>,
     current_user: ReqData<User>,
-    pagination: web::Query<PagePaginationQuery>,
+    room_id: Path<RoomId>,
+    pagination: Query<PagePaginationQuery>,
 ) -> DefaultApiResult<Vec<Invite>> {
-    let room_uuid = room_uuid.into_inner();
+    let settings = settings.load_full();
+    let room_id = room_id.into_inner();
     let current_user = current_user.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
@@ -146,7 +159,7 @@ pub async fn get_invites(
 
     let (invites, total_invites) = crate::block(
         move || -> Result<(Vec<db_invites::InviteWithUsers>, i64), DefaultApiError> {
-            let room = db.get_room(room_uuid)?;
+            let room = db.get_room(room_id)?;
             if let Some(room) = room {
                 match accessible_rooms {
                     kustos::AccessibleResources::All => {
@@ -167,6 +180,9 @@ pub async fn get_invites(
     let invites = invites
         .into_iter()
         .map(|(db_invite, created_by, updated_by)| {
+            let created_by = PublicUserProfile::from_db(&settings, created_by);
+            let updated_by = PublicUserProfile::from_db(&settings, updated_by);
+
             Invite::from_with_user(db_invite, created_by, updated_by)
         })
         .collect::<Vec<Invite>>();
@@ -176,28 +192,31 @@ pub async fn get_invites(
 
 #[derive(Debug, Deserialize)]
 pub struct RoomIdAndInviteCode {
-    room_uuid: RoomId,
+    room_id: RoomId,
     invite_code: InviteCodeId,
 }
 
-/// API Endpoint *GET /rooms/{room_uuid}/invites/{invite_code}*
+/// API Endpoint *GET /rooms/{room_id}/invites/{invite_code}*
 ///
 /// Returns a single invite.
 /// Returns 401 Not Found when the user has no access.
-#[get("/rooms/{room_uuid}/invites/{invite_code}")]
+#[get("/rooms/{room_id}/invites/{invite_code}")]
 pub async fn get_invite(
+    settings: SharedSettingsActix,
     db: Data<Db>,
     current_user: ReqData<User>,
     path_params: Path<RoomIdAndInviteCode>,
 ) -> DefaultApiResult<Invite> {
+    let settings = settings.load_full();
+
     let RoomIdAndInviteCode {
-        room_uuid,
+        room_id,
         invite_code,
     } = path_params.into_inner();
 
     let (db_invite, created_by, updated_by) = crate::block(
         move || -> Result<(db_invites::Invite, User, User), DefaultApiError> {
-            let room = db.get_room(room_uuid)?;
+            let room = db.get_room(room_id)?;
             if room.is_some() {
                 let result = db.get_invite_with_users(invite_code)?;
                 if !check_owning_access(&result.0, &current_user.into_inner()) {
@@ -211,36 +230,41 @@ pub async fn get_invite(
     )
     .await??;
 
+    let created_by = PublicUserProfile::from_db(&settings, created_by);
+    let updated_by = PublicUserProfile::from_db(&settings, updated_by);
+
     Ok(ApiResponse::new(Invite::from_with_user(
         db_invite, created_by, updated_by,
     )))
 }
 
-/// API Endpoint *PUT /rooms/{room_uuid}/invites/{invite_code}*
+/// API Endpoint *PUT /rooms/{room_id}/invites/{invite_code}*
 ///
 /// Uses the provided [`UpdateInvite`] to modify a specified invite.
 /// Returns the modified [`Invite`]
-#[put("/rooms/{room_uuid}/invites/{invite_code}")]
+#[put("/rooms/{room_id}/invites/{invite_code}")]
 pub async fn update_invite(
+    settings: SharedSettingsActix,
     db: Data<Db>,
     current_user: ReqData<User>,
     path_params: Path<RoomIdAndInviteCode>,
     update_invite: Json<UpdateInvite>,
 ) -> DefaultApiResult<Invite> {
+    let settings = settings.load_full();
     let RoomIdAndInviteCode {
-        room_uuid,
+        room_id,
         invite_code,
     } = path_params.into_inner();
     let update_invite = update_invite.into_inner();
 
     let (db_invite, created_by, updated_by) = crate::block(
         move || -> Result<(db_invites::Invite, User, User), DefaultApiError> {
-            let room = db.get_room(room_uuid)?;
+            let room = db.get_room(room_id)?;
             if room.is_some() {
                 Ok(db.get_invite(invite_code).and_then(|invite| {
                     let current_user = current_user.into_inner();
                     if check_owning_access(&invite, &current_user) {
-                        let now = chrono::Utc::now();
+                        let now = Utc::now();
                         let update_invite = db_invites::UpdateInvite {
                             updated_by: Some(current_user.id),
                             updated_at: Some(now),
@@ -261,16 +285,19 @@ pub async fn update_invite(
     )
     .await??;
 
+    let created_by = PublicUserProfile::from_db(&settings, created_by);
+    let updated_by = PublicUserProfile::from_db(&settings, updated_by);
+
     Ok(ApiResponse::new(Invite::from_with_user(
         db_invite, created_by, updated_by,
     )))
 }
 
-/// API Endpoint *PUT /rooms/{room_uuid}*
+/// API Endpoint *PUT /rooms/{room_id}*
 ///
 /// Deletes the [`Invite`] identified by this resource.
 /// Returns 204 No Content
-#[delete("/rooms/{room_uuid}/invites/{invite_code}")]
+#[delete("/rooms/{room_id}/invites/{invite_code}")]
 pub async fn delete_invite(
     db: Data<Db>,
     authz: Data<kustos::Authz>,
@@ -278,14 +305,14 @@ pub async fn delete_invite(
     path_params: Path<RoomIdAndInviteCode>,
 ) -> Result<HttpResponse, DefaultApiError> {
     let RoomIdAndInviteCode {
-        room_uuid,
+        room_id,
         invite_code,
     } = path_params.into_inner();
 
     crate::block(move || -> Result<db_invites::Invite, DefaultApiError> {
-        let room = db.get_room(room_uuid)?;
+        let room = db.get_room(room_id)?;
         if room.is_some() {
-            let now = chrono::Utc::now();
+            let now = Utc::now();
             let invite_update = db_invites::UpdateInvite {
                 updated_by: Some(current_user.id),
                 updated_at: Some(now),
@@ -310,7 +337,7 @@ pub async fn delete_invite(
     })
     .await??;
 
-    let rel_invite_path = format!("/rooms/{}/invites/{}", room_uuid, invite_code);
+    let rel_invite_path = format!("/rooms/{}/invites/{}", room_id, invite_code);
     let invite_path = invite_code.resource_id();
 
     if let Err(e) = authz
@@ -364,7 +391,7 @@ pub async fn verify_invite_code(
 
     if invite.active {
         if let Some(expiration) = invite.expiration {
-            if expiration <= chrono::Utc::now() {
+            if expiration <= Utc::now() {
                 // Do not leak the existence of the invite when it is expired
                 return Err(DefaultApiError::NotFound);
             }

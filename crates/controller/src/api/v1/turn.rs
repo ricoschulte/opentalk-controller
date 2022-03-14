@@ -4,7 +4,7 @@ use crate::api::v1::middleware::oidc_auth::check_access_token;
 use crate::api::v1::response::NoContent;
 use crate::api::v1::INVALID_ACCESS_TOKEN;
 use crate::oidc::OidcContext;
-use crate::settings;
+use crate::settings::{self, SharedSettingsActix};
 use crate::settings::{Settings, TurnServer};
 use actix_web::get;
 use actix_web::http::header::Header;
@@ -61,7 +61,7 @@ pub enum IceServer {
 /// Returns a list of ['Turn'] with HMAC-SHA1 credentials following <https://datatracker.ietf.org/doc/html/draft-uberti-behave-turn-rest-00>
 #[get("/turn")]
 pub async fn get(
-    settings: Data<arc_swap::ArcSwap<settings::Settings>>,
+    settings: SharedSettingsActix,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     req: HttpRequest,

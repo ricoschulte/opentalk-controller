@@ -42,8 +42,10 @@ pub struct User {
     pub firstname: String,
     pub lastname: String,
     pub id_token_exp: i64,
-    pub theme: String,
     pub language: String,
+    pub display_name: String,
+    pub dashboard_theme: String,
+    pub conference_theme: String,
 }
 
 /// Diesel insertable user struct
@@ -59,8 +61,8 @@ pub struct NewUser {
     pub firstname: String,
     pub lastname: String,
     pub id_token_exp: i64,
-    pub theme: String,
     pub language: String,
+    pub display_name: String,
 }
 
 pub struct NewUserWithGroups {
@@ -75,9 +77,11 @@ pub struct NewUserWithGroups {
 #[table_name = "users"]
 pub struct UpdateUser {
     pub title: Option<String>,
-    pub theme: Option<String>,
+    pub display_name: Option<String>,
     pub language: Option<String>,
     pub id_token_exp: Option<i64>,
+    pub dashboard_theme: Option<String>,
+    pub conference_theme: Option<String>,
 }
 
 /// Ok type of [`DbUsersEx::modify_user`]
@@ -295,6 +299,8 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
 
         let conn = self.get_conn()?;
 
+        let lower_display_name = lower(users::display_name);
+
         let lower_first_lastname = lower(
             users::columns::firstname
                 .concat(" ")
@@ -303,14 +309,29 @@ pub trait DbUsersEx: DbInterface + DbGroupsEx {
 
         let matches = users::table
             .filter(
-                lower_first_lastname
-                    .like(&like_query)
-                    .or(lower(users::columns::email).like(&like_query))
-                    .or(soundex(lower_first_lastname)
-                        .eq(soundex(&search_str))
-                        .and(levenshtein(lower_first_lastname, &search_str).lt(5))),
+                // First try LIKE query on display_name
+                lower_display_name.like(&like_query).or(
+                    // Then try LIKE query with first+last name
+                    lower_first_lastname
+                        .like(&like_query)
+                        // Then try LIKE query on email
+                        .or(lower(users::columns::email).like(&like_query))
+                        //
+                        // Then SOUNDEX on display_name
+                        .or(soundex(lower_display_name)
+                            .eq(soundex(&search_str))
+                            // only take SOUNDEX results with a levenshtein score of lower than 5
+                            .and(levenshtein(lower_display_name, &search_str).lt(5)))
+                        //
+                        // Then SOUNDEX on first+last name
+                        .or(soundex(lower_first_lastname)
+                            .eq(soundex(&search_str))
+                            // only take SOUNDEX results with a levenshtein score of lower than 5
+                            .and(levenshtein(lower_first_lastname, &search_str).lt(5))),
+                ),
             )
-            .order_by(levenshtein(lower_first_lastname, &search_str))
+            .order_by(levenshtein(lower_display_name, &search_str))
+            .then_order_by(levenshtein(lower_first_lastname, &search_str))
             .then_order_by(users::columns::id)
             .limit(5)
             .get_results(&conn)?;

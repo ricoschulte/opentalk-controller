@@ -12,6 +12,7 @@ pub enum AccessMethod {
     Get,
     Post,
     Put,
+    Patch,
     Delete,
 }
 
@@ -19,10 +20,11 @@ impl AccessMethod {
     pub const GET: AccessMethod = AccessMethod::Get;
     pub const POST: AccessMethod = AccessMethod::Post;
     pub const PUT: AccessMethod = AccessMethod::Put;
+    pub const PATCH: AccessMethod = AccessMethod::Patch;
     pub const DELETE: AccessMethod = AccessMethod::Delete;
 
-    pub fn all_http() -> [AccessMethod; 4] {
-        [Self::GET, Self::POST, Self::PUT, Self::DELETE]
+    pub fn all_http() -> [AccessMethod; 5] {
+        [Self::GET, Self::POST, Self::PUT, Self::PATCH, Self::DELETE]
     }
 }
 
@@ -36,6 +38,7 @@ impl FromStr for AccessMethod {
             "GET" => AccessMethod::Get,
             "POST" => AccessMethod::Post,
             "PUT" => AccessMethod::Put,
+            "PATCH" => AccessMethod::Patch,
             "DELETE" => AccessMethod::Delete,
             _ => return Err(crate::ParsingError::InvalidAccessMethod(s.to_owned())),
         })
@@ -49,6 +52,7 @@ impl AsRef<str> for AccessMethod {
             AccessMethod::Write => "write",
             AccessMethod::Get => "GET",
             AccessMethod::Post => "POST",
+            AccessMethod::Patch => "PATCH",
             AccessMethod::Put => "PUT",
             AccessMethod::Delete => "DELETE",
         }
@@ -79,6 +83,7 @@ impl From<http::Method> for AccessMethod {
         match method {
             http::Method::GET => Self::GET,
             http::Method::POST => Self::POST,
+            http::Method::PATCH => Self::PATCH,
             http::Method::PUT => Self::PUT,
             http::Method::DELETE => Self::DELETE,
             _ => unimplemented!(),

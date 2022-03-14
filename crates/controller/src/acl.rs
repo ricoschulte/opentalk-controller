@@ -36,7 +36,7 @@ pub(crate) async fn check_or_create_kustos_default_permissions(
         authz,
         "user",
         "/users/me",
-        [AccessMethod::Put, AccessMethod::Get],
+        [AccessMethod::Patch, AccessMethod::Get],
     )
     .await?;
 

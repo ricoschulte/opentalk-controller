@@ -69,7 +69,7 @@ impl DatabaseContext {
             firstname: "test".into(),
             lastname: "tester".into(),
             id_token_exp: 0,
-            theme: "".into(),
+            display_name: "test tester".into(),
             language: "en".into(),
         };
 

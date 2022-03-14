@@ -1,9 +1,13 @@
 //! Handles the application settings via a config file and environment variables.
 use crate::cli::Args;
+use actix_web::web::Data;
+use arc_swap::ArcSwap;
 use config::ConfigError;
 use std::sync::Arc;
 
 pub use controller_shared::settings::*;
+
+pub type SharedSettingsActix = Data<ArcSwap<Settings>>;
 
 /// Reload the settings from the `config_path` & the environment
 ///
