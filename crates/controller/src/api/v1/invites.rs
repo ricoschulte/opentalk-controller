@@ -8,6 +8,7 @@ use db_storage::invites::DbInvitesEx;
 use db_storage::invites::{self as db_invites, InviteCodeId};
 use db_storage::rooms::{DbRoomsEx, RoomId};
 use db_storage::users::User;
+use kustos::policies_builder::PoliciesBuilder;
 use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -63,10 +64,10 @@ pub struct UpdateInvite {
 #[post("/rooms/{room_uuid}/invites")]
 pub async fn add_invite(
     db: Data<Db>,
+    authz: Data<kustos::Authz>,
     current_user: ReqData<User>,
     room_uuid: Path<RoomId>,
     data: Json<NewInvite>,
-    authz: Data<kustos::Authz>,
 ) -> DefaultApiResult<Invite> {
     let room_uuid = room_uuid.into_inner();
     let current_user = current_user.into_inner();
@@ -99,26 +100,23 @@ pub async fn add_invite(
     .await??;
 
     // TODO(r.floren) Do we want to rollback if this failed?
-    let rel_invite_path = format!("/rooms/{}/invites/{}", room_uuid, db_invite.id).into();
+    let rel_invite_path = format!("/rooms/{}/invites/{}", room_uuid, db_invite.id);
     let invite_path = db_invite.id.resource_id();
 
-    if let Err(e) = authz
-        .grant_user_access(
-            current_user.id,
-            &[
-                (
-                    &rel_invite_path,
-                    &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
-                ),
-                (
-                    &invite_path,
-                    &[AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
-                ),
-            ],
+    let policies = PoliciesBuilder::new()
+        .grant_user_access(current_user.id)
+        .add_resource(
+            rel_invite_path,
+            [AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
         )
-        .await
-    {
-        log::error!("Failed to add RBAC policy: {}", e);
+        .add_resource(
+            invite_path,
+            [AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
+        )
+        .finish();
+
+    if let Err(e) = authz.add_policies(policies).await {
+        log::error!("Failed to add RBAC policies: {}", e);
         return Err(DefaultApiError::Internal);
     }
 
@@ -132,10 +130,10 @@ pub async fn add_invite(
 #[get("/rooms/{room_uuid}/invites")]
 pub async fn get_invites(
     db: Data<Db>,
+    authz: Data<kustos::Authz>,
     room_uuid: Path<RoomId>,
     current_user: ReqData<User>,
     pagination: web::Query<PagePaginationQuery>,
-    authz: Data<kustos::Authz>,
 ) -> DefaultApiResult<Vec<Invite>> {
     let room_uuid = room_uuid.into_inner();
     let current_user = current_user.into_inner();
@@ -275,6 +273,7 @@ pub async fn update_invite(
 #[delete("/rooms/{room_uuid}/invites/{invite_code}")]
 pub async fn delete_invite(
     db: Data<Db>,
+    authz: Data<kustos::Authz>,
     current_user: ReqData<User>,
     path_params: Path<RoomIdAndInviteCode>,
 ) -> Result<HttpResponse, DefaultApiError> {
@@ -310,6 +309,23 @@ pub async fn delete_invite(
         }
     })
     .await??;
+
+    let rel_invite_path = format!("/rooms/{}/invites/{}", room_uuid, invite_code);
+    let invite_path = invite_code.resource_id();
+
+    if let Err(e) = authz
+        .remove_explicit_resource_permissions(rel_invite_path)
+        .await
+    {
+        log::error!("failed to remove resource {}", e);
+    }
+
+    if let Err(e) = authz
+        .remove_explicit_resource_permissions(invite_path)
+        .await
+    {
+        log::error!("failed to remove resource {}", e);
+    }
 
     Ok(HttpResponse::NoContent().finish())
 }
