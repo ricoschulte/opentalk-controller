@@ -1,9 +1,9 @@
-use super::adapter::ActixTungsteniteAdapter;
 use super::modules::{ModuleBuilder, ModuleBuilderImpl};
 use super::runner::Runner;
 use super::SignalingModule;
 use crate::api::signaling::resumption::{ResumptionData, ResumptionTokenKeepAlive};
 use crate::api::signaling::ticket::{TicketData, TicketRedisKey};
+use crate::api::signaling::ws::actor::WebSocketActor;
 use crate::api::v1::{ApiError, DefaultApiError};
 use crate::api::Participant;
 use actix_web::http::header;
@@ -11,8 +11,6 @@ use actix_web::web::Data;
 use actix_web::{get, HttpMessage};
 use actix_web::{web, HttpRequest, HttpResponse};
 use actix_web_actors::ws;
-use async_tungstenite::tungstenite::protocol::Role;
-use async_tungstenite::WebSocketStream;
 use database::Db;
 use db_storage::rooms::DbRoomsEx;
 use db_storage::rooms::Room;
@@ -21,7 +19,7 @@ use db_storage::DbUsersEx;
 use kustos::Authz;
 use redis::aio::ConnectionManager;
 use std::marker::PhantomData;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, mpsc};
 use tokio::task;
 use tracing_actix_web::RequestId;
 
@@ -96,10 +94,11 @@ pub(crate) async fn ws_service(
         ResumptionTokenKeepAlive::new(ticket_data.resumption, resumption_data);
 
     // Finish websocket handshake
-    let mut response = ws::handshake(&request)?;
-
-    let (adapter, actix_stream) = ActixTungsteniteAdapter::from_actix_payload(stream);
-    let websocket = WebSocketStream::from_raw_socket(adapter, Role::Server, None).await;
+    let (sender, recv) = mpsc::unbounded_channel();
+    let (addr, response) =
+        ws::WsResponseBuilder::new(WebSocketActor::new(sender), &request, stream)
+            .protocols(protocols.0)
+            .start_with_addr()?;
 
     let mut builder = Runner::builder(
         request_id,
@@ -125,7 +124,7 @@ pub(crate) async fn ws_service(
     }
 
     // Build and initialize the runner
-    let runner = match builder.build(websocket, shutdown.subscribe()).await {
+    let runner = match builder.build(addr, recv, shutdown.subscribe()).await {
         Ok(runner) => runner,
         Err(e) => {
             log::error!("Failed to initialize runner, {}", e);
@@ -136,9 +135,7 @@ pub(crate) async fn ws_service(
     // Spawn the runner task
     task::spawn_local(runner.run());
 
-    response.insert_header((header::SEC_WEBSOCKET_PROTOCOL, protocol));
-
-    Ok(response.streaming(actix_stream))
+    Ok(response)
 }
 
 fn read_request_header<'t>(

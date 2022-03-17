@@ -15,9 +15,9 @@ use crate::api::signaling::prelude::{BreakoutRoomId, InitContext, ModuleContext}
 use crate::api::signaling::ws_modules::control::ParticipationKind;
 use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
+use actix_http::ws::CloseCode;
 use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
-use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
@@ -806,7 +806,7 @@ where
         if let Some(exit) = exit {
             self.exit = true;
 
-            log::debug!("Module requested exit with CloseCode: {}", exit);
+            log::debug!("Module requested exit with CloseCode: {:?}", exit);
         }
     }
 

@@ -2,10 +2,9 @@ use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::ControlData;
 use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
-use adapter::ActixTungsteniteAdapter;
+use actix_http::ws::CloseCode;
 use anyhow::Result;
-use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
-use async_tungstenite::WebSocketStream;
+use bytestring::ByteString;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
@@ -23,7 +22,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio_stream::Stream;
 
-mod adapter;
+mod actor;
 mod echo;
 mod http;
 pub mod module_tester;
@@ -34,8 +33,6 @@ pub use echo::Echo;
 pub use http::ws_service;
 pub use http::SignalingModules;
 pub use http::SignalingProtocols;
-
-type WebSocket = WebSocketStream<ActixTungsteniteAdapter>;
 
 /// Event passed to [`SignalingModule::on_event`]
 pub enum Event<'evt, M>
@@ -409,7 +406,9 @@ impl<'n, O> NamespacedOutgoing<'n, O>
 where
     O: Serialize,
 {
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).expect("Failed to convert namespaced to json")
+    pub fn to_json(&self) -> ByteString {
+        serde_json::to_string(self)
+            .expect("Failed to convert namespaced to json")
+            .into()
     }
 }

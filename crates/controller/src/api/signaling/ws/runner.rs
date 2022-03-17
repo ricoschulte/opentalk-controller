@@ -1,13 +1,15 @@
+use super::actor::WebSocketActor;
 use super::modules::{
     AnyStream, DynBroadcastEvent, DynEventCtx, DynTargetedEvent, Modules, NoSuchModuleError,
 };
 use super::{
     DestroyContext, Namespaced, NamespacedOutgoing, RabbitMqBinding, RabbitMqExchange,
-    RabbitMqPublish, Timestamp, WebSocket,
+    RabbitMqPublish, Timestamp,
 };
 use crate::api;
 use crate::api::signaling::prelude::*;
 use crate::api::signaling::resumption::{ResumptionTokenKeepAlive, ResumptionTokenUsed};
+use crate::api::signaling::ws::actor::WsCommand;
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::storage::ParticipantIdRunnerLock;
@@ -16,17 +18,17 @@ use crate::api::signaling::ws_modules::control::{
 };
 use crate::api::signaling::{Role, SignalingRoomId};
 use crate::ha_sync::user_update;
+use actix::Addr;
+use actix_http::ws::{CloseCode, CloseReason, Message};
+use actix_web_actors::ws;
 use anyhow::{bail, Context, Result};
-use async_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
-use async_tungstenite::tungstenite::protocol::CloseFrame;
-use async_tungstenite::tungstenite::Message;
+use bytestring::ByteString;
 use chrono::TimeZone;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
 use db_storage::users::User;
 use futures::stream::SelectAll;
-use futures::SinkExt;
 use kustos::Authz;
 use lapin::message::DeliveryResult;
 use lapin::options::{ExchangeDeclareOptions, QueueDeclareOptions};
@@ -35,15 +37,12 @@ use redis::aio::ConnectionManager;
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::broadcast;
-use tokio::time::{sleep, Sleep};
+use tokio::sync::{broadcast, mpsc};
+use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
-
-const WS_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Builder to the runner type.
 ///
@@ -107,10 +106,11 @@ impl Builder {
     }
 
     /// Build to runner from the data inside the builder and provided websocket
-    #[tracing::instrument(skip(self, websocket, shutdown_sig))]
+    #[tracing::instrument(err, skip_all)]
     pub async fn build(
         mut self,
-        websocket: WebSocket,
+        to_ws_actor: Addr<WebSocketActor>,
+        from_ws_actor: mpsc::UnboundedReceiver<Message>,
         shutdown_sig: broadcast::Receiver<()>,
     ) -> Result<Runner> {
         self.aquire_participant_id().await?;
@@ -302,9 +302,8 @@ impl Builder {
             role: self.role,
             control_data: None,
             ws: Ws {
-                websocket,
-                timeout: Box::pin(sleep(WS_TIMEOUT)),
-                awaiting_pong: false,
+                to_actor: to_ws_actor,
+                from_actor: from_ws_actor,
                 state: State::Open,
             },
             modules: self.modules,
@@ -321,9 +320,9 @@ impl Builder {
     }
 }
 
-/// The websocket runner
+/// The session runner
 ///
-/// As root of the websocket-task it is responsible to drive the websocket application,
+/// As root of the session-task it is responsible to drive the module,
 /// manage setup and teardown of redis storage, RabbitMQ queues and modules.
 ///
 /// Also acts as `control` module which handles participant and room states.
@@ -346,7 +345,7 @@ pub struct Runner {
     // The control data. Initialized when frontend send join
     control_data: Option<ControlData>,
 
-    // Websocket abstraction which helps detecting timeouts using regular ping-messages
+    // Websocket abstraction which connects the to the websocket actor
     ws: Ws,
 
     // All registered and initialized modules
@@ -558,7 +557,7 @@ impl Runner {
 
     /// Runs the runner until the peer closes its websocket connection or a fatal error occurres.
     pub async fn run(mut self) {
-        while matches!(self.ws.state, State::Open | State::Closing) {
+        while matches!(self.ws.state, State::Open) {
             if self.exit && matches!(self.ws.state, State::Open) {
                 // This case handles exit on errors unrelated to websocket or controller shutdown
                 self.ws.close(CloseCode::Abnormal).await;
@@ -597,6 +596,7 @@ impl Runner {
                 }
                 _ = self.shutdown_sig.recv() => {
                     self.ws.close(CloseCode::Away).await;
+                    break;
                 }
                 _ = self.resumption_keep_alive.wait() => {
                     if let Err(e) = self.resumption_keep_alive.refresh(&mut self.redis_conn).await {
@@ -626,14 +626,12 @@ impl Runner {
 
     #[tracing::instrument(skip(self, message), fields(id = %self.id))]
     async fn handle_ws_message(&mut self, message: Message) {
-        log::trace!("Received websocket message {}", message);
+        log::trace!("Received websocket message {:?}", message);
 
         let value: Result<Namespaced<'_, Value>, _> = match message {
             Message::Text(ref text) => serde_json::from_str(text),
             Message::Binary(ref binary) => serde_json::from_slice(binary),
-            Message::Frame(_) | Message::Ping(_) | Message::Pong(_) | Message::Close(_) => {
-                unreachable!()
-            }
+            _ => unreachable!(),
         };
 
         let namespaced = match value {
@@ -1272,7 +1270,7 @@ struct ModuleRequestedActions {
     exit: Option<CloseCode>,
 }
 
-fn error(text: &str) -> String {
+fn error(text: &str) -> ByteString {
     NamespacedOutgoing {
         namespace: "error",
         timestamp: Timestamp::now(),
@@ -1281,20 +1279,15 @@ fn error(text: &str) -> String {
     .to_json()
 }
 
-/// Helper websocket abstraction that pings the participants in regular intervals
 struct Ws {
-    websocket: WebSocket,
-    // Timeout trigger
-    timeout: Pin<Box<Sleep>>,
-
-    awaiting_pong: bool,
+    to_actor: Addr<WebSocketActor>,
+    from_actor: mpsc::UnboundedReceiver<ws::Message>,
 
     state: State,
 }
 
 enum State {
     Open,
-    Closing,
     Closed,
     Error,
 }
@@ -1302,11 +1295,15 @@ enum State {
 impl Ws {
     /// Send message via websocket
     async fn send(&mut self, message: Message) {
-        log::trace!("Send message to websocket: {:?}", message);
+        if let State::Open = self.state {
+            log::trace!("Send message to websocket: {:?}", message);
 
-        if let Err(e) = self.websocket.send(message).await {
-            log::error!("Failed to send websocket message, {}", e);
-            self.state = State::Error;
+            if let Err(e) = self.to_actor.send(WsCommand::Ws(message)).await {
+                log::error!("Failed to send websocket message, {}", e);
+                self.state = State::Error;
+            }
+        } else {
+            log::warn!("Tried to send websocket message on closed or error'd websocket");
         }
     }
 
@@ -1316,19 +1313,16 @@ impl Ws {
             return;
         }
 
-        let frame = CloseFrame {
+        let reason = CloseReason {
             code,
-            reason: "".into(),
+            description: None,
         };
 
-        log::debug!("closing websocket with code {}", code);
+        log::debug!("closing websocket with code {:?}", code);
 
-        if let Err(e) = self.websocket.close(Some(frame)).await {
+        if let Err(e) = self.to_actor.send(WsCommand::Close(reason)).await {
             log::error!("Failed to close websocket, {}", e);
             self.state = State::Error;
-        } else {
-            self.state = State::Closing;
-            self.timeout.set(sleep(WS_TIMEOUT));
         }
     }
 
@@ -1336,47 +1330,11 @@ impl Ws {
     ///
     /// Sends a health check ping message every WS_TIMEOUT.
     async fn receive(&mut self) -> Result<Option<Message>> {
-        loop {
-            tokio::select! {
-                message = self.websocket.next() => {
-                    match message {
-                        Some(Ok(msg)) => {
-                            if matches!(self.state, State::Open) {
-                                // Received a message, reset timeout.
-                                self.timeout.set(sleep(WS_TIMEOUT));
-                            }
-
-                            match msg {
-                                Message::Ping(ping) => self.send(Message::Pong(ping)).await,
-                                Message::Pong(_) => self.awaiting_pong = false,
-                                Message::Close(_) => self.state = State::Closing,
-                                msg => return Ok(Some(msg))
-                            }
-                        }
-                        Some(Err(e)) => {
-                            self.state = State::Error;
-                            bail!(e);
-                        }
-                        None => if matches!(self.state, State::Closing) {
-                            self.state = State::Closed;
-                            return Ok(None)
-                        } else {
-                            self.state = State::Error;
-                            bail!("WebSocket stream closed unexpectedly")
-                        },
-                    }
-                }
-                _ = self.timeout.as_mut() => {
-                    if self.awaiting_pong {
-                        self.state = State::Error;
-                        bail!("Websocket timed out, peer no longer responds");
-                    } else {
-                        self.timeout.set(sleep(WS_TIMEOUT));
-                        self.awaiting_pong = true;
-
-                        self.websocket.send(Message::Ping(vec![])).await?;
-                    }
-                }
+        match self.from_actor.recv().await {
+            Some(msg) => Ok(Some(msg)),
+            None => {
+                self.state = State::Closed;
+                Ok(None)
             }
         }
     }

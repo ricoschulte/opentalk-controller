@@ -60,6 +60,7 @@ bytes = "1"
 serde_json = "1"
 parking_lot = "0.12"
 mime = "0.3.16"
+bytestring = "1"
 
 ### RabbitMQ
 lapin = { version = "2", default-features = false }
@@ -78,7 +79,8 @@ base64 = "0.13"
 chrono = "0.4"
 
 ### Websockets
-async-tungstenite = "0.17"
+actix = "0.13"
+actix-http = "3"
 actix-web-actors = "4.1"
 
 ### Rust Encryption
