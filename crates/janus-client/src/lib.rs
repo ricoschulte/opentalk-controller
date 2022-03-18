@@ -100,6 +100,8 @@ use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::sleep;
 
+#[macro_use]
+mod macros;
 mod client;
 pub mod error;
 pub mod rabbitmq;

@@ -136,31 +136,12 @@ pub enum PluginBody {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::assert_eq_json;
     use crate::types::{outgoing::JanusRequest, HandleId, SessionId};
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_trickle() {
-        let reference = r#"{
-            "janus":"trickle",
-            "handle_id":2123,
-            "session_id":234,
-            "candidates":[
-                {
-                    "sdpMLineIndex":1,
-                    "candidate":"1 2 UDP 2130706431 10.0.1.1 5001 typ host"
-            },
-            {
-                    "sdpMLineIndex":1,
-                    "candidate":"2 1 UDP 1694498815 192.0.2.3 5000 typ srflx raddr 10.0.1.1 rport 8998"
-            }
-        ]
-          }"#;
-        let reference = reference
-            .lines()
-            .map(|s| s.trim_start())
-            .collect::<String>();
-        let our = JanusRequest::TrickleMessage {
+        let trickle_message = JanusRequest::TrickleMessage {
             session_id: SessionId::new(234),
             handle_id: HandleId::new(2123),
             trickle: TrickleMessage::new(&[
@@ -177,6 +158,24 @@ mod test {
             ])
             .unwrap(),
         };
-        assert_eq!(reference, serde_json::to_string(&our).unwrap());
+
+        assert_eq_json!(
+            trickle_message,
+            {
+                "janus": "trickle",
+                "handle_id": 2123,
+                "session_id": 234,
+                "candidates": [
+                    {
+                        "sdpMLineIndex":1,
+                        "candidate":"1 2 UDP 2130706431 10.0.1.1 5001 typ host"
+                    },
+                    {
+                        "sdpMLineIndex":1,
+                        "candidate":"2 1 UDP 1694498815 192.0.2.3 5000 typ srflx raddr 10.0.1.1 rport 8998"
+                    }
+                ]
+            }
+        );
     }
 }

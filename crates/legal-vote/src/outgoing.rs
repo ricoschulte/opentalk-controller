@@ -167,12 +167,11 @@ mod test {
     use controller::prelude::*;
     use controller_shared::ParticipantId;
     use db_storage::legal_votes::types::{CancelReason, Parameters, UserParameters};
+    use test_util::assert_eq_json;
     use uuid::Uuid;
 
     #[test]
     fn start_message() {
-        let json_str = r#"{"message":"started","initiator_id":"00000000-0000-0000-0000-000000000000","legal_vote_id":"00000000-0000-0000-0000-000000000000","start_time":"1970-01-01T00:00:00Z","max_votes":2,"name":"TestVote","subtitle":"A subtitle","topic":"Yes or No?","allowed_participants":["00000000-0000-0000-0000-000000000001","00000000-0000-0000-0000-000000000002"],"enable_abstain":false,"auto_stop":false,"duration":null}"#;
-
         let message = Message::Started(Parameters {
             initiator_id: ParticipantId::nil(),
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
@@ -189,15 +188,30 @@ mod test {
             },
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "started",
+                "initiator_id": "00000000-0000-0000-0000-000000000000",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "start_time": "1970-01-01T00:00:00Z",
+                "max_votes": 2,
+                "name": "TestVote",
+                "subtitle": "A subtitle",
+                "topic": "Yes or No?",
+                "allowed_participants": [
+                    "00000000-0000-0000-0000-000000000001",
+                    "00000000-0000-0000-0000-000000000002"
+                ],
+                "enable_abstain": false,
+                "auto_stop": false,
+                "duration": null
+            }
+        );
     }
 
     #[test]
     fn vote_success_message() {
-        let json_str = r#"{"message":"voted","legal_vote_id":"00000000-0000-0000-0000-000000000000","response":"success","vote_option":"yes","issuer":"00000000-0000-0000-0000-000000000000"}"#;
-
         let message = Message::Voted(VoteResponse {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             response: Response::Success(VoteSuccess {
@@ -206,57 +220,74 @@ mod test {
             }),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "voted",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "response": "success",
+                "vote_option": "yes",
+                "issuer": "00000000-0000-0000-0000-000000000000"
+            }
+        );
     }
 
     #[test]
     fn vote_failed_invalid_vote_id_message() {
-        let json_str = r#"{"message":"voted","legal_vote_id":"00000000-0000-0000-0000-000000000000","response":"failed","reason":"invalid_vote_id"}"#;
-
         let message = Message::Voted(VoteResponse {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             response: Response::Failed(VoteFailed::InvalidVoteId),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "voted",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "response": "failed",
+                "reason": "invalid_vote_id"
+            }
+        );
     }
 
     #[test]
     fn vote_failed_ineligible_message() {
-        let json_str = r#"{"message":"voted","legal_vote_id":"00000000-0000-0000-0000-000000000000","response":"failed","reason":"ineligible"}"#;
-
         let message = Message::Voted(VoteResponse {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             response: Response::Failed(VoteFailed::Ineligible),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "voted",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "response": "failed",
+                "reason": "ineligible"
+            }
+        );
     }
 
     #[test]
     fn vote_failed_invalid_option_message() {
-        let json_str = r#"{"message":"voted","legal_vote_id":"00000000-0000-0000-0000-000000000000","response":"failed","reason":"invalid_option"}"#;
-
         let message = Message::Voted(VoteResponse {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             response: Response::Failed(VoteFailed::InvalidOption),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "voted",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "response": "failed",
+                "reason": "invalid_option"
+            }
+        );
     }
 
     #[test]
     fn update_message() {
-        let json_str = r#"{"message":"updated","legal_vote_id":"00000000-0000-0000-0000-000000000000","yes":1,"no":0,"voters":{"00000000-0000-0000-0000-000000000001":"yes"}}"#;
-
         let votes = Votes {
             yes: 1,
             no: 0,
@@ -271,15 +302,22 @@ mod test {
             results: Results { votes, voters },
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "updated",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "yes": 1,
+                "no": 0,
+                "voters": {
+                    "00000000-0000-0000-0000-000000000001": "yes"
+                }
+            }
+        );
     }
 
     #[test]
     fn stop_message() {
-        let json_str = r#"{"message":"stopped","legal_vote_id":"00000000-0000-0000-0000-000000000000","kind":"by_participant","issuer":"00000000-0000-0000-0000-000000000000","results":"valid","yes":1,"no":0,"voters":{"00000000-0000-0000-0000-000000000001":"yes"}}"#;
-
         let votes = Votes {
             yes: 1,
             no: 0,
@@ -295,15 +333,25 @@ mod test {
             results: FinalResults::Valid(Results { votes, voters }),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "stopped",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "kind": "by_participant",
+                "issuer": "00000000-0000-0000-0000-000000000000",
+                "results": "valid",
+                "yes": 1,
+                "no": 0,
+                "voters": {
+                    "00000000-0000-0000-0000-000000000001": "yes"
+                }
+            }
+        );
     }
 
     #[test]
     fn auto_stop_message() {
-        let json_str = r#"{"message":"stopped","legal_vote_id":"00000000-0000-0000-0000-000000000000","kind":"auto","results":"valid","yes":1,"no":0,"voters":{"00000000-0000-0000-0000-000000000001":"yes"}}"#;
-
         let votes = Votes {
             yes: 1,
             no: 0,
@@ -319,15 +367,24 @@ mod test {
             results: FinalResults::Valid(Results { votes, voters }),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "stopped",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "kind": "auto",
+                "results": "valid",
+                "yes": 1,
+                "no": 0,
+                "voters": {
+                    "00000000-0000-0000-0000-000000000001": "yes"
+                }
+            }
+        );
     }
 
     #[test]
     fn expired_stop_message() {
-        let json_str = r#"{"message":"stopped","legal_vote_id":"00000000-0000-0000-0000-000000000000","kind":"expired","results":"valid","yes":0,"no":0,"abstain":1,"voters":{"00000000-0000-0000-0000-000000000001":"abstain"}}"#;
-
         let votes = Votes {
             yes: 0,
             no: 0,
@@ -343,146 +400,196 @@ mod test {
             results: FinalResults::Valid(Results { votes, voters }),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "stopped",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "kind": "expired",
+                "results": "valid",
+                "yes": 0,
+                "no": 0,
+                "abstain": 1,
+                "voters": {
+                  "00000000-0000-0000-0000-000000000001": "abstain"
+                }
+            }
+        );
     }
 
     #[test]
     fn invalid_stop_message() {
-        let json_str = r#"{"message":"stopped","legal_vote_id":"00000000-0000-0000-0000-000000000000","kind":"by_participant","issuer":"00000000-0000-0000-0000-000000000000","results":"invalid","reason":"vote_count_inconsistent"}"#;
-
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Invalid(Invalid::VoteCountInconsistent),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "stopped",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "kind": "by_participant",
+                "issuer": "00000000-0000-0000-0000-000000000000",
+                "results": "invalid",
+                "reason": "vote_count_inconsistent"
+            }
+        );
     }
 
     #[test]
     fn room_destroyed_cancel_message() {
-        let json_str = r#"{"message":"canceled","legal_vote_id":"00000000-0000-0000-0000-000000000000","reason":"room_destroyed"}"#;
-
         let message = Message::Canceled(Canceled {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             reason: CancelReason::RoomDestroyed,
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "canceled",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "reason": "room_destroyed"
+            }
+        );
     }
 
     #[test]
     fn initiator_left_cancel_message() {
-        let json_str = r#"{"message":"canceled","legal_vote_id":"00000000-0000-0000-0000-000000000000","reason":"initiator_left"}"#;
-
         let message = Message::Canceled(Canceled {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             reason: CancelReason::InitiatorLeft,
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "canceled",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "reason": "initiator_left"
+            }
+        );
     }
 
     #[test]
     fn custom_cancel_message() {
-        let json_str = r#"{"message":"canceled","legal_vote_id":"00000000-0000-0000-0000-000000000000","reason":"custom","custom":"A custom reason"}"#;
-
         let message = Message::Canceled(Canceled {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             reason: CancelReason::Custom("A custom reason".into()),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str)
+        assert_eq_json!(
+            message,
+            {
+                "message": "canceled",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "reason": "custom",
+                "custom": "A custom reason"
+            }
+        );
     }
 
     #[test]
     fn ineligible_error_message() {
-        let json_str = r#"{"message":"error","error":"ineligible"}"#;
-
         let message = Message::Error(ErrorKind::Ineligible);
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "error",
+                "error": "ineligible"
+            }
+        );
     }
 
     #[test]
     fn invalid_vote_id_error_message() {
-        let json_str = r#"{"message":"error","error":"invalid_vote_id"}"#;
-
         let message = Message::Error(ErrorKind::InvalidVoteId);
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "error",
+                "error": "invalid_vote_id"
+            }
+        );
     }
 
     #[test]
     fn no_vote_active_error_message() {
-        let json_str = r#"{"message":"error","error":"no_vote_active"}"#;
-
         let message = Message::Error(ErrorKind::NoVoteActive);
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "error",
+                "error": "no_vote_active"
+            }
+        );
     }
 
     #[test]
     fn vote_already_active_error_message() {
-        let json_str = r#"{"message":"error","error":"vote_already_active"}"#;
-
         let message = Message::Error(ErrorKind::VoteAlreadyActive);
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "error",
+                "error": "vote_already_active"
+            }
+        );
     }
 
     #[test]
     fn allowlist_contains_guests_error_message() {
-        let json_str = r#"{"message":"error","error":"allowlist_contains_guests","guests":["00000000-0000-0000-0000-000000000000","00000000-0000-0000-0000-000000000001"]}"#;
-
         let message = Message::Error(ErrorKind::AllowlistContainsGuests(GuestParticipants {
             guests: vec![ParticipantId::new_test(0), ParticipantId::new_test(1)],
         }));
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "error",
+                "error": "allowlist_contains_guests",
+                "guests": [
+                    "00000000-0000-0000-0000-000000000000",
+                    "00000000-0000-0000-0000-000000000001"
+                ]
+            }
+        );
     }
 
     #[test]
     fn bad_request_error_message() {
-        let json_str = r#"{"message":"error","error":"bad_request","fields":["name","duration"]}"#;
-
         let message = Message::Error(ErrorKind::BadRequest(InvalidFields {
             fields: vec!["name".into(), "duration".into()],
         }));
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "error",
+                "error": "bad_request",
+                "fields": [
+                    "name",
+                    "duration"
+                ]
+            }
+        );
     }
 
     #[test]
     fn internal_error_message() {
-        let json_str = r#"{"message":"error","error":"internal"}"#;
-
         let message = Message::Error(ErrorKind::Internal);
 
-        let string = serde_json::to_string(&message).unwrap();
-
-        assert_eq!(string, json_str);
+        assert_eq_json!(
+            message,
+            {
+                "message": "error",
+                "error": "internal",
+            }
+        );
     }
 }

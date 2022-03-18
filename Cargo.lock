@@ -1742,6 +1742,7 @@ dependencies = [
  "janus-client",
  "k3k-controller-core",
  "k3k-controller-shared",
+ "k3k-test-util",
  "serde",
 ]
 
