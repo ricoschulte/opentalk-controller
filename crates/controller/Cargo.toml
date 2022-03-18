@@ -85,6 +85,7 @@ actix-web-actors = "4.1"
 ring = "0.16"
 rustls = "0.20"
 rustls-pemfile = "0.3"
+md5 = "0.7"
 
 ### QoL
 displaydoc = "0.2"

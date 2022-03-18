@@ -60,9 +60,11 @@ pub async fn login(
                         Some(user) => {
                             let modify_user = UpdateUser {
                                 title: None,
-                                theme: None,
                                 language: None,
                                 id_token_exp: Some(info.expiration.timestamp()),
+                                display_name: None,
+                                dashboard_theme: None,
+                                conference_theme: None,
                             };
 
                             let modified_user =
@@ -76,10 +78,10 @@ pub async fn login(
                                 oidc_issuer: info.issuer,
                                 email: info.email,
                                 title: String::new(),
+                                display_name: format!("{} {}", info.firstname, info.lastname),
                                 firstname: info.firstname,
                                 lastname: info.lastname,
                                 id_token_exp: info.expiration.timestamp(),
-                                theme: "default".to_string(),
                                 language: "en-US".to_string(), // TODO: set language based on browser
                             };
 

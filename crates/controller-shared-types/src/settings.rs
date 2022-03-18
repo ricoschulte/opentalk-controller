@@ -56,6 +56,8 @@ pub struct Settings {
     pub logging: Logging,
     #[serde(default)]
     pub authz: Authz,
+    #[serde(default)]
+    pub avatar: Avatar,
 
     #[serde(flatten)]
     pub extensions: HashMap<String, config::Value>,
@@ -288,4 +290,22 @@ where
     let duration: u64 = Deserialize::deserialize(deserializer)?;
 
     Ok(Duration::from_secs(duration))
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Avatar {
+    #[serde(default = "default_libravatar_url")]
+    pub libravatar_url: String,
+}
+
+impl Default for Avatar {
+    fn default() -> Self {
+        Self {
+            libravatar_url: default_libravatar_url(),
+        }
+    }
+}
+
+fn default_libravatar_url() -> String {
+    "https://seccdn.libravatar.org/avatar/".into()
 }

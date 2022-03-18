@@ -94,8 +94,10 @@ table! {
         firstname -> Varchar,
         lastname -> Varchar,
         id_token_exp -> Int8,
-        theme -> Varchar,
         language -> Varchar,
+        display_name -> Varchar,
+        dashboard_theme -> Varchar,
+        conference_theme -> Varchar,
     }
 }
 
