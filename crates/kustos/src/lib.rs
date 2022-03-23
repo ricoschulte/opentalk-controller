@@ -71,7 +71,7 @@
 use crate::actix_web::KustosService;
 use access::AccessMethod;
 use casbin::{CoreApi, MgmtApi, RbacApi};
-use db::DbCasbinEx;
+use database::Db;
 use internal::{synced_enforcer::SyncedEnforcer, ToCasbin, ToCasbinMultiple, ToCasbinString};
 use policy::{GroupPolicies, Policy, RolePolicies, UserPolicies, UserPolicy};
 use std::{str::FromStr, sync::Arc, time::Duration};
@@ -107,10 +107,7 @@ pub struct Authz {
 }
 
 impl Authz {
-    pub async fn new<T>(db: Arc<T>) -> Result<Self>
-    where
-        T: 'static + DbCasbinEx + Sync + Send,
-    {
+    pub async fn new(db: Arc<Db>) -> Result<Self> {
         let acl_model = internal::default_acl_model().await;
         let adapter = internal::diesel_adapter::CasbinAdapter::new(db.clone());
         let enforcer = Arc::new(tokio::sync::RwLock::new(
@@ -120,14 +117,11 @@ impl Authz {
         Ok(Self { inner: enforcer })
     }
 
-    pub async fn new_with_autoload<T>(
-        db: Arc<T>,
+    pub async fn new_with_autoload(
+        db: Arc<Db>,
         shutdown_channel: Receiver<()>,
         interval: Duration,
-    ) -> Result<(Self, JoinHandle<Result<()>>)>
-    where
-        T: 'static + DbCasbinEx + Sync + Send,
-    {
+    ) -> Result<(Self, JoinHandle<Result<()>>)> {
         let acl_model = internal::default_acl_model().await;
         let adapter = internal::diesel_adapter::CasbinAdapter::new(db.clone());
         let enforcer = Arc::new(tokio::sync::RwLock::new(
