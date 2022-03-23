@@ -1,4 +1,4 @@
-//! Casbin-rs adapter taken from https://github.com/casbin-rs/diesel-adapter but inlined to allow for our migration
+//! Casbin-rs adapter taken from <https://github.com/casbin-rs/diesel-adapter> but inlined to allow for our migration
 use super::block;
 use crate::db::{
     self,

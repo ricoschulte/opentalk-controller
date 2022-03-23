@@ -1,4 +1,4 @@
-//! Actix-web middleware based on https://github.com/casbin-rs/actix-casbin-auth
+//! Actix-web middleware based on <https://github.com/casbin-rs/actix-casbin-auth>
 use crate::actix_web::User;
 use crate::{AccessMethod, PolicyUser, SyncedEnforcer, UserPolicy};
 use actix_web::dev::{Service, Transform};

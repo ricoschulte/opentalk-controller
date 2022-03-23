@@ -135,8 +135,8 @@ impl NewLegalVote {
 
     /// Insert a [`NewLegalVote`] into the database and returns the created [`LegalVote`]
     ///
-    /// Generates a [`VoteId`] (uuid) for the entry in the database. In case the insert statement fails with an `UniqueViolation`,
-    /// the statement will be resend with a different [`VoteId`] to counteract uuid collisions.
+    /// Generates a [`LegalVoteId`] (uuid) for the entry in the database. In case the insert statement fails with an `UniqueViolation`,
+    /// the statement will be resend with a different [`LegalVoteId`] to counteract uuid collisions.
     #[tracing::instrument(err, skip_all)]
     pub fn insert(self, conn: &DbConnection) -> Result<LegalVote> {
         // Try 3 times to generate a UUID without collision.

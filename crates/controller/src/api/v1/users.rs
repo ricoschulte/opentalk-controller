@@ -1,7 +1,7 @@
 //! User related API structs and Endpoints
 //!
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar
-//! structs are defined in the Database module [`crate::db`] for database operations.
+//! structs are defined in the Database crate [`db_storage`] for database operations.
 
 use crate::api::v1::{ApiResponse, DefaultApiError, PagePaginationQuery};
 use crate::settings::SharedSettingsActix;
@@ -50,7 +50,7 @@ impl PublicUserProfile {
 
 /// Private user profile.
 ///
-/// Similar to [`UserDetails`], but contains additional "private" information about a user.
+/// Similar to [`PublicUserProfile`], but contains additional "private" information about a user.
 /// Is only accessible to the user himself.
 /// Is used on */users/me* endpoints.
 #[derive(Debug, Serialize)]
@@ -92,7 +92,7 @@ impl PrivateUserProfile {
 
 /// API Endpoint *GET /users*
 ///
-/// Returns a JSON array of all database users as [`UserDetails`]
+/// Returns a JSON array of all database users as [`PublicUserProfile`]
 #[get("/users")]
 pub async fn all(
     settings: SharedSettingsActix,
@@ -226,7 +226,7 @@ pub async fn get_me(
 
 /// API Endpoint *GET /users/{user_id}*
 ///
-/// Returns [`PubUserProfile`] of the specified user
+/// Returns [`PublicUserProfile`] of the specified user
 #[get("/users/{user_id}")]
 pub async fn get_user(
     settings: SharedSettingsActix,

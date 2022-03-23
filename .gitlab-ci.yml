@@ -30,6 +30,15 @@ lint:clippy:
   stage: lint
   script: cargo clippy --workspace --all-features --tests -- --deny warnings
 
+lint:doc:
+  variables:
+    RUSTDOCFLAGS: -Dwarnings
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE == 'schedule'
+  stage: lint
+  script: cargo doc --workspace --no-deps
+
 lint:dependency_check:
   image: git.heinlein-video.de:5050/heinlein-video/cargo-deny:latest
   rules:

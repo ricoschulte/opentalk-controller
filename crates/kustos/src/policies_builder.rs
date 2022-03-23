@@ -64,7 +64,7 @@ pub struct Finished;
 impl<B: BuilderState> PoliciesBuilder<B> {
     /// Wraps up the previous state and switches to granting access to the given user
     ///
-    /// Until you call another `grant_*_access` method or `finish`, all following [`add_resource`] calls will target this user.
+    /// Until you call another `grant_*_access` method or [`finish()`](Self::finish()), all following [`add_resource()`](Self::add_resource()) calls will target this user.
     pub fn grant_user_access<T>(self, user: T) -> PoliciesBuilder<GrantingAccess<PolicyUser>>
     where
         T: Into<PolicyUser>,
@@ -83,7 +83,7 @@ impl<B: BuilderState> PoliciesBuilder<B> {
 
     /// Wraps up the previous state and switches to granting access to the given group
     ///
-    /// Until you call another `grant_*_access` method or `finish`, all following [`add_resource`] calls will target this group.
+    /// Until you call another `grant_*_access` method or [`finish()`](Self::finish()), all following [`add_resource()`](Self::add_resource()) calls will target this group.
     pub fn grant_group_access<T>(self, group: T) -> PoliciesBuilder<GrantingAccess<PolicyGroup>>
     where
         T: Into<PolicyGroup>,
@@ -102,7 +102,7 @@ impl<B: BuilderState> PoliciesBuilder<B> {
 
     /// Wraps up the previous state and switches to granting access to the given role
     ///
-    /// Until you call another `grant_*_access` method or [`finish`], all fallowing [`add_resource`] calls will target this role.
+    /// Until you call another `grant_*_access` method or [`finish()`](Self::finish()), all fallowing [`add_resource()`](Self::add_resource()) calls will target this role.
     pub fn grant_role_access<T>(self, role: T) -> PoliciesBuilder<GrantingAccess<PolicyRole>>
     where
         T: Into<PolicyRole>,
