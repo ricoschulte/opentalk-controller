@@ -14,6 +14,7 @@ async fn run() -> Result<()> {
         janus_media::register(&mut controller).await?;
         legal_vote::register(&mut controller);
         polls::register(&mut controller);
+        protocol::register(&mut controller);
         controller.run().await?;
     }
 
