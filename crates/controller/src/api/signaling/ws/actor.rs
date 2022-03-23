@@ -142,10 +142,13 @@ impl StreamHandler<Result<Message, ProtocolError>> for WebSocketActor {
                 self.forward_to_runner(ctx, msg);
             }
             Ok(Message::Continuation(item)) => self.handle_continuation(ctx, item),
-            Ok(Message::Close(_)) => ctx.close(Some(CloseReason {
-                code: CloseCode::Normal,
-                description: None,
-            })),
+            Ok(Message::Close(_)) => {
+                ctx.close(Some(CloseReason {
+                    code: CloseCode::Normal,
+                    description: None,
+                }));
+                ctx.stop();
+            }
             Ok(Message::Nop) => {}
             Err(e) => {
                 log::warn!("Protocol error in websocket - exiting, {}", e);
