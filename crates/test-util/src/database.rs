@@ -3,8 +3,8 @@ use controller::prelude::anyhow::Context;
 use controller::prelude::*;
 use database::Db;
 use db_storage::migrations::migrate_from_url;
-use db_storage::rooms::{DbRoomsEx, NewRoom, Room, RoomId};
-use db_storage::users::{DbUsersEx, NewUser, NewUserWithGroups, User, UserId};
+use db_storage::rooms::{NewRoom, Room, RoomId};
+use db_storage::users::{NewUser, NewUserWithGroups, User, UserId};
 use diesel::{Connection, PgConnection, RunQueryDsl};
 use std::sync::Arc;
 
@@ -12,7 +12,7 @@ use std::sync::Arc;
 pub struct DatabaseContext {
     pub base_url: String,
     pub db_name: String,
-    pub db_conn: Arc<Db>,
+    pub db: Arc<Db>,
     /// DatabaseContext will DROP the database inside postgres when dropped
     pub drop_db_on_drop: bool,
 }
@@ -55,7 +55,7 @@ impl DatabaseContext {
         Self {
             base_url: base_url.to_string(),
             db_name: db_name.to_string(),
-            db_conn,
+            db: db_conn,
             drop_db_on_drop,
         }
     }
@@ -74,8 +74,8 @@ impl DatabaseContext {
         };
 
         let new_user_with_groups = NewUserWithGroups { new_user, groups };
-
-        let user = self.db_conn.create_user(new_user_with_groups)?;
+        let conn = self.db.get_conn()?;
+        let user = new_user_with_groups.insert(&conn)?;
 
         Ok(user.0)
     }
@@ -88,7 +88,11 @@ impl DatabaseContext {
             listen_only: false,
         };
 
-        Ok(self.db_conn.new_room(new_room)?)
+        let conn = self.db.get_conn()?;
+
+        let room = new_room.insert(&conn)?;
+
+        Ok(room)
     }
 }
 

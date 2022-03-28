@@ -10,8 +10,8 @@ use chrono::{DateTime, Utc};
 use control::rabbitmq;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use db_storage::database::Db;
-use db_storage::groups::{DbGroupsEx, Group, GroupId};
+use database::Db;
+use db_storage::groups::{Group, GroupId};
 use db_storage::users::UserId;
 use r3dlock::Mutex;
 use serde::{Deserialize, Serialize};
@@ -87,10 +87,13 @@ impl SignalingModule for Chat {
             let user_id = user.id;
             let db = ctx.db().clone();
 
-            let groups = controller::block(move || db.get_groups_for_user(user_id))
-                .await
-                .context("controller::block failed")?
-                .context("Failed to retrieve groups for user")?;
+            let groups = controller::block(move || {
+                let conn = db.get_conn()?;
+
+                Group::get_all_for_user(&conn, user_id)
+            })
+            .await?
+            .context("Failed to retrieve groups for user")?;
 
             for group in &groups {
                 log::debug!("Group: {}", group.id);
@@ -173,11 +176,13 @@ impl SignalingModule for Chat {
                 // Inquire the database about each user's groups
                 let participant_to_common_groups_mappings =
                     controller::block(move || -> Result<Vec<(ParticipantId, Vec<String>)>> {
+                        let conn = db.get_conn()?;
+
                         let mut participant_to_common_groups_mappings = vec![];
 
                         for (user_id, participant_id) in participant_user_mappings {
                             // Get the users groups
-                            let groups = db.get_groups_for_user(user_id)?;
+                            let groups = Group::get_all_for_user(&conn, user_id)?;
 
                             // Intersect our groups and the groups of the user and collect their id/name
                             // as strings into a set
@@ -224,7 +229,9 @@ impl SignalingModule for Chat {
 
                     let common_groups = controller::block(move || -> Result<Vec<String>> {
                         // Get the user's groups
-                        let groups = db.get_groups_for_user(user_id)?;
+                        let conn = db.get_conn()?;
+
+                        let groups = Group::get_all_for_user(&conn, user_id)?;
 
                         // Intersect our groups and the groups of the user and collect their id/name
                         // as strings into a set

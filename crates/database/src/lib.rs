@@ -1,22 +1,5 @@
 //! K3K Database connector, interface and connection handling
-//!
-//!
-//! # How to use:
-//! Extend the base trait here using extension traits to add functionality for specific features/tables
-//!
-//! # Example
-//! ```rust
-//! # use k3k_database::DatabaseError;
-//! # use k3k_database::DbInterface;
-//! trait DbFeatureEx: DbInterface {
-//!     fn feature_a(&self, x: bool) -> Result<bool, DatabaseError>{
-//!         let conn = self.get_conn()?;
-//!         // Do stuff with conn and x
-//!         Ok(true)
-//!     }
-//! }
-//! impl<T: DbInterface> DbFeatureEx for T {}
-//! ```
+
 use diesel::pg::Pg;
 use diesel::query_builder::{AstPass, Query, QueryFragment};
 use diesel::query_dsl::LoadQuery;
@@ -54,6 +37,20 @@ pub enum DatabaseError {
     R2D2Error(String),
 }
 
+pub trait OptionalExt<T, E> {
+    fn optional(self) -> Result<Option<T>, E>;
+}
+
+impl<T> OptionalExt<T, DatabaseError> for Result<T, DatabaseError> {
+    fn optional(self) -> Result<Option<T>, DatabaseError> {
+        match self {
+            Ok(t) => Ok(Some(t)),
+            Err(DatabaseError::NotFound) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+}
+
 impl From<diesel::result::Error> for DatabaseError {
     fn from(err: diesel::result::Error) -> Self {
         match err {
@@ -62,15 +59,6 @@ impl From<diesel::result::Error> for DatabaseError {
         }
     }
 }
-
-/// The database interface
-///
-/// Used to allow extensibility by extension traits.
-pub trait DbInterface {
-    /// Returns an established connection from the connection pool
-    fn get_conn(&self) -> Result<DbConnection>;
-}
-
 /// Pagination trait for diesel
 pub trait Paginate: Sized {
     fn paginate(self, page: i64) -> Paginated<Self>;

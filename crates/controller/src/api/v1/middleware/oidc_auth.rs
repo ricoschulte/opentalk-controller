@@ -10,9 +10,8 @@ use actix_web::web::Data;
 use actix_web::{HttpMessage, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use core::future::ready;
-use database::Db;
+use database::{Db, OptionalExt};
 use db_storage::users::User;
-use db_storage::DbUsersEx;
 use openidconnect::AccessToken;
 use std::future::{Future, Ready};
 use std::pin::Pin;
@@ -127,12 +126,16 @@ pub async fn check_access_token(
         }
     };
 
-    let current_user = crate::block(move || match db.get_user_by_oidc_sub(&issuer, &sub)? {
-        None => {
-            log::warn!("The requesting user could not be found in the database");
-            Err(DefaultApiError::Internal)
+    let current_user = crate::block(move || {
+        let conn = db.get_conn()?;
+
+        match User::get_by_oidc_sub(&conn, &issuer, &sub).optional()? {
+            Some(user) => Ok(user),
+            None => {
+                log::warn!("The requesting user could not be found in the database");
+                Err(DefaultApiError::Internal)
+            }
         }
-        Some(user) => Ok(user),
     })
     .await??;
 

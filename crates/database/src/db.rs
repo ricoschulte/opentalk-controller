@@ -1,4 +1,4 @@
-use crate::{DatabaseError, DbConnection, DbInterface};
+use crate::{DatabaseError, DbConnection};
 use controller_shared::settings;
 use diesel::r2d2::ConnectionManager;
 use diesel::{r2d2, PgConnection};
@@ -14,7 +14,7 @@ pub struct Db {
 }
 
 impl Db {
-    /// Creates a new DbInterface instance from the specified database settings.
+    /// Creates a new Db instance from the specified database settings.
     #[tracing::instrument(skip(db_settings))]
     pub fn connect(db_settings: &settings::Database) -> crate::Result<Self> {
         Self::connect_url(
@@ -24,7 +24,7 @@ impl Db {
         )
     }
 
-    /// Creates a new DbInterface instance from the specified database url.
+    /// Creates a new Db instance from the specified database url.
     pub fn connect_url(db_url: &str, max_conns: u32, min_idle: Option<u32>) -> crate::Result<Self> {
         let manager = ConnectionManager::<PgConnection>::new(db_url);
 
@@ -40,20 +40,18 @@ impl Db {
 
         Ok(Self { pool })
     }
-}
 
-impl DbInterface for Db {
     /// Returns an established connection from the connection pool
-    fn get_conn(&self) -> crate::Result<DbConnection> {
+    pub fn get_conn(&self) -> crate::Result<DbConnection> {
         match self.pool.get() {
             Ok(con) => Ok(con),
             Err(e) => {
                 let state = self.pool.state();
                 let msg = format!(
                     "Unable to get connection from connection pool.
-                            Error: {}
-                            Pool State:
-                                {:?}",
+                                Error: {}
+                                Pool State:
+                                    {:?}",
                     e, state
                 );
                 log::error!("{}", &msg);

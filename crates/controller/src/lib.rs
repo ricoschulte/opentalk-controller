@@ -31,7 +31,7 @@ use anyhow::{anyhow, Context, Result};
 use arc_swap::ArcSwap;
 use breakout::BreakoutRooms;
 use database::Db;
-use db_storage::groups::{DbGroupsEx, NewGroup};
+use db_storage::groups::NewGroup;
 use oidc::OidcContext;
 use prelude::*;
 use redis::aio::ConnectionManager;
@@ -320,10 +320,14 @@ impl Controller {
             // kustos to assign this group to the administrator role.
             // TODO(r.floren): When we support multiple issuers, this logic needs some rework,
             // either by creating one admin Group per issuer or making the role assignment a manual task for more security.
-            let admin_group = self.db.get_or_create_group(NewGroup {
+            let conn = self.db.get_conn()?;
+            let admin_group = NewGroup {
                 oidc_issuer: Some(shared_settings.load().oidc.provider.issuer.to_string()),
                 name: "/OpenTalk_Administrator".into(),
-            })?;
+            }
+            .insert_or_get(&conn)?;
+            // Drop early to avoid holding a single connection from the pool for the whole runtime
+            drop(conn);
 
             check_or_create_kustos_default_permissions(&enforcer, vec![admin_group]).await?;
 

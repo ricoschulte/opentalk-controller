@@ -1,7 +1,7 @@
 use super::schema::{groups, user_groups};
 use super::users::{User, UserId};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
-use database::{DbInterface, Result};
+use database::{DbConnection, Result};
 use diesel::{
     BoolExpressionMethods, Connection, ExpressionMethods, Identifiable, Insertable,
     OptionalExtension, QueryDsl, Queryable, RunQueryDsl,
@@ -31,6 +31,20 @@ pub struct Group {
     pub name: String,
 }
 
+impl Group {
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_all_for_user(conn: &DbConnection, user_id: UserId) -> Result<Vec<Group>> {
+        let query = user_groups::table
+            .inner_join(groups::table)
+            .filter(user_groups::user_id.eq(user_id))
+            .select(groups::all_columns)
+            .order_by(groups::id_serial);
+
+        let groups: Vec<Group> = query.load(conn)?;
+
+        Ok(groups)
+    }
+}
 #[derive(Debug, Insertable)]
 #[table_name = "groups"]
 pub struct NewGroup {
@@ -39,9 +53,35 @@ pub struct NewGroup {
     pub name: String,
 }
 
+impl NewGroup {
+    /// Insert the new group. If the group already exists for the OIDC issuer the group will be returned instead
+    #[tracing::instrument(err, skip_all)]
+    pub fn insert_or_get(self, conn: &DbConnection) -> Result<Group> {
+        conn.transaction(|| {
+            let query = groups::table.select(groups::all_columns).filter(
+                groups::oidc_issuer
+                    .eq(&self.oidc_issuer)
+                    .and(groups::name.eq(&self.name)),
+            );
+
+            let group: Option<Group> = query.first(conn).optional()?;
+
+            let group = if let Some(group) = group {
+                group
+            } else {
+                diesel::insert_into(groups::table)
+                    .values(self)
+                    .get_result(conn)?
+            };
+
+            Ok(group)
+        })
+    }
+}
+
 #[derive(Debug, Insertable)]
 #[table_name = "user_groups"]
-pub struct NewUserGroup {
+pub struct NewUserGroupRelation {
     pub user_id: UserId,
     pub group_id: GroupId,
 }
@@ -51,52 +91,7 @@ pub struct NewUserGroup {
 #[belongs_to(User, foreign_key = "user_id")]
 #[belongs_to(Group, foreign_key = "group_id")]
 #[primary_key(user_id, group_id)]
-pub struct UserGroup {
+pub struct UserGroupRelation {
     pub user_id: UserId,
     pub group_id: GroupId,
 }
-
-pub trait DbGroupsEx: DbInterface {
-    #[tracing::instrument(err, skip_all)]
-    fn get_or_create_group(&self, new_group: NewGroup) -> Result<Group> {
-        let conn = self.get_conn()?;
-
-        conn.transaction(|| {
-            let group: Option<Group> = groups::table
-                .select(groups::all_columns)
-                .filter(
-                    groups::oidc_issuer
-                        .eq(&new_group.oidc_issuer)
-                        .and(groups::name.eq(&new_group.name)),
-                )
-                .first(&conn)
-                .optional()?;
-
-            let group = if let Some(group) = group {
-                group
-            } else {
-                diesel::insert_into(groups::table)
-                    .values(new_group)
-                    .get_result(&conn)?
-            };
-
-            Ok(group)
-        })
-    }
-
-    #[tracing::instrument(err, skip_all)]
-    fn get_groups_for_user(&self, user_id: UserId) -> Result<Vec<Group>> {
-        let conn = self.get_conn()?;
-
-        let groups: Vec<Group> = user_groups::table
-            .inner_join(groups::table)
-            .filter(user_groups::user_id.eq(user_id))
-            .select(groups::all_columns)
-            .order_by(groups::id_serial)
-            .get_results(&conn)?;
-
-        Ok(groups)
-    }
-}
-
-impl<T: DbInterface> DbGroupsEx for T {}

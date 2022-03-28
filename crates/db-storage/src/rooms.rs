@@ -4,8 +4,10 @@ use crate::schema::rooms;
 use crate::schema::users;
 use crate::users::{User, UserId};
 use chrono::{DateTime, Utc};
-use database::{DbInterface, Paginate, Result};
-use diesel::{ExpressionMethods, QueryDsl, QueryResult};
+use database::DbConnection;
+use database::{Paginate, Result};
+use diesel::prelude::*;
+use diesel::{ExpressionMethods, QueryDsl};
 use diesel::{Identifiable, Queryable};
 
 diesel_newtype! {
@@ -27,6 +29,79 @@ pub struct Room {
     pub listen_only: bool,
 }
 
+impl Room {
+    /// Select a room using the given id
+    #[tracing::instrument(err, skip_all)]
+    pub fn get(conn: &DbConnection, id: RoomId) -> Result<Self> {
+        let query = rooms::table.filter(rooms::id.eq(id));
+
+        let room: Room = query.get_result(conn)?;
+
+        Ok(room)
+    }
+
+    /// Select all rooms joined with their creator
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_all_with_creator(conn: &DbConnection) -> Result<Vec<(Room, User)>> {
+        let query = rooms::table
+            .order_by(rooms::id.desc())
+            .inner_join(users::table);
+
+        let room_with_creator = query.load::<(Room, User)>(conn)?;
+
+        Ok(room_with_creator)
+    }
+
+    /// Select all rooms paginated
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_all_paginated(
+        conn: &DbConnection,
+        limit: i64,
+        page: i64,
+    ) -> Result<(Vec<Room>, i64)> {
+        let query = rooms::table
+            .order_by(rooms::id.desc())
+            .paginate_by(limit, page);
+
+        let rooms_with_total = query.load_and_count::<Room, _>(conn)?;
+
+        Ok(rooms_with_total)
+    }
+
+    /// Select all rooms filtered by ids
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_by_ids_paginated(
+        conn: &DbConnection,
+        ids: &[RoomId],
+        limit: i64,
+        page: i64,
+    ) -> Result<(Vec<Room>, i64)> {
+        let query = rooms::table
+            .filter(rooms::id.eq_any(ids))
+            .order_by(rooms::id.desc())
+            .paginate_by(limit, page);
+
+        let rooms_with_total = query.load_and_count::<Room, _>(conn)?;
+
+        Ok(rooms_with_total)
+    }
+
+    /// Delete a room using the given id
+    #[tracing::instrument(err, skip_all)]
+    pub fn delete_by_id(conn: &DbConnection, room_id: RoomId) -> Result<()> {
+        let query = diesel::delete(rooms::table.filter(rooms::id.eq(room_id)));
+
+        query.execute(conn)?;
+
+        Ok(())
+    }
+
+    /// Delete the room from the database
+    pub fn delete(self, conn: &DbConnection) -> Result<()> {
+        Self::delete_by_id(conn, self.id)
+    }
+}
+
 /// Diesel insertable room struct
 ///
 /// Represents fields that have to be provided on room insertion.
@@ -37,6 +112,15 @@ pub struct NewRoom {
     pub password: String,
     pub wait_for_moderator: bool,
     pub listen_only: bool,
+}
+
+impl NewRoom {
+    #[tracing::instrument(err, skip_all)]
+    pub fn insert(self, conn: &DbConnection) -> Result<Room> {
+        let room = self.insert_into(rooms::table).get_result(conn)?;
+
+        Ok(room)
+    }
 }
 
 /// Diesel room struct for updates
@@ -50,102 +134,12 @@ pub struct UpdateRoom {
     pub listen_only: Option<bool>,
 }
 
-pub trait DbRoomsEx: DbInterface {
+impl UpdateRoom {
     #[tracing::instrument(err, skip_all)]
-    fn get_rooms_with_creator(&self) -> Result<Vec<(Room, User)>> {
-        let conn = self.get_conn()?;
-
-        let query = rooms::table
-            .order_by(rooms::columns::id.desc())
-            .inner_join(users::table);
-
-        let room_with_creator = query.load::<(Room, User)>(&conn)?;
-
-        Ok(room_with_creator)
-    }
-
-    #[tracing::instrument(err, skip_all, fields(%limit, %page))]
-    fn get_rooms_paginated(&self, limit: i64, page: i64) -> Result<(Vec<Room>, i64)> {
-        let conn = self.get_conn()?;
-
-        let query = rooms::table
-            .order_by(rooms::columns::id.desc())
-            .paginate_by(limit, page);
-
-        let rooms_with_total = query.load_and_count::<Room, _>(&conn)?;
-
-        Ok(rooms_with_total)
-    }
-
-    #[tracing::instrument(err, skip_all, fields(%limit, %page))]
-    fn get_rooms_by_ids_paginated(
-        &self,
-        ids: &[RoomId],
-        limit: i64,
-        page: i64,
-    ) -> Result<(Vec<Room>, i64)> {
-        let conn = self.get_conn()?;
-
-        let query = rooms::table
-            .filter(rooms::columns::id.eq_any(ids))
-            .order_by(rooms::columns::id.desc())
-            .paginate_by(limit, page);
-
-        let rooms_with_total = query.load_and_count::<Room, _>(&conn)?;
-
-        Ok(rooms_with_total)
-    }
-
-    #[tracing::instrument(err, skip_all)]
-    fn new_room(&self, room: NewRoom) -> Result<Room> {
-        let con = self.get_conn()?;
-
-        // a UUID collision will result in an internal server error
-        let room_result: QueryResult<Room> = diesel::insert_into(rooms::table)
-            .values(room)
-            .get_result(&con);
-
-        match room_result {
-            Ok(rooms) => Ok(rooms),
-            Err(e) => {
-                log::error!("Query error creating new room, {}", e);
-                Err(e.into())
-            }
-        }
-    }
-
-    #[tracing::instrument(err, skip_all)]
-    fn modify_room(&self, room_id: RoomId, modify_room: UpdateRoom) -> Result<Room> {
-        let con = self.get_conn()?;
-
-        let target = rooms::table.filter(rooms::columns::id.eq(&room_id));
-        let room = diesel::update(target).set(modify_room).get_result(&con)?;
+    pub fn apply(self, conn: &DbConnection, room_id: RoomId) -> Result<Room> {
+        let target = rooms::table.filter(rooms::id.eq(&room_id));
+        let room = diesel::update(target).set(self).get_result(conn)?;
 
         Ok(room)
     }
-
-    #[tracing::instrument(err, skip_all)]
-    fn get_room(&self, room_id: RoomId) -> Result<Option<Room>> {
-        let con = self.get_conn()?;
-
-        let result: QueryResult<Room> = rooms::table
-            .filter(rooms::columns::id.eq(room_id))
-            .get_result(&con);
-
-        match result {
-            Ok(user) => Ok(Some(user)),
-            Err(diesel::NotFound) => Ok(None),
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    #[tracing::instrument(skip(self, room_id))]
-    fn delete_room(&self, room_id: RoomId) -> Result<()> {
-        let conn = self.get_conn()?;
-
-        diesel::delete(rooms::table.filter(rooms::columns::id.eq(room_id))).execute(&conn)?;
-
-        Ok(())
-    }
 }
-impl<T: DbInterface> DbRoomsEx for T {}

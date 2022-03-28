@@ -4,10 +4,9 @@ use crate::ha_sync::user_update;
 use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
-use database::Db;
+use database::{Db, OptionalExt};
 use db_storage::groups::GroupId;
-use db_storage::users::{ModifiedUser, NewUser, NewUserWithGroups, UpdateUser, User};
-use db_storage::DbUsersEx;
+use db_storage::users::{NewUser, NewUserWithGroups, UpdateUser, User, UserUpdatedInfo};
 use either::Either;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -52,60 +51,56 @@ pub async fn login(
         Ok(info) => {
             // TODO(r.floren): Find a neater way for relaying the information here.
 
-            let db_result = crate::block(
-                move || -> Result<Either<ModifiedUser, (User, Vec<GroupId>)>, DefaultApiError> {
-                    let user = db.get_user_by_oidc_sub(&info.issuer, &info.sub)?;
+            let db_result = crate::block(move || -> database::Result<_> {
+                let conn = db.get_conn()?;
 
-                    match user {
-                        Some(user) => {
-                            let modify_user = UpdateUser {
-                                title: None,
-                                language: None,
-                                id_token_exp: Some(info.expiration.timestamp()),
-                                display_name: None,
-                                dashboard_theme: None,
-                                conference_theme: None,
-                            };
+                let user = User::get_by_oidc_sub(&conn, &info.issuer, &info.sub).optional()?;
 
-                            let modified_user =
-                                db.update_user(user.id, modify_user, Some(info.x_grp))?;
+                match user {
+                    Some(user) => {
+                        let changeset = UpdateUser {
+                            id_token_exp: Some(info.expiration.timestamp()),
+                            ..Default::default()
+                        };
 
-                            Ok(Either::Left(modified_user))
-                        }
-                        None => {
-                            let new_user = NewUser {
-                                oidc_sub: info.sub,
-                                oidc_issuer: info.issuer,
-                                email: info.email,
-                                title: String::new(),
-                                display_name: format!("{} {}", info.firstname, info.lastname),
-                                firstname: info.firstname,
-                                lastname: info.lastname,
-                                id_token_exp: info.expiration.timestamp(),
-                                language: "en-US".to_string(), // TODO: set language based on browser
-                            };
+                        let updated_info = changeset.apply(&conn, user.id, Some(info.x_grp))?;
 
-                            let new_user = NewUserWithGroups {
-                                new_user,
-                                groups: info.x_grp.clone(),
-                            };
-
-                            let created = db.create_user(new_user)?;
-
-                            Ok(Either::Right(created))
-                        }
+                        Ok(Either::Left(updated_info))
                     }
-                },
-            )
+                    None => {
+                        let new_user = NewUser {
+                            oidc_sub: info.sub,
+                            oidc_issuer: info.issuer,
+                            email: info.email,
+                            title: String::new(),
+                            display_name: format!("{} {}", info.firstname, info.lastname),
+                            firstname: info.firstname,
+                            lastname: info.lastname,
+                            id_token_exp: info.expiration.timestamp(),
+                            language: "en-US".to_string(), // TODO: set language based on browser
+                        };
+
+                        let new_user = NewUserWithGroups {
+                            new_user,
+                            groups: info.x_grp,
+                        };
+
+                        let user_with_groups = new_user.insert(&conn)?;
+
+                        Ok(Either::Right(user_with_groups))
+                    }
+                }
+            })
             .await??;
 
-            if let Either::Left(modified_user) = &db_result {
+            if let Either::Left(updated_info) = &db_result {
                 // The user was updated.
                 let message = user_update::Message {
-                    groups: modified_user.groups_changed,
+                    groups: updated_info.groups_changed,
                 };
+
                 if let Err(e) = message
-                    .send_via(&*rabbitmq_channel, modified_user.user.id)
+                    .send_via(&*rabbitmq_channel, updated_info.user.id)
                     .await
                 {
                     log::error!("Failed to send user-update message {:?}", e);
@@ -150,7 +145,7 @@ pub async fn oidc_provider(oidc_ctx: Data<OidcContext>) -> Json<Provider> {
 
 async fn update_core_user_permissions(
     authz: &kustos::Authz,
-    db_result: Either<ModifiedUser, (User, Vec<GroupId>)>,
+    db_result: Either<UserUpdatedInfo, (User, Vec<GroupId>)>,
 ) -> Result<(), DefaultApiError> {
     match db_result {
         Either::Left(modified_user) => {
