@@ -3,6 +3,7 @@ name = "k3k-controller-core"
 version = "0.1.0"
 edition = "2018"
 
+build = "build.rs"
 
 [dependencies]
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
@@ -13,7 +14,10 @@ db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 log = { version = "0.4", features = ["serde"] }
 tracing = { version = "0.1" }
 tracing-futures = "0.2"
-tracing-subscriber = { version = "0.3", features = ["parking_lot", "env-filter"] }
+tracing-subscriber = { version = "0.3", features = [
+    "parking_lot",
+    "env-filter",
+] }
 tracing-opentelemetry = "0.17"
 opentelemetry = { version = "0.17", default-features = false, features = [
     "trace",
@@ -116,3 +120,13 @@ k3k-controller-client = { path = "../client" }
 tokio-postgres = "0.7"
 serial_test = "0.6"
 test-util = { path = "../test-util", package = "k3k-test-util" }
+
+
+[build-dependencies]
+anyhow = "1.0"
+vergen = { version = "7.0.0", default-features = false, features = [
+    "build",
+    "cargo",
+    "rustc",
+    "git",
+] }

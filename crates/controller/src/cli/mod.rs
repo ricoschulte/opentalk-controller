@@ -23,6 +23,9 @@ pub struct Args {
 
     #[structopt(subcommand)]
     cmd: Option<SubCommand>,
+
+    #[structopt(long)]
+    version: bool,
 }
 
 #[derive(StructOpt, Debug, Clone)]
@@ -70,7 +73,7 @@ pub(crate) enum EnableDisable {
 impl Args {
     /// Returns true if we want to startup the controller after we finished the cli part
     pub fn controller_should_start(&self) -> bool {
-        !(self.reload || self.cmd.is_some())
+        !(self.reload || self.cmd.is_some() || self.version)
     }
 }
 
@@ -79,6 +82,10 @@ impl Args {
 /// Also runs (optional) cli commands if necessary
 pub async fn parse_args() -> Result<Args> {
     let args = Args::from_args();
+
+    if args.version {
+        print_version()
+    }
 
     if args.reload {
         reload::trigger_reload()?;
@@ -111,4 +118,26 @@ pub async fn parse_args() -> Result<Args> {
     }
 
     Ok(args)
+}
+
+const BUILD_INFO: [(&'static str, Option<&'static str>); 10] = [
+    ("Build Timestamp", option_env!("VERGEN_BUILD_TIMESTAMP")),
+    ("Build Version", option_env!("VERGEN_GIT_SEMVER")),
+    ("Commit SHA", option_env!("VERGEN_GIT_SHA")),
+    ("Commit Date", option_env!("VERGEN_GIT_COMMIT_TIMESTAMP")),
+    ("Commit Branch", option_env!("VERGEN_GIT_BRANCH")),
+    ("rustc Version", option_env!("VERGEN_RUSTC_SEMVER")),
+    ("rustc Channel", option_env!("VERGEN_RUSTC_CHANNEL")),
+    ("rustc Host Triple", option_env!("VERGEN_RUSTC_HOST_TRIPLE")),
+    (
+        "cargo Target Triple",
+        option_env!("VERGEN_CARGO_TARGET_TRIPLE"),
+    ),
+    ("cargo Profile", option_env!("VERGEN_CARGO_PROFILE")),
+];
+
+fn print_version() {
+    for (label, value) in BUILD_INFO {
+        println!("{}: {}", label, value.unwrap_or("N/A"));
+    }
 }
