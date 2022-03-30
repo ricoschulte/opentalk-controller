@@ -4,7 +4,7 @@ use tokio::task::JoinError;
 
 /// A combining error type which is returned by most major kustos methods
 ///
-/// Derived using [`thiserror::thiserror`]
+/// Derived using [`thiserror::Error`]
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Not Authorized")]
@@ -26,7 +26,7 @@ pub enum Error {
 /// The error type returned by the underlying [`casbin`] [enforcer](crate::SyncedEnforcer) for
 /// converting the public types to/from [`casbin`] compatible strings
 ///
-/// Derived using [`thiserror::thiserror`]
+/// Derived using [`thiserror::Error`]
 #[derive(Debug, Error)]
 pub enum ParsingError {
     #[error("Invalid access method: `{0}`")]

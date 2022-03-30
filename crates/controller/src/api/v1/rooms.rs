@@ -1,7 +1,7 @@
 //! Room related API structs and Endpoints
 //!
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar
-//! structs are defined in the Database module [`crate::db`] for database operations.
+//! structs are defined in the Database crate [`db_storage`] for database operations.
 
 use super::response::NoContent;
 use crate::api::signaling::prelude::*;
@@ -320,7 +320,7 @@ type StartError = ApiError<StartRoomError>;
 
 /// API Endpoint *POST /rooms/{room_id}/start*
 ///
-/// This endpoint has to be called in order to get a [`Ticket`]. When joining a room, the ticket
+/// This endpoint has to be called in order to get a room ticket. When joining a room, the ticket
 /// must be provided as a `Sec-WebSocket-Protocol` header field when starting the WebSocket
 /// connection.
 ///
@@ -328,7 +328,7 @@ type StartError = ApiError<StartRoomError>;
 /// through the [`StartRequest`] JSON in the requests body. When the room has no password set,
 /// the provided password will be ignored.
 ///
-/// Returns a [`Ticket`] for the specified room.
+/// Returns a [`StartResponse`] containing the ticket for the specified room.
 ///
 /// # Errors
 ///
@@ -487,7 +487,7 @@ pub struct SipStartRequest {
 
 /// API Endpoint *POST /rooms/sip/start*
 ///
-/// Get a [`Ticket`] for a new sip connection to a room. The requester has to provide
+/// Get a [`StartResponse`] for a new sip connection to a room. The requester has to provide
 /// a valid [`SipId`] & [`SipPassword`] via the [`SipStartRequest`]
 ///
 /// Returns [`StartError::NotFound`](ApiError::NotFound) when the requested room could not be found.
