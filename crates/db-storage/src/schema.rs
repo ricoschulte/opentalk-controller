@@ -1,4 +1,6 @@
 table! {
+    use crate::sql_types::*;
+
     casbin_rule (id) {
         id -> Int4,
         ptype -> Varchar,
@@ -12,6 +14,8 @@ table! {
 }
 
 table! {
+    use crate::sql_types::*;
+
     groups (id) {
         id -> Uuid,
         id_serial -> Int8,
@@ -21,6 +25,8 @@ table! {
 }
 
 table! {
+    use crate::sql_types::*;
+
     invites (id) {
         id -> Uuid,
         id_serial -> Int8,
@@ -35,6 +41,8 @@ table! {
 }
 
 table! {
+    use crate::sql_types::*;
+
     legal_votes (id) {
         id -> Uuid,
         id_serial -> Int8,
@@ -46,6 +54,8 @@ table! {
 }
 
 table! {
+    use crate::sql_types::*;
+
     refinery_schema_history (version) {
         version -> Int4,
         name -> Nullable<Varchar>,
@@ -55,6 +65,8 @@ table! {
 }
 
 table! {
+    use crate::sql_types::*;
+
     rooms (id) {
         id -> Uuid,
         id_serial -> Int8,
@@ -67,6 +79,8 @@ table! {
 }
 
 table! {
+    use crate::sql_types::*;
+
     sip_configs (id) {
         id -> Int8,
         room -> Uuid,
@@ -77,6 +91,8 @@ table! {
 }
 
 table! {
+    use crate::sql_types::*;
+
     user_groups (user_id, group_id) {
         user_id -> Uuid,
         group_id -> Uuid,
@@ -84,6 +100,8 @@ table! {
 }
 
 table! {
+    use crate::sql_types::*;
+
     users (id) {
         id -> Uuid,
         id_serial -> Int8,

@@ -38,3 +38,8 @@ pub mod users;
 sql_function!(fn lower(x: Text) -> Text);
 sql_function!(fn levenshtein(x: Text, y: Text) -> Integer);
 sql_function!(fn soundex(x: Text) -> Text);
+
+// SQL types reexport for schema.rs
+pub mod sql_types {
+    pub use diesel::sql_types::*;
+}

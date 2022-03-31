@@ -126,6 +126,8 @@ fn run_diesel_cli(db_url: &str) -> Result<Vec<u8>> {
     cmd.arg("--database-url")
         .arg(&db_url)
         .arg("print-schema")
+        .arg("--import-types")
+        .arg("crate::sql_types::*")
         .log_cmd(None)
         .log_err(log::Level::Warn);
 
