@@ -1295,3 +1295,312 @@ where
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use db_storage::events::TimeZone;
+    use db_storage::rooms::RoomId;
+    use db_storage::users::UserId;
+    use std::time::SystemTime;
+    use test_util::assert_eq_json;
+    use uuid::Uuid;
+
+    #[test]
+    fn event_resource_serialize() {
+        let unix_epoch: DateTime<Utc> = SystemTime::UNIX_EPOCH.into();
+
+        let user_profile = PublicUserProfile {
+            id: UserId::from(Uuid::nil()),
+            email: "test@example.org".into(),
+            title: "".into(),
+            firstname: "Test".into(),
+            lastname: "Test".into(),
+            display_name: "Tester".into(),
+            avatar_url: "https://example.org/avatar".into(),
+        };
+
+        let event_resource = EventResource {
+            id: EventId::from(Uuid::nil()),
+            created_by: user_profile.clone(),
+            created_at: unix_epoch,
+            updated_by: user_profile.clone(),
+            updated_at: unix_epoch,
+            title: "Event title".into(),
+            description: "Event description".into(),
+            room: EventRoomInfo {
+                id: RoomId::from(Uuid::nil()),
+                password: None,
+                sip_tel: None,
+                sip_uri: None,
+                sip_id: None,
+                sip_password: None,
+            },
+            invitees_truncated: false,
+            invitees: vec![EventInvitee {
+                profile: user_profile,
+                status: EventInviteStatus::Accepted,
+            }],
+            is_time_independent: false,
+            is_all_day: Some(false),
+            starts_at: Some(DateTimeTz {
+                datetime: unix_epoch,
+                timezone: TimeZone(Tz::Europe__Berlin),
+            }),
+            ends_at: Some(DateTimeTz {
+                datetime: unix_epoch,
+                timezone: TimeZone(Tz::Europe__Berlin),
+            }),
+            recurrence_pattern: vec![],
+            type_: EventType::Single,
+            status: EventStatus::Ok,
+            invite_status: EventInviteStatus::Accepted,
+        };
+
+        assert_eq_json!(
+            event_resource,
+            {
+                "id": "00000000-0000-0000-0000-000000000000",
+                "created_by": {
+                    "id": "00000000-0000-0000-0000-000000000000",
+                    "email": "test@example.org",
+                    "title": "",
+                    "firstname": "Test",
+                    "lastname": "Test",
+                    "display_name": "Tester",
+                    "avatar_url": "https://example.org/avatar"
+                },
+                "created_at": "1970-01-01T00:00:00Z",
+                "updated_by": {
+                    "id": "00000000-0000-0000-0000-000000000000",
+                    "email": "test@example.org",
+                    "title": "",
+                    "firstname": "Test",
+                    "lastname": "Test",
+                    "display_name": "Tester",
+                    "avatar_url": "https://example.org/avatar"
+                },
+                "updated_at": "1970-01-01T00:00:00Z",
+                "title": "Event title",
+                "description": "Event description",
+                "room": {
+                    "id": "00000000-0000-0000-0000-000000000000"
+                },
+                "invitees_truncated": false,
+                "invitees": [
+                    {
+                        "profile": {
+                            "id": "00000000-0000-0000-0000-000000000000",
+                            "email": "test@example.org",
+                            "title": "",
+                            "firstname": "Test",
+                            "lastname": "Test",
+                            "display_name": "Tester",
+                            "avatar_url": "https://example.org/avatar"
+                        },
+                        "status": "accepted"
+                    }
+                ],
+                "is_time_independent": false,
+                "is_all_day": false,
+                "starts_at": {
+                    "datetime": "1970-01-01T00:00:00Z",
+                    "timezone": "Europe/Berlin"
+                },
+                "ends_at": {
+                    "datetime": "1970-01-01T00:00:00Z",
+                    "timezone": "Europe/Berlin"
+                },
+                "type": "single",
+                "status": "ok",
+                "invite_status": "accepted"
+            }
+        );
+    }
+
+    #[test]
+    fn event_resource_time_independent_serialize() {
+        let unix_epoch: DateTime<Utc> = SystemTime::UNIX_EPOCH.into();
+
+        let user_profile = PublicUserProfile {
+            id: UserId::from(Uuid::nil()),
+            email: "test@example.org".into(),
+            title: "".into(),
+            firstname: "Test".into(),
+            lastname: "Test".into(),
+            display_name: "Tester".into(),
+            avatar_url: "https://example.org/avatar".into(),
+        };
+
+        let event_resource = EventResource {
+            id: EventId::from(Uuid::nil()),
+            created_by: user_profile.clone(),
+            created_at: unix_epoch,
+            updated_by: user_profile.clone(),
+            updated_at: unix_epoch,
+            title: "Event title".into(),
+            description: "Event description".into(),
+            room: EventRoomInfo {
+                id: RoomId::from(Uuid::nil()),
+                password: None,
+                sip_tel: None,
+                sip_uri: None,
+                sip_id: None,
+                sip_password: None,
+            },
+            invitees_truncated: false,
+            invitees: vec![EventInvitee {
+                profile: user_profile,
+                status: EventInviteStatus::Accepted,
+            }],
+            is_time_independent: true,
+            is_all_day: None,
+            starts_at: None,
+            ends_at: None,
+            recurrence_pattern: vec![],
+            type_: EventType::Single,
+            status: EventStatus::Ok,
+            invite_status: EventInviteStatus::Accepted,
+        };
+
+        assert_eq_json!(
+            event_resource,
+            {
+                "id": "00000000-0000-0000-0000-000000000000",
+                "created_by": {
+                    "id": "00000000-0000-0000-0000-000000000000",
+                    "email": "test@example.org",
+                    "title": "",
+                    "firstname": "Test",
+                    "lastname": "Test",
+                    "display_name": "Tester",
+                    "avatar_url": "https://example.org/avatar"
+                },
+                "created_at": "1970-01-01T00:00:00Z",
+                "updated_by": {
+                    "id": "00000000-0000-0000-0000-000000000000",
+                    "email": "test@example.org",
+                    "title": "",
+                    "firstname": "Test",
+                    "lastname": "Test",
+                    "display_name": "Tester",
+                    "avatar_url": "https://example.org/avatar"
+                },
+                "updated_at": "1970-01-01T00:00:00Z",
+                "title": "Event title",
+                "description": "Event description",
+                "room": {
+                    "id": "00000000-0000-0000-0000-000000000000"
+                },
+                "invitees_truncated": false,
+                "invitees": [
+                    {
+                        "profile": {
+                            "id": "00000000-0000-0000-0000-000000000000",
+                            "email": "test@example.org",
+                            "title": "",
+                            "firstname": "Test",
+                            "lastname": "Test",
+                            "display_name": "Tester",
+                            "avatar_url": "https://example.org/avatar"
+                        },
+                        "status": "accepted"
+                    }
+                ],
+                "is_time_independent": true,
+                "type": "single",
+                "status": "ok",
+                "invite_status": "accepted"
+            }
+        );
+    }
+
+    #[test]
+    fn event_exception_serialize() {
+        let unix_epoch: DateTime<Utc> = SystemTime::UNIX_EPOCH.into();
+        let instance_id = InstanceId(unix_epoch);
+        let event_id = EventId::from(Uuid::nil());
+        let user_profile = PublicUserProfile {
+            id: UserId::from(Uuid::nil()),
+            email: "test@example.org".into(),
+            title: "".into(),
+            firstname: "Test".into(),
+            lastname: "Test".into(),
+            display_name: "Tester".into(),
+            avatar_url: "https://example.org/avatar".into(),
+        };
+
+        let instance = EventExceptionResource {
+            id: EventAndInstanceId(event_id, instance_id),
+            recurring_event_id: event_id,
+            instance_id,
+            created_by: user_profile.clone(),
+            created_at: unix_epoch,
+            updated_by: user_profile,
+            updated_at: unix_epoch,
+            title: Some("Instance title".into()),
+            description: Some("Instance description".into()),
+            is_all_day: Some(false),
+            starts_at: Some(DateTimeTz {
+                datetime: unix_epoch,
+                timezone: TimeZone(Tz::Europe__Berlin),
+            }),
+            ends_at: Some(DateTimeTz {
+                datetime: unix_epoch,
+                timezone: TimeZone(Tz::Europe__Berlin),
+            }),
+            original_starts_at: DateTimeTz {
+                datetime: unix_epoch,
+                timezone: TimeZone(Tz::Europe__Berlin),
+            },
+            type_: EventType::Exception,
+            status: EventStatus::Ok,
+        };
+
+        assert_eq_json!(
+            instance,
+            {
+                "id": "00000000-0000-0000-0000-000000000000_19700101T000000Z",
+                "recurring_event_id": "00000000-0000-0000-0000-000000000000",
+                "instance_id": "19700101T000000Z",
+                "created_by": {
+                    "id": "00000000-0000-0000-0000-000000000000",
+                    "email": "test@example.org",
+                    "title": "",
+                    "firstname": "Test",
+                    "lastname": "Test",
+                    "display_name": "Tester",
+                    "avatar_url": "https://example.org/avatar"
+                },
+                "created_at": "1970-01-01T00:00:00Z",
+                "updated_by": {
+                    "id": "00000000-0000-0000-0000-000000000000",
+                    "email": "test@example.org",
+                    "title": "",
+                    "firstname": "Test",
+                    "lastname": "Test",
+                    "display_name": "Tester",
+                    "avatar_url": "https://example.org/avatar"
+                },
+                "updated_at": "1970-01-01T00:00:00Z",
+                "title": "Instance title",
+                "description": "Instance description",
+                "is_all_day": false,
+                "starts_at": {
+                    "datetime": "1970-01-01T00:00:00Z",
+                    "timezone": "Europe/Berlin"
+                },
+                "ends_at": {
+                    "datetime": "1970-01-01T00:00:00Z",
+                    "timezone": "Europe/Berlin"
+                },
+                "original_starts_at": {
+                    "datetime": "1970-01-01T00:00:00Z",
+                    "timezone": "Europe/Berlin"
+                },
+                "type": "exception",
+                "status": "ok",
+            }
+        );
+    }
+}
