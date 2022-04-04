@@ -120,9 +120,9 @@ pub async fn parse_args() -> Result<Args> {
     Ok(args)
 }
 
-const BUILD_INFO: [(&'static str, Option<&'static str>); 10] = [
+const BUILD_INFO: [(&str, Option<&str>); 10] = [
     ("Build Timestamp", option_env!("VERGEN_BUILD_TIMESTAMP")),
-    ("Build Version", option_env!("VERGEN_GIT_SEMVER")),
+    ("Build Version", option_env!("VERGEN_BUILD_SEMVER")),
     ("Commit SHA", option_env!("VERGEN_GIT_SHA")),
     ("Commit Date", option_env!("VERGEN_GIT_COMMIT_TIMESTAMP")),
     ("Commit Branch", option_env!("VERGEN_GIT_BRANCH")),
