@@ -180,6 +180,7 @@ pub struct EventResource {
     pub type_: EventType,
     pub status: EventStatus,
     pub invite_status: EventInviteStatus,
+    pub is_favorite: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -469,6 +470,7 @@ fn create_time_independent_event(
         type_: EventType::Single,
         status: EventStatus::Ok,
         invite_status: EventInviteStatus::Accepted,
+        is_favorite: false,
     })
 }
 
@@ -540,6 +542,7 @@ fn create_time_dependent_event(
         },
         status: EventStatus::Ok,
         invite_status: EventInviteStatus::Accepted,
+        is_favorite: false,
     })
 }
 
@@ -616,7 +619,7 @@ pub async fn get_events(
             per_page,
         )?;
 
-        for (event, _, _, exceptions) in &events {
+        for (event, _, _, exceptions, _) in &events {
             users.add(event);
             users.add(exceptions);
         }
@@ -637,7 +640,7 @@ pub async fn get_events(
 
         let mut ret_cursor_data = None;
 
-        for ((event, invite, room, exceptions), mut invites_with_user) in
+        for ((event, invite, room, exceptions, is_favorite), mut invites_with_user) in
             events.into_iter().zip(invites_with_users_grouped_by_event)
         {
             ret_cursor_data = Some(GetEventsCursorData {
@@ -692,6 +695,7 @@ pub async fn get_events(
                 },
                 status: EventStatus::Ok,
                 invite_status,
+                is_favorite,
             }));
 
             for exception in exceptions {
@@ -733,7 +737,7 @@ pub async fn get_event(
     crate::block(move || {
         let conn = db.get_conn()?;
 
-        let (event, invite, room) =
+        let (event, invite, room, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
         let (invitees, invitees_truncated) =
             get_invitees_for_event(&settings, &conn, event_id, query.invitees_max)?;
@@ -770,6 +774,7 @@ pub async fn get_event(
             invite_status: invite
                 .map(|inv| inv.status)
                 .unwrap_or(EventInviteStatus::Accepted),
+            is_favorite,
         };
 
         Ok(ApiResponse::new(event_resource))
@@ -820,7 +825,7 @@ pub async fn patch_event(
     crate::block(move || {
         let conn = db.get_conn()?;
 
-        let (event, invite, room) =
+        let (event, invite, room, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
 
         let update_event = match (event.is_time_independent, patch.is_time_independent) {
@@ -879,6 +884,7 @@ pub async fn patch_event(
             invite_status: invite
                 .map(|inv| inv.status)
                 .unwrap_or(EventInviteStatus::Accepted),
+            is_favorite,
         };
 
         Ok(ApiResponse::new(event_resource))
@@ -1355,6 +1361,7 @@ mod tests {
             type_: EventType::Single,
             status: EventStatus::Ok,
             invite_status: EventInviteStatus::Accepted,
+            is_favorite: false,
         };
 
         assert_eq_json!(
@@ -1413,7 +1420,8 @@ mod tests {
                 },
                 "type": "single",
                 "status": "ok",
-                "invite_status": "accepted"
+                "invite_status": "accepted",
+                "is_favorite": false
             }
         );
     }
@@ -1461,6 +1469,7 @@ mod tests {
             type_: EventType::Single,
             status: EventStatus::Ok,
             invite_status: EventInviteStatus::Accepted,
+            is_favorite: true,
         };
 
         assert_eq_json!(
@@ -1510,7 +1519,8 @@ mod tests {
                 "is_time_independent": true,
                 "type": "single",
                 "status": "ok",
-                "invite_status": "accepted"
+                "invite_status": "accepted",
+                "is_favorite": true
             }
         );
     }

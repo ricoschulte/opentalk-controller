@@ -41,6 +41,7 @@ pub struct EventInstance {
     pub type_: EventType,
     pub status: EventStatus,
     pub invite_status: EventInviteStatus,
+    pub is_favorite: bool,
 }
 
 #[derive(Deserialize)]
@@ -85,7 +86,7 @@ pub async fn get_event_instances(
     crate::block(move || {
         let conn = db.get_conn()?;
 
-        let (event, invite, room) =
+        let (event, invite, room, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
 
         let (invitees, invitees_truncated) =
@@ -138,6 +139,7 @@ pub async fn get_event_instances(
                 &users,
                 event.clone(),
                 invite_status,
+                is_favorite,
                 exception,
                 room.clone(),
                 InstanceId(datetime),
@@ -192,7 +194,7 @@ pub async fn get_event_instance(
     crate::block(move || {
         let conn = db.get_conn()?;
 
-        let (event, invite, room) =
+        let (event, invite, room, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
         verify_recurrence_date(&event, instance_id.0)?;
 
@@ -214,6 +216,7 @@ pub async fn get_event_instance(
             invite
                 .map(|inv| inv.status)
                 .unwrap_or(EventInviteStatus::Accepted),
+            is_favorite,
             exception,
             room,
             instance_id,
@@ -273,7 +276,7 @@ pub async fn patch_event_instance(
     crate::block(move || {
         let conn = db.get_conn()?;
 
-        let (event, invite, room) =
+        let (event, invite, room, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
 
         if !event.is_recurring.unwrap_or_default() {
@@ -370,6 +373,7 @@ pub async fn patch_event_instance(
             invite
                 .map(|inv| inv.status)
                 .unwrap_or(EventInviteStatus::Accepted),
+            is_favorite,
             Some(exception),
             room,
             instance_id,
@@ -387,6 +391,7 @@ fn create_event_instance(
     users: &UserProfilesBatch,
     mut event: Event,
     invite_status: EventInviteStatus,
+    is_favorite: bool,
     exception: Option<EventException>,
     room: EventRoomInfo,
     instance_id: InstanceId,
@@ -450,6 +455,7 @@ fn create_event_instance(
         type_: EventType::Instance,
         status,
         invite_status,
+        is_favorite,
     })
 }
 
@@ -570,6 +576,7 @@ mod tests {
             type_: EventType::Instance,
             status: EventStatus::Ok,
             invite_status: EventInviteStatus::Accepted,
+            is_favorite: false,
         };
 
         assert_eq_json!(
@@ -629,7 +636,8 @@ mod tests {
                 },
                 "type": "instance",
                 "status": "ok",
-                "invite_status": "accepted"
+                "invite_status": "accepted",
+                "is_favorite": false
             }
         );
     }

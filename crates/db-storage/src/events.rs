@@ -128,24 +128,30 @@ impl Event {
         conn: &DbConnection,
         user_id: UserId,
         event_id: EventId,
-    ) -> Result<(Event, Option<EventInvite>, Room)> {
+    ) -> Result<(Event, Option<EventInvite>, Room, bool)> {
         let query = events::table
             .left_join(
                 event_invites::table.on(event_invites::event_id
                     .eq(events::id)
                     .and(event_invites::invitee.eq(user_id))),
             )
+            .left_join(
+                event_favorites::table.on(event_favorites::event_id
+                    .eq(events::id)
+                    .and(event_favorites::user_id.eq(user_id))),
+            )
             .inner_join(rooms::table.on(events::room.eq(rooms::id)))
             .select((
                 events::all_columns,
                 event_invites::all_columns.nullable(),
                 rooms::all_columns,
+                event_favorites::user_id.is_not_null(),
             ))
             .filter(events::id.eq(event_id));
 
-        let (event, invite, room) = query.first(conn)?;
+        let (event, invite, room, is_favorite) = query.first(conn)?;
 
-        Ok((event, invite, room))
+        Ok((event, invite, room, is_favorite))
     }
 
     #[tracing::instrument(err, skip_all)]
@@ -158,7 +164,7 @@ impl Event {
         time_max: Option<DateTime<Utc>>,
         cursor: Option<GetEventsCursor>,
         limit: i64,
-    ) -> Result<Vec<(Event, Option<EventInvite>, Room, Vec<EventException>)>> {
+    ) -> Result<Vec<(Event, Option<EventInvite>, Room, Vec<EventException>, bool)>> {
         // Filter applied to all events which validates that the event is either created by
         // the given user or a invite to the event exists for the user
         let event_related_to_user_id = events::created_by
@@ -172,11 +178,17 @@ impl Event {
                     .eq(events::id)
                     .and(event_invites::invitee.eq(user_id))),
             )
+            .left_join(
+                event_favorites::table.on(event_favorites::event_id
+                    .eq(events::id)
+                    .and(event_favorites::user_id.eq(user_id))),
+            )
             .inner_join(rooms::table)
             .select((
                 events::all_columns,
                 event_invites::all_columns.nullable(),
                 rooms::all_columns,
+                event_favorites::user_id.is_not_null(),
             ))
             .filter(event_related_to_user_id)
             .order_by(events::starts_at.asc().nulls_first())
@@ -229,25 +241,17 @@ impl Event {
             }
         }
 
-        let events_with_invite_and_room: Vec<(Event, Option<EventInvite>, Room)> = if only_favorites
-        {
-            // cannot box away the inner_join
-            // INNER JOIN on event_favorites to only get favored events
-            query
-                .inner_join(
-                    event_favorites::table.on(events::id
-                        .eq(event_favorites::event_id)
-                        .and(event_favorites::user_id.eq(user_id))),
-                )
-                .get_results(conn)?
-        } else {
-            query.get_results(conn)?
-        };
+        if only_favorites {
+            query = query.filter(event_favorites::user_id.is_not_null());
+        }
+
+        let events_with_invite_and_room: Vec<(Event, Option<EventInvite>, Room, bool)> =
+            query.load(conn)?;
 
         let mut events_with_invite_room_and_exceptions =
             Vec::with_capacity(events_with_invite_and_room.len());
 
-        for (event, invite, room) in events_with_invite_and_room {
+        for (event, invite, room, is_favorite) in events_with_invite_and_room {
             let exceptions = if event.is_recurring.unwrap_or_default() {
                 event_exceptions::table
                     .filter(event_exceptions::event_id.eq(event.id))
@@ -256,7 +260,13 @@ impl Event {
                 vec![]
             };
 
-            events_with_invite_room_and_exceptions.push((event, invite, room, exceptions));
+            events_with_invite_room_and_exceptions.push((
+                event,
+                invite,
+                room,
+                exceptions,
+                is_favorite,
+            ));
         }
 
         Ok(events_with_invite_room_and_exceptions)
