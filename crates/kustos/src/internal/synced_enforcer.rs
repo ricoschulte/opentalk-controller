@@ -1,6 +1,7 @@
 //! Includes an enforcer that supports a background task which reloads the adapter every n seconds
 use super::rbac_api_ex::RbacApiEx;
 use super::{ToCasbin, ToCasbinString};
+use crate::metrics::KustosMetrics;
 use crate::{PolicyUser, UserPolicy};
 use async_trait::async_trait;
 use casbin::rhai::ImmutableString;
@@ -13,7 +14,7 @@ use parking_lot as pl;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 type EventCallback = fn(&mut SyncedEnforcer, EventData);
@@ -22,6 +23,7 @@ pub struct SyncedEnforcer {
     enforcer: Enforcer,
     events: HashMap<Event, Vec<EventCallback>>,
     autoload_running: bool,
+    metrics: Option<Arc<KustosMetrics>>,
 }
 
 impl SyncedEnforcer {
@@ -55,6 +57,10 @@ impl SyncedEnforcer {
             .has_role_for_user(&policy[0], &policy[1], None)
     }
 
+    pub fn set_metrics(&mut self, metrics: Arc<KustosMetrics>) {
+        self.metrics = Some(metrics)
+    }
+
     /// The autoloader creates the need for using the enforcer inside of a tokio::Mutex
     pub async fn start_autoload_policy(
         enforcer: Arc<RwLock<SyncedEnforcer>>,
@@ -77,12 +83,8 @@ impl SyncedEnforcer {
             loop {
                 tokio::select! {
                     _ = ticker.tick() => {
-
-                        match cloned_enforcer.write().await.load_policy().await {
-                            Ok(_) => {},
-                            Err(e) => {
-                                return Err(crate::Error::CasbinError(e))
-                            },
+                        if let Err(e)= cloned_enforcer.write().await.load_policy().await {
+                            return Err(crate::Error::CasbinError(e))
                         }
                     },
                     _ = shutdown.recv() => {
@@ -131,6 +133,7 @@ impl CoreApi for SyncedEnforcer {
             enforcer,
             events: HashMap::new(),
             autoload_running: false,
+            metrics: None,
         };
 
         Ok(enforcer)
@@ -212,13 +215,33 @@ impl CoreApi for SyncedEnforcer {
     #[inline]
     #[tracing::instrument(level = "trace", skip(self, rvals))]
     fn enforce<ARGS: EnforceArgs>(&self, rvals: ARGS) -> Result<bool> {
-        self.enforcer.enforce(rvals)
+        let start = Instant::now();
+
+        let res = self.enforcer.enforce(rvals)?;
+
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .enforce_execution_time
+                .record(start.elapsed().as_secs_f64(), &[]);
+        }
+
+        Ok(res)
     }
 
     #[inline]
     #[tracing::instrument(level = "trace", skip(self, rvals))]
     fn enforce_mut<ARGS: EnforceArgs>(&mut self, rvals: ARGS) -> Result<bool> {
-        self.enforcer.enforce_mut(rvals)
+        let start = Instant::now();
+
+        let res = self.enforcer.enforce_mut(rvals)?;
+
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .enforce_execution_time
+                .record(start.elapsed().as_secs_f64(), &[]);
+        }
+
+        Ok(res)
     }
 
     #[inline]
@@ -235,7 +258,17 @@ impl CoreApi for SyncedEnforcer {
 
     #[inline]
     async fn load_policy(&mut self) -> Result<()> {
-        self.enforcer.load_policy().await
+        let start = Instant::now();
+
+        self.enforcer.load_policy().await?;
+
+        if let Some(metrics) = &self.metrics {
+            metrics
+                .load_policy_execution_time
+                .record(start.elapsed().as_secs_f64(), &[]);
+        }
+
+        Ok(())
     }
 
     #[inline]

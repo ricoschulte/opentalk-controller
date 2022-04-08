@@ -43,6 +43,11 @@ parking_lot = "0.12"
 ### TODO(r.floren) add this as a default feature
 actix-web = { version = "4" }
 
+### Opentelementry metrics
+opentelemetry = { version = "0.17", default-features = false, features = [
+    "metrics",
+] }
+
 [dependencies.casbin]
 git = "https://github.com/kbalt/casbin-rs.git"
 rev = "76b07db60264138b3f10b52469b74e41629e3e15"
@@ -56,3 +61,4 @@ anyhow = "1.0"
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 url = "2"
 tokio = { version = "1", features = ["rt", "macros"] }
+

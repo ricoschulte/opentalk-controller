@@ -3,7 +3,6 @@
 use diesel::pg::Pg;
 use diesel::query_builder::{AstPass, Query, QueryFragment};
 use diesel::query_dsl::LoadQuery;
-use diesel::r2d2::ConnectionManager;
 use diesel::result::Error;
 use diesel::sql_types::BigInt;
 use diesel::{r2d2, PgConnection, QueryResult, RunQueryDsl};
@@ -12,12 +11,15 @@ use diesel::{r2d2, PgConnection, QueryResult, RunQueryDsl};
 extern crate diesel;
 
 mod db;
+mod metrics;
 pub mod query_helper;
 
 pub use db::Db;
+pub use metrics::DatabaseMetrics;
 
 /// Pooled connection alias
-pub type DbConnection = r2d2::PooledConnection<ConnectionManager<PgConnection>>;
+pub type DbConnection =
+    metrics::MetricsConnection<r2d2::PooledConnection<r2d2::ConnectionManager<PgConnection>>>;
 
 /// Result type using [`DatabaseError`] as a default Error
 pub type Result<T, E = DatabaseError> = std::result::Result<T, E>;
@@ -112,7 +114,7 @@ impl<T: Query> Query for Paginated<T> {
     type SqlType = (T::SqlType, BigInt);
 }
 
-impl<T> RunQueryDsl<PgConnection> for Paginated<T> {}
+impl<T, Conn> RunQueryDsl<Conn> for Paginated<T> {}
 
 impl<T> QueryFragment<Pg> for Paginated<T>
 where

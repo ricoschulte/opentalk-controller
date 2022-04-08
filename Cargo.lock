@@ -780,6 +780,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cidr"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "300bccc729b1ada84523246038aad61fead689ac362bb9d44beea6f6a188c34b"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "clap"
 version = "2.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -949,6 +958,16 @@ checksum = "ccc0a48a9b826acdf4028595adc9db92caea352f7af011a3034acd172a52a0aa"
 dependencies = [
  "quote",
  "syn",
+]
+
+[[package]]
+name = "dashmap"
+version = "4.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e77a43b28d0668df09411cb0bc9a8c2adc40f9a048afe863e05fd43251e8e39c"
+dependencies = [
+ "cfg-if 1.0.0",
+ "num_cpus",
 ]
 
 [[package]]
@@ -1742,7 +1761,9 @@ dependencies = [
  "openidconnect",
  "opentelemetry",
  "opentelemetry-jaeger",
+ "opentelemetry-prometheus",
  "parking_lot 0.12.0",
+ "prometheus",
  "r3dlock",
  "rand",
  "redis",
@@ -1780,6 +1801,7 @@ version = "0.1.0"
 dependencies = [
  "arc-swap",
  "chrono",
+ "cidr",
  "config",
  "openidconnect",
  "redis",
@@ -1795,6 +1817,7 @@ dependencies = [
  "diesel",
  "k3k-controller-shared",
  "log",
+ "opentelemetry",
  "thiserror",
  "tracing",
 ]
@@ -1914,6 +1937,7 @@ dependencies = [
  "k3k-database",
  "k3k-db-storage",
  "log",
+ "opentelemetry",
  "parking_lot 0.12.0",
  "serial_test",
  "thiserror",
@@ -2017,9 +2041,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.14"
+version = "0.4.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51b9bbe6c47d51fc3e1a9b945965946b4c44142ab8792c50835a980d362c2710"
+checksum = "abb12e687cfb44aa40f41fc3978ef76448f9b6038cad6aef4259d3c095a2382e"
 dependencies = [
  "cfg-if 1.0.0",
  "serde",
@@ -2273,6 +2297,8 @@ checksum = "6105e89802af13fdf48c49d7646d3b533a70e536d818aae7e78ba0433d01acb8"
 dependencies = [
  "async-trait",
  "crossbeam-channel",
+ "dashmap",
+ "fnv",
  "futures-channel",
  "futures-executor",
  "futures-util",
@@ -2299,6 +2325,17 @@ dependencies = [
  "thiserror",
  "thrift",
  "tokio",
+]
+
+[[package]]
+name = "opentelemetry-prometheus"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9328977e479cebe12ce0d3fcecdaea4721d234895a9440c5b5dfd113f0594ac6"
+dependencies = [
+ "opentelemetry",
+ "prometheus",
+ "protobuf",
 ]
 
 [[package]]
@@ -2628,6 +2665,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "prometheus"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7f64969ffd5dd8f39bd57a68ac53c163a095ed9d0fb707146da1b27025a3504"
+dependencies = [
+ "cfg-if 1.0.0",
+ "fnv",
+ "lazy_static",
+ "memchr",
+ "parking_lot 0.11.2",
+ "protobuf",
+ "thiserror",
+]
+
+[[package]]
+name = "protobuf"
+version = "2.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf7e6d18738ecd0902d30d1ad232c9125985a3422929b16c65517b38adc14f96"
+
+[[package]]
 name = "protocol"
 version = "0.1.0"
 dependencies = [
@@ -2924,15 +2982,16 @@ dependencies = [
 
 [[package]]
 name = "rrule"
-version = "0.7.1"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "129e5abab03e4e3ac4638c5a5f4ec98f394201e3c1237e0603c65099f41027bf"
+checksum = "bf34c235fb6c9975051992d1070a4a3c8e55be7986f12ae446bca441662914e8"
 dependencies = [
  "chrono",
  "chrono-tz",
  "lazy_static",
  "log",
  "regex",
+ "thiserror",
 ]
 
 [[package]]

@@ -59,6 +59,8 @@ pub struct Settings {
     #[serde(default)]
     pub avatar: Avatar,
     #[serde(default)]
+    pub metrics: Metrics,
+    #[serde(default)]
     pub etherpad: Option<Etherpad>,
 
     #[serde(default)]
@@ -346,4 +348,9 @@ fn default_user_language() -> String {
 pub struct Endpoints {
     #[serde(default)]
     pub disable_users_find: bool,
+}
+
+#[derive(Debug, Default, Clone, Deserialize)]
+pub struct Metrics {
+    pub allowlist: Vec<cidr::IpInet>,
 }
