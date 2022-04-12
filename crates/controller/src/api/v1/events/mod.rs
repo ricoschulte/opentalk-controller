@@ -34,8 +34,10 @@ pub mod invites;
 const LOCAL_DT_FORMAT: &str = "%Y%m%dT%H%M%S";
 const UTC_DT_FORMAT: &str = "%Y%m%dT%H%M%SZ";
 
+/// Opaque id of an EventInstance or EventException resource. Should only be used to sort/index the related resource.
 #[derive(Debug, Copy, Clone)]
 pub struct EventAndInstanceId(EventId, InstanceId);
+
 impl Serialize for EventAndInstanceId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -45,8 +47,13 @@ impl Serialize for EventAndInstanceId {
     }
 }
 
+/// ID of an EventInstance
+///
+/// Is created from the starts_at datetime of the original recurrence (original meaning that exceptions don't change
+/// the instance id).
 #[derive(Debug, Copy, Clone)]
 pub struct InstanceId(DateTime<Utc>);
+
 impl Serialize for InstanceId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -156,56 +163,155 @@ impl DateTimeTz {
     }
 }
 
+/// Event Resource representation
+///
+/// Returned from `GET /events/` and `GET /events/{event_id}`
 #[derive(Debug, Serialize)]
 pub struct EventResource {
+    /// ID of the event
     pub id: EventId,
+
+    /// Public user profile of the user which created the event
     pub created_by: PublicUserProfile,
+
+    /// Timestamp of the event creation
     pub created_at: DateTime<Utc>,
+
+    /// Public user profile of the user which last updated the event
     pub updated_by: PublicUserProfile,
+
+    /// Timestamp of the last update
     pub updated_at: DateTime<Utc>,
+
+    /// Title of the event
+    ///
+    /// For display purposes
     pub title: String,
+
+    /// Description of the event
+    ///
+    /// For display purposes
     pub description: String,
+
+    /// All information about the room the event takes place in
     pub room: EventRoomInfo,
+
+    /// Flag which indicates if `invitees` contains all invites as far as known to the application
+    /// May also be true if there are no invitees but no invitees were requested
     pub invitees_truncated: bool,
+
+    /// List of event invitees and their invite status. Might not be complete, see `invite_truncated`
     pub invitees: Vec<EventInvitee>,
+
+    /// Is the event time independent?
+    ///
+    /// Time independent events are not bound to any time but instead are constantly available to join
     pub is_time_independent: bool,
+
+    /// Is the event an all day event
+    ///
+    /// All-day events have no start/end time, they last the entire day(s)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_all_day: Option<bool>,
+
+    /// Start time of the event.
+    ///
+    /// Omitted if `is_time_independent` is true
+    ///
+    /// For events of type `recurring` the datetime contains the time of the first instance.
+    /// The datetimes of subsequent recurrences are computed using the datetime of the first instance and its timezone.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub starts_at: Option<DateTimeTz>,
+
+    /// End time of the event.
+    ///
+    /// Omitted if `is_time_independent` is true
+    ///
+    /// For events of type `recurring` the datetime contains the time of the first instance.
+    /// The datetimes of subsequent recurrences are computed using the datetime of the first instance and its timezone.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ends_at: Option<DateTimeTz>,
+
+    /// Recurrence pattern(s) for recurring events
+    ///
+    /// May contain RRULE, EXRULE, RDATE and EXDATE strings
+    ///
+    /// Requires `type` to be `recurring`
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub recurrence_pattern: Vec<String>,
+
+    /// Type of event
+    ///
+    /// Time independent events or events without recurrence are `single` while recurring events are `recurring`
     #[serde(rename = "type")]
     pub type_: EventType,
+
+    /// Status of the event. `ok` by default but may be `cancelled`
     pub status: EventStatus,
+
+    /// The invite status of the current user for this event
     pub invite_status: EventInviteStatus,
+
+    /// Is this event in the current user's favorite list?
     pub is_favorite: bool,
 }
 
+/// Event exception resource
+///
+/// Overrides event properties for a event recurrence. May only exist for events of type `recurring`.
 #[derive(Debug, Serialize)]
 pub struct EventExceptionResource {
+    /// Opaque ID of the exception
     pub id: EventAndInstanceId,
+
+    /// ID of the event  the exception belongs to
     pub recurring_event_id: EventId,
+
+    /// ID of the instance the exception overrides
     pub instance_id: InstanceId,
+
+    /// Public user profile of the user which created the exception
     pub created_by: PublicUserProfile,
+
+    /// Timestamp of the exceptions creation
     pub created_at: DateTime<Utc>,
+
+    /// Public user profile of the user which last updated the exception
     pub updated_by: PublicUserProfile,
+
+    /// Timestamp of the exceptions last update
     pub updated_at: DateTime<Utc>,
+
+    /// Override the title of the instance
     #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+
+    /// Override the description of the instance
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+
+    /// Override the `is_all_day` property of the instance
     #[serde(skip_serializing_if = "Option::is_none")]
     pub is_all_day: Option<bool>,
+
+    /// Override the `starts_at` time of the instance
     #[serde(skip_serializing_if = "Option::is_none")]
     pub starts_at: Option<DateTimeTz>,
+
+    /// Override the `ends_at` time of the instance
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ends_at: Option<DateTimeTz>,
+
+    /// The `starts_at` of the instance this exception modifies. Used to match the exception the instance
     pub original_starts_at: DateTimeTz,
+
+    /// Must always be `exception`
     #[serde(rename = "type")]
     pub type_: EventType,
+
+    /// Override the status of the event instance
+    ///
+    /// This can be used to cancel a occurrence of an event
     pub status: EventStatus,
 }
 
@@ -246,6 +352,9 @@ pub struct EventInvitee {
     pub status: EventInviteStatus,
 }
 
+/// Type of event resource.
+///
+/// Is used as type discriminator in field `type`.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EventType {
@@ -255,25 +364,41 @@ pub enum EventType {
     Exception,
 }
 
+/// Status of an event
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EventStatus {
+    /// Default status, event is ok
     Ok,
+
+    /// Event (or event instance) was cancelled
     Cancelled,
 }
 
 /// All information about a room in which an event takes place
 #[derive(Debug, Clone, Serialize)]
 pub struct EventRoomInfo {
+    /// ID of the room
     pub id: RoomId,
+
+    /// Password of the room
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
+
+    /// SIP Call-In phone number which must be used to reach the room
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sip_tel: Option<String>,
+
+    /// SIP Call-In sip uri
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sip_uri: Option<String>,
+
+    /// SIP ID which must transmitted via DTMF (number field on the phone) to identify this room
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sip_id: Option<String>,
+
+    /// SIP password which must be transmitted via DTMF (number field on the phone) after entering the `sip_id`
+    /// to enter the room
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sip_password: Option<String>,
 }
@@ -309,18 +434,47 @@ impl EventRoomInfo {
     }
 }
 
+/// Body of the the `POST /events` endpoint
 #[derive(Debug, Deserialize, Validate)]
 pub struct PostEventsBody {
+    /// Title of the event
     #[validate(length(max = 255))]
     pub title: String,
+
+    /// Description of the event
     #[validate(length(max = 4096))]
     pub description: String,
+
+    /// Optional password for the room related to the event
     #[validate(length(min = 1, max = 255))]
     pub password: Option<String>,
+
+    /// Should the created event be time independent?
+    ///
+    /// If true, all following fields must be null
+    /// If false, requires `is_all_day`, `starts_at`, `ends_at`
     pub is_time_independent: bool,
+
+    /// Should the event be all-day?
+    ///
+    /// If true, requires `starts_at.datetime` and `ends_at.datetime` to have a 00:00 time part
     pub is_all_day: Option<bool>,
+
+    /// Start time of the event
+    ///
+    /// For recurring events these must contains the datetime of the first instance
     pub starts_at: Option<DateTimeTz>,
+
+    /// End time of the event
+    ///
+    /// For recurring events these must contains the datetime of the first instance
     pub ends_at: Option<DateTimeTz>,
+
+    /// List of recurrence patterns
+    ///
+    /// If the list if non-empty the created event will be of type `recurring`
+    ///
+    /// For more infos see the documentation of [`EventResource`]
     #[validate(custom = "validate_recurrence_pattern")]
     #[serde(default)]
     pub recurrence_pattern: Vec<String>,
@@ -338,6 +492,7 @@ fn validate_recurrence_pattern(pattern: &[String]) -> Result<(), ValidationError
     Ok(())
 }
 
+/// API Endpoint `POST /events`
 #[post("/events")]
 pub async fn new_event(
     settings: SharedSettingsActix,
@@ -570,24 +725,45 @@ fn create_time_dependent_event(
 /// Allows for customization in the search for events
 #[derive(Debug, Deserialize)]
 pub struct GetEventsQuery {
+    /// Optional minimum time in which the event happens
     time_min: Option<DateTime<Utc>>,
+
+    /// Optional maximum time in which the event happens
     time_max: Option<DateTime<Utc>>,
+
+    /// Maximum number of invitees to return inside the event resource
+    ///
+    /// Default: 0
     #[serde(default)]
     invitees_max: u32,
+
+    /// Return only favorite events
     #[serde(default)]
     favorites: bool,
+
+    /// How many events to return per page
     per_page: Option<i64>,
+
+    /// Cursor token to get the next page of events
+    ///
+    /// Returned by the endpoint if the maximum number of events per page has been hit
     after: Option<Cursor<GetEventsCursorData>>,
 }
 
-// shortening the names
+/// Data stored inside the `GET /events` query cursor
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 struct GetEventsCursorData {
+    /// Last event in the list
     event_id: EventId,
+
+    /// last event created at
     event_created_at: DateTime<Utc>,
+
+    /// Last event starts_at
     event_starts_at: Option<DateTime<Utc>>,
 }
 
+/// Return type of the `GET /events` endpoint
 #[derive(Serialize)]
 #[serde(untagged)]
 pub enum EventOrException {
@@ -595,9 +771,11 @@ pub enum EventOrException {
     Exception(EventExceptionResource),
 }
 
-/// API Endpoint *GET /events*
+/// API Endpoint `GET /events`
 ///
-/// Returns a list of events inside the given time range
+/// Returns a paginated list of events and their exceptions inside the given time range
+///
+/// See documentation of [`GetEventsQuery`] for all query options
 #[get("/events")]
 pub async fn get_events(
     settings: SharedSettingsActix,
@@ -732,13 +910,17 @@ pub async fn get_events(
     .await?
 }
 
+/// Path query parameters for the `GET /events/{event_id}` endpoint
 #[derive(Debug, Deserialize)]
 pub struct GetEventQuery {
+    /// Maximum number of invitees to return inside the event resource
+    ///
+    /// Default: 0
     #[serde(default)]
     invitees_max: i64,
 }
 
-/// API Endpoint *GET /events/{id}*
+/// API Endpoint `GET /events/{event_id}` endpoint
 ///
 /// Returns the event resource for the given id
 #[get("/events/{event_id}")]
@@ -801,27 +983,59 @@ pub async fn get_event(
     .await?
 }
 
+/// Path query parameters for the `PATCH /events/{event_id}` endpoint
 #[derive(Debug, Deserialize)]
 pub struct PatchEventQuery {
+    /// Maximum number of invitees to include inside the event
     #[serde(default)]
     invitees_max: i64,
 }
 
+/// Body for the `PATCH /events/{event_id}` endpoint
 #[derive(Deserialize, Validate)]
 pub struct PatchEventBody {
+    /// Patch the title of th event
     #[validate(length(max = 255))]
     title: Option<String>,
+
+    /// Patch the description of the event
     #[validate(length(max = 4096))]
     description: Option<String>,
+
+    /// Patch the time independence of the event
+    ///
+    /// If it changes the independence from true false this body has to have
+    /// `is_all_day`, `starts_at` and `ends_at` set
+    ///
+    /// See documentation of [`PostEventsBody`] for more info
     is_time_independent: Option<bool>,
+
+    /// Patch if the event is an all-day event
+    ///
+    /// If it changes the value from false to true this request must ensure
+    /// that the `starts_at.datetime` and `ends_at.datetime` have a 00:00 time part.
+    ///
+    /// See documentation of [`PostEventsBody`] for more info
     is_all_day: Option<bool>,
+
     starts_at: Option<DateTimeTz>,
     ends_at: Option<DateTimeTz>,
+
+    /// Patch the events recurrence patterns
+    ///
+    /// If this list is non empty it override the events current one
     #[validate(custom = "validate_recurrence_pattern")]
     #[serde(default)]
     recurrence_pattern: Vec<String>,
 }
 
+/// API Endpoint `PATCH /events/{event_id}`
+///
+/// See documentation of [`PatchEventBody`] for more infos
+///
+/// Patches which modify the event in a way that would invalidate existing
+/// exceptions (e.g. by changing the recurrence rule or time dependence)
+/// will have all exceptions deleted
 #[patch("/events/{event_id}")]
 pub async fn patch_event(
     settings: SharedSettingsActix,

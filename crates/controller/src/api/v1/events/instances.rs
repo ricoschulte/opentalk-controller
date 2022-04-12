@@ -20,15 +20,37 @@ use rrule::RRuleSet;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
+/// Event instance resource
+///
+/// An event instance is an occurrence of an recurring event
+///
+/// Exceptions for the instance are always already applied
+///
+/// For infos on undocumented fields see [`EventResource`](super::EventResource)
 #[derive(Debug, Serialize)]
 pub struct EventInstance {
+    /// Opaque id of the event instance resource
     pub id: EventAndInstanceId,
+
+    /// ID of the recurring event this instance belongs to
     pub recurring_event_id: EventId,
+
+    /// Opaque id of the instance
     pub instance_id: InstanceId,
+
+    /// Public user profile of the user which created the event
     pub created_by: PublicUserProfile,
+
+    /// Timestamp of the event creation
     pub created_at: DateTime<Utc>,
+
+    /// Public user profile of the user which last updated the event
+    /// or created the exception which modified the instance
     pub updated_by: PublicUserProfile,
+
+    /// Timestamp of the last update
     pub updated_at: DateTime<Utc>,
+
     pub title: String,
     pub description: String,
     pub room: EventRoomInfo,
@@ -37,6 +59,8 @@ pub struct EventInstance {
     pub is_all_day: bool,
     pub starts_at: DateTimeTz,
     pub ends_at: DateTimeTz,
+
+    /// Must always be `instance`
     #[serde(rename = "type")]
     pub type_: EventType,
     pub status: EventStatus,
@@ -229,18 +253,24 @@ pub async fn get_event_instance(
     .await?
 }
 
+/// Path parameters for the `PATCH /events/{event_id}/{instance_id}` endpoint
 #[derive(Deserialize)]
 pub struct PatchEventInstancePath {
     event_id: EventId,
     instance_id: InstanceId,
 }
 
+/// Path query for the `PATCH /events/{event_id}/{instance_id}` endpoint
 #[derive(Deserialize)]
 pub struct PatchEventInstanceQuery {
+    /// Maximum number of invitees to return inside the event instance resource
+    ///
+    /// Default: 0
     #[serde(default)]
     invitees_max: i64,
 }
 
+/// Request body for the `PATCH /events/{event_id}/{instance_id}` endpoint
 #[derive(Debug, Deserialize, Validate)]
 pub struct PatchEventInstanceBody {
     #[validate(length(max = 255))]
@@ -253,6 +283,12 @@ pub struct PatchEventInstanceBody {
     status: Option<EventStatus>,
 }
 
+/// API Endpoint `PATCH /events/{event_id}/{instance_id}`
+///
+/// Patch an instance of an recurring event. This creates oder modifies an exception for the event
+/// at the point of time of the given instance_id.
+///
+/// Returns the patches event instance
 #[patch("/events/{event_id}/instances/{instance_id}")]
 pub async fn patch_event_instance(
     settings: SharedSettingsActix,

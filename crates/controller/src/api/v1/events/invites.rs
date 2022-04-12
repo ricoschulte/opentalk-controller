@@ -17,7 +17,7 @@ use kustos::policies_builder::PoliciesBuilder;
 use kustos::Authz;
 use serde::{Deserialize, Serialize};
 
-/// API Endpoint *GET /events/{id}/invites*
+/// API Endpoint `GET /events/{event_id}/invites`
 ///
 /// Get all invites for an event
 #[get("/events/{event_id}/invites")]
@@ -52,12 +52,14 @@ pub async fn get_invites_for_event(
     Ok(ApiResponse::new(event_invitees).with_page_pagination(per_page, page, total_event_invitees))
 }
 
+/// Request body for the `POST /events/{event_id}/invites` endpoint
 #[derive(Deserialize)]
 pub struct PostEventInviteBody {
+    /// ID of the user to invite
     pub invitee: UserId,
 }
 
-/// API Endpoint *POST /events/{id}/invites*
+/// API Endpoint `POST /events/{event_id}/invites`
 ///
 /// Invite a user to an event
 #[post("/events/{event_id}/invites")]
@@ -118,13 +120,14 @@ pub async fn create_invite_to_event(
     }
 }
 
+/// Path parameters for the `DELETE /events/{event_id}/invites/{invite_id}` endpoint
 #[derive(Deserialize)]
 pub struct DeleteEventInvitePath {
     pub event_id: EventId,
     pub user_id: UserId,
 }
 
-/// API Endpoint *DELETE /events/{event_id}/invites/{invite_id}*
+/// API Endpoint `DELETE /events/{event_id}/invites/{invite_id}`
 ///
 /// Delete/Withdraw an event invitation made to a user
 #[delete("/events/{event_id}/invites/{user_id}")]
@@ -176,12 +179,13 @@ pub async fn delete_invite_to_event(
     Ok(NoContent)
 }
 
+/// Response body for the `GET /event_invites/pending` endpoint
 #[derive(Serialize)]
 pub struct GetEventInvitesPendingResponse {
     total_pending_invites: u32,
 }
 
-/// API Endpoint *GET /users/me/pending_invites*
+/// API Endpoint `GET /users/me/pending_invites`
 #[get("/users/me/pending_invites")]
 pub async fn get_event_invites_pending(
     db: Data<Db>,
@@ -199,7 +203,7 @@ pub async fn get_event_invites_pending(
     }))
 }
 
-/// API Endpoint *PATCH /events/{event_id}/invite*
+/// API Endpoint `PATCH /events/{event_id}/invite`
 ///
 /// Accept an invite to an event
 #[patch("/events/{event_id}/invite")]
@@ -224,7 +228,7 @@ pub async fn accept_event_invite(
     Ok(NoContent)
 }
 
-/// API Endpoint *DELETE /events/{event_id}/invite*
+/// API Endpoint `DELETE /events/{event_id}/invite`
 ///
 /// Decline an invite to an event
 #[delete("/events/{event_id}/invite")]
