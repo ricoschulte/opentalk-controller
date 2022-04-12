@@ -86,7 +86,7 @@ pub async fn get_event_instances(
     crate::block(move || {
         let conn = db.get_conn()?;
 
-        let (event, invite, room, is_favorite) =
+        let (event, invite, room, sip_config, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
 
         let (invitees, invitees_truncated) =
@@ -126,7 +126,7 @@ pub async fn get_event_instances(
             .add(&exceptions)
             .fetch(&settings, &conn)?;
 
-        let room = EventRoomInfo::from_room(room);
+        let room = EventRoomInfo::from_room(&settings, room, sip_config);
 
         let mut exceptions = exceptions.into_iter().peekable();
 
@@ -194,7 +194,7 @@ pub async fn get_event_instance(
     crate::block(move || {
         let conn = db.get_conn()?;
 
-        let (event, invite, room, is_favorite) =
+        let (event, invite, room, sip_config, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
         verify_recurrence_date(&event, instance_id.0)?;
 
@@ -208,7 +208,7 @@ pub async fn get_event_instance(
             .add(&exception)
             .fetch(&settings, &conn)?;
 
-        let room = EventRoomInfo::from_room(room);
+        let room = EventRoomInfo::from_room(&settings, room, sip_config);
 
         let event_instance = create_event_instance(
             &users,
@@ -276,7 +276,7 @@ pub async fn patch_event_instance(
     crate::block(move || {
         let conn = db.get_conn()?;
 
-        let (event, invite, room, is_favorite) =
+        let (event, invite, room, sip_config, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
 
         if !event.is_recurring.unwrap_or_default() {
@@ -365,7 +365,7 @@ pub async fn patch_event_instance(
             .add(&exception)
             .fetch(&settings, &conn)?;
 
-        let room = EventRoomInfo::from_room(room);
+        let room = EventRoomInfo::from_room(&settings, room, sip_config);
 
         let event_instance = create_event_instance(
             &users,

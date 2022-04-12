@@ -112,6 +112,11 @@ from_routing_key = "from-janus-2"
 # Used to propagate updates from one controller to the other.
 # reload_interval = 10
 
+#[call_in]
+# Set a phone number which will be displayed to the user
+# for the call-in service
+#tel=03012345678
+
 # The etherpad configuration for the protocol module
 #[etherpad]
 #url = "http://localhost:9001"

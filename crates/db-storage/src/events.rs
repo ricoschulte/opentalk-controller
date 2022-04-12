@@ -1,5 +1,8 @@
 use crate::rooms::{Room, RoomId};
-use crate::schema::{event_exceptions, event_favorites, event_invites, events, rooms, users};
+use crate::schema::{
+    event_exceptions, event_favorites, event_invites, events, rooms, sip_configs, users,
+};
+use crate::sip_configs::SipConfig;
 use crate::users::{User, UserId};
 use crate::utils::HasUsers;
 use chrono::{DateTime, Utc};
@@ -124,11 +127,12 @@ impl Event {
     }
 
     #[tracing::instrument(err, skip_all)]
+    #[allow(clippy::type_complexity)]
     pub fn get_with_invite_and_room(
         conn: &DbConnection,
         user_id: UserId,
         event_id: EventId,
-    ) -> Result<(Event, Option<EventInvite>, Room, bool)> {
+    ) -> Result<(Event, Option<EventInvite>, Room, Option<SipConfig>, bool)> {
         let query = events::table
             .left_join(
                 event_invites::table.on(event_invites::event_id
@@ -141,17 +145,19 @@ impl Event {
                     .and(event_favorites::user_id.eq(user_id))),
             )
             .inner_join(rooms::table.on(events::room.eq(rooms::id)))
+            .left_join(sip_configs::table.on(rooms::id.eq(sip_configs::room)))
             .select((
                 events::all_columns,
                 event_invites::all_columns.nullable(),
                 rooms::all_columns,
+                sip_configs::all_columns.nullable(),
                 event_favorites::user_id.is_not_null(),
             ))
             .filter(events::id.eq(event_id));
 
-        let (event, invite, room, is_favorite) = query.first(conn)?;
+        let (event, invite, room, sip_config, is_favorite) = query.first(conn)?;
 
-        Ok((event, invite, room, is_favorite))
+        Ok((event, invite, room, sip_config, is_favorite))
     }
 
     #[tracing::instrument(err, skip_all)]
@@ -164,7 +170,16 @@ impl Event {
         time_max: Option<DateTime<Utc>>,
         cursor: Option<GetEventsCursor>,
         limit: i64,
-    ) -> Result<Vec<(Event, Option<EventInvite>, Room, Vec<EventException>, bool)>> {
+    ) -> Result<
+        Vec<(
+            Event,
+            Option<EventInvite>,
+            Room,
+            Option<SipConfig>,
+            Vec<EventException>,
+            bool,
+        )>,
+    > {
         // Filter applied to all events which validates that the event is either created by
         // the given user or a invite to the event exists for the user
         let event_related_to_user_id = events::created_by
@@ -184,10 +199,12 @@ impl Event {
                     .and(event_favorites::user_id.eq(user_id))),
             )
             .inner_join(rooms::table)
+            .left_join(sip_configs::table.on(rooms::id.eq(sip_configs::room)))
             .select((
                 events::all_columns,
                 event_invites::all_columns.nullable(),
                 rooms::all_columns,
+                sip_configs::all_columns.nullable(),
                 event_favorites::user_id.is_not_null(),
             ))
             .filter(event_related_to_user_id)
@@ -245,13 +262,18 @@ impl Event {
             query = query.filter(event_favorites::user_id.is_not_null());
         }
 
-        let events_with_invite_and_room: Vec<(Event, Option<EventInvite>, Room, bool)> =
-            query.load(conn)?;
+        let events_with_invite_and_room: Vec<(
+            Event,
+            Option<EventInvite>,
+            Room,
+            Option<SipConfig>,
+            bool,
+        )> = query.load(conn)?;
 
         let mut events_with_invite_room_and_exceptions =
             Vec::with_capacity(events_with_invite_and_room.len());
 
-        for (event, invite, room, is_favorite) in events_with_invite_and_room {
+        for (event, invite, room, sip_config, is_favorite) in events_with_invite_and_room {
             let exceptions = if event.is_recurring.unwrap_or_default() {
                 event_exceptions::table
                     .filter(event_exceptions::event_id.eq(event.id))
@@ -264,6 +286,7 @@ impl Event {
                 event,
                 invite,
                 room,
+                sip_config,
                 exceptions,
                 is_favorite,
             ));

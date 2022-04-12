@@ -17,6 +17,7 @@ use db_storage::events::{
     TimeZone, UpdateEvent,
 };
 use db_storage::rooms::{NewRoom, Room, RoomId};
+use db_storage::sip_configs::{NewSipConfig, SipConfig};
 use db_storage::users::User;
 use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
 use kustos::prelude::{AccessMethod, IsSubject};
@@ -278,7 +279,21 @@ pub struct EventRoomInfo {
 }
 
 impl EventRoomInfo {
-    fn from_room(room: Room) -> Self {
+    fn from_room(settings: &Settings, room: Room, sip_config: Option<SipConfig>) -> Self {
+        let sip_tel = if sip_config.is_some() {
+            settings.call_in.as_ref().map(|c| c.tel.clone())
+        } else {
+            None
+        };
+
+        let (sip_id, sip_password) = if let Some(sip_config) = sip_config {
+            (
+                Some(sip_config.sip_id.into_inner().into_inner()),
+                Some(sip_config.password.into_inner().into_inner()),
+            )
+        } else {
+            (None, None)
+        };
         Self {
             id: room.id,
             password: if room.password.is_empty() {
@@ -286,10 +301,10 @@ impl EventRoomInfo {
             } else {
                 Some(room.password)
             },
-            sip_tel: None, // TODO add sip info
-            sip_uri: None,
-            sip_id: None,
-            sip_password: None,
+            sip_tel,
+            sip_uri: None, // TODO SIP URI support
+            sip_id,
+            sip_password,
         }
     }
 }
@@ -433,6 +448,8 @@ fn create_time_independent_event(
     }
     .insert(conn)?;
 
+    let sip_config = NewSipConfig::new(room.id, false).insert(conn)?;
+
     let event = NewEvent {
         title,
         description,
@@ -455,7 +472,7 @@ fn create_time_independent_event(
         id: event.id,
         title: event.title,
         description: event.description,
-        room: EventRoomInfo::from_room(room),
+        room: EventRoomInfo::from_room(settings, room, Some(sip_config)),
         invitees_truncated: false,
         invitees: vec![],
         created_by: PublicUserProfile::from_db(settings, current_user.clone()),
@@ -501,6 +518,8 @@ fn create_time_dependent_event(
     }
     .insert(conn)?;
 
+    let sip_config = NewSipConfig::new(room.id, false).insert(conn)?;
+
     let event = NewEvent {
         title,
         description,
@@ -523,7 +542,7 @@ fn create_time_dependent_event(
         id: event.id,
         title: event.title,
         description: event.description,
-        room: EventRoomInfo::from_room(room),
+        room: EventRoomInfo::from_room(settings, room, Some(sip_config)),
         invitees_truncated: false,
         invitees: vec![],
         created_by: PublicUserProfile::from_db(settings, current_user.clone()),
@@ -619,7 +638,7 @@ pub async fn get_events(
             per_page,
         )?;
 
-        for (event, _, _, exceptions, _) in &events {
+        for (event, _, _, _, exceptions, _) in &events {
             users.add(event);
             users.add(exceptions);
         }
@@ -640,7 +659,7 @@ pub async fn get_events(
 
         let mut ret_cursor_data = None;
 
-        for ((event, invite, room, exceptions, is_favorite), mut invites_with_user) in
+        for ((event, invite, room, sip_config, exceptions, is_favorite), mut invites_with_user) in
             events.into_iter().zip(invites_with_users_grouped_by_event)
         {
             ret_cursor_data = Some(GetEventsCursorData {
@@ -680,7 +699,7 @@ pub async fn get_events(
                 updated_at: event.updated_at,
                 title: event.title,
                 description: event.description,
-                room: EventRoomInfo::from_room(room),
+                room: EventRoomInfo::from_room(&settings, room, sip_config),
                 invitees_truncated,
                 invitees,
                 is_time_independent: event.is_time_independent,
@@ -737,7 +756,7 @@ pub async fn get_event(
     crate::block(move || {
         let conn = db.get_conn()?;
 
-        let (event, invite, room, is_favorite) =
+        let (event, invite, room, sip_config, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
         let (invitees, invitees_truncated) =
             get_invitees_for_event(&settings, &conn, event_id, query.invitees_max)?;
@@ -753,7 +772,7 @@ pub async fn get_event(
             id: event.id,
             title: event.title,
             description: event.description,
-            room: EventRoomInfo::from_room(room),
+            room: EventRoomInfo::from_room(&settings, room, sip_config),
             invitees_truncated,
             invitees,
             created_by: users.get(event.created_by),
@@ -825,7 +844,7 @@ pub async fn patch_event(
     crate::block(move || {
         let conn = db.get_conn()?;
 
-        let (event, invite, room, is_favorite) =
+        let (event, invite, room, sip_config, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
 
         let update_event = match (event.is_time_independent, patch.is_time_independent) {
@@ -867,7 +886,7 @@ pub async fn patch_event(
             updated_at: event.updated_at,
             title: event.title,
             description: event.description,
-            room: EventRoomInfo::from_room(room),
+            room: EventRoomInfo::from_room(&settings, room, sip_config),
             invitees_truncated,
             invitees,
             is_time_independent: true,
