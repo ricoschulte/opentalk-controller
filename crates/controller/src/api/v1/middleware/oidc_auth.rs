@@ -1,7 +1,6 @@
 //! Handles user Authentication in API requests
-use crate::api::v1::{
-    DefaultApiError, ACCESS_TOKEN_INACTIVE, INVALID_ACCESS_TOKEN, SESSION_EXPIRED,
-};
+use crate::api::v1::response::error::AuthenticationError;
+use crate::api::v1::response::ApiError;
 use crate::oidc::OidcContext;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::error::Error;
@@ -85,10 +84,10 @@ where
             Ok(a) => a,
             Err(e) => {
                 log::warn!("Unable to parse access token, {}", e);
-                let error = DefaultApiError::auth_bearer_invalid_token(
-                    INVALID_ACCESS_TOKEN,
-                    "Unable to parse access token".into(),
-                );
+                let error = ApiError::unauthorized()
+                    .with_message("Unable to parse access token")
+                    .with_www_authenticate(AuthenticationError::InvalidAccessToken);
+
                 let response = req.into_response(error.error_response());
                 return Box::pin(ready(Ok(response)));
             }
@@ -114,15 +113,13 @@ pub async fn check_access_token(
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     access_token: AccessToken,
-) -> Result<User, DefaultApiError> {
+) -> Result<User, ApiError> {
     let (issuer, sub) = match oidc_ctx.verify_access_token(&access_token) {
         Ok(sub) => sub,
         Err(e) => {
             log::error!("Invalid access token, {}", e);
-            return Err(DefaultApiError::auth_bearer_invalid_token(
-                INVALID_ACCESS_TOKEN,
-                e.to_string(),
-            ));
+            return Err(ApiError::unauthorized()
+                .with_www_authenticate(AuthenticationError::InvalidAccessToken));
         }
     };
 
@@ -133,7 +130,7 @@ pub async fn check_access_token(
             Some(user) => Ok(user),
             None => {
                 log::warn!("The requesting user could not be found in the database");
-                Err(DefaultApiError::Internal)
+                Err(ApiError::internal())
             }
         }
     })
@@ -141,26 +138,23 @@ pub async fn check_access_token(
 
     // check if the id token is expired
     if chrono::Utc::now().timestamp() > current_user.id_token_exp {
-        return Err(DefaultApiError::auth_bearer_invalid_token(
-            SESSION_EXPIRED,
-            "The session for this user has expired".to_string(),
-        ));
+        return Err(ApiError::unauthorized()
+            .with_message("The session for this user has expired")
+            .with_www_authenticate(AuthenticationError::SessionExpired));
     }
 
     let info = match oidc_ctx.introspect_access_token(&access_token).await {
         Ok(info) => info,
         Err(e) => {
             log::error!("Failed to check if AccessToken is active, {}", e);
-            return Err(DefaultApiError::Internal);
+            return Err(ApiError::internal());
         }
     };
 
     if info.active {
         Ok(current_user)
     } else {
-        Err(DefaultApiError::auth_bearer_invalid_token(
-            ACCESS_TOKEN_INACTIVE,
-            "The provided access token is inactive".into(),
-        ))
+        Err(ApiError::unauthorized()
+            .with_www_authenticate(AuthenticationError::AccessTokenInactive))
     }
 }

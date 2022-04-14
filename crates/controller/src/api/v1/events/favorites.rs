@@ -1,5 +1,4 @@
-use crate::api::v1::response::{Created, NoContent};
-use crate::api::v1::DefaultApiError;
+use crate::api::v1::response::{ApiError, Created, NoContent};
 use actix_web::web::{Data, Path, ReqData};
 use actix_web::{delete, put, Either};
 use database::Db;
@@ -14,7 +13,7 @@ pub async fn add_event_to_favorites(
     db: Data<Db>,
     id: Path<EventId>,
     current_user: ReqData<User>,
-) -> Result<Either<Created, NoContent>, DefaultApiError> {
+) -> Result<Either<Created, NoContent>, ApiError> {
     crate::block(move || {
         let conn = db.get_conn()?;
 
@@ -30,7 +29,7 @@ pub async fn add_event_to_favorites(
                 Some("event_favorites_event_id_fkey")
             ) =>
             {
-                Err(DefaultApiError::NotFound)
+                Err(ApiError::not_found())
             }
             Err(database::DatabaseError::DieselError(diesel::result::Error::DatabaseError(
                 diesel::result::DatabaseErrorKind::UniqueViolation,
@@ -50,7 +49,7 @@ pub async fn remove_event_from_favorites(
     db: Data<Db>,
     id: Path<EventId>,
     current_user: ReqData<User>,
-) -> Result<NoContent, DefaultApiError> {
+) -> Result<NoContent, ApiError> {
     crate::block(move || {
         let conn = db.get_conn()?;
 

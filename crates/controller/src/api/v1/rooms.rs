@@ -3,11 +3,12 @@
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar
 //! structs are defined in the Database crate [`db_storage`] for database operations.
 
-use super::response::NoContent;
+use super::response::error::{ApiError, ValidationErrorEntry};
+use super::response::{NoContent, CODE_INVALID_VALUE};
 use crate::api::signaling::prelude::*;
 use crate::api::signaling::resumption::{ResumptionData, ResumptionToken};
 use crate::api::signaling::ticket::{TicketData, TicketToken};
-use crate::api::v1::{ApiError, ApiResponse, DefaultApiError, PagePaginationQuery};
+use crate::api::v1::{ApiResponse, PagePaginationQuery};
 use crate::api::Participant;
 use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, post, put};
@@ -80,7 +81,7 @@ fn disallow_empty(modify_room: &ModifyRoom) -> Result<(), ValidationError> {
     } = modify_room;
 
     if password.is_none() && wait_for_moderator.is_none() && listen_only.is_none() {
-        Err(ValidationError::new("ModifyRoom has no set fields"))
+        Err(ValidationError::new("empty"))
     } else {
         Ok(())
     }
@@ -95,14 +96,13 @@ pub async fn owned(
     current_user: ReqData<User>,
     pagination: web::Query<PagePaginationQuery>,
     authz: Data<Authz>,
-) -> Result<ApiResponse<Vec<RoomResource>>, DefaultApiError> {
+) -> Result<ApiResponse<Vec<RoomResource>>, ApiError> {
     let current_user = current_user.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let accessible_rooms: kustos::AccessibleResources<RoomId> = authz
         .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
-        .await
-        .map_err(|_| DefaultApiError::Internal)?;
+        .await?;
 
     let (rooms, room_count) = crate::block(move || {
         let conn = db.get_conn()?;
@@ -140,13 +140,10 @@ pub async fn new(
     current_user: ReqData<User>,
     room_parameters: Json<NewRoom>,
     authz: Data<Authz>,
-) -> Result<Json<RoomResource>, DefaultApiError> {
+) -> Result<Json<RoomResource>, ApiError> {
     let room_parameters = room_parameters.into_inner();
 
-    if let Err(e) = room_parameters.validate() {
-        log::warn!("API new room validation error {}", e);
-        return Err(DefaultApiError::ValidationFailed);
-    }
+    room_parameters.validate()?;
 
     let current_user_id = current_user.id;
 
@@ -184,10 +181,7 @@ pub async fn new(
         .room_write_access(room.uuid)
         .finish();
 
-    if let Err(e) = authz.add_policies(policies).await {
-        log::error!("Failed to add RBAC policies: {}", e);
-        return Err(DefaultApiError::Internal);
-    }
+    authz.add_policies(policies).await?;
 
     Ok(Json(room))
 }
@@ -201,14 +195,11 @@ pub async fn modify(
     db: Data<Db>,
     room_id: Path<RoomId>,
     modify_room: Json<ModifyRoom>,
-) -> Result<Json<RoomResource>, DefaultApiError> {
+) -> Result<Json<RoomResource>, ApiError> {
     let room_id = room_id.into_inner();
     let modify_room = modify_room.into_inner();
 
-    if let Err(e) = modify_room.validate() {
-        log::warn!("API modify room validation error {}", e);
-        return Err(DefaultApiError::ValidationFailed);
-    }
+    modify_room.validate()?;
 
     let db_room = crate::block(move || {
         let conn = db.get_conn()?;
@@ -242,7 +233,7 @@ pub async fn delete(
     db: Data<Db>,
     room_id: Path<RoomId>,
     authz: Data<Authz>,
-) -> Result<NoContent, DefaultApiError> {
+) -> Result<NoContent, ApiError> {
     let room_id = room_id.into_inner();
     let room_path = format!("/rooms/{}", room_id);
 
@@ -255,8 +246,7 @@ pub async fn delete(
 
     if !authz
         .remove_explicit_resource_permissions(room_path.clone())
-        .await
-        .map_err(|_| DefaultApiError::Internal)?
+        .await?
     {
         log::error!("Failed to delete permissions for {}", room_path);
     }
@@ -268,10 +258,7 @@ pub async fn delete(
 ///
 /// Returns the specified Room as [`RoomDetails`].
 #[get("/rooms/{room_id}")]
-pub async fn get(
-    db: Data<Db>,
-    room_id: Path<RoomId>,
-) -> Result<Json<RoomDetails>, DefaultApiError> {
+pub async fn get(db: Data<Db>, room_id: Path<RoomId>) -> Result<Json<RoomDetails>, ApiError> {
     let room_id = room_id.into_inner();
 
     let db_room = crate::block(move || {
@@ -306,17 +293,35 @@ pub struct StartResponse {
     resumption: ResumptionToken,
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug)]
 pub enum StartRoomError {
-    InvalidInvite,
     WrongRoomPassword,
     InvalidCredentials,
     NoBreakoutRooms,
     InvalidBreakoutRoomId,
 }
 
-type StartError = ApiError<StartRoomError>;
+impl From<StartRoomError> for ApiError {
+    fn from(start_room_error: StartRoomError) -> Self {
+        match start_room_error {
+            StartRoomError::WrongRoomPassword => ApiError::unauthorized()
+                .with_code("wrong_room_password")
+                .with_message("The provided password does not match the rooms password"),
+
+            StartRoomError::InvalidCredentials => {
+                ApiError::unauthorized().with_code("invalid_credentials")
+            }
+
+            StartRoomError::NoBreakoutRooms => ApiError::bad_request()
+                .with_code("no_breakout_rooms")
+                .with_message("The requested room has no breakout rooms"),
+
+            StartRoomError::InvalidBreakoutRoomId => ApiError::bad_request()
+                .with_code("invalid_breakout_room_id")
+                .with_message("The provided breakout room ID is invalid"),
+        }
+    }
+}
 
 /// API Endpoint *POST /rooms/{room_id}/start*
 ///
@@ -332,8 +337,9 @@ type StartError = ApiError<StartRoomError>;
 ///
 /// # Errors
 ///
-/// Returns [`StartError::NotFound`](ApiError::NotFound) when the requested room could not be found.
-/// Returns [`StartRoomError::WrongRoomPassword`] when the provided password is wrong.
+/// Returns [`StartRoomError::WrongRoomPassword`] when the provided password is wrong
+/// Returns [`StartRoomError::NoBreakoutRooms`]  when no breakout rooms are configured but were provided
+/// Returns [`StartRoomError::InvalidBreakoutRoomId`]  when the provided breakout room id is invalid     
 #[post("/rooms/{room_id}/start")]
 pub async fn start(
     db: Data<Db>,
@@ -341,7 +347,7 @@ pub async fn start(
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
     request: Json<StartRequest>,
-) -> Result<Json<StartResponse>, StartError> {
+) -> Result<Json<StartResponse>, ApiError> {
     let request = request.into_inner();
     let room_id = room_id.into_inner();
 
@@ -355,14 +361,10 @@ pub async fn start(
     if !room.password.is_empty() {
         if let Some(pw) = &request.password {
             if pw != &room.password {
-                return Err(StartError::AuthJson(
-                    StartRoomError::WrongRoomPassword.into(),
-                ));
+                return Err(StartRoomError::WrongRoomPassword.into());
             }
         } else {
-            return Err(StartError::AuthJson(
-                StartRoomError::WrongRoomPassword.into(),
-            ));
+            return Err(StartRoomError::WrongRoomPassword.into());
         }
     }
 
@@ -373,12 +375,10 @@ pub async fn start(
 
         if let Some(config) = config {
             if !config.is_valid_id(breakout_room) {
-                return Err(StartError::AuthJson(
-                    StartRoomError::InvalidBreakoutRoomId.into(),
-                ));
+                return Err(StartRoomError::InvalidBreakoutRoomId.into());
             }
         } else {
-            return Err(StartError::AuthJson(StartRoomError::NoBreakoutRooms.into()));
+            return Err(StartRoomError::NoBreakoutRooms.into());
         }
     }
 
@@ -412,23 +412,29 @@ pub async fn start_invited(
     redis_ctx: Data<ConnectionManager>,
     room_id: Path<RoomId>,
     request: Json<InvitedStartRequest>,
-) -> Result<ApiResponse<StartResponse>, StartError> {
+) -> Result<ApiResponse<StartResponse>, ApiError> {
     let request = request.into_inner();
     let room_id = room_id.into_inner();
 
-    let invite_code_as_uuid = uuid::Uuid::from_str(&request.invite_code)
-        .map_err(|_| StartError::BadRequest("bad invite_code format".to_string()))?;
+    let invite_code_as_uuid = uuid::Uuid::from_str(&request.invite_code).map_err(|_| {
+        ApiError::unprocessable_entities([ValidationErrorEntry::new(
+            "invite_code",
+            CODE_INVALID_VALUE,
+            Some("Bad invite code format"),
+        )])
+    })?;
 
-    let room = crate::block(move || -> Result<db_rooms::Room, StartError> {
+    let room = crate::block(move || -> Result<db_rooms::Room, ApiError> {
         let conn = db.get_conn()?;
 
         let invite = Invite::get(&conn, InviteCodeId::from(invite_code_as_uuid))?;
 
         if !invite.active {
-            return Err(StartError::AuthJson(StartRoomError::InvalidInvite.into()));
+            return Err(ApiError::not_found());
         }
+
         if invite.room != room_id {
-            return Err(StartError::BadRequest("RoomId mismatch".to_string()));
+            return Err(ApiError::bad_request().with_message("Room id mismatch"));
         }
 
         let room = Room::get(&conn, invite.room)?;
@@ -440,14 +446,10 @@ pub async fn start_invited(
     if !room.password.is_empty() {
         if let Some(pw) = &request.password {
             if pw != &room.password {
-                return Err(StartError::AuthJson(
-                    StartRoomError::WrongRoomPassword.into(),
-                ));
+                return Err(StartRoomError::WrongRoomPassword.into());
             }
         } else {
-            return Err(StartError::AuthJson(
-                StartRoomError::WrongRoomPassword.into(),
-            ));
+            return Err(StartRoomError::WrongRoomPassword.into());
         }
     }
 
@@ -458,12 +460,10 @@ pub async fn start_invited(
 
         if let Some(config) = config {
             if !config.is_valid_id(breakout_room) {
-                return Err(StartError::AuthJson(
-                    StartRoomError::InvalidBreakoutRoomId.into(),
-                ));
+                return Err(StartRoomError::InvalidBreakoutRoomId.into());
             }
         } else {
-            return Err(StartError::AuthJson(StartRoomError::NoBreakoutRooms.into()));
+            return Err(StartRoomError::NoBreakoutRooms.into());
         }
     }
 
@@ -490,41 +490,33 @@ pub struct SipStartRequest {
 /// Get a [`StartResponse`] for a new sip connection to a room. The requester has to provide
 /// a valid [`SipId`] & [`SipPassword`] via the [`SipStartRequest`]
 ///
-/// Returns [`StartError::NotFound`](ApiError::NotFound) when the requested room could not be found.
+/// # Errors
+///
+/// Returns [`StartRoomError::InvalidCredentials`] when the provided [`SipId`] or [`SipPassword`] is wrong
 #[post("/rooms/sip/start")]
 pub async fn sip_start(
     db: Data<Db>,
     redis_ctx: Data<ConnectionManager>,
     request: Json<SipStartRequest>,
-) -> Result<ApiResponse<StartResponse>, StartError> {
+) -> Result<ApiResponse<StartResponse>, ApiError> {
     let mut redis_conn = (**redis_ctx).clone();
     let request = request.into_inner();
 
-    request
-        .sip_id
-        .validate()
-        .map_err(|_| StartError::BadRequest("bad sip_id format".to_string()))?;
+    request.sip_id.validate()?;
 
-    request
-        .password
-        .validate()
-        .map_err(|_| StartError::BadRequest("bad sip_password format".to_string()))?;
+    request.password.validate()?;
 
-    let room_id = crate::block(move || -> Result<RoomId, StartError> {
+    let room_id = crate::block(move || -> Result<RoomId, ApiError> {
         let conn = db.get_conn()?;
 
         if let Some(sip_config) = SipConfig::get(&conn, request.sip_id).optional()? {
             if sip_config.password == request.password {
                 Ok(sip_config.room)
             } else {
-                Err(StartError::AuthJson(
-                    StartRoomError::InvalidCredentials.into(),
-                ))
+                Err(StartRoomError::InvalidCredentials.into())
             }
         } else {
-            Err(StartError::AuthJson(
-                StartRoomError::InvalidCredentials.into(),
-            ))
+            Err(StartRoomError::InvalidCredentials.into())
         }
     })
     .await??;
@@ -547,7 +539,7 @@ async fn generate_response(
     room: RoomId,
     breakout_room: Option<BreakoutRoomId>,
     resumption: Option<ResumptionToken>,
-) -> Result<StartResponse, StartError> {
+) -> Result<StartResponse, ApiError> {
     // Get participant id, check resumption token if it exists, if not generate random one
     let participant_id = if let Some(resumption) = resumption {
         let resumption_redis_key = resumption.into_redis_key();
@@ -556,7 +548,7 @@ async fn generate_response(
         let resumption_data: Option<ResumptionData> =
             redis_conn.get(&resumption_redis_key).await.map_err(|e| {
                 log::error!("Failed to fetch resumption token from redis, {}", e);
-                StartError::Internal
+                ApiError::internal()
             })?;
 
         // If redis returned None generate random id, else check if request matches resumption data
@@ -567,8 +559,8 @@ async fn generate_response(
                         .await?;
 
                 if in_use {
-                    return Err(StartError::BadRequest(
-                        "the session of the given resumption token is still running".into(),
+                    return Err(ApiError::bad_request().with_message(
+                        "the session of the given resumption token is still running",
                     ));
                 } else if redis_conn
                     .del(&resumption_redis_key)
@@ -613,7 +605,7 @@ async fn generate_response(
         .await
         .map_err(|e| {
             log::error!("Unable to store ticket in redis, {}", e);
-            StartError::Internal
+            ApiError::internal()
         })?;
 
     Ok(StartResponse { ticket, resumption })

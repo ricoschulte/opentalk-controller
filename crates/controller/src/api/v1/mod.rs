@@ -20,7 +20,7 @@
 //! - `/legal_votes/{legal_vote_id}` ([GET](legal_vote::get_specific))
 
 pub use request::{CursorPaginationQuery, PagePaginationQuery};
-pub use response::{ApiError, ApiResponse, DefaultApiError, DefaultApiResult};
+pub use response::{ApiResponse, DefaultApiResult};
 
 pub mod auth;
 mod cursor;
@@ -29,15 +29,9 @@ pub mod invites;
 pub mod legal_vote;
 pub mod middleware;
 mod request;
-mod response;
+pub mod response;
 pub mod rooms;
 pub mod sip_configs;
 pub mod turn;
 pub mod users;
 mod util;
-
-// WWW-Authenticate error-descriptions
-static INVALID_ID_TOKEN: &str = "invalid id token";
-static INVALID_ACCESS_TOKEN: &str = "invalid access token";
-static ACCESS_TOKEN_INACTIVE: &str = "access token inactive";
-static SESSION_EXPIRED: &str = "session expired";
