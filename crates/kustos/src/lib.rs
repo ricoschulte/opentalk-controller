@@ -482,6 +482,30 @@ impl Authz {
             .map_err(Into::into)
     }
 
+    /// Removes all rules that explicitly name the given resource
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn remove_explicit_resources<I, R>(&self, resources: I) -> Result<usize>
+    where
+        I: IntoIterator<Item = R>,
+        R: Into<ResourceId>,
+    {
+        let mut inner = self.inner.write().await;
+
+        let mut amount = 0;
+
+        for resource in resources {
+            let removed = inner
+                .remove_filtered_policy(1, vec![resource.into().0])
+                .await?;
+
+            if removed {
+                amount += 1;
+            }
+        }
+
+        Ok(amount)
+    }
+
     /// Removes access for user
     #[tracing::instrument(level = "debug", skip(self, user, resource, access))]
     pub async fn remove_user_permission<S, R, A>(
@@ -504,6 +528,36 @@ impl Authz {
             )
             .await
             .map_err(Into::into)
+    }
+
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn remove_all_user_permission_for_resources<S, R, I>(
+        &self,
+        user: S,
+        resources: I,
+    ) -> Result<usize>
+    where
+        S: Into<PolicyUser>,
+        R: Into<ResourceId>,
+        I: IntoIterator<Item = R>,
+    {
+        let mut inner = self.inner.write().await;
+
+        let user = user.into().0.to_string();
+
+        let mut amount = 0;
+
+        for resource in resources {
+            let removed = inner
+                .remove_filtered_policy(1, vec![user.clone(), resource.into().0])
+                .await?;
+
+            if removed {
+                amount += 1;
+            }
+        }
+
+        Ok(amount)
     }
 
     /// Removes access for role

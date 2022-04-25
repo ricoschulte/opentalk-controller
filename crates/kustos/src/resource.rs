@@ -40,6 +40,7 @@ pub trait Resource: Sized + Display + FromStr<Err = ResourceParseError> {
 /// * `/users/1` to represent the resource of user with id = 1
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct ResourceId(pub(crate) String);
+
 impl<T: IsSubject> From<Policy<T>> for ResourceId {
     fn from(policy: Policy<T>) -> Self {
         policy.obj
@@ -51,9 +52,12 @@ impl ResourceId {
         self.0
     }
 
-    pub fn with_suffix(&self, suffix: &str) -> ResourceId {
+    pub fn with_suffix<S>(&self, suffix: S) -> ResourceId
+    where
+        S: AsRef<str>,
+    {
         let mut inner = self.0.clone();
-        inner.push_str(suffix);
+        inner.push_str(suffix.as_ref());
         ResourceId(inner)
     }
 }
