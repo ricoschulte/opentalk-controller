@@ -6,7 +6,6 @@ use actix_web::error::ErrorInternalServerError;
 use actix_web::{
     dev::ServiceRequest, dev::ServiceResponse, Error, HttpMessage, HttpResponse, Result,
 };
-use casbin::function_map::key_match3;
 use casbin::{CoreApi, Result as CasbinResult};
 use futures::future::{ok, Ready};
 use futures::Future;
@@ -37,7 +36,7 @@ impl KustosService {
             .await
             .get_role_manager()
             .write()
-            .matching_fn(Some(key_match3), None);
+            .matching_fn(None, None);
         Ok(KustosService {
             strip_versioned_path,
             enforcer,
