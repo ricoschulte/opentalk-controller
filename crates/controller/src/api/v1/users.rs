@@ -17,7 +17,7 @@ use validator::{Validate, ValidationError};
 /// Public user details.
 ///
 /// Contains general "public" information about a user. Is accessible to all other users.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct PublicUserProfile {
     pub id: UserId,
     pub email: String,

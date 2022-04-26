@@ -61,6 +61,9 @@ pub struct Settings {
     #[serde(default)]
     pub etherpad: Option<Etherpad>,
 
+    #[serde(default)]
+    pub call_in: Option<CallIn>,
+
     #[serde(flatten)]
     pub extensions: HashMap<String, config::Value>,
 }
@@ -316,4 +319,9 @@ impl Default for Avatar {
 
 fn default_libravatar_url() -> String {
     "https://seccdn.libravatar.org/avatar/".into()
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct CallIn {
+    pub tel: String,
 }

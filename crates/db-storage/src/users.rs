@@ -10,6 +10,7 @@ use diesel::{
     Insertable, PgConnection, QueryDsl, Queryable, RunQueryDsl, TextExpressionMethods,
 };
 use kustos::subject::PolicyUser;
+use std::fmt;
 
 diesel_newtype! {
     #[derive(Copy)] SerialUserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt",
@@ -44,6 +45,16 @@ pub struct User {
     pub display_name: String,
     pub dashboard_theme: String,
     pub conference_theme: String,
+}
+
+impl fmt::Debug for User {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("User")
+            .field("id", &self.id)
+            .field("first_name", &self.firstname)
+            .field("last_name", &self.lastname)
+            .finish()
+    }
 }
 
 impl User {

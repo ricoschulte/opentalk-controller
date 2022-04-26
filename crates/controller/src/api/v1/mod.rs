@@ -23,6 +23,8 @@ pub use request::{CursorPaginationQuery, PagePaginationQuery};
 pub use response::{ApiError, ApiResponse, DefaultApiError, DefaultApiResult};
 
 pub mod auth;
+mod cursor;
+pub mod events;
 pub mod invites;
 pub mod legal_vote;
 pub mod middleware;
@@ -32,6 +34,7 @@ pub mod rooms;
 pub mod sip_configs;
 pub mod turn;
 pub mod users;
+mod util;
 
 // WWW-Authenticate error-descriptions
 static INVALID_ID_TOKEN: &str = "invalid id token";

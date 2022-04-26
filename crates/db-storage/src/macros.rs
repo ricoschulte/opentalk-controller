@@ -136,3 +136,71 @@ macro_rules! diesel_newtype {
         }
     };
 }
+
+/// Defines a new SQL enum
+///
+/// The first argument is the resulting type for use in rust code.
+/// The second argument is the serialized version of the enum name.
+/// The third argument is the sql type.
+/// The 4th argument is the string identifier of the sql type.
+///
+/// After that follow the variants of the enum with the syntax of:
+/// `RustVariant = byte-string`
+///
+/// # Example
+///
+/// ```rust
+/// sql_enum!(
+///     CustomSqlEnum,          // Name of the Rust enum name
+///     "custom_sql_enum",      // Name of the type name in sql
+///     CustomSqlEnumType,      // Name of the diesel enum type repr
+///     "CustomSqlEnumType",    // Name of the diesel enum type as string literal (needed for diesel orm)
+///     {
+///         Variant1 = b"variant1", // the variants with their respective sql string representation
+///         Variant2 = b"variant2",
+///     }
+/// );
+/// ```
+macro_rules! sql_enum {
+    ($(#[$enum_meta:meta])* $enum_ident:ident,
+    $sql_type_lit:literal,
+     $(#[$type_meta:meta])* $type_ident:ident,
+     $type_lit:literal,
+     {$($variant_ident:ident = $variant_lit:literal),* $(,)?}
+    ) => {
+
+        $(#[$type_meta])*
+        #[derive(SqlType, QueryId)]
+        #[postgres(type_name = $sql_type_lit)]
+        pub struct $type_ident;
+
+        $(#[$enum_meta])*
+        #[derive(Debug, Copy, Clone, FromSqlRow, AsExpression)]
+        #[sql_type = $type_lit]
+        pub enum $enum_ident {
+            $($variant_ident),*
+        }
+
+
+        impl ToSql<$type_ident, Pg> for $enum_ident {
+            fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
+                match *self {
+                    $(
+                        Self::$variant_ident => out.write_all($variant_lit)?,
+                    )*
+                }
+
+                Ok(IsNull::No)
+            }
+        }
+
+        impl FromSql<$type_ident, Pg> for $enum_ident {
+            fn from_sql(bytes: Option<&<Pg as Backend>::RawValue>) -> deserialize::Result<Self> {
+                match not_none!(bytes) {
+                    $($variant_lit => Ok(Self::$variant_ident),)*
+                    _ => Err("unknown enum variant".into()),
+                }
+            }
+        }
+    };
+}
