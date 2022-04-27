@@ -39,6 +39,7 @@ pub(crate) async fn check_or_create_kustos_default_permissions(
         [AccessMethod::Patch, AccessMethod::Get],
     )
     .await?;
+    check_or_create_kustos_role_policy(authz, "user", "/users/find", [AccessMethod::Get]).await?;
     check_or_create_kustos_role_policy(
         authz,
         "user",
