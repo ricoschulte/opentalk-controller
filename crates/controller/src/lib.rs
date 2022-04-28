@@ -55,6 +55,8 @@ mod api;
 #[cfg(doc)]
 pub mod api;
 
+mod internal_api;
+
 mod acl;
 mod cli;
 mod ha_sync;
@@ -301,7 +303,7 @@ impl Controller {
                     .app_data(db)
                     .app_data(oidc_ctx)
                     .app_data(Data::new(shutdown.clone()))
-                    .service(api::internal::introspect)
+                    .service(internal_api::introspect::post)
             })
         };
 
