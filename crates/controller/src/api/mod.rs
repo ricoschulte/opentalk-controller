@@ -1,4 +1,8 @@
-//! Modules to HTTP APIs
+//! Modules for external HTTP APIs
+//!
+//! Versions REST APIs are in v{VERSION}
+//! APIs for use with our own frontend lie in internal
+//! These directory map to the path prefix `/internal` or `/v1`
 
 use db_storage::users::{User, UserId};
 use serde::{Deserialize, Serialize};

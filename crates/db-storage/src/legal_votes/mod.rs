@@ -113,6 +113,28 @@ impl LegalVote {
 
         Ok(legal_votes_with_total)
     }
+
+    /// Get all `LegalVotes` for room
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_all_ids_for_room(conn: &DbConnection, room_id: RoomId) -> Result<Vec<LegalVoteId>> {
+        let query = legal_votes::table
+            .select(legal_votes::id)
+            .filter(legal_votes::room.eq(room_id));
+
+        let legal_votes_with_total = query.load(conn)?;
+
+        Ok(legal_votes_with_total)
+    }
+
+    /// Delete all `LegalVotes` for room
+    #[tracing::instrument(err, skip_all)]
+    pub fn delete_by_room(conn: &DbConnection, room_id: RoomId) -> Result<()> {
+        diesel::delete(legal_votes::table)
+            .filter(legal_votes::room.eq(room_id))
+            .execute(conn)?;
+
+        Ok(())
+    }
 }
 
 /// LegalVote insert values

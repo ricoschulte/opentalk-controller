@@ -324,6 +324,32 @@ impl Event {
             Ok(())
         }
     }
+
+    /// Returns all [`Event`]s in the given [`RoomId`].
+    ///
+    /// This is needed because when rescheduling an Event from time x onwards, we create a new Event and both reference the room.
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_all_ids_for_room(conn: &DbConnection, room_id: RoomId) -> Result<Vec<EventId>> {
+        let query = events::table
+            .select(events::id)
+            .filter(events::room.eq(room_id));
+
+        let events = query.load(conn)?;
+
+        Ok(events)
+    }
+
+    /// Deletes all [`Event`]s in a given [`RoomId`]
+    ///
+    /// Fastpath for deleting multiple events in room
+    #[tracing::instrument(err, skip_all)]
+    pub fn delete_all_for_room(conn: &DbConnection, room_id: RoomId) -> Result<()> {
+        diesel::delete(events::table)
+            .filter(events::room.eq(room_id))
+            .execute(conn)?;
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Insertable)]
