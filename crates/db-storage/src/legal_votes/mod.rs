@@ -160,8 +160,8 @@ impl NewLegalVote {
             }
         }
 
-        Err(DatabaseError::Custom(
-            "Unable to create legal vote after 3 attempts with unique violation".into(),
+        Err(DatabaseError::custom(
+            "Unable to create legal vote after 3 attempts with unique violation",
         ))
     }
 }
@@ -175,7 +175,7 @@ pub fn set_protocol(
     protocol: NewProtocol,
 ) -> Result<()> {
     let protocol =
-        serde_json::to_value(protocol).map_err(|e| DatabaseError::Custom(e.to_string()))?;
+        serde_json::to_value(protocol).map_err(|e| DatabaseError::Custom(e.to_string().into()))?;
 
     let query = diesel::update(legal_votes::table.filter(legal_votes::id.eq(&legal_vote_id)))
         .set(legal_votes::protocol.eq(protocol));

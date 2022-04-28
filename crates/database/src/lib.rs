@@ -6,6 +6,7 @@ use diesel::query_dsl::LoadQuery;
 use diesel::result::Error;
 use diesel::sql_types::BigInt;
 use diesel::{r2d2, PgConnection, QueryResult, RunQueryDsl};
+use std::borrow::Cow;
 
 #[macro_use]
 extern crate diesel;
@@ -28,7 +29,7 @@ pub type Result<T, E = DatabaseError> = std::result::Result<T, E>;
 #[derive(Debug, thiserror::Error)]
 pub enum DatabaseError {
     #[error("Database Error: `{0}`")]
-    Custom(String),
+    Custom(Cow<'static, str>),
     #[error("Diesel Error: `{0}`")]
     DieselError(diesel::result::Error),
     #[error("A requested resource could not be found")]
@@ -37,6 +38,15 @@ pub enum DatabaseError {
     // generic R2D2 error handling. See https://github.com/diesel-rs/diesel/issues/2336
     #[error("The connection pool returned an Error: `{0}`")]
     R2D2Error(String),
+}
+
+impl DatabaseError {
+    pub fn custom<I>(error_string: I) -> Self
+    where
+        I: Into<Cow<'static, str>>,
+    {
+        Self::Custom(error_string.into())
+    }
 }
 
 pub trait OptionalExt<T, E> {
