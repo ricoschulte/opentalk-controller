@@ -277,7 +277,7 @@ impl Event {
             let exceptions = if event.is_recurring.unwrap_or_default() {
                 event_exceptions::table
                     .filter(event_exceptions::event_id.eq(event.id))
-                    .get_results(conn)?
+                    .load(conn)?
             } else {
                 vec![]
             };
