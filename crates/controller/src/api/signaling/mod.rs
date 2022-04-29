@@ -73,7 +73,7 @@ pub mod prelude {
         DestroyContext, Event, InitContext, ModuleContext, SignalingModule, SignalingModules,
         SignalingProtocols,
     };
-    pub use super::ws_modules::{breakout, control};
+    pub use super::ws_modules::{breakout, control, moderation};
     pub use super::{Role, SignalingRoomId, Timestamp};
     pub use breakout::BreakoutRoomId;
 }

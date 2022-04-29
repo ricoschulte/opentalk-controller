@@ -33,6 +33,7 @@ use arc_swap::ArcSwap;
 use breakout::BreakoutRooms;
 use database::Db;
 use db_storage::groups::NewGroup;
+use moderation::ModerationModule;
 use oidc::OidcContext;
 use prelude::*;
 use redis::aio::ConnectionManager;
@@ -254,6 +255,7 @@ impl Controller {
 
         // Add default modules
         signaling.add_module::<BreakoutRooms>(());
+        signaling.add_module::<ModerationModule>(());
 
         Ok(Self {
             startup_settings: settings,
