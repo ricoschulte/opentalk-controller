@@ -146,7 +146,7 @@ impl DateTimeTz {
             } else {
                 None
             }
-        } else if let (Some(dt), Some(tz)) = (event.starts_at, event.starts_at_tz) {
+        } else if let (Some(dt), Some(tz)) = (event.ends_at, event.ends_at_tz) {
             // Non recurring events just directly use the ends_at field from the db
             Some(Self {
                 datetime: dt,
@@ -561,7 +561,7 @@ pub async fn new_event(
                 let msg = if new_event.is_time_independent {
                     "time independent events must not have is_all_day, starts_at, ends_at or recurrence_pattern set"
                 } else {
-                     "time dependent events must have title, description, is_all_day, starts_at and ends_at set"
+                    "time dependent events must have title, description, is_all_day, starts_at and ends_at set"
                 };
 
                 Err(DefaultApiError::BadRequest(msg.into()))
@@ -704,7 +704,7 @@ fn create_time_dependent_event(
         created_at: event.created_at,
         updated_by: PublicUserProfile::from_db(settings, current_user),
         updated_at: event.updated_at,
-        is_time_independent: false,
+        is_time_independent: event.is_time_independent,
         is_all_day: event.is_all_day,
         starts_at: Some(starts_at),
         ends_at: Some(ends_at),
@@ -1103,7 +1103,7 @@ pub async fn patch_event(
             room: EventRoomInfo::from_room(&settings, room, sip_config),
             invitees_truncated,
             invitees,
-            is_time_independent: true,
+            is_time_independent: event.is_time_independent,
             is_all_day: event.is_all_day,
             starts_at,
             ends_at,
