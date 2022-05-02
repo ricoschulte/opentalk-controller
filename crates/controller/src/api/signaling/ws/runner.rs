@@ -327,52 +327,52 @@ impl Builder {
 ///
 /// Also acts as `control` module which handles participant and room states.
 pub struct Runner {
-    // Runner ID which is used to assume ownership of a participant id
+    /// Runner ID which is used to assume ownership of a participant id
     runner_id: Uuid,
 
-    // participant id that the runner is connected to
+    /// participant id that the runner is connected to
     id: ParticipantId,
 
-    // Full signaling room id
+    /// Full signaling room id
     room_id: SignalingRoomId,
 
-    // User behind the participant or Guest
+    /// User behind the participant or Guest
     participant: api::Participant<User>,
 
-    // The role of the participant inside the room
+    /// The role of the participant inside the room
     role: Role,
 
-    // The control data. Initialized when frontend send join
+    /// The control data. Initialized when frontend send join
     control_data: Option<ControlData>,
 
-    // Websocket abstraction which connects the to the websocket actor
+    /// Websocket abstraction which connects the to the websocket actor
     ws: Ws,
 
-    // All registered and initialized modules
+    /// All registered and initialized modules
     modules: Modules,
     events: SelectAll<AnyStream>,
 
-    // Redis connection manager
+    /// Redis connection manager
     redis_conn: ConnectionManager,
 
-    // RabbitMQ queue consumer for this participant, will contain any events about room and
-    // participant changes
+    /// RabbitMQ queue consumer for this participant, will contain any events about room and
+    /// participant changes
     consumer: lapin::Consumer,
     consumer_delegated: bool,
 
-    // RabbitMQ channel to send events
+    /// RabbitMQ channel to send events
     rabbit_mq_channel: lapin::Channel,
 
-    // Name of the rabbitmq room exchange
+    /// Name of the rabbitmq room exchange
     room_exchange: String,
 
-    // Util to keep the resumption token alive
+    /// Util to keep the resumption token alive
     resumption_keep_alive: ResumptionTokenKeepAlive,
 
-    // global application shutdown signal
+    /// global application shutdown signal
     shutdown_sig: broadcast::Receiver<()>,
 
-    // When set to true the runner will gracefully exit on next loop
+    /// When set to true the runner will gracefully exit on next loop
     exit: bool,
 }
 
