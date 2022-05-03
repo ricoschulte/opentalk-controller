@@ -491,6 +491,7 @@ where
 
                 attr_pipe
                     .set("display_name", &join.display_name)
+                    .set("avatar_url", &join.display_name)
                     .set("joined_at", ctx.timestamp)
                     .set("hand_is_up", false)
                     .set("hand_updated_at", ctx.timestamp)
@@ -523,8 +524,15 @@ where
 
                 let mut frontend_data = None;
                 let mut participants_data = participants.iter().map(|p| (p.id, None)).collect();
+
+                let avatar_url = match &self.participant {
+                    Participant::User(user) => Some(format!("{}{}", "http://example.org/", user)),
+                    _ => None,
+                };
+
                 let mut control_data = ControlData {
-                    display_name: join.display_name,
+                    display_name: join.display_name.clone(),
+                    avatar_url: avatar_url.clone(),
                     participation_kind: match &self.participant {
                         Participant::User(_) => ParticipationKind::User,
                         Participant::Guest => ParticipationKind::Guest,
@@ -570,6 +578,8 @@ where
 
                 let join_success = control::outgoing::JoinSuccess {
                     id: self.participant_id,
+                    display_name: join.display_name,
+                    avatar_url,
                     role: self.role,
                     module_data,
                     participants,
@@ -852,8 +862,17 @@ where
         };
 
         #[allow(clippy::type_complexity)]
-        let (display_name, joined_at, left_at, hand_is_up, hand_updated_at, participation_kind): (
+        let (
+            display_name,
+            avatar_url,
+            joined_at,
+            left_at,
+            hand_is_up,
+            hand_updated_at,
+            participation_kind,
+        ): (
             String,
+            Option<String>,
             Timestamp,
             Option<Timestamp>,
             bool,
@@ -861,6 +880,7 @@ where
             ParticipationKind,
         ) = storage::AttrPipeline::new(self.room_id, id)
             .get("display_name")
+            .get("avatar_url")
             .get("joined_at")
             .get("left_at")
             .get("hand_is_up")
@@ -873,6 +893,7 @@ where
             NAMESPACE,
             serde_json::to_value(ControlData {
                 display_name,
+                avatar_url,
                 participation_kind,
                 hand_is_up,
                 joined_at,

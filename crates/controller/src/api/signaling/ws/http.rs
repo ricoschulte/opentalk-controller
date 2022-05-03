@@ -6,6 +6,7 @@ use crate::api::signaling::ticket::{TicketData, TicketRedisKey};
 use crate::api::signaling::ws::actor::WebSocketActor;
 use crate::api::v1::response::ApiError;
 use crate::api::Participant;
+use crate::settings::SharedSettingsActix;
 use actix_web::http::header;
 use actix_web::web::Data;
 use actix_web::{get, HttpMessage};
@@ -56,6 +57,7 @@ pub(crate) async fn ws_service(
     modules: Data<SignalingModules>,
     request: HttpRequest,
     stream: web::Payload,
+    settings: SharedSettingsActix,
 ) -> actix_web::Result<HttpResponse> {
     let mut redis_conn = (**redis_conn).clone();
 
@@ -122,7 +124,15 @@ pub(crate) async fn ws_service(
     }
 
     // Build and initialize the runner
-    let runner = match builder.build(addr, recv, shutdown.subscribe()).await {
+    let runner = match builder
+        .build(
+            addr,
+            recv,
+            shutdown.subscribe(),
+            settings.into_inner().clone(),
+        )
+        .await
+    {
         Ok(runner) => runner,
         Err(e) => {
             log::error!("Failed to initialize runner, {}", e);

@@ -1,7 +1,6 @@
 use super::*;
-use control::outgoing::{JoinSuccess, Message};
+use control::outgoing::Message;
 use db_storage::users::User;
-use std::collections::HashMap;
 
 /// Creates a new [`ModuleTester`] with two users
 pub async fn setup_users<M: SignalingModule>(
@@ -33,20 +32,17 @@ pub async fn setup_users<M: SignalingModule>(
         .unwrap();
 
     // Expect a JoinSuccess response
-    let join_success = module_tester
+    if let WsMessageOutgoing::Control(Message::JoinSuccess(join_success)) = module_tester
         .receive_ws_message(&USER_1.participant_id)
         .await
-        .unwrap();
-
-    assert_eq!(
-        join_success,
-        WsMessageOutgoing::Control(Message::JoinSuccess(JoinSuccess {
-            id: USER_1.participant_id,
-            role: Role::Moderator,
-            module_data: HashMap::new(),
-            participants: vec![]
-        }))
-    );
+        .unwrap()
+    {
+        assert_eq!(join_success.id, USER_1.participant_id);
+        assert_eq!(join_success.role, Role::Moderator);
+        assert!(join_success.participants.is_empty());
+    } else {
+        panic!("Expected ParticipantJoined Event ")
+    }
 
     // Join with user2
     module_tester
