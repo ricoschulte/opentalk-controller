@@ -114,10 +114,6 @@ pub async fn add_participant_to_set(
         .context("Failed to add own participant id to set")
 }
 
-/// Mark the given participant in the given room as left.
-///
-/// # Returns
-/// true if all participants in the room are marked as left
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn participants_all_left(
     redis_conn: &mut RedisConnection,

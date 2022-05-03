@@ -38,6 +38,7 @@ use lapin::{BasicProperties, ExchangeKind};
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::mem::replace;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
@@ -304,7 +305,7 @@ impl Builder {
             room_id,
             participant: self.participant,
             role: self.role,
-            control_data: None,
+            state: RunnerState::None,
             ws: Ws {
                 to_actor: to_ws_actor,
                 from_actor: from_ws_actor,
@@ -351,7 +352,7 @@ pub struct Runner {
     role: Role,
 
     /// The control data. Initialized when frontend send join
-    control_data: Option<ControlData>,
+    state: RunnerState,
 
     /// Websocket abstraction which connects the to the websocket actor
     ws: Ws,
@@ -397,6 +398,22 @@ impl Drop for Runner {
             self.delegate_consumer()
         }
     }
+}
+
+/// Current state of the runner
+enum RunnerState {
+    /// Runner and its rabbitmq resources are created
+    /// but has not joined the room yet (no redis resources set)
+    None,
+
+    /// Inside the waiting room
+    Waiting {
+        accepted: bool,
+        control_data: ControlData,
+    },
+
+    /// Inside the actual room
+    Joined(ControlData),
 }
 
 impl Runner {
@@ -485,72 +502,144 @@ impl Runner {
             log::error!("Failed to cancel consumer, {}", e);
         }
 
-        // The retry/wait_time values are set extra high
-        // since a lot of operations are being done while holding the lock
-        let mut room_mutex = storage::room_mutex(self.room_id);
+        if let RunnerState::Joined(_) | RunnerState::Waiting { .. } = &self.state {
+            // The retry/wait_time values are set extra high
+            // since a lot of operations are being done while holding the lock
+            let mut room_mutex = storage::room_mutex(self.room_id);
 
-        let room_guard = match room_mutex.lock(&mut self.redis_conn).await {
-            Ok(guard) => guard,
-            Err(r3dlock::Error::Redis(e)) => {
-                log::error!("Failed to acquire r3dlock, {}", e);
-                // There is a problem when accessing redis which could
-                // mean either the network or redis is broken.
-                // Both cases cannot be handled here, abort the cleanup
-                return;
-            }
-            Err(r3dlock::Error::CouldNotAcquireLock) => {
-                log::error!("Failed to acquire r3dlock, contention too high");
-                return;
-            }
-            Err(r3dlock::Error::FailedToUnlock | r3dlock::Error::AlreadyExpired) => {
-                unreachable!()
-            }
-        };
-
-        if let Err(e) = storage::set_attribute(
-            &mut self.redis_conn,
-            self.room_id,
-            self.id,
-            "left_at",
-            Timestamp::now(),
-        )
-        .await
-        {
-            log::error!("Failed to set left_at attribute, {:?}", e);
-        }
-
-        let destroy_room =
-            match storage::participants_all_left(&mut self.redis_conn, self.room_id).await {
-                Ok(destroy_room) => destroy_room,
-                Err(e) => {
-                    log::error!(
-                        "failed to check if all participants have left the room, {:?}",
-                        e
-                    );
-                    false
+            let room_guard = match room_mutex.lock(&mut self.redis_conn).await {
+                Ok(guard) => guard,
+                Err(r3dlock::Error::Redis(e)) => {
+                    log::error!("Failed to acquire r3dlock, {}", e);
+                    // There is a problem when accessing redis which could
+                    // mean either the network or redis is broken.
+                    // Both cases cannot be handled here, abort the cleanup
+                    return;
+                }
+                Err(r3dlock::Error::CouldNotAcquireLock) => {
+                    log::error!("Failed to acquire r3dlock, contention too high");
+                    return;
+                }
+                Err(r3dlock::Error::FailedToUnlock | r3dlock::Error::AlreadyExpired) => {
+                    unreachable!()
                 }
             };
 
-        let ctx = DestroyContext {
-            redis_conn: &mut self.redis_conn,
-            destroy_room,
-        };
+            if let RunnerState::Joined(_) = &self.state {
+                // first check if the list of joined participant is empty
+                if let Err(e) = storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.id,
+                    "left_at",
+                    Timestamp::now(),
+                )
+                .await
+                {
+                    log::error!("failed to mark participant as left, {:?}", e);
+                }
+            } else if let RunnerState::Waiting { .. } = &self.state {
+                if let Err(e) = moderation::storage::waiting_room_remove(
+                    &mut self.redis_conn,
+                    self.room_id.room_id(),
+                    self.id,
+                )
+                .await
+                {
+                    log::error!(
+                        "failed to remove participant from waiting_room_list, {:?}",
+                        e
+                    );
+                }
+            };
 
-        self.modules.destroy(ctx).await;
+            let room_is_empty =
+                match storage::participants_all_left(&mut self.redis_conn, self.room_id).await {
+                    Ok(room_is_empty) => room_is_empty,
+                    Err(e) => {
+                        log::error!("Failed to check if room is empty {:?}", e);
+                        false
+                    }
+                };
 
-        if destroy_room {
-            if let Err(e) = self.cleanup_redis().await {
-                log::error!("Failed to remove all control attributes, {}", e);
+            // if the room is empty check that the waiting room is empty
+            let destroy_room = if room_is_empty {
+                if self.room_id.1.is_some() {
+                    // Breakout rooms are destroyed even with participants inside the waiting room
+                    true
+                } else {
+                    let waiting_room_is_empty = match moderation::storage::waiting_room_len(
+                        &mut self.redis_conn,
+                        self.room_id.room_id(),
+                    )
+                    .await
+                    {
+                        Ok(waiting_room_len) => waiting_room_len == 0,
+                        Err(e) => {
+                            log::error!("failed to get waiting room len, {:?}", e);
+                            false
+                        }
+                    };
+
+                    // destroy room only if waiting room is empty
+                    waiting_room_is_empty
+                }
+            } else {
+                false
+            };
+
+            let ctx = DestroyContext {
+                redis_conn: &mut self.redis_conn,
+                destroy_room,
+            };
+
+            self.modules.destroy(ctx).await;
+
+            if destroy_room {
+                if let Err(e) = self.cleanup_redis().await {
+                    log::error!("Failed to remove all control attributes, {}", e);
+                }
             }
-        }
 
-        if let Err(e) = room_guard.unlock(&mut self.redis_conn).await {
-            log::error!("Failed to unlock set_guard r3dlock, {}", e);
-        }
+            if let Err(e) = room_guard.unlock(&mut self.redis_conn).await {
+                log::error!("Failed to unlock set_guard r3dlock, {}", e);
+            }
 
-        if self.control_data.is_some() {
-            self.rabbitmq_publish_control(Timestamp::now(), None, rabbitmq::Message::Left(self.id))
-                .await;
+            match &self.state {
+                RunnerState::None => unreachable!("state was checked before"),
+                RunnerState::Waiting { .. } => {
+                    self.rabbitmq_publish(
+                        Timestamp::now(),
+                        Some(
+                            breakout::rabbitmq::global_exchange_name(self.room_id.room_id())
+                                .as_str(),
+                        ),
+                        control::rabbitmq::room_all_routing_key(),
+                        Namespaced {
+                            namespace: moderation::NAMESPACE,
+                            payload: moderation::rabbitmq::Message::LeftWaitingRoom(self.id),
+                        }
+                        .to_json(),
+                    )
+                    .await;
+                }
+                RunnerState::Joined(_) => {
+                    self.rabbitmq_publish_control(
+                        Timestamp::now(),
+                        None,
+                        rabbitmq::Message::Left(self.id),
+                    )
+                    .await;
+                }
+            }
+        } else {
+            // Not joined, just destroy modules normal
+            let ctx = DestroyContext {
+                redis_conn: &mut self.redis_conn,
+                destroy_room: false,
+            };
+
+            self.modules.destroy(ctx).await;
         }
 
         // release participant id
@@ -691,7 +780,7 @@ impl Runner {
                 }
             }
             // Do not handle any other messages than control-join before joined
-        } else if self.control_data.is_some() {
+        } else if let RunnerState::Joined(_) = &self.state {
             match self
                 .handle_module_targeted_event(
                     namespaced.namespace,
@@ -718,8 +807,6 @@ impl Runner {
         timestamp: Timestamp,
         msg: incoming::Message,
     ) -> Result<()> {
-        let settings = self.settings.load();
-
         match msg {
             incoming::Message::Join(join) => {
                 if join.display_name.is_empty() {
@@ -739,44 +826,22 @@ impl Runner {
                     return Ok(());
                 }
 
-                let mut lock = storage::room_mutex(self.room_id);
-
-                let guard = lock.lock(&mut self.redis_conn).await?;
-
-                let res = self.join_room_locked(timestamp, &join.display_name).await;
-
-                let unlock_res = guard.unlock(&mut self.redis_conn).await;
-
-                let participant_ids = match res {
-                    Ok(participants) => participants,
-                    Err(e) => {
-                        bail!("Failed to join room, {e:?}\nUnlocked room lock, {unlock_res:?}");
-                    }
-                };
-
-                unlock_res?;
-
-                let mut participants = vec![];
-
-                for id in participant_ids {
-                    match self.build_participant(id).await {
-                        Ok(participant) => participants.push(participant),
-                        Err(e) => log::error!("Failed to build participant {}, {}", id, e),
-                    };
-                }
-
-                let avatar_url = match &self.participant {
-                    api::Participant::User(user) => Some(format!(
+                let avatar_url = if let api::Participant::User(user) = &self.participant {
+                    Some(format!(
                         "{}{:x}",
-                        settings.avatar.libravatar_url,
+                        self.settings.load().avatar.libravatar_url,
                         md5::compute(&user.email)
-                    )),
-                    _ => None,
+                    ))
+                } else {
+                    None
                 };
+
+                self.set_control_attributes(timestamp, &join.display_name, avatar_url.as_deref())
+                    .await?;
 
                 let control_data = ControlData {
                     display_name: join.display_name.clone(),
-                    avatar_url: avatar_url.clone(),
+                    avatar_url,
                     participation_kind: match &self.participant {
                         api::Participant::User(_) => ParticipationKind::User,
                         api::Participant::Guest => ParticipationKind::Guest,
@@ -788,45 +853,63 @@ impl Runner {
                     left_at: None,
                 };
 
-                let mut module_data = HashMap::new();
+                let is_moderator = matches!(self.role, Role::Moderator);
 
-                let actions = self
-                    .handle_module_broadcast_event(
-                        timestamp,
-                        DynBroadcastEvent::Joined(
-                            &control_data,
-                            &mut module_data,
-                            &mut participants,
-                        ),
-                        false,
+                if !is_moderator
+                    && moderation::storage::is_waiting_room_enabled(
+                        &mut self.redis_conn,
+                        self.room_id.room_id(),
                     )
-                    .await;
-
-                self.control_data = Some(control_data);
-
-                self.ws
-                    .send(Message::Text(
-                        NamespacedOutgoing {
-                            namespace: NAMESPACE,
+                    .await?
+                {
+                    // Waiting room is enabled; join the waiting room
+                    self.join_waiting_room(timestamp, control_data).await?;
+                } else {
+                    // Waiting room is not enabled; join the room directly
+                    self.join_room(timestamp, control_data).await?;
+                }
+            }
+            incoming::Message::EnterRoom => {
+                match replace(&mut self.state, RunnerState::None) {
+                    RunnerState::Waiting {
+                        accepted: true,
+                        control_data,
+                    } => {
+                        self.rabbitmq_publish(
                             timestamp,
-                            payload: outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
-                                id: self.id,
-                                display_name: join.display_name,
-                                avatar_url,
-                                role: self.role,
-                                module_data,
-                                participants,
-                            }),
-                        }
-                        .to_json(),
-                    ))
-                    .await;
+                            Some(
+                                breakout::rabbitmq::global_exchange_name(self.room_id.room_id())
+                                    .as_str(),
+                            ),
+                            control::rabbitmq::room_all_routing_key(),
+                            Namespaced {
+                                namespace: moderation::NAMESPACE,
+                                payload: moderation::rabbitmq::Message::LeftWaitingRoom(self.id),
+                            }
+                            .to_json(),
+                        )
+                        .await;
 
-                self.rabbitmq_publish_control(timestamp, None, rabbitmq::Message::Joined(self.id))
-                    .await;
+                        self.join_room(timestamp, control_data).await?
+                    }
+                    // not in correct state, reset it
+                    state => {
+                        self.state = state;
 
-                self.handle_module_requested_actions(timestamp, actions)
-                    .await;
+                        self.ws
+                            .send(Message::Text(
+                                NamespacedOutgoing {
+                                    namespace: NAMESPACE,
+                                    timestamp,
+                                    payload: outgoing::Message::Error {
+                                        text: "not accepted or not in waiting room",
+                                    },
+                                }
+                                .to_json(),
+                            ))
+                            .await;
+                    }
+                }
             }
             incoming::Message::RaiseHand => {
                 storage::AttrPipeline::new(self.room_id, self.id)
@@ -861,24 +944,162 @@ impl Runner {
         Ok(())
     }
 
-    async fn join_room_locked(
+    async fn join_waiting_room(
+        &mut self,
+        timestamp: Timestamp,
+        control_data: ControlData,
+    ) -> Result<()> {
+        self.state = RunnerState::Waiting {
+            accepted: false,
+            control_data,
+        };
+
+        self.ws
+            .send(Message::Text(
+                NamespacedOutgoing {
+                    namespace: NAMESPACE,
+                    timestamp,
+                    payload: moderation::outgoing::Message::InWaitingRoom,
+                }
+                .to_json(),
+            ))
+            .await;
+
+        let mut lock = storage::room_mutex(self.room_id);
+        let guard = lock.lock(&mut self.redis_conn).await?;
+
+        let res = moderation::storage::waiting_room_add(
+            &mut self.redis_conn,
+            self.room_id.room_id(),
+            self.id,
+        )
+        .await;
+
+        guard.unlock(&mut self.redis_conn).await?;
+        let num_added = res?;
+
+        // Check that SADD doesn't return 0. That would mean that the participant id would be a
+        // duplicate which cannot be allowed. Since this should never happen just error and exit.
+        if !self.resuming && num_added == 0 {
+            bail!("participant-id is already taken inside waiting-room set");
+        }
+
+        self.rabbitmq_publish(
+            timestamp,
+            Some(breakout::rabbitmq::global_exchange_name(self.room_id.room_id()).as_str()),
+            control::rabbitmq::room_all_routing_key(),
+            Namespaced {
+                namespace: moderation::NAMESPACE,
+                payload: moderation::rabbitmq::Message::JoinedWaitingRoom(self.id),
+            }
+            .to_json(),
+        )
+        .await;
+
+        Ok(())
+    }
+
+    async fn join_room(&mut self, timestamp: Timestamp, control_data: ControlData) -> Result<()> {
+        let mut lock = storage::room_mutex(self.room_id);
+
+        let guard = lock.lock(&mut self.redis_conn).await?;
+
+        let res = self.join_room_locked().await;
+
+        let unlock_res = guard.unlock(&mut self.redis_conn).await;
+
+        let participant_ids = match res {
+            Ok(participants) => participants,
+            Err(e) => {
+                bail!("Failed to join room, {e:?}\nUnlocked room lock, {unlock_res:?}");
+            }
+        };
+
+        unlock_res?;
+
+        let mut participants = vec![];
+
+        for id in participant_ids {
+            match self.build_participant(id).await {
+                Ok(participant) => participants.push(participant),
+                Err(e) => log::error!("Failed to build participant {}, {}", id, e),
+            };
+        }
+
+        let mut module_data = HashMap::new();
+
+        let actions = self
+            .handle_module_broadcast_event(
+                timestamp,
+                DynBroadcastEvent::Joined(&control_data, &mut module_data, &mut participants),
+                false,
+            )
+            .await;
+
+        self.ws
+            .send(Message::Text(
+                NamespacedOutgoing {
+                    namespace: NAMESPACE,
+                    timestamp,
+                    payload: outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
+                        id: self.id,
+                        display_name: control_data.display_name.clone(),
+                        avatar_url: control_data.avatar_url.clone(),
+                        role: self.role,
+                        module_data,
+                        participants,
+                    }),
+                }
+                .to_json(),
+            ))
+            .await;
+
+        self.state = RunnerState::Joined(control_data);
+
+        self.rabbitmq_publish_control(timestamp, None, rabbitmq::Message::Joined(self.id))
+            .await;
+
+        self.handle_module_requested_actions(timestamp, actions)
+            .await;
+
+        Ok(())
+    }
+
+    async fn join_room_locked(&mut self) -> Result<Vec<ParticipantId>> {
+        let participants = storage::get_all_participants(&mut self.redis_conn, self.room_id)
+            .await
+            .context("Failed to get all active participants")?;
+
+        let num_added =
+            storage::add_participant_to_set(&mut self.redis_conn, self.room_id, self.id)
+                .await
+                .context("Failed to add self to participants set")?;
+
+        // Check that SADD doesn't return 0. That would mean that the participant id would be a
+        // duplicate which cannot be allowed. Since this should never happen just error and exit.
+        if !self.resuming && num_added == 0 {
+            bail!("participant-id is already taken inside participant set");
+        }
+
+        Ok(participants)
+    }
+
+    async fn set_control_attributes(
         &mut self,
         timestamp: Timestamp,
         display_name: &str,
-    ) -> Result<Vec<ParticipantId>> {
+        avatar_url: Option<&str>,
+    ) -> Result<()> {
         let mut pipe_attrs = storage::AttrPipeline::new(self.room_id, self.id);
 
         match &self.participant {
             api::Participant::User(ref user) => {
-                let avatar_url = format!(
-                    "{}{:x}",
-                    self.settings.load().avatar.libravatar_url,
-                    md5::compute(&user.email)
-                );
-
                 pipe_attrs
                     .set("kind", ParticipationKind::User)
-                    .set("avatar_url", avatar_url)
+                    .set(
+                        "avatar_url",
+                        avatar_url.expect("user must have avatar_url set"),
+                    )
                     .set("user_id", user.id);
             }
             api::Participant::Guest => {
@@ -898,22 +1119,7 @@ impl Runner {
             .query_async(&mut self.redis_conn)
             .await?;
 
-        let participants = storage::get_all_participants(&mut self.redis_conn, self.room_id)
-            .await
-            .context("Failed to get all active participants")?;
-
-        let num_added =
-            storage::add_participant_to_set(&mut self.redis_conn, self.room_id, self.id)
-                .await
-                .context("Failed to add self to participants set")?;
-
-        // Check that SADD doesn't return 0. That would mean that the participant id would be a
-        // duplicate which cannot be allowed. Since this should never happen just error and exit.
-        if !self.resuming && num_added == 0 {
-            bail!("participant-id is already taken inside participant set");
-        }
-
-        Ok(participants)
+        Ok(())
     }
 
     async fn build_participant(&mut self, id: ParticipantId) -> Result<Participant> {
@@ -922,56 +1128,12 @@ impl Runner {
             module_data: Default::default(),
         };
 
-        #[allow(clippy::type_complexity)]
-        let (
-            display_name,
-            avatar_url,
-            joined_at,
-            left_at,
-            hand_is_up,
-            hand_updated_at,
-            participation_kind,
-        ): (
-            Option<String>,
-            Option<String>,
-            Option<Timestamp>,
-            Option<Timestamp>,
-            Option<bool>,
-            Option<Timestamp>,
-            Option<ParticipationKind>,
-        ) = storage::AttrPipeline::new(self.room_id, id)
-            .get("display_name")
-            .get("avatar_url")
-            .get("joined_at")
-            .get("left_at")
-            .get("hand_is_up")
-            .get("hand_updated_at")
-            .get("kind")
-            .query_async(&mut self.redis_conn)
-            .await?;
-
-        if display_name.is_none()
-            || joined_at.is_none()
-            || hand_is_up.is_none()
-            || hand_updated_at.is_none()
-        {
-            log::error!("failed to fetch some attribute, using fallback defaults");
-        }
+        let control_data = ControlData::from_redis(&mut self.redis_conn, self.room_id, id).await?;
 
         participant.module_data.insert(
             NAMESPACE,
-            serde_json::to_value(ControlData {
-                display_name: display_name.unwrap_or_else(|| "Participant".into()),
-                avatar_url,
-                participation_kind: participation_kind.unwrap_or(ParticipationKind::Guest),
-                hand_is_up: hand_is_up.unwrap_or_default(),
-                hand_updated_at: hand_updated_at.unwrap_or_else(Timestamp::unix_epoch),
-                joined_at: joined_at.unwrap_or_else(Timestamp::unix_epoch),
-                // no default for left_at. If its not found by error,
-                // worst case we have a ghost participant,
-                left_at,
-            })
-            .expect("Failed to convert ControlData to serde_json::Value"),
+            serde_json::to_value(control_data)
+                .expect("Failed to convert ControlData to serde_json::Value"),
         );
 
         Ok(participant)
@@ -988,9 +1150,10 @@ impl Runner {
         // then if it is a ha_sync::user_update message
         if delivery.exchange.as_str().starts_with("k3k-signaling") {
             // Do not handle any messages before the user joined the room
-            if self.control_data.is_none() {
+            if let RunnerState::None = &self.state {
                 return;
             }
+
             let timestamp: Timestamp = delivery.properties.timestamp().map(|value| chrono::Utc.timestamp(value as i64, 0)).unwrap_or_else(|| {
                 log::warn!("Got RabbitMQ message without timestamp. Creating current timestamp as fallback.");
                 chrono::Utc::now()
@@ -1017,7 +1180,8 @@ impl Runner {
                 if let Err(e) = self.handle_rabbitmq_control_msg(timestamp, msg).await {
                     log::error!("Failed to handle incoming rabbitmq control msg, {}", e);
                 }
-            } else {
+            } else if let RunnerState::Joined(_) = &self.state {
+                // Only allow rmq messages outside the control namespace if the participant is fully joined
                 match self
                     .handle_module_targeted_event(
                         namespaced.namespace,
@@ -1067,7 +1231,8 @@ impl Runner {
 
         match msg {
             rabbitmq::Message::Joined(id) => {
-                if self.id == id {
+                // Ignore events of self and only if runner is joined
+                if self.id == id || !matches!(&self.state, RunnerState::Joined(_)) {
                     return Ok(());
                 }
 
@@ -1096,7 +1261,8 @@ impl Runner {
                     .await;
             }
             rabbitmq::Message::Left(id) => {
-                if self.id == id {
+                // Ignore events of self and only if runner is joined
+                if self.id == id || !matches!(&self.state, RunnerState::Joined(_)) {
                     return Ok(());
                 }
 
@@ -1125,7 +1291,8 @@ impl Runner {
                     .await;
             }
             rabbitmq::Message::Update(id) => {
-                if self.id == id {
+                // Ignore updates of self and only if runner is joined
+                if self.id == id || !matches!(&self.state, RunnerState::Joined(_)) {
                     return Ok(());
                 }
 
@@ -1152,6 +1319,33 @@ impl Runner {
 
                 self.handle_module_requested_actions(timestamp, actions)
                     .await;
+            }
+            rabbitmq::Message::Accepted(id) => {
+                if self.id != id {
+                    log::warn!("Received misrouted control#accepted message");
+                    return Ok(());
+                }
+
+                if let RunnerState::Waiting {
+                    accepted,
+                    control_data: _,
+                } = &mut self.state
+                {
+                    if !*accepted {
+                        *accepted = true;
+
+                        self.ws
+                            .send(Message::Text(
+                                NamespacedOutgoing {
+                                    namespace: moderation::NAMESPACE,
+                                    timestamp,
+                                    payload: moderation::outgoing::Message::Accepted,
+                                }
+                                .to_json(),
+                            ))
+                            .await;
+                    }
+                }
             }
         }
 

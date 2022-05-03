@@ -595,6 +595,7 @@ where
 
                 Ok(())
             }
+            control::incoming::Message::EnterRoom => unreachable!(),
             control::incoming::Message::RaiseHand => {
                 storage::AttrPipeline::new(self.room_id, self.participant_id)
                     .set("hand_is_up", true)
@@ -703,6 +704,9 @@ where
                 ))?;
 
                 Ok(())
+            }
+            control::rabbitmq::Message::Accepted(_participant_id) => {
+                todo!()
             }
         }
     }

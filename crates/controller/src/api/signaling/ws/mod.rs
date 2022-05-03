@@ -1,3 +1,4 @@
+use super::prelude::*;
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::ControlData;
 use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
@@ -266,6 +267,26 @@ where
             routing_key,
             message: Namespaced {
                 namespace: M::NAMESPACE,
+                payload: message,
+            }
+            .to_json(),
+        });
+    }
+
+    /// Queue a outgoing control message
+    ///
+    /// Used in modules which control some behavior in the control module/runner
+    pub(crate) fn rabbitmq_publish_control(
+        &mut self,
+        exchange: String,
+        routing_key: String,
+        message: control::rabbitmq::Message,
+    ) {
+        self.rabbitmq_publish.push(RabbitMqPublish {
+            exchange,
+            routing_key,
+            message: Namespaced {
+                namespace: control::NAMESPACE,
                 payload: message,
             }
             .to_json(),

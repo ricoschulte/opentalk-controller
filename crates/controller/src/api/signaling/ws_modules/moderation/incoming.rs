@@ -6,6 +6,10 @@ use serde::Deserialize;
 pub enum Message {
     Kick(Target),
     Ban(Target),
+
+    EnableWaitingRoom,
+    DisableWaitingRoom,
+    Accept(Target),
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,6 +52,24 @@ mod test {
         let msg: Message = serde_json::from_str(json).unwrap();
 
         if let Message::Ban(Target { target }) = msg {
+            assert_eq!(target, ParticipantId::nil());
+        } else {
+            panic!()
+        }
+    }
+
+    #[test]
+    fn accept() {
+        let json = r#"
+        {
+            "action": "accept",
+            "target": "00000000-0000-0000-0000-000000000000"
+        }
+        "#;
+
+        let msg: Message = serde_json::from_str(json).unwrap();
+
+        if let Message::Accept(Target { target }) = msg {
             assert_eq!(target, ParticipantId::nil());
         } else {
             panic!()
