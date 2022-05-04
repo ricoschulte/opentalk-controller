@@ -3,7 +3,7 @@ use super::groups::{Group, UserGroupRelation};
 use super::schema::{groups, user_groups, users};
 use crate::groups::{GroupId, NewGroup, NewUserGroupRelation};
 use crate::{levenshtein, lower, soundex};
-use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
+use controller_shared::{impl_from_redis_value, impl_to_redis_args};
 use database::{DatabaseError, DbConnection, Paginate, Result};
 use diesel::{
     BelongingToDsl, BoolExpressionMethods, Connection, ExpressionMethods, GroupedBy, Identifiable,
@@ -17,8 +17,8 @@ diesel_newtype! {
     #[derive(Copy)] UserId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/users/"
 }
 
-impl_to_redis_args_se!(UserId);
-impl_from_redis_value_de!(UserId);
+impl_to_redis_args!(UserId);
+impl_from_redis_value!(UserId);
 
 impl From<UserId> for PolicyUser {
     fn from(id: UserId) -> Self {
