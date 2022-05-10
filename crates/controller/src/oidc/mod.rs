@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use controller_shared::settings;
-use openidconnect::reqwest::async_http_client as http_client;
+use http::async_http_client;
 use openidconnect::{AccessToken, TokenIntrospectionResponse};
 use provider::ProviderClient;
 
+mod http;
 mod jwt;
 mod provider;
 
@@ -14,6 +15,7 @@ pub use jwt::VerifyError;
 #[derive(Debug)]
 pub struct OidcContext {
     provider: ProviderClient,
+    http_client: reqwest::Client,
 }
 
 impl OidcContext {
@@ -24,9 +26,14 @@ impl OidcContext {
     pub async fn from_config(oidc_config: settings::Oidc) -> Result<Self> {
         log::debug!("OIDC config: {:?}", oidc_config);
 
-        let client = ProviderClient::discover(oidc_config.provider).await?;
+        let http_client = http::make_client()?;
 
-        Ok(Self { provider: client })
+        let client = ProviderClient::discover(http_client.clone(), oidc_config.provider).await?;
+
+        Ok(Self {
+            provider: client,
+            http_client,
+        })
     }
 
     /// Verifies the signature and expiration of an AccessToken.
@@ -63,9 +70,10 @@ impl OidcContext {
             .provider
             .client
             .introspect(access_token)?
-            .request_async(http_client)
+            .request_async(async_http_client(self.http_client.clone()))
             .await
             .context("Failed to verify token using the introspect endpoint")?;
+
         tracing::Span::current().record("active", &response.active());
 
         Ok(AccessTokenIntrospectInfo {

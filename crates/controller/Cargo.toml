@@ -79,6 +79,7 @@ r3dlock = { path = "../r3dlock" }
 
 ### OpenID Connect & JWT
 openidconnect = { version = "2" }
+reqwest = { version = "0.11", default-features = false, features = ["rustls-tls"] }
 jsonwebtoken = "7"
 base64 = "0.13"
 chrono = "0.4"
