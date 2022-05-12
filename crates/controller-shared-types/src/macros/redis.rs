@@ -13,6 +13,38 @@ macro_rules! impl_to_redis_args {
     };
 }
 
+/// Implement [`redis::FromRedisValue`](https://docs.rs/redis/*/redis/trait.FromRedisValue.html) for a type that implements FromStr
+#[macro_export]
+macro_rules! impl_from_redis_value {
+    ($ty:ty) => {
+        impl ::redis::FromRedisValue for $ty {
+            fn from_redis_value(v: &redis::Value) -> ::redis::RedisResult<$ty> {
+                match *v {
+                    ::redis::Value::Data(ref bytes) => {
+                        let s = ::std::str::from_utf8(bytes).map_err(|_| {
+                            ::redis::RedisError::from((
+                                ::redis::ErrorKind::TypeError,
+                                "string is not utf8",
+                            ))
+                        })?;
+
+                        ::std::str::FromStr::from_str(s).map_err(|_| {
+                            ::redis::RedisError::from((
+                                ::redis::ErrorKind::TypeError,
+                                "failed to parse string",
+                            ))
+                        })
+                    }
+                    _ => ::redis::RedisResult::Err(::redis::RedisError::from((
+                        ::redis::ErrorKind::TypeError,
+                        "invalid data type",
+                    ))),
+                }
+            }
+        }
+    };
+}
+
 /// Implement [`redis::FromRedisValue`](https://docs.rs/redis/*/redis/trait.FromRedisValue.html) for a type that implements deserialize
 #[macro_export]
 macro_rules! impl_from_redis_value_de {

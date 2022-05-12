@@ -299,6 +299,7 @@ pub enum StartRoomError {
     InvalidCredentials,
     NoBreakoutRooms,
     InvalidBreakoutRoomId,
+    BannedFromRoom,
 }
 
 impl From<StartRoomError> for ApiError {
@@ -319,6 +320,10 @@ impl From<StartRoomError> for ApiError {
             StartRoomError::InvalidBreakoutRoomId => ApiError::bad_request()
                 .with_code("invalid_breakout_room_id")
                 .with_message("The provided breakout room ID is invalid"),
+
+            StartRoomError::BannedFromRoom => ApiError::forbidden()
+                .with_code("banned_from_room")
+                .with_message("This user has been banned from entering this room"),
         }
     }
 }
@@ -369,6 +374,11 @@ pub async fn start(
     }
 
     let mut redis_conn = (**redis_ctx).clone();
+
+    // check if user is banned from room
+    if moderation::storage::is_banned(&mut redis_conn, room.id, current_user.id).await? {
+        return Err(StartRoomError::BannedFromRoom.into());
+    }
 
     if let Some(breakout_room) = request.breakout_room {
         let config = breakout::storage::get_config(&mut redis_conn, room.id).await?;
