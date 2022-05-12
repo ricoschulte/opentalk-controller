@@ -12,7 +12,6 @@
 //! - `/rooms/{room_id}/sip ([GET](sip_configs::get), [PUT](sip_configs::put), [DELETE](sip_configs::delete))
 //! - `/rooms/{room_id}/legal_votes ([GET](legal_vote::get_all_for_room))
 //! - `/turn` ([GET](turn::get))
-//! - `/users` ([GET](users::all))
 //! - `/users/me`([GET](users::get_me), [PATCH](users::patch_me))
 //! - `/users/{user_id}` ([GET](users::get_user))
 //! - `/users/find` ([GET](users::find))

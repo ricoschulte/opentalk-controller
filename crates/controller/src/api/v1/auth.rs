@@ -3,6 +3,7 @@ use crate::api::v1::response::error::AuthenticationError;
 use crate::api::v1::response::ApiError;
 use crate::ha_sync::user_update;
 use crate::oidc::OidcContext;
+use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
 use database::{Db, OptionalExt};
@@ -33,6 +34,7 @@ pub struct LoginResponse {
 /// Returns a [`LoginResponse`] containing the users permissions.
 #[post("/auth/login")]
 pub async fn login(
+    settings: SharedSettingsActix,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     rabbitmq_channel: Data<lapin::Channel>,
@@ -67,6 +69,8 @@ pub async fn login(
                         Ok(Either::Left(updated_info))
                     }
                     None => {
+                        let settings = settings.load_full();
+
                         let new_user = NewUser {
                             oidc_sub: info.sub,
                             oidc_issuer: info.issuer,
@@ -76,7 +80,8 @@ pub async fn login(
                             firstname: info.firstname,
                             lastname: info.lastname,
                             id_token_exp: info.expiration.timestamp(),
-                            language: "en-US".to_string(), // TODO: set language based on browser
+                            // TODO: try to get user language from accept-language header
+                            language: settings.defaults.user_language.clone(),
                         };
 
                         let new_user = NewUserWithGroups {

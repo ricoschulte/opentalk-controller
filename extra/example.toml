@@ -122,3 +122,13 @@ from_routing_key = "from-janus-2"
 #url = "http://localhost:9001"
 # Etherpads api key
 #api_key = "secret"
+
+# Default/fallback values
+#[defaults]
+# Default language of a new user
+#user_language = "en-US"
+
+# Settings for endpoiints
+#[endpoints]
+# Disable the /users/find endpoint for performance or privacy reasons
+#disable_users_find = false

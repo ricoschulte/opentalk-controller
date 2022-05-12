@@ -4,14 +4,12 @@
 //! structs are defined in the Database crate [`db_storage`] for database operations.
 
 use super::response::{ApiError, NoContent};
-use crate::api::v1::{ApiResponse, PagePaginationQuery};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{get, patch, Either};
 use controller_shared::settings::Settings;
 use database::Db;
 use db_storage::users::{UpdateUser, User, UserId};
-use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -89,45 +87,6 @@ impl PrivateUserProfile {
             language: user.language,
         }
     }
-}
-
-/// API Endpoint *GET /users*
-///
-/// Returns a JSON array of all database users as [`PublicUserProfile`]
-#[get("/users")]
-pub async fn all(
-    settings: SharedSettingsActix,
-    db: Data<Db>,
-    current_user: ReqData<User>,
-    pagination: Query<PagePaginationQuery>,
-    authz: Data<Authz>,
-) -> Result<ApiResponse<Vec<PublicUserProfile>>, ApiError> {
-    let settings = settings.load_full();
-    let current_user = current_user.into_inner();
-    let PagePaginationQuery { per_page, page } = pagination.into_inner();
-
-    let accessible_users: kustos::AccessibleResources<UserId> = authz
-        .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
-        .await?;
-
-    let (users, total_users) = crate::block(move || {
-        let conn = db.get_conn()?;
-
-        match accessible_users {
-            kustos::AccessibleResources::All => User::get_all_paginated(&conn, per_page, page),
-            kustos::AccessibleResources::List(list) => {
-                User::get_by_ids_paginated(&conn, &list, per_page, page)
-            }
-        }
-    })
-    .await??;
-
-    let users = users
-        .into_iter()
-        .map(|db_user| PublicUserProfile::from_db(&settings, db_user))
-        .collect::<Vec<PublicUserProfile>>();
-
-    Ok(ApiResponse::new(users).with_page_pagination(per_page, page, total_users))
 }
 
 // Used to modify user settings
@@ -258,6 +217,10 @@ pub async fn find(
     query: Query<FindQuery>,
 ) -> Result<Json<Vec<PublicUserProfile>>, ApiError> {
     let settings = settings.load_full();
+
+    if settings.endpoints.disable_users_find {
+        return Err(ApiError::not_found());
+    }
 
     let found_users = crate::block(move || {
         let conn = db.get_conn()?;

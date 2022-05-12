@@ -64,6 +64,12 @@ pub struct Settings {
     #[serde(default)]
     pub call_in: Option<CallIn>,
 
+    #[serde(default)]
+    pub defaults: Defaults,
+
+    #[serde(default)]
+    pub endpoints: Endpoints,
+
     #[serde(flatten)]
     pub extensions: HashMap<String, config::Value>,
 }
@@ -324,4 +330,20 @@ fn default_libravatar_url() -> String {
 #[derive(Clone, Debug, Deserialize)]
 pub struct CallIn {
     pub tel: String,
+}
+
+#[derive(Clone, Default, Debug, Deserialize)]
+pub struct Defaults {
+    #[serde(default = "default_user_language")]
+    pub user_language: String,
+}
+
+fn default_user_language() -> String {
+    "en-US".into()
+}
+
+#[derive(Clone, Default, Debug, Deserialize)]
+pub struct Endpoints {
+    #[serde(default)]
+    pub disable_users_find: bool,
 }
