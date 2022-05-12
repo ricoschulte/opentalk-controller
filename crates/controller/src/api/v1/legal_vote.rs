@@ -1,4 +1,5 @@
-use super::{ApiResponse, DefaultApiError, PagePaginationQuery};
+use super::response::error::ApiError;
+use super::{ApiResponse, PagePaginationQuery};
 use actix_web::get;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use anyhow::Result;
@@ -164,14 +165,13 @@ pub async fn get_all_for_room(
     pagination: Query<PagePaginationQuery>,
     room_id: Path<RoomId>,
     current_user: ReqData<User>,
-) -> Result<ApiResponse<Vec<LegalVoteEntry>>, DefaultApiError> {
+) -> Result<ApiResponse<Vec<LegalVoteEntry>>, ApiError> {
     let room_id = room_id.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
         .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
-        .await
-        .map_err(|_| DefaultApiError::Internal)?;
+        .await?;
 
     let (legal_votes, count) = crate::block(move || -> database::Result<_> {
         let conn = db.get_conn()?;
@@ -218,13 +218,12 @@ pub async fn get_all(
     authz: Data<Authz>,
     pagination: Query<PagePaginationQuery>,
     current_user: ReqData<User>,
-) -> Result<ApiResponse<Vec<LegalVoteEntry>>, DefaultApiError> {
+) -> Result<ApiResponse<Vec<LegalVoteEntry>>, ApiError> {
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
         .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
-        .await
-        .map_err(|_| DefaultApiError::Internal)?;
+        .await?;
 
     let (legal_votes, count) = crate::block(move || -> database::Result<_> {
         let conn = db.get_conn()?;
@@ -269,18 +268,17 @@ pub async fn get_specific(
     authz: Data<Authz>,
     legal_vote_id: Path<LegalVoteId>,
     current_user: ReqData<User>,
-) -> Result<Json<LegalVoteEntry>, DefaultApiError> {
+) -> Result<Json<LegalVoteEntry>, ApiError> {
     let legal_vote_id = legal_vote_id.into_inner();
 
     let accessible_legal_votes: AccessibleResources<LegalVoteId> = authz
         .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
-        .await
-        .map_err(|_| DefaultApiError::Internal)?;
+        .await?;
 
     match accessible_legal_votes {
         kustos::AccessibleResources::List(vote_ids) => {
             if !vote_ids.contains(&legal_vote_id) {
-                return Err(DefaultApiError::InsufficientPermission);
+                return Err(ApiError::forbidden());
             }
         }
         kustos::AccessibleResources::All => (),

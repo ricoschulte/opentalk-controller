@@ -1,4 +1,4 @@
-use crate::api::v1::DefaultApiError;
+use super::response::error::ApiError;
 use actix_web::web::{Data, Json, Path};
 use actix_web::{delete, get, put, HttpResponse};
 use database::{Db, OptionalExt};
@@ -29,7 +29,7 @@ fn disallow_empty(modify_room: &PutSipConfig) -> Result<(), ValidationError> {
     let PutSipConfig { password, lobby } = modify_room;
 
     if password.is_none() && lobby.is_none() {
-        Err(ValidationError::new("ModifySipConfig has no set fields"))
+        Err(ValidationError::new("empty"))
     } else {
         Ok(())
     }
@@ -39,10 +39,7 @@ fn disallow_empty(modify_room: &PutSipConfig) -> Result<(), ValidationError> {
 ///
 /// Get the sip config for the specified room.
 #[get("/rooms/{room_id}/sip")]
-pub async fn get(
-    db: Data<Db>,
-    room_id: Path<RoomId>,
-) -> Result<Json<SipConfigResource>, DefaultApiError> {
+pub async fn get(db: Data<Db>, room_id: Path<RoomId>) -> Result<Json<SipConfigResource>, ApiError> {
     let room_id = room_id.into_inner();
 
     let sip_config = crate::block(move || -> database::Result<_> {
@@ -73,14 +70,11 @@ pub async fn put(
     db: Data<Db>,
     room_id: Path<RoomId>,
     modify_sip_config: Json<PutSipConfig>,
-) -> Result<HttpResponse, DefaultApiError> {
+) -> Result<HttpResponse, ApiError> {
     let room_id = room_id.into_inner();
     let modify_sip_config = modify_sip_config.into_inner();
 
-    if let Err(e) = modify_sip_config.validate() {
-        log::warn!("API modify room validation error {}", e);
-        return Err(DefaultApiError::ValidationFailed);
-    }
+    modify_sip_config.validate()?;
 
     let (sip_config, newly_created) = crate::block(move || -> database::Result<_> {
         let conn = db.get_conn()?;
@@ -137,7 +131,7 @@ pub async fn put(
 ///
 /// Deletes the sip config of the provided room.
 #[delete("/rooms/{room_id}/sip")]
-pub async fn delete(db: Data<Db>, room_id: Path<RoomId>) -> Result<HttpResponse, DefaultApiError> {
+pub async fn delete(db: Data<Db>, room_id: Path<RoomId>) -> Result<HttpResponse, ApiError> {
     let room_id = room_id.into_inner();
 
     crate::block(move || {

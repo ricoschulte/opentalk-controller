@@ -3,16 +3,17 @@
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar
 //! structs are defined in the Database crate [`db_storage`] for database operations.
 
-use crate::api::v1::{ApiResponse, DefaultApiError, PagePaginationQuery};
+use super::response::{ApiError, NoContent};
+use crate::api::v1::{ApiResponse, PagePaginationQuery};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
-use actix_web::{get, patch};
+use actix_web::{get, patch, Either};
 use controller_shared::settings::Settings;
 use database::Db;
 use db_storage::users::{UpdateUser, User, UserId};
 use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 /// Public user details.
 ///
@@ -100,15 +101,14 @@ pub async fn all(
     current_user: ReqData<User>,
     pagination: Query<PagePaginationQuery>,
     authz: Data<Authz>,
-) -> Result<ApiResponse<Vec<PublicUserProfile>>, DefaultApiError> {
+) -> Result<ApiResponse<Vec<PublicUserProfile>>, ApiError> {
     let settings = settings.load_full();
     let current_user = current_user.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let accessible_users: kustos::AccessibleResources<UserId> = authz
         .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
-        .await
-        .map_err(|_| DefaultApiError::Internal)?;
+        .await?;
 
     let (users, total_users) = crate::block(move || {
         let conn = db.get_conn()?;
@@ -132,7 +132,6 @@ pub async fn all(
 
 // Used to modify user settings
 #[derive(Debug, Validate, Deserialize)]
-#[validate(schema(function = "disallow_empty"))]
 pub struct PatchMeBody {
     #[validate(length(max = 255))]
     pub title: Option<String>,
@@ -146,26 +145,21 @@ pub struct PatchMeBody {
     pub conference_theme: Option<String>,
 }
 
-fn disallow_empty(patch: &PatchMeBody) -> Result<(), ValidationError> {
-    let PatchMeBody {
-        title,
-        display_name,
-        language,
-        dashboard_theme,
-        conference_theme,
-    } = patch;
+impl PatchMeBody {
+    fn is_empty(&self) -> bool {
+        let PatchMeBody {
+            title,
+            display_name,
+            language,
+            dashboard_theme,
+            conference_theme,
+        } = self;
 
-    if title.is_none()
-        && display_name.is_none()
-        && language.is_none()
-        && dashboard_theme.is_none()
-        && conference_theme.is_none()
-    {
-        Err(ValidationError::new(
-            "patch body must have at least one valid field",
-        ))
-    } else {
-        Ok(())
+        title.is_none()
+            && display_name.is_none()
+            && language.is_none()
+            && dashboard_theme.is_none()
+            && conference_theme.is_none()
     }
 }
 
@@ -176,16 +170,18 @@ pub async fn patch_me(
     db: Data<Db>,
     current_user: ReqData<User>,
     patch: Json<PatchMeBody>,
-) -> Result<Json<PrivateUserProfile>, DefaultApiError> {
-    let settings = settings.load_full();
+) -> Result<Either<Json<PrivateUserProfile>, NoContent>, ApiError> {
     let patch = patch.into_inner();
 
-    if let Err(e) = patch.validate() {
-        log::warn!("API patch/me validation error {}", e);
-        return Err(DefaultApiError::ValidationFailed);
+    if patch.is_empty() {
+        return Ok(Either::Right(NoContent));
     }
 
-    let db_user = crate::block(move || -> Result<User, DefaultApiError> {
+    patch.validate()?;
+
+    let settings = settings.load_full();
+
+    let db_user = crate::block(move || -> Result<User, ApiError> {
         let conn = db.get_conn()?;
 
         let changeset = UpdateUser {
@@ -205,7 +201,7 @@ pub async fn patch_me(
 
     let user_profile = PrivateUserProfile::from_db(&settings, db_user);
 
-    Ok(Json(user_profile))
+    Ok(Either::Left(Json(user_profile)))
 }
 
 /// API Endpoint *GET /users/me*
@@ -215,7 +211,7 @@ pub async fn patch_me(
 pub async fn get_me(
     settings: SharedSettingsActix,
     current_user: ReqData<User>,
-) -> Result<Json<PrivateUserProfile>, DefaultApiError> {
+) -> Result<Json<PrivateUserProfile>, ApiError> {
     let settings = settings.load_full();
     let current_user = current_user.into_inner();
 
@@ -232,7 +228,7 @@ pub async fn get_user(
     settings: SharedSettingsActix,
     db: Data<Db>,
     user_id: Path<UserId>,
-) -> Result<Json<PublicUserProfile>, DefaultApiError> {
+) -> Result<Json<PublicUserProfile>, ApiError> {
     let settings = settings.load_full();
 
     let user = crate::block(move || {
@@ -260,7 +256,7 @@ pub async fn find(
     settings: SharedSettingsActix,
     db: Data<Db>,
     query: Query<FindQuery>,
-) -> Result<Json<Vec<PublicUserProfile>>, DefaultApiError> {
+) -> Result<Json<Vec<PublicUserProfile>>, ApiError> {
     let settings = settings.load_full();
 
     let found_users = crate::block(move || {

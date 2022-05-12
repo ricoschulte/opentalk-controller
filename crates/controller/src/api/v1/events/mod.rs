@@ -1,13 +1,15 @@
 use super::cursor::Cursor;
 use super::request::default_pagination_per_page;
-use super::response::NoContent;
+use super::response::error::ValidationErrorEntry;
+use super::response::{ApiError, NoContent, CODE_VALUE_REQUIRED};
 use super::users::PublicUserProfile;
-use super::{ApiResponse, DefaultApiError, DefaultApiResult, PagePaginationQuery};
+use super::{ApiResponse, DefaultApiResult, PagePaginationQuery};
+use crate::api::v1::response::CODE_IGNORED_VALUE;
 use crate::api::v1::rooms::RoomsPoliciesBuilderExt;
 use crate::api::v1::util::GetUserProfilesBatched;
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
-use actix_web::{delete, get, patch, post};
+use actix_web::{delete, get, patch, post, Either};
 use chrono::{DateTime, Datelike, NaiveTime, TimeZone as _, Utc};
 use chrono_tz::Tz;
 use controller_shared::settings::Settings;
@@ -505,9 +507,7 @@ pub async fn new_event(
     let current_user = current_user.into_inner();
     let new_event = new_event.into_inner();
 
-    if let Err(_e) = new_event.validate() {
-        return Err(DefaultApiError::ValidationFailed);
-    }
+    new_event.validate()?;
 
     let event_resource = crate::block(move || {
         let conn = db.get_conn()?;
@@ -564,7 +564,7 @@ pub async fn new_event(
                     "time dependent events must have title, description, is_all_day, starts_at and ends_at set"
                 };
 
-                Err(DefaultApiError::BadRequest(msg.into()))
+                Err(ApiError::bad_request().with_message(msg))
             }
         }
     })
@@ -578,10 +578,7 @@ pub async fn new_event(
         .room_write_access(event_resource.room.id)
         .finish();
 
-    if let Err(e) = authz.add_policies(policies).await {
-        log::error!("Failed to add RBAC policies: {}", e);
-        return Err(DefaultApiError::Internal);
-    }
+    authz.add_policies(policies).await?;
 
     Ok(ApiResponse::new(event_resource))
 }
@@ -594,7 +591,7 @@ fn create_time_independent_event(
     title: String,
     description: String,
     password: Option<String>,
-) -> Result<EventResource, DefaultApiError> {
+) -> Result<EventResource, ApiError> {
     let room = NewRoom {
         created_by: current_user.id,
         password: password.unwrap_or_default(),
@@ -659,7 +656,7 @@ fn create_time_dependent_event(
     starts_at: DateTimeTz,
     ends_at: DateTimeTz,
     recurrence_pattern: Vec<String>,
-) -> Result<EventResource, DefaultApiError> {
+) -> Result<EventResource, ApiError> {
     let recurrence_pattern = recurrence_array_to_string(recurrence_pattern);
 
     let (duration_secs, ends_at_dt, ends_at_tz) =
@@ -1029,6 +1026,28 @@ pub struct PatchEventBody {
     recurrence_pattern: Vec<String>,
 }
 
+impl PatchEventBody {
+    fn is_empty(&self) -> bool {
+        let PatchEventBody {
+            title,
+            description,
+            is_time_independent,
+            is_all_day,
+            starts_at,
+            ends_at,
+            recurrence_pattern,
+        } = self;
+
+        title.is_none()
+            && description.is_none()
+            && is_time_independent.is_none()
+            && is_all_day.is_none()
+            && starts_at.is_none()
+            && ends_at.is_none()
+            && recurrence_pattern.is_empty()
+    }
+}
+
 /// API Endpoint `PATCH /events/{event_id}`
 ///
 /// See documentation of [`PatchEventBody`] for more infos
@@ -1044,16 +1063,19 @@ pub async fn patch_event(
     event_id: Path<EventId>,
     query: Query<PatchEventQuery>,
     patch: Json<PatchEventBody>,
-) -> DefaultApiResult<EventResource> {
+) -> Result<Either<ApiResponse<EventResource>, NoContent>, ApiError> {
+    let patch = patch.into_inner();
+
+    if patch.is_empty() {
+        return Ok(Either::Right(NoContent));
+    }
+
+    patch.validate()?;
+
     let settings = settings.load_full();
     let current_user = current_user.into_inner();
     let event_id = event_id.into_inner();
     let query = query.into_inner();
-    let patch = patch.into_inner();
-
-    if let Err(_e) = patch.validate() {
-        return Err(DefaultApiError::ValidationFailed);
-    }
 
     crate::block(move || {
         let conn = db.get_conn()?;
@@ -1120,7 +1142,7 @@ pub async fn patch_event(
             is_favorite,
         };
 
-        Ok(ApiResponse::new(event_resource))
+        Ok(Either::Left(ApiResponse::new(event_resource)))
     })
     .await?
 }
@@ -1131,7 +1153,7 @@ pub async fn patch_event(
 fn patch_event_change_to_time_dependent(
     current_user: &User,
     patch: PatchEventBody,
-) -> Result<UpdateEvent, DefaultApiError> {
+) -> Result<UpdateEvent, ApiError> {
     if let (Some(is_all_day), Some(starts_at), Some(ends_at)) =
         (patch.is_all_day, patch.starts_at, patch.ends_at)
     {
@@ -1156,9 +1178,35 @@ fn patch_event_change_to_time_dependent(
             recurrence_pattern: Some(recurrence_pattern),
         })
     } else {
-        Err(DefaultApiError::BadRequest(
-            "is_all_day, starts_at and ends_at must be provided".into(),
-        ))
+        const MSG: Option<&str> = Some("Must be provided when changing to time dependent events");
+
+        let mut entries = vec![];
+
+        if patch.is_all_day.is_some() {
+            entries.push(ValidationErrorEntry::new(
+                "is_all_day",
+                CODE_VALUE_REQUIRED,
+                MSG,
+            ))
+        }
+
+        if patch.starts_at.is_some() {
+            entries.push(ValidationErrorEntry::new(
+                "starts_at",
+                CODE_VALUE_REQUIRED,
+                MSG,
+            ))
+        }
+
+        if patch.ends_at.is_some() {
+            entries.push(ValidationErrorEntry::new(
+                "ends_at",
+                CODE_VALUE_REQUIRED,
+                MSG,
+            ))
+        }
+
+        Err(ApiError::unprocessable_entities(entries))
     }
 }
 
@@ -1170,11 +1218,37 @@ fn patch_time_independent_event(
     current_user: &User,
     event: &Event,
     patch: PatchEventBody,
-) -> Result<UpdateEvent, DefaultApiError> {
+) -> Result<UpdateEvent, ApiError> {
     if patch.is_all_day.is_some() || patch.starts_at.is_some() || patch.ends_at.is_some() {
-        return Err(DefaultApiError::BadRequest(
-            "is_all_day, starts_at and ends_at would be ignored in this patch".into(),
-        ));
+        const MSG: Option<&str> = Some("Value would be ignored in this request");
+
+        let mut entries = vec![];
+
+        if patch.is_all_day.is_some() {
+            entries.push(ValidationErrorEntry::new(
+                "is_all_day",
+                CODE_IGNORED_VALUE,
+                MSG,
+            ))
+        }
+
+        if patch.starts_at.is_some() {
+            entries.push(ValidationErrorEntry::new(
+                "starts_at",
+                CODE_IGNORED_VALUE,
+                MSG,
+            ))
+        }
+
+        if patch.ends_at.is_some() {
+            entries.push(ValidationErrorEntry::new(
+                "ends_at",
+                CODE_IGNORED_VALUE,
+                MSG,
+            ))
+        }
+
+        return Err(ApiError::unprocessable_entities(entries));
     }
 
     if event.is_recurring.unwrap_or_default() {
@@ -1207,7 +1281,7 @@ fn patch_time_dependent_event(
     current_user: &User,
     event: &Event,
     patch: PatchEventBody,
-) -> Result<UpdateEvent, DefaultApiError> {
+) -> Result<UpdateEvent, ApiError> {
     let recurrence_pattern = recurrence_array_to_string(patch.recurrence_pattern);
 
     let is_all_day = patch.is_all_day.or(event.is_all_day).unwrap();
@@ -1253,7 +1327,7 @@ pub async fn delete_event(
     db: Data<Db>,
     authz: Data<Authz>,
     event_id: Path<EventId>,
-) -> Result<NoContent, DefaultApiError> {
+) -> Result<NoContent, ApiError> {
     let event_id = event_id.into_inner();
 
     crate::block(move || {
@@ -1272,10 +1346,7 @@ pub async fn delete_event(
         format!("/users/me/event_favorites/{event_id}"),
     ];
 
-    if let Err(e) = authz.remove_explicit_resources(resources).await {
-        log::error!("Failed to remove  RBAC policies: {}", e);
-        return Err(DefaultApiError::Internal);
-    }
+    authz.remove_explicit_resources(resources).await?;
 
     Ok(NoContent)
 }
@@ -1348,7 +1419,7 @@ fn verify_exception_dt_params(
     is_all_day: bool,
     starts_at: DateTimeTz,
     ends_at: DateTimeTz,
-) -> Result<(), DefaultApiError> {
+) -> Result<(), ApiError> {
     parse_event_dt_params(is_all_day, starts_at, ends_at, &None).map(|_| ())
 }
 
@@ -1368,25 +1439,29 @@ fn parse_event_dt_params(
     starts_at: DateTimeTz,
     ends_at: DateTimeTz,
     recurrence_pattern: &Option<String>,
-) -> Result<(Option<i32>, DateTime<Tz>, TimeZone), DefaultApiError> {
+) -> Result<(Option<i32>, DateTime<Tz>, TimeZone), ApiError> {
+    const CODE_INVALID_EVENT: &str = "invalid_event";
+
     let starts_at_dt = starts_at.to_datetime_tz();
     let ends_at_dt = ends_at.to_datetime_tz();
 
     let duration_secs = (ends_at_dt - starts_at_dt).num_seconds();
 
     if duration_secs < 0 {
-        return Err(DefaultApiError::BadRequest(
-            "ends_at must not be before starts_at".into(),
-        ));
+        return Err(ApiError::unprocessable_entity()
+            .with_code(CODE_INVALID_EVENT)
+            .with_message("ends_at must not be before starts_at"));
     }
 
     if is_all_day {
         let zero = NaiveTime::from_hms(0, 0, 0);
 
         if starts_at.datetime.time() != zero || ends_at.datetime.time() != zero {
-            return Err(DefaultApiError::BadRequest(
-                "is_all_day requires starts_at/ends_at to be set at the start of the day".into(),
-            ));
+            return Err(ApiError::unprocessable_entity()
+                .with_code(CODE_INVALID_EVENT)
+                .with_message(
+                    "is_all_day requires starts_at/ends_at to be set at the start of the day",
+                ));
         }
     }
 
@@ -1400,9 +1475,9 @@ fn parse_event_dt_params(
             Ok(rrule) => rrule,
             Err(e) => {
                 log::warn!("failed to parse rrule {:?}", e);
-                return Err(DefaultApiError::BadRequest(
-                    "invalid recurrence pattern".into(),
-                ));
+                return Err(ApiError::unprocessable_entity()
+                    .with_code(CODE_INVALID_EVENT)
+                    .with_message("Invalid recurrence pattern"));
             }
         };
 
@@ -1411,9 +1486,9 @@ fn parse_event_dt_params(
             .iter()
             .any(|rrule| rrule.get_properties().freq > Frequency::Daily)
         {
-            return Err(DefaultApiError::BadRequest(
-                "frequencies below 'DAILY' are not supported".into(),
-            ));
+            return Err(ApiError::unprocessable_entity()
+                .with_code(CODE_INVALID_EVENT)
+                .with_message("Frequencies below 'DAILY' are not supported"));
         }
 
         // Figure out ends_at timestamp
@@ -1440,7 +1515,9 @@ fn parse_event_dt_params(
             // For bounded RRULEs calculate the date of the last occurrence
             // Still limiting the iterations - just in case
             rrule_set.into_iter().take(36525).last().ok_or_else(|| {
-                DefaultApiError::BadRequest("recurrence_pattern does not yield any dates".into())
+                ApiError::unprocessable_entity()
+                    .with_code(CODE_INVALID_EVENT)
+                    .with_message("recurrence_pattern does not yield any dates")
             })?
         } else {
             // For RRULEs for which calculating the last occurrence might take too

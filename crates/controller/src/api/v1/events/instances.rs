@@ -1,13 +1,14 @@
 use super::{
-    ApiResponse, DateTimeTz, DefaultApiError, DefaultApiResult, EventAndInstanceId, EventInvitee,
-    EventRoomInfo, EventStatus, EventType, InstanceId, LOCAL_DT_FORMAT,
+    ApiResponse, DateTimeTz, DefaultApiResult, EventAndInstanceId, EventInvitee, EventRoomInfo,
+    EventStatus, EventType, InstanceId, LOCAL_DT_FORMAT,
 };
 use crate::api::v1::cursor::Cursor;
+use crate::api::v1::response::{ApiError, NoContent};
 use crate::api::v1::users::PublicUserProfile;
 use crate::api::v1::util::{GetUserProfilesBatched, UserProfilesBatch};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
-use actix_web::{get, patch};
+use actix_web::{get, patch, Either};
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use database::{Db, OptionalExt};
@@ -283,12 +284,32 @@ pub struct PatchEventInstanceBody {
     status: Option<EventStatus>,
 }
 
+impl PatchEventInstanceBody {
+    fn is_empty(&self) -> bool {
+        let PatchEventInstanceBody {
+            title,
+            description,
+            is_all_day,
+            starts_at,
+            ends_at,
+            status,
+        } = self;
+
+        title.is_none()
+            && description.is_none()
+            && is_all_day.is_none()
+            && starts_at.is_none()
+            && ends_at.is_none()
+            && status.is_none()
+    }
+}
+
 /// API Endpoint `PATCH /events/{event_id}/{instance_id}`
 ///
 /// Patch an instance of an recurring event. This creates oder modifies an exception for the event
 /// at the point of time of the given instance_id.
 ///
-/// Returns the patches event instance
+/// Returns the patched event instance
 #[patch("/events/{event_id}/instances/{instance_id}")]
 pub async fn patch_event_instance(
     settings: SharedSettingsActix,
@@ -297,17 +318,20 @@ pub async fn patch_event_instance(
     path: Path<PatchEventInstancePath>,
     query: Query<PatchEventInstanceQuery>,
     patch: Json<PatchEventInstanceBody>,
-) -> DefaultApiResult<EventInstance> {
+) -> Result<Either<ApiResponse<EventInstance>, NoContent>, ApiError> {
+    let patch = patch.into_inner();
+
+    if patch.is_empty() {
+        return Ok(Either::Right(NoContent));
+    }
+
+    patch.validate()?;
+
     let settings = settings.load_full();
     let PatchEventInstancePath {
         event_id,
         instance_id,
     } = path.into_inner();
-    let patch = patch.into_inner();
-
-    if let Err(_e) = patch.validate() {
-        return Err(DefaultApiError::ValidationFailed);
-    }
 
     crate::block(move || {
         let conn = db.get_conn()?;
@@ -316,7 +340,7 @@ pub async fn patch_event_instance(
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
 
         if !event.is_recurring.unwrap_or_default() {
-            return Err(DefaultApiError::NotFound);
+            return Err(ApiError::not_found());
         }
 
         verify_recurrence_date(&event, instance_id.0)?;
@@ -417,7 +441,7 @@ pub async fn patch_event_instance(
             invitees_truncated,
         )?;
 
-        Ok(ApiResponse::new(event_instance))
+        Ok(Either::Left(ApiResponse::new(event_instance)))
     })
     .await?
 }
@@ -501,19 +525,19 @@ fn patch<T>(dst: &mut T, value: Option<T>) {
     }
 }
 
-fn build_rruleset(event: &Event) -> Result<RRuleSet, DefaultApiError> {
+fn build_rruleset(event: &Event) -> Result<RRuleSet, ApiError> {
     // TODO add recurring check into SQL query?
     if !event.is_recurring.unwrap_or_default() {
-        return Err(DefaultApiError::NotFound);
+        return Err(ApiError::not_found());
     }
 
     // TODO add more information to internal errors here
     let recurrence_pattern = event
         .recurrence_pattern
         .as_ref()
-        .ok_or(DefaultApiError::Internal)?;
-    let starts_at = event.starts_at.ok_or(DefaultApiError::Internal)?;
-    let starts_at_tz = event.starts_at_tz.ok_or(DefaultApiError::Internal)?.0;
+        .ok_or_else(ApiError::internal)?;
+    let starts_at = event.starts_at.ok_or_else(ApiError::internal)?;
+    let starts_at_tz = event.starts_at_tz.ok_or_else(ApiError::internal)?.0;
 
     let starts_at = starts_at
         .with_timezone(&starts_at_tz)
@@ -523,7 +547,7 @@ fn build_rruleset(event: &Event) -> Result<RRuleSet, DefaultApiError> {
     let rruleset = format!("DTSTART;TZID={starts_at_tz}:{starts_at};\n{recurrence_pattern}");
     let rruleset: RRuleSet = rruleset.parse().map_err(|e| {
         log::error!("failed to parse rrule from db {}", e);
-        DefaultApiError::Internal
+        ApiError::internal()
     })?;
 
     Ok(rruleset)
@@ -532,7 +556,7 @@ fn build_rruleset(event: &Event) -> Result<RRuleSet, DefaultApiError> {
 fn verify_recurrence_date(
     event: &Event,
     requested_dt: DateTime<Utc>,
-) -> Result<RRuleSet, DefaultApiError> {
+) -> Result<RRuleSet, ApiError> {
     let rruleset = build_rruleset(event)?;
 
     let requested_dt = requested_dt.with_timezone(&event.starts_at_tz.unwrap().0);
@@ -548,7 +572,7 @@ fn verify_recurrence_date(
     if found {
         Ok(rruleset)
     } else {
-        Err(DefaultApiError::NotFound)
+        Err(ApiError::not_found())
     }
 }
 

@@ -1,5 +1,6 @@
 //! Auth related API structs and Endpoints
-use super::{DefaultApiError, INVALID_ID_TOKEN};
+use crate::api::v1::response::error::AuthenticationError;
+use crate::api::v1::response::ApiError;
 use crate::ha_sync::user_update;
 use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json};
@@ -37,16 +38,14 @@ pub async fn login(
     rabbitmq_channel: Data<lapin::Channel>,
     body: Json<Login>,
     authz: Data<kustos::Authz>,
-) -> Result<Json<LoginResponse>, DefaultApiError> {
+) -> Result<Json<LoginResponse>, ApiError> {
     let id_token = body.into_inner().id_token;
 
     match oidc_ctx.verify_id_token(&id_token) {
         Err(e) => {
             log::warn!("Got invalid ID Token {}", e);
-            Err(DefaultApiError::auth_bearer_invalid_token(
-                INVALID_ID_TOKEN,
-                e.to_string(),
-            ))
+
+            Err(ApiError::unauthorized().with_www_authenticate(AuthenticationError::InvalidIdToken))
         }
         Ok(info) => {
             // TODO(r.floren): Find a neater way for relaying the information here.
@@ -146,7 +145,7 @@ pub async fn oidc_provider(oidc_ctx: Data<OidcContext>) -> Json<Provider> {
 async fn update_core_user_permissions(
     authz: &kustos::Authz,
     db_result: Either<UserUpdatedInfo, (User, Vec<GroupId>)>,
-) -> Result<(), DefaultApiError> {
+) -> Result<(), ApiError> {
     match db_result {
         Either::Left(modified_user) => {
             // TODO(r.floren) this could be optimized I guess, with a user_to_groups?
@@ -154,34 +153,20 @@ async fn update_core_user_permissions(
             for group in modified_user.groups_added {
                 authz
                     .add_user_to_group(modified_user.user.id, group)
-                    .await
-                    .map_err(|e| {
-                        log::error!("Failed to add user to group - {}", e);
-                        DefaultApiError::Internal
-                    })?;
+                    .await?;
             }
 
             for group in modified_user.groups_removed {
                 authz
                     .remove_user_from_group(modified_user.user.id, group)
-                    .await
-                    .map_err(|e| {
-                        log::error!("Failed to remove user from group  - {}", e);
-                        DefaultApiError::Internal
-                    })?;
+                    .await?;
             }
         }
         Either::Right((user, groups)) => {
-            authz.add_user_to_role(user.id, "user").await.map_err(|e| {
-                log::error!("Failed to add user to user role - {}", e);
-                DefaultApiError::Internal
-            })?;
+            authz.add_user_to_role(user.id, "user").await?;
 
             for group in groups {
-                authz.add_user_to_group(user.id, group).await.map_err(|e| {
-                    log::error!("Failed to remove user from group  - {}", e);
-                    DefaultApiError::Internal
-                })?;
+                authz.add_user_to_group(user.id, group).await?;
             }
         }
     }

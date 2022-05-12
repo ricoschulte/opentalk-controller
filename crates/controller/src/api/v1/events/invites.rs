@@ -1,6 +1,6 @@
-use super::{ApiResponse, DefaultApiError, DefaultApiResult, PagePaginationQuery};
+use super::{ApiResponse, DefaultApiResult, PagePaginationQuery};
 use crate::api::v1::events::{EventInvitee, EventPoliciesBuilderExt};
-use crate::api::v1::response::{Created, NoContent};
+use crate::api::v1::response::{ApiError, Created, NoContent};
 use crate::api::v1::rooms::RoomsPoliciesBuilderExt;
 use crate::api::v1::users::PublicUserProfile;
 use crate::settings::SharedSettingsActix;
@@ -69,7 +69,7 @@ pub async fn create_invite_to_event(
     current_user: ReqData<User>,
     event_id: Path<EventId>,
     create_invite: Json<PostEventInviteBody>,
-) -> Result<Either<Created, NoContent>, DefaultApiError> {
+) -> Result<Either<Created, NoContent>, ApiError> {
     let event_id = event_id.into_inner();
 
     let res = crate::block(move || -> database::Result<Either<_, NoContent>> {
@@ -109,10 +109,7 @@ pub async fn create_invite_to_event(
                 .event_invite_invitee_access(event_id)
                 .finish();
 
-            if let Err(e) = authz.add_policies(policies).await {
-                log::error!("Failed to add RBAC policies: {}", e);
-                return Err(DefaultApiError::Internal);
-            }
+            authz.add_policies(policies).await?;
 
             Ok(Either::Left(Created))
         }
@@ -136,7 +133,7 @@ pub async fn delete_invite_to_event(
     authz: Data<Authz>,
     current_user: ReqData<User>,
     path_params: Path<DeleteEventInvitePath>,
-) -> Result<NoContent, DefaultApiError> {
+) -> Result<NoContent, ApiError> {
     let DeleteEventInvitePath { event_id, user_id } = path_params.into_inner();
 
     let (room_id, invite) = crate::block(move || -> database::Result<_> {
@@ -168,13 +165,9 @@ pub async fn delete_invite_to_event(
         format!("/rooms/{room_id}/start"),
     ];
 
-    if let Err(e) = authz
+    authz
         .remove_all_user_permission_for_resources(invite.invitee, resources)
-        .await
-    {
-        log::error!("Failed to remove RBAC policies: {}", e);
-        return Err(DefaultApiError::Internal);
-    }
+        .await?;
 
     Ok(NoContent)
 }
@@ -211,7 +204,7 @@ pub async fn accept_event_invite(
     db: Data<Db>,
     current_user: ReqData<User>,
     event_id: Path<EventId>,
-) -> Result<NoContent, DefaultApiError> {
+) -> Result<NoContent, ApiError> {
     let event_id = event_id.into_inner();
 
     crate::block(move || -> database::Result<_> {
@@ -236,7 +229,7 @@ pub async fn decline_event_invite(
     db: Data<Db>,
     current_user: ReqData<User>,
     event_id: Path<EventId>,
-) -> Result<NoContent, DefaultApiError> {
+) -> Result<NoContent, ApiError> {
     let event_id = event_id.into_inner();
 
     crate::block(move || -> database::Result<_> {

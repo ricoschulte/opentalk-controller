@@ -1,20 +1,21 @@
 //! TURN related API structs and Endpoints
-use super::DefaultApiError;
+use super::response::ApiError;
 use crate::api::v1::middleware::oidc_auth::check_access_token;
+use crate::api::v1::response::error::AuthenticationError;
 use crate::api::v1::response::NoContent;
-use crate::api::v1::INVALID_ACCESS_TOKEN;
 use crate::oidc::OidcContext;
 use crate::settings::{self, SharedSettingsActix};
 use crate::settings::{Settings, TurnServer};
-use actix_web::get;
+use actix_http::StatusCode;
 use actix_web::http::header::Header;
 use actix_web::web::Data;
 use actix_web::web::Json;
 use actix_web::Either as AWEither;
 use actix_web::HttpRequest;
+use actix_web::{get, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use arc_swap::ArcSwap;
-use database::{DatabaseError, Db};
+use database::{Db, OptionalExt};
 use db_storage::invites::{Invite, InviteCodeId};
 use db_storage::users::User;
 use either::Either;
@@ -65,7 +66,7 @@ pub async fn get(
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     req: HttpRequest,
-) -> Result<AWEither<Json<Vec<IceServer>>, NoContent>, DefaultApiError> {
+) -> Result<AWEither<Json<Vec<IceServer>>, NoContent>, ApiError> {
     let settings: &ArcSwap<Settings> = &**settings;
     let settings = settings.load();
 
@@ -93,10 +94,10 @@ pub async fn get(
         Some(turn_config) => {
             let expires = (chrono::Utc::now()
                 + chrono::Duration::from_std(turn_config.lifetime)
-                    .map_err(|_| DefaultApiError::Internal)?)
+                    .map_err(|_| ApiError::internal())?)
             .timestamp();
             let mut rand_rng = ::rand::thread_rng();
-            rr_servers(&mut rand_rng, &turn_config.servers, expires)?
+            rr_servers(&mut rand_rng, &turn_config.servers, expires)
         }
         None => vec![],
     };
@@ -119,7 +120,7 @@ fn create_credentials<T: Rng + CryptoRng>(
     psk: &str,
     ttl: i64,
     uris: &[String],
-) -> Result<IceServer, anyhow::Error> {
+) -> IceServer {
     // TODO We should invest time to add SHA265 support to coturn or our own turn server.
     let key = hmac::Key::new(hmac::HMAC_SHA1_FOR_LEGACY_USE_ONLY, psk.as_bytes());
 
@@ -128,61 +129,46 @@ fn create_credentials<T: Rng + CryptoRng>(
     let username = format!("{}:turn_random_for_privacy_{}", ttl, random_part);
     let password = base64::encode(hmac::sign(&key, username.as_bytes()).as_ref());
 
-    Ok(IceServer::Turn(Turn {
+    IceServer::Turn(Turn {
         username,
         password,
         ttl: ttl.to_string(),
         uris: uris.to_vec(),
-    }))
+    })
 }
 
 fn rr_servers<T: Rng + CryptoRng>(
     rng: &mut T,
     servers: &[TurnServer],
     expires: i64,
-) -> Result<Vec<IceServer>, DefaultApiError> {
+) -> Vec<IceServer> {
     // Create a list of TURN responses for each configured TURN server.
     match servers.len() {
-        0 => Ok(vec![]),
+        0 => vec![],
         // When we only have one configured TURN server, return the credentials for this single one.
-        1 => match create_credentials(rng, &servers[0].pre_shared_key, expires, &servers[0].uris) {
-            Ok(turn) => Ok(vec![turn]),
-            Err(e) => {
-                log::error!("TURN credential error: {}", e);
-                Err(DefaultApiError::Internal)
-            }
-        },
+        1 => vec![create_credentials(rng, &servers[0].pre_shared_key, expires, &servers[0].uris)]
+        ,
         // When we have two configured TURN servers, draw a random one and return the credentials for this drawn one.
         2 => {
             let between: Uniform<u32> = Uniform::from(0..1);
             let selected_server = between.sample(rng) as usize;
-            match create_credentials(
+            let turn = create_credentials(
                 rng,
                 &servers[selected_server].pre_shared_key,
                 expires,
                 &servers[selected_server].uris,
-            ) {
-                Ok(turn) => Ok(vec![turn]),
-                Err(e) => {
-                    log::error!("TURN credential error: {}", e);
-                    Err(DefaultApiError::Internal)
-                }
-            }
+            );
+
+            vec![turn]
         }
         // When we have more than two configured TURN servers, draw two and return the credentials for the drawn ones.
         _ => servers
             .choose_multiple(rng, 2)
             .into_iter()
             .map(|server| {
-                match create_credentials(rng, &server.pre_shared_key, expires, &server.uris) {
-                    Ok(turn) => Ok(turn),
-                    Err(e) => {
-                        log::error!("TURN credential error: {}", e);
-                        Err(DefaultApiError::Internal)
-                    }
-                }
+                create_credentials(rng, &server.pre_shared_key, expires, &server.uris)
             })
-            .collect::<Result<Vec<_>, DefaultApiError>>(),
+            .collect::<Vec<_>>(),
     }
 }
 
@@ -191,13 +177,12 @@ pub async fn check_access_token_or_invite(
     req: &HttpRequest,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
-) -> Result<Either<User, Invite>, DefaultApiError> {
+) -> Result<Either<User, Invite>, ApiError> {
     let auth = Authorization::<Bearer>::parse(req).map_err(|e| {
         log::warn!("Unable to parse access token, {}", e);
-        DefaultApiError::auth_bearer_invalid_token(
-            INVALID_ACCESS_TOKEN,
-            "Unable to parse access token".into(),
-        )
+        ApiError::unauthorized()
+            .with_message("Unable to parse Authentication Bearer header")
+            .with_www_authenticate(AuthenticationError::InvalidAccessToken)
     })?;
 
     let access_token = auth.into_scheme().token().to_string();
@@ -206,37 +191,32 @@ pub async fn check_access_token_or_invite(
 
     match current_user {
         Ok(user) => Ok(Either::Left(user)),
-        Err(DefaultApiError::Auth(_, _)) => {
-            // Needed as long as we use uuid as invite-codes
+        Err(e) => {
+            // return early if we got a non-auth error
+            if e.status_code() != StatusCode::UNAUTHORIZED {
+                return Err(e);
+            }
+
             let invite_uuid = uuid::Uuid::from_str(&access_token).map_err(|_| {
-                DefaultApiError::auth_bearer_invalid_token(
-                    INVALID_ACCESS_TOKEN,
-                    "Invalid Bearer token".into(),
-                )
+                ApiError::unauthorized()
+                    .with_www_authenticate(AuthenticationError::InvalidAccessToken)
             })?;
 
             crate::block(move || {
                 let conn = db.get_conn()?;
 
-                match Invite::get(&conn, InviteCodeId::from(invite_uuid)) {
-                    Ok(invite) => Ok(invite),
-                    Err(DatabaseError::NotFound) => {
+                match Invite::get(&conn, InviteCodeId::from(invite_uuid)).optional()? {
+                    Some(invite) => Ok(invite),
+                    None => {
                         log::warn!("The requesting user could not be found in the database");
-                        Err(DefaultApiError::auth_bearer_invalid_token(
-                            INVALID_ACCESS_TOKEN,
-                            "Invalid Bearer token".into(),
-                        ))
-                    }
-                    Err(_) => {
-                        log::warn!("The requesting user could not be found in the database");
-                        Err(DefaultApiError::Internal)
+                        Err(ApiError::unauthorized()
+                            .with_www_authenticate(AuthenticationError::InvalidAccessToken))
                     }
                 }
             })
             .await?
             .map(Either::Right)
         }
-        Err(e) => Err(e),
     }
 }
 
@@ -250,7 +230,7 @@ mod test {
         use rand::SeedableRng;
         let mut rng = StdRng::seed_from_u64(1234567890);
         let credentials =
-            create_credentials(&mut rng, "PSK", 3400, &["turn:turn.turn.turn".to_owned()]).unwrap();
+            create_credentials(&mut rng, "PSK", 3400, &["turn:turn.turn.turn".to_owned()]);
         assert_eq!(
             credentials,
             IceServer::Turn(Turn {
@@ -269,7 +249,7 @@ mod test {
 
         // No configured servers
         let mut rng = StdRng::seed_from_u64(1234567890);
-        assert_eq!(rr_servers(&mut rng, &[], 1200).unwrap(), vec![]);
+        assert_eq!(rr_servers(&mut rng, &[], 1200), vec![]);
 
         // One configured server
         let mut rng = StdRng::seed_from_u64(1234567890);
@@ -278,7 +258,7 @@ mod test {
             pre_shared_key: "PSK1".to_owned(),
         }];
         assert_eq!(
-            rr_servers(&mut rng, &one_server, 1200).unwrap(),
+            rr_servers(&mut rng, &one_server, 1200),
             vec![IceServer::Turn(Turn {
                 username: "1200:turn_random_for_privacy_8VbonSpZc9GXSw9gMxaV0A==".to_owned(),
                 password: "G7hjqVZX/dVAOgzzb+GeS8vEpcU=".to_owned(),
@@ -300,7 +280,7 @@ mod test {
             },
         ];
         assert_eq!(
-            rr_servers(&mut rng, &two_servers, 1200).unwrap(),
+            rr_servers(&mut rng, &two_servers, 1200),
             vec![IceServer::Turn(Turn {
                 username: "1200:turn_random_for_privacy_VuidKllz0ZdLD2AzFpXQYA==".to_owned(),
                 password: "Aybo95/GPrJhWN2qqbz6yP2qEvg=".to_owned(),
@@ -326,7 +306,7 @@ mod test {
             },
         ];
         assert_eq!(
-            rr_servers(&mut rng, &three_servers, 1200).unwrap(),
+            rr_servers(&mut rng, &three_servers, 1200),
             vec![
                 IceServer::Turn(Turn {
                     username: "1200:turn_random_for_privacy_nSpZc9GXSw9gMxaV0GDahQ==".to_owned(),
@@ -349,7 +329,6 @@ mod test {
         let mut third = 0;
         for _ in 1..5000 {
             rr_servers(&mut rng, &three_servers, 1200)
-                .unwrap()
                 .iter()
                 .filter_map(|e| match e {
                     IceServer::Turn(turn) => Some(turn),

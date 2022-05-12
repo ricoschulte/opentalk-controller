@@ -21,6 +21,7 @@
 //! ```
 
 use crate::acl::check_or_create_kustos_default_permissions;
+use crate::api::v1::response::error::json_error_handler;
 use crate::settings::{Settings, SharedSettings};
 use crate::trace::ReducedSpanBuilder;
 use actix_cors::Cors;
@@ -351,6 +352,7 @@ impl Controller {
                     .wrap(api::v1::middleware::headers::Headers {})
                     .wrap(TracingLogger::<ReducedSpanBuilder>::new())
                     .wrap(cors)
+                    .app_data(web::JsonConfig::default().error_handler(json_error_handler))
                     .app_data(Data::from(shared_settings.clone()))
                     .app_data(db.clone())
                     .app_data(oidc_ctx.clone())

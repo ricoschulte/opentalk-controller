@@ -1,7 +1,8 @@
 //! Contains invite related REST endpoints.
-use super::response::NoContent;
+use super::response::{ApiError, NoContent};
+use super::DefaultApiResult;
 use crate::api::v1::users::PublicUserProfile;
-use crate::api::v1::{ApiResponse, DefaultApiError, DefaultApiResult, PagePaginationQuery};
+use crate::api::v1::{ApiResponse, PagePaginationQuery};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{delete, get, post, put};
@@ -104,10 +105,7 @@ pub async fn add_invite(
         )
         .finish();
 
-    if let Err(e) = authz.add_policies(policies).await {
-        log::error!("Failed to add RBAC policies: {}", e);
-        return Err(DefaultApiError::Internal);
-    }
+    authz.add_policies(policies).await?;
 
     let created_by = PublicUserProfile::from_db(&settings, current_user.clone());
     let updated_by = PublicUserProfile::from_db(&settings, current_user);
@@ -136,8 +134,7 @@ pub async fn get_invites(
 
     let accessible_rooms: kustos::AccessibleResources<InviteCodeId> = authz
         .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
-        .await
-        .map_err(|_| DefaultApiError::Internal)?;
+        .await?;
 
     let (invites_with_users, total_invites) = crate::block(move || {
         let conn = db.get_conn()?;
@@ -285,7 +282,7 @@ pub async fn delete_invite(
     authz: Data<kustos::Authz>,
     current_user: ReqData<User>,
     path_params: Path<RoomIdAndInviteCode>,
-) -> Result<NoContent, DefaultApiError> {
+) -> Result<NoContent, ApiError> {
     let RoomIdAndInviteCode {
         room_id,
         invite_code,
@@ -347,10 +344,7 @@ pub async fn verify_invite_code(
 ) -> DefaultApiResult<CodeVerified> {
     let data = data.into_inner();
 
-    if let Err(e) = data.validate() {
-        log::warn!("API new room validation error {}", e);
-        return Err(DefaultApiError::ValidationFailed);
-    }
+    data.validate()?;
 
     let invite = crate::block(move || -> database::Result<_> {
         let conn = db.get_conn()?;
@@ -363,7 +357,7 @@ pub async fn verify_invite_code(
         if let Some(expiration) = invite.expiration {
             if expiration <= Utc::now() {
                 // Do not leak the existence of the invite when it is expired
-                return Err(DefaultApiError::NotFound);
+                return Err(ApiError::not_found());
             }
         }
         Ok(ApiResponse::new(CodeVerified {
@@ -371,6 +365,6 @@ pub async fn verify_invite_code(
         }))
     } else {
         // TODO(r.floren) Do we want to return something else here?
-        Err(DefaultApiError::NotFound)
+        Err(ApiError::not_found())
     }
 }

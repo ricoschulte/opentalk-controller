@@ -4,7 +4,7 @@ use super::SignalingModule;
 use crate::api::signaling::resumption::{ResumptionData, ResumptionTokenKeepAlive};
 use crate::api::signaling::ticket::{TicketData, TicketRedisKey};
 use crate::api::signaling::ws::actor::WebSocketActor;
-use crate::api::v1::{ApiError, DefaultApiError};
+use crate::api::v1::response::ApiError;
 use crate::api::Participant;
 use actix_web::http::header;
 use actix_web::web::Data;
@@ -169,7 +169,9 @@ fn read_request_header<'t>(
         Some(protocol) => protocol,
         None => {
             log::debug!("Rejecting websocket request, missing valid protocol");
-            return Err(DefaultApiError::BadRequest("Missing protocol".into()));
+            return Err(ApiError::bad_request()
+                .with_code("missing_protocol")
+                .with_message("Missing valid protocol"));
         }
     };
 
@@ -182,17 +184,19 @@ fn read_request_header<'t>(
                 ticket.len()
             );
 
-            return Err(DefaultApiError::auth_bearer_invalid_token(
-                "ticket invalid",
-                "Please request a new ticket from /v1/rooms/<room_id>/start".into(),
-            ));
+            return Err(ApiError::unauthorized()
+                .with_code("invalid_ticket")
+                .with_message(
+                    "Invalid ticket. Please request a new ticket from /v1/rooms/<room_id>/start",
+                ));
         }
         None => {
             log::debug!("Rejecting websocket request, missing ticket");
-            return Err(DefaultApiError::auth_bearer_invalid_request(
-                "missing ticket",
-                "Please request a ticket from /v1/rooms/<room_id>/start".into(),
-            ));
+            return Err(ApiError::unauthorized()
+                .with_code("missing_ticket")
+                .with_message(
+                    "Missing ticket. Please request a new ticket from /v1/rooms/<room_id>/start",
+                ));
         }
     };
 
@@ -210,13 +214,14 @@ async fn get_ticket_data_from_redis(
         .await
         .map_err(|e| {
             log::warn!("Unable to get ticket data in redis: {}", e);
-            DefaultApiError::Internal
+            ApiError::internal()
         })?;
 
     let ticket_data = ticket_data.ok_or_else(|| {
-        DefaultApiError::auth_bearer_invalid_token(
-            "ticket invalid or expired",
-            "Please request a new ticket from /v1/rooms/<room_id>/start".into(),
+        ApiError::unauthorized()
+            .with_code("invalid_ticket")
+            .with_message(
+            "Invalid or expired ticket. Please request a new ticket from /v1/rooms/<room_id>/start",
         )
     })?;
 
