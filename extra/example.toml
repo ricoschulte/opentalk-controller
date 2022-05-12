@@ -115,7 +115,7 @@ from_routing_key = "from-janus-2"
 #[call_in]
 # Set a phone number which will be displayed to the user
 # for the call-in service
-#tel=03012345678
+#tel="03012345678"
 
 # The etherpad configuration for the protocol module
 #[etherpad]
