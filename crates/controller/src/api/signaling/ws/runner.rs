@@ -24,6 +24,7 @@ use actix_web_actors::ws;
 use anyhow::{bail, Context, Result};
 use bytestring::ByteString;
 use chrono::TimeZone;
+use controller_shared::settings::SharedSettings;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
@@ -112,6 +113,7 @@ impl Builder {
         to_ws_actor: Addr<WebSocketActor>,
         from_ws_actor: mpsc::UnboundedReceiver<Message>,
         shutdown_sig: broadcast::Receiver<()>,
+        settings: SharedSettings,
     ) -> Result<Runner> {
         self.aquire_participant_id().await?;
         // ==== CONTROL MODULE DECLARATIONS ====
@@ -316,6 +318,7 @@ impl Builder {
             resumption_keep_alive: self.resumption_keep_alive,
             shutdown_sig,
             exit: false,
+            settings,
         })
     }
 }
@@ -327,53 +330,56 @@ impl Builder {
 ///
 /// Also acts as `control` module which handles participant and room states.
 pub struct Runner {
-    // Runner ID which is used to assume ownership of a participant id
+    /// Runner ID which is used to assume ownership of a participant id
     runner_id: Uuid,
 
-    // participant id that the runner is connected to
+    /// participant id that the runner is connected to
     id: ParticipantId,
 
-    // Full signaling room id
+    /// Full signaling room id
     room_id: SignalingRoomId,
 
-    // User behind the participant or Guest
+    /// User behind the participant or Guest
     participant: api::Participant<User>,
 
-    // The role of the participant inside the room
+    /// The role of the participant inside the room
     role: Role,
 
-    // The control data. Initialized when frontend send join
+    /// The control data. Initialized when frontend send join
     control_data: Option<ControlData>,
 
-    // Websocket abstraction which connects the to the websocket actor
+    /// Websocket abstraction which connects the to the websocket actor
     ws: Ws,
 
-    // All registered and initialized modules
+    /// All registered and initialized modules
     modules: Modules,
     events: SelectAll<AnyStream>,
 
-    // Redis connection manager
+    /// Redis connection manager
     redis_conn: ConnectionManager,
 
-    // RabbitMQ queue consumer for this participant, will contain any events about room and
-    // participant changes
+    /// RabbitMQ queue consumer for this participant, will contain any events about room and
+    /// participant changes
     consumer: lapin::Consumer,
     consumer_delegated: bool,
 
-    // RabbitMQ channel to send events
+    /// RabbitMQ channel to send events
     rabbit_mq_channel: lapin::Channel,
 
-    // Name of the rabbitmq room exchange
+    /// Name of the rabbitmq room exchange
     room_exchange: String,
 
-    // Util to keep the resumption token alive
+    /// Util to keep the resumption token alive
     resumption_keep_alive: ResumptionTokenKeepAlive,
 
-    // global application shutdown signal
+    /// global application shutdown signal
     shutdown_sig: broadcast::Receiver<()>,
 
-    // When set to true the runner will gracefully exit on next loop
+    /// When set to true the runner will gracefully exit on next loop
     exit: bool,
+
+    /// Shared settings of the running program
+    settings: SharedSettings,
 }
 
 impl Drop for Runner {
@@ -692,6 +698,8 @@ impl Runner {
         timestamp: Timestamp,
         msg: incoming::Message,
     ) -> Result<()> {
+        let settings = self.settings.load();
+
         match msg {
             incoming::Message::Join(join) => {
                 if join.display_name.is_empty() {
@@ -737,8 +745,18 @@ impl Runner {
                     };
                 }
 
+                let avatar_url = match &self.participant {
+                    api::Participant::User(user) => Some(format!(
+                        "{}{:x}",
+                        settings.avatar.libravatar_url,
+                        md5::compute(&user.email)
+                    )),
+                    _ => None,
+                };
+
                 let control_data = ControlData {
-                    display_name: join.display_name,
+                    display_name: join.display_name.clone(),
+                    avatar_url: avatar_url.clone(),
                     participation_kind: match &self.participant {
                         api::Participant::User(_) => ParticipationKind::User,
                         api::Participant::Guest => ParticipationKind::Guest,
@@ -773,6 +791,8 @@ impl Runner {
                             timestamp,
                             payload: outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
                                 id: self.id,
+                                display_name: join.display_name,
+                                avatar_url,
                                 role: self.role,
                                 module_data,
                                 participants,
@@ -830,8 +850,15 @@ impl Runner {
 
         match &self.participant {
             api::Participant::User(ref user) => {
+                let avatar_url = format!(
+                    "{}{:x}",
+                    self.settings.load().avatar.libravatar_url,
+                    md5::compute(&user.email)
+                );
+
                 pipe_attrs
                     .set("kind", ParticipationKind::User)
+                    .set("avatar_url", avatar_url)
                     .set("user_id", user.id);
             }
             api::Participant::Guest => {
@@ -876,7 +903,16 @@ impl Runner {
         };
 
         #[allow(clippy::type_complexity)]
-        let (display_name, joined_at, left_at, hand_is_up, hand_updated_at, participation_kind): (
+        let (
+            display_name,
+            avatar_url,
+            joined_at,
+            left_at,
+            hand_is_up,
+            hand_updated_at,
+            participation_kind,
+        ): (
+            Option<String>,
             Option<String>,
             Option<Timestamp>,
             Option<Timestamp>,
@@ -885,6 +921,7 @@ impl Runner {
             Option<ParticipationKind>,
         ) = storage::AttrPipeline::new(self.room_id, id)
             .get("display_name")
+            .get("avatar_url")
             .get("joined_at")
             .get("left_at")
             .get("hand_is_up")
@@ -905,6 +942,7 @@ impl Runner {
             NAMESPACE,
             serde_json::to_value(ControlData {
                 display_name: display_name.unwrap_or_else(|| "Participant".into()),
+                avatar_url,
                 participation_kind: participation_kind.unwrap_or(ParticipationKind::Guest),
                 hand_is_up: hand_is_up.unwrap_or_default(),
                 hand_updated_at: hand_updated_at.unwrap_or_else(Timestamp::unix_epoch),

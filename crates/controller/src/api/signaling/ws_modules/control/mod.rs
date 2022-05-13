@@ -15,6 +15,8 @@ pub const NAMESPACE: &str = "control";
 #[derive(Debug, Serialize)]
 pub struct ControlData {
     pub display_name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
     pub participation_kind: ParticipationKind,
     pub hand_is_up: bool,
     pub joined_at: Timestamp,

@@ -27,6 +27,11 @@ pub enum Message {
 pub struct JoinSuccess {
     pub id: ParticipantId,
 
+    pub display_name: String,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub avatar_url: Option<String>,
+
     pub role: Role,
 
     #[serde(flatten)]
@@ -54,11 +59,30 @@ mod test {
 
     #[test]
     fn join_success() {
-        let expected = r#"{"message":"join_success","id":"00000000-0000-0000-0000-000000000000","role":"user","participants":[]}"#;
+        let expected = r#"{"message":"join_success","id":"00000000-0000-0000-0000-000000000000","display_name":"name","avatar_url":"http://url","role":"user","participants":[]}"#;
 
         let produced = serde_json::to_string(&Message::JoinSuccess(JoinSuccess {
             id: ParticipantId::nil(),
+            display_name: "name".into(),
+            avatar_url: Some("http://url".into()),
             role: Role::User,
+            module_data: Default::default(),
+            participants: vec![],
+        }))
+        .unwrap();
+
+        assert_eq!(expected, produced);
+    }
+
+    #[test]
+    fn join_success_guest() {
+        let expected = r#"{"message":"join_success","id":"00000000-0000-0000-0000-000000000000","display_name":"name","role":"guest","participants":[]}"#;
+
+        let produced = serde_json::to_string(&Message::JoinSuccess(JoinSuccess {
+            id: ParticipantId::nil(),
+            display_name: "name".into(),
+            avatar_url: None,
+            role: Role::Guest,
             module_data: Default::default(),
             participants: vec![],
         }))
