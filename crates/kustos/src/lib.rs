@@ -397,8 +397,7 @@ impl Authz {
             .map(|x| -> ResourceId { x.into() })
             .filter_map(|x| {
                 x.strip_prefix(prefix)
-                    // Strip everything after the first occurrence of /
-                    .and_then(|x| x.split_once('/').map(|x| x.0))
+                    .filter(|x| x.contains('/'))
                     .map(T::from_str)
             })
             .collect::<Result<Vec<T>, <T as FromStr>::Err>>()?;
