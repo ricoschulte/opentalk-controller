@@ -7,10 +7,6 @@ edition = "2018"
 
 [dependencies]
 database = { path = "../database", package = "k3k-database" }
-casbin = { version = "2.0.9", default-features = false, features = [
-    "runtime-tokio",
-    "incremental",
-] }
 
 ## Database migration
 barrel = { version = "0.7", features = ["pg"] }
@@ -42,10 +38,16 @@ futures = "0.3"
 async-trait = "0.1"
 
 tokio = { version = "1" }
-parking_lot = "0.11"
+parking_lot = "0.12"
 
 ### TODO(r.floren) add this as a default feature
 actix-web = { version = "4" }
+
+[dependencies.casbin]
+git = "https://github.com/kbalt/casbin-rs.git"
+rev = "76b07db60264138b3f10b52469b74e41629e3e15"
+default-features = false
+features = ["runtime-tokio", "incremental"]
 
 [dev-dependencies]
 serial_test = "0.6"

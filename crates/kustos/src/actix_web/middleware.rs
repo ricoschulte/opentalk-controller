@@ -31,12 +31,6 @@ impl KustosService {
         enforcer: Arc<RwLock<SyncedEnforcer>>,
         strip_versioned_path: bool,
     ) -> CasbinResult<Self> {
-        enforcer
-            .write()
-            .await
-            .get_role_manager()
-            .write()
-            .matching_fn(None, None);
         Ok(KustosService {
             strip_versioned_path,
             enforcer,
@@ -301,7 +295,7 @@ mod tests {
             .await
             .get_role_manager()
             .write()
-            .matching_fn(Some(key_match2), None);
+            .set_role_matching_fn(key_match2);
 
         let share_enforcer = casbin_middleware.get_enforcer();
         let clone_enforcer = share_enforcer.clone();

@@ -109,10 +109,6 @@ sysinfo = { version = "0.23", default-features = false }
 nix = "0.23.0"
 
 ### Access Control
-casbin = { version = "2.0.9", default-features = false, features = [
-    "runtime-tokio",
-    "incremental",
-] }
 kustos = { path = "../kustos" }
 
 regex = "1.5"
