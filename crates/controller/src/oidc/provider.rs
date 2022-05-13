@@ -1,7 +1,7 @@
+use super::http::async_http_client;
 use anyhow::{Context, Result};
 use controller_shared::settings;
 use openidconnect::core::CoreClient;
-use openidconnect::reqwest::async_http_client as http_client;
 use openidconnect::url::Url;
 use openidconnect::{ClientId, IntrospectionUrl};
 use serde::{Deserialize, Serialize};
@@ -41,10 +41,14 @@ pub struct ProviderClient {
 
 impl ProviderClient {
     /// Discover Provider information from given settings
-    pub async fn discover(provider: settings::OidcProvider) -> Result<ProviderClient> {
-        let metadata = ProviderMetadata::discover_async(provider.issuer, http_client)
-            .await
-            .context("Failed to discover provider metadata")?;
+    pub async fn discover(
+        http_client: reqwest::Client,
+        provider: settings::OidcProvider,
+    ) -> Result<ProviderClient> {
+        let metadata =
+            ProviderMetadata::discover_async(provider.issuer, async_http_client(http_client))
+                .await
+                .context("Failed to discover provider metadata")?;
 
         let client = CoreClient::new(
             provider.client_id.clone(),
