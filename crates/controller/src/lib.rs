@@ -497,7 +497,6 @@ fn v1_scope(
                 .wrap(acl)
                 .wrap(api::v1::middleware::oidc_auth::OidcAuth { db, oidc_ctx })
                 .service(api::v1::users::find)
-                .service(api::v1::users::all)
                 .service(api::v1::users::patch_me)
                 .service(api::v1::users::get_me)
                 .service(api::v1::users::get_user)
