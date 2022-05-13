@@ -9,6 +9,7 @@ use casbin::{
     RbacApi, RoleManager, TryIntoAdapter, TryIntoModel,
 };
 use casbin::{EventEmitter, Result};
+use parking_lot as pl;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::Arc;
@@ -179,6 +180,16 @@ impl CoreApi for SyncedEnforcer {
     }
 
     #[inline]
+    fn get_role_managers(&self) -> Box<dyn Iterator<Item = Arc<pl::RwLock<dyn RoleManager>>> + '_> {
+        self.enforcer.get_role_managers()
+    }
+
+    #[inline]
+    fn get_role_manager_for_ptype(&self, ptype: &str) -> Option<Arc<pl::RwLock<dyn RoleManager>>> {
+        self.enforcer.get_role_manager_for_ptype(ptype)
+    }
+
+    #[inline]
     fn set_role_manager(&mut self, rm: Arc<parking_lot::RwLock<dyn RoleManager>>) -> Result<()> {
         self.enforcer.set_role_manager(rm)
     }
@@ -200,14 +211,14 @@ impl CoreApi for SyncedEnforcer {
 
     #[inline]
     #[tracing::instrument(level = "trace", skip(self, rvals))]
-    fn enforce_mut<ARGS: EnforceArgs>(&mut self, rvals: ARGS) -> Result<bool> {
-        self.enforcer.enforce_mut(rvals)
+    fn enforce<ARGS: EnforceArgs>(&self, rvals: ARGS) -> Result<bool> {
+        self.enforcer.enforce(rvals)
     }
 
     #[inline]
     #[tracing::instrument(level = "trace", skip(self, rvals))]
-    fn enforce<ARGS: EnforceArgs>(&self, rvals: ARGS) -> Result<bool> {
-        self.enforcer.enforce(rvals)
+    fn enforce_mut<ARGS: EnforceArgs>(&mut self, rvals: ARGS) -> Result<bool> {
+        self.enforcer.enforce_mut(rvals)
     }
 
     #[inline]
@@ -254,13 +265,13 @@ impl CoreApi for SyncedEnforcer {
     }
 
     #[inline]
-    fn enable_enforce(&mut self, enabled: bool) {
-        self.enforcer.enable_enforce(enabled);
+    fn enable_auto_save(&mut self, auto_save: bool) {
+        self.enforcer.enable_auto_save(auto_save);
     }
 
     #[inline]
-    fn enable_auto_save(&mut self, auto_save: bool) {
-        self.enforcer.enable_auto_save(auto_save);
+    fn enable_enforce(&mut self, enabled: bool) {
+        self.enforcer.enable_enforce(enabled);
     }
 
     #[inline]

@@ -706,12 +706,13 @@ dependencies = [
 [[package]]
 name = "casbin"
 version = "2.0.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3be2866a3a3174b9d31a11d9f9ef219ab84a444d107981c51bf79d7be221adc"
+source = "git+https://github.com/kbalt/casbin-rs.git?rev=76b07db60264138b3f10b52469b74e41629e3e15#76b07db60264138b3f10b52469b74e41629e3e15"
 dependencies = [
  "async-trait",
- "lazy_static",
- "parking_lot 0.11.2",
+ "fixedbitset",
+ "once_cell",
+ "parking_lot 0.12.0",
+ "petgraph",
  "regex",
  "rhai",
  "ritelinked",
@@ -1163,6 +1164,12 @@ name = "firestorm"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d3d6188b8804df28032815ea256b6955c9625c24da7525f387a7af02fbb8f01"
+
+[[package]]
+name = "fixedbitset"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "279fb028e20b3c4c320317955b77c5e0c9701f05a1d309905d6fc702cdc5053e"
 
 [[package]]
 name = "flate2"
@@ -1710,7 +1717,6 @@ dependencies = [
  "bincode",
  "bytes",
  "bytestring",
- "casbin",
  "chrono",
  "chrono-tz",
  "config",
@@ -1908,7 +1914,7 @@ dependencies = [
  "k3k-database",
  "k3k-db-storage",
  "log",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.0",
  "serial_test",
  "thiserror",
  "tokio",
@@ -2413,6 +2419,16 @@ name = "percent-encoding"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
+
+[[package]]
+name = "petgraph"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4a13a2fa9d0b63e5f22328828741e523766fff0ee9e779316902290dff3f824f"
+dependencies = [
+ "fixedbitset",
+ "indexmap",
+]
 
 [[package]]
 name = "phf"

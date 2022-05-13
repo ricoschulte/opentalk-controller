@@ -7,16 +7,13 @@ pub trait RbacApiEx: RbacApi {
     #[tracing::instrument(level = "trace", skip(self))]
     fn get_implicit_users_for_role(&mut self, role: &str, domain: Option<&str>) -> Vec<String> {
         let mut res: HashSet<String> = HashSet::new();
-        let mut q: Vec<String> = vec![role.to_owned()];
-        while !q.is_empty() {
-            let name = q.swap_remove(0);
-            let users = self.get_role_manager().write().get_users(&name, domain);
-            for r in users.into_iter() {
-                if res.insert(r.to_owned()) {
-                    q.push(r);
-                }
-            }
+
+        for rm in self.get_role_managers() {
+            let users = rm.read().get_users(role, domain);
+
+            res.extend(users);
         }
+
         res.into_iter().collect()
     }
 
