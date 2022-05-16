@@ -500,13 +500,26 @@ impl Runner {
             }
         };
 
+        if let Err(e) = storage::set_attribute(
+            &mut self.redis_conn,
+            self.room_id,
+            self.id,
+            "left_at",
+            Timestamp::now(),
+        )
+        .await
+        {
+            log::error!("Failed to set left_at attribute, {:?}", e);
+        }
+
         let destroy_room =
-            match storage::mark_participant_as_left(&mut self.redis_conn, self.room_id, self.id)
-                .await
-            {
+            match storage::participants_all_left(&mut self.redis_conn, self.room_id).await {
                 Ok(destroy_room) => destroy_room,
                 Err(e) => {
-                    log::error!("failed to mark participant as left, {:?}", e);
+                    log::error!(
+                        "failed to check if all participants have left the room, {:?}",
+                        e
+                    );
                     false
                 }
             };
