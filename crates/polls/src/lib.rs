@@ -181,7 +181,7 @@ impl Polls {
 
                 if choices
                     .iter()
-                    .any(|content| !matches!(content.len(), 2..=100))
+                    .any(|content| !matches!(content.len(), 1..=100))
                 {
                     ctx.ws_send(outgoing::Message::Error(
                         outgoing::Error::InvalidChoiceDescription,
