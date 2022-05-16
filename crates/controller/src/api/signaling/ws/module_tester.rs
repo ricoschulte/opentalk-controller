@@ -911,12 +911,17 @@ where
 
         let set_guard = set_lock.lock(&mut self.redis_conn).await?;
 
-        let destroy_room = storage::mark_participant_as_left(
+        storage::set_attribute(
             &mut self.redis_conn,
             self.room_id,
             self.participant_id,
+            "left_at",
+            Timestamp::now(),
         )
         .await?;
+
+        let destroy_room =
+            storage::participants_all_left(&mut self.redis_conn, self.room_id).await?;
 
         self.publish_rabbitmq_control(control::rabbitmq::Message::Left(self.participant_id))
             .context("Failed to send rabbitmq left message on destroy")?;

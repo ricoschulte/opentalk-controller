@@ -119,29 +119,16 @@ pub async fn add_participant_to_set(
 /// # Returns
 /// true if all participants in the room are marked as left
 #[tracing::instrument(level = "debug", skip(redis_conn))]
-pub async fn mark_participant_as_left(
+pub async fn participants_all_left(
     redis_conn: &mut ConnectionManager,
     room: SignalingRoomId,
-    participant: ParticipantId,
 ) -> Result<bool> {
-    set_attribute(redis_conn, room, participant, "left_at", Timestamp::now())
-        .await
-        .context("failed to set left_at attribute")?;
+    let participants = get_all_participants(redis_conn, room).await?;
 
-    let total_participant: usize = redis_conn
-        .scard(RoomParticipants { room })
-        .await
-        .context("Failed to get number of participants in participant set")?;
+    let left_at_attrs: Vec<Option<Timestamp>> =
+        get_attribute_for_participants(redis_conn, room, "left_at", &participants).await?;
 
-    let left_participants: usize = redis_conn
-        .hlen(RoomParticipantAttributes {
-            room,
-            attribute_name: "left_at",
-        })
-        .await
-        .context("failed to get attributes len")?;
-
-    Ok(total_participant == left_participants)
+    Ok(left_at_attrs.iter().all(Option::is_some))
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
