@@ -397,7 +397,8 @@ impl Authz {
             .map(|x| -> ResourceId { x.into() })
             .filter_map(|x| {
                 x.strip_prefix(prefix)
-                    .filter(|x| x.contains('/'))
+                    // Filter everything that still contains a slash, these are subresources
+                    .filter(|x| !x.contains('/'))
                     .map(T::from_str)
             })
             .collect::<Result<Vec<T>, <T as FromStr>::Err>>()?;
