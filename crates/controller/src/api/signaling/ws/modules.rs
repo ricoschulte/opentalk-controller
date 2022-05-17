@@ -4,11 +4,11 @@ use crate::api::signaling::ws::runner::Builder;
 use crate::api::signaling::ws::{DestroyContext, InitContext, RabbitMqPublish};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::ControlData;
+use crate::redis_wrapper::RedisConnection;
 use actix_http::ws::{CloseCode, Message};
 use anyhow::{Context, Result};
 use controller_shared::ParticipantId;
 use futures::stream::SelectAll;
-use redis::aio::ConnectionManager;
 use serde_json::Value;
 use std::any::Any;
 use std::collections::HashMap;
@@ -127,7 +127,7 @@ pub(super) struct DynEventCtx<'ctx> {
     pub timestamp: Timestamp,
     pub ws_messages: &'ctx mut Vec<Message>,
     pub rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
-    pub redis_conn: &'ctx mut ConnectionManager,
+    pub redis_conn: &'ctx mut RedisConnection,
     pub events: &'ctx mut SelectAll<AnyStream>,
     pub invalidate_data: &'ctx mut bool,
     pub exit: &'ctx mut Option<CloseCode>,

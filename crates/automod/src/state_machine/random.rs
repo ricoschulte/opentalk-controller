@@ -5,12 +5,11 @@ use anyhow::Result;
 use controller::prelude::*;
 use rand::seq::SliceRandom;
 use rand::Rng;
-use redis::aio::ConnectionManager;
 
 /// Depending on the config will select a random participant to be speaker. This may be used when
 /// the selection_strategy ist `random` or a moderator issues a `Select::Random` command.
 pub async fn select_random<R: Rng>(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     config: &StorageConfig,
     rng: &mut R,

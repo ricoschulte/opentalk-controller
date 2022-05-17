@@ -2,6 +2,7 @@ use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::ControlData;
 use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
+use crate::redis_wrapper::RedisConnection;
 use actix_http::ws::CloseCode;
 use anyhow::Result;
 use bytestring::ByteString;
@@ -14,7 +15,6 @@ use kustos::Authz;
 use lapin::options::{ExchangeDeclareOptions, QueueBindOptions};
 use lapin::ExchangeKind;
 use modules::{any_stream, AnyStream};
-use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::Debug;
@@ -106,7 +106,7 @@ where
     rabbitmq_exchanges: &'ctx mut Vec<RabbitMqExchange>,
     rabbitmq_bindings: &'ctx mut Vec<RabbitMqBinding>,
     events: &'ctx mut SelectAll<AnyStream>,
-    redis_conn: &'ctx mut ConnectionManager,
+    redis_conn: &'ctx mut RedisConnection,
     m: PhantomData<fn() -> M>,
 }
 
@@ -170,7 +170,7 @@ where
     }
 
     /// Access to a redis connection
-    pub fn redis_conn(&mut self) -> &mut ConnectionManager {
+    pub fn redis_conn(&mut self) -> &mut RedisConnection {
         self.redis_conn
     }
 
@@ -221,7 +221,7 @@ where
     ws_messages: &'ctx mut Vec<NamespacedOutgoing<'static, M::Outgoing>>,
     timestamp: Timestamp,
     rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
-    redis_conn: &'ctx mut ConnectionManager,
+    redis_conn: &'ctx mut RedisConnection,
     events: &'ctx mut SelectAll<AnyStream>,
     invalidate_data: &'ctx mut bool,
     exit: &'ctx mut Option<CloseCode>,
@@ -273,7 +273,7 @@ where
     }
 
     /// Access to the storage of the room
-    pub fn redis_conn(&mut self) -> &mut ConnectionManager {
+    pub fn redis_conn(&mut self) -> &mut RedisConnection {
         self.redis_conn
     }
 
@@ -302,13 +302,13 @@ where
 
 /// Context passed to the `destroy` function
 pub struct DestroyContext<'ctx> {
-    redis_conn: &'ctx mut ConnectionManager,
+    redis_conn: &'ctx mut RedisConnection,
     destroy_room: bool,
 }
 
 impl DestroyContext<'_> {
     /// Access to a redis connection
-    pub fn redis_conn(&mut self) -> &mut ConnectionManager {
+    pub fn redis_conn(&mut self) -> &mut RedisConnection {
         self.redis_conn
     }
 

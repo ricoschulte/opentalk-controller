@@ -12,7 +12,6 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -28,7 +27,7 @@ impl_to_redis_args!(RoomAutoModPlaylist);
 /// Set the playlist. If the `playlist` parameter is empty the old one will still be removed.
 #[tracing::instrument(name = "set_playlist", level = "debug", skip(redis_conn, playlist))]
 pub async fn set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     playlist: &[ParticipantId],
 ) -> Result<()> {
@@ -50,7 +49,7 @@ pub async fn set(
 /// Get the next participant from the playlist
 #[tracing::instrument(name = "pop_playlist", level = "debug", skip(redis_conn))]
 pub async fn pop(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Option<ParticipantId>> {
     redis_conn
@@ -62,7 +61,7 @@ pub async fn pop(
 /// Returns the playlist in a Vec.
 #[tracing::instrument(name = "get_playlist", level = "debug", skip(redis_conn))]
 pub async fn get_all(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Vec<ParticipantId>> {
     redis_conn
@@ -74,7 +73,7 @@ pub async fn get_all(
 /// Remove first occurrence of `participant` from the playlist.
 #[tracing::instrument(name = "remove_from_playlist", level = "debug", skip(redis_conn))]
 pub async fn remove_first(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<()> {
@@ -91,7 +90,7 @@ pub async fn remove_first(
     skip(redis_conn)
 )]
 pub async fn remove_all_occurrences(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<()> {
@@ -103,7 +102,7 @@ pub async fn remove_all_occurrences(
 
 /// Delete the complete playlist.
 #[tracing::instrument(name = "del_playlist", level = "debug", skip(redis_conn))]
-pub async fn del(redis_conn: &mut ConnectionManager, room: SignalingRoomId) -> Result<()> {
+pub async fn del(redis_conn: &mut RedisConnection, room: SignalingRoomId) -> Result<()> {
     redis_conn
         .del(RoomAutoModPlaylist { room })
         .await

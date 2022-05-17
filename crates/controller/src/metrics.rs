@@ -1,3 +1,4 @@
+use crate::redis_wrapper::RedisMetrics;
 use crate::settings::SharedSettingsActix;
 use actix_http::body::BoxBody;
 use actix_http::StatusCode;
@@ -26,6 +27,7 @@ pub struct CombinedMetrics {
     pub(super) endpoint: Arc<EndpointMetrics>,
     pub(super) database: Arc<DatabaseMetrics>,
     pub(super) kustos: Arc<KustosMetrics>,
+    pub(super) redis: Arc<RedisMetrics>,
 }
 
 /// Overrides the default OTel aggregation method
@@ -72,6 +74,10 @@ impl AggregatorSelector for OverrideAggregatorSelector {
             "kustos.load_policy_execution_time_seconds" => Some(Arc::new(aggregators::histogram(
                 descriptor,
                 &[0.01, 0.05, 0.1, 0.25, 0.5],
+            ))),
+            "redis.command_execution_time_seconds" => Some(Arc::new(aggregators::histogram(
+                descriptor,
+                &[0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5],
             ))),
             _ => self.fallback.aggregator_for(descriptor),
         }
@@ -138,11 +144,20 @@ impl CombinedMetrics {
                 .init(),
         });
 
+        let redis = Arc::new(RedisMetrics {
+            command_execution_time: meter
+                .f64_value_recorder("redis.command_execution_time_seconds")
+                .with_description("Execution time of redis commands in seconds")
+                .with_unit(Unit::new("seconds"))
+                .init(),
+        });
+
         Self {
             exporter,
             endpoint,
             database,
             kustos,
+            redis,
         }
     }
 }

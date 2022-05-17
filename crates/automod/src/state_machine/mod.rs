@@ -9,7 +9,6 @@ use crate::storage;
 use anyhow::Result;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use redis::aio::ConnectionManager;
 
 mod next;
 mod random;
@@ -46,7 +45,7 @@ pub fn map_select_unchecked(
 /// [`SpeakerUpdate`] if necessary.
 /// Does not check if the participant exists or is even eligible to be speaker.
 pub async fn select_unchecked(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     config: &StorageConfig,
     participant: Option<ParticipantId>,
@@ -105,7 +104,7 @@ mod test {
 
     pub const ROOM: SignalingRoomId = SignalingRoomId::new_test(RoomId::from(uuid::Uuid::nil()));
 
-    pub async fn setup() -> ConnectionManager {
+    pub async fn setup() -> RedisConnection {
         let redis_url =
             std::env::var("REDIS_ADDR").unwrap_or_else(|_| "redis://0.0.0.0:6379/".to_owned());
         let redis = redis::Client::open(redis_url).expect("Invalid redis url");
@@ -117,7 +116,7 @@ mod test {
             .await
             .unwrap();
 
-        mgr
+        RedisConnection::new(mgr)
     }
 
     pub fn rng() -> StdRng {

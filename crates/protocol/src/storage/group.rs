@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -17,7 +16,7 @@ impl_to_redis_args!(GroupKey);
 
 #[tracing::instrument(name = "set_protocol_group", skip(redis_conn))]
 pub(crate) async fn set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     group_id: &str,
 ) -> Result<()> {
@@ -29,7 +28,7 @@ pub(crate) async fn set(
 
 #[tracing::instrument(name = "get_protocol_group", skip(redis_conn))]
 pub(crate) async fn get(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
 ) -> Result<Option<String>> {
     redis_conn
@@ -39,10 +38,7 @@ pub(crate) async fn get(
 }
 
 #[tracing::instrument(name = "delete_protocol_group", skip(redis_conn))]
-pub(crate) async fn del(
-    redis_conn: &mut ConnectionManager,
-    room_id: SignalingRoomId,
-) -> Result<()> {
+pub(crate) async fn del(redis_conn: &mut RedisConnection, room_id: SignalingRoomId) -> Result<()> {
     redis_conn
         .del(GroupKey { room_id })
         .await

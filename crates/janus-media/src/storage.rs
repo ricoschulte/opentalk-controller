@@ -3,7 +3,6 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -20,7 +19,7 @@ impl_to_redis_args!(MediaState);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_state(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<Option<State>> {
@@ -38,7 +37,7 @@ pub async fn get_state(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_state(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
     state: &State,
@@ -55,7 +54,7 @@ pub async fn set_state(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn del_state(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<()> {

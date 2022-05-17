@@ -3,7 +3,6 @@ use anyhow::Result;
 use controller::prelude::anyhow::Context;
 use controller::prelude::chrono::{Duration, Utc};
 use controller::prelude::control::storage::get_attribute;
-use controller::prelude::redis::aio::ConnectionManager;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use etherpad_client::EtherpadClient;
@@ -204,7 +203,7 @@ impl Protocol {
     }
 
     /// Initializes the etherpad-group and -pad for this room
-    async fn init_etherpad(&self, redis_conn: &mut ConnectionManager) -> Result<()> {
+    async fn init_etherpad(&self, redis_conn: &mut RedisConnection) -> Result<()> {
         let group_id = self
             .etherpad
             .create_group_for(self.room_id.to_string())
@@ -231,7 +230,7 @@ impl Protocol {
     /// Creates a new etherpad author for the participant
     ///
     /// Returns the generated author id
-    async fn create_author(&self, redis_conn: &mut ConnectionManager) -> Result<String> {
+    async fn create_author(&self, redis_conn: &mut RedisConnection) -> Result<String> {
         let display_name: String = get_attribute(
             redis_conn,
             self.room_id,
@@ -276,7 +275,7 @@ impl Protocol {
     /// Returns the `[SessionInfo]`
     async fn prepare_and_create_user_session(
         &mut self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
     ) -> Result<SessionInfo> {
         let author_id = self
             .create_author(redis_conn)
@@ -332,7 +331,7 @@ impl Protocol {
     }
 
     /// Removes the room related pad and group from etherpad
-    async fn cleanup_etherpad(&self, redis_conn: &mut ConnectionManager) -> Result<()> {
+    async fn cleanup_etherpad(&self, redis_conn: &mut RedisConnection) -> Result<()> {
         let init_state = storage::init::get(redis_conn, self.room_id).await?;
 
         if init_state.is_none() {

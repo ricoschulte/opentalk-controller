@@ -37,7 +37,6 @@ use db_storage::groups::NewGroup;
 use moderation::ModerationModule;
 use oidc::OidcContext;
 use prelude::*;
-use redis::aio::ConnectionManager;
 use std::fs::File;
 use std::io::BufReader;
 use std::net::Ipv6Addr;
@@ -61,6 +60,7 @@ mod cli;
 mod ha_sync;
 mod metrics;
 mod oidc;
+mod redis_wrapper;
 mod trace;
 
 pub mod settings;
@@ -68,6 +68,7 @@ pub mod settings;
 pub mod prelude {
     pub use crate::api::signaling::prelude::*;
     pub use crate::api::Participant;
+    pub use crate::redis_wrapper::RedisConnection;
     pub use crate::{impl_from_redis_value_de, impl_to_redis_args, impl_to_redis_args_se};
 
     // re-export commonly used crates to reduce dependency management in module-crates
@@ -156,7 +157,7 @@ pub struct Controller {
     pub rabbitmq_channel: lapin::Channel,
 
     /// Cloneable redis connection manager, can be used to write/read to the controller's redis.
-    pub redis: ConnectionManager,
+    pub redis: RedisConnection,
 
     /// Reload signal which can be triggered by a user.
     /// When received a module should try to re-read it's config and act accordingly.
@@ -255,6 +256,7 @@ impl Controller {
         let redis_conn = redis::aio::ConnectionManager::new(redis)
             .await
             .context("Failed to create redis connection manager")?;
+        let redis_conn = RedisConnection::new(redis_conn).with_metrics(metrics.redis.clone());
 
         let (shutdown, _) = broadcast::channel::<()>(1);
         let (reload, _) = broadcast::channel::<()>(4);

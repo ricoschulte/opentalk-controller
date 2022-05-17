@@ -2,7 +2,6 @@
 use crate::database::DatabaseContext;
 use anyhow::Result;
 use controller::prelude::anyhow::Context;
-use controller::prelude::redis::aio::ConnectionManager;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
@@ -44,7 +43,7 @@ pub const USERS: [TestUser; 2] = [USER_1, USER_2];
 /// The [`TestContext`] provides access to redis & postgres for tests
 pub struct TestContext {
     pub db_ctx: DatabaseContext,
-    pub redis_conn: ConnectionManager,
+    pub redis_conn: RedisConnection,
     pub authz: Arc<Authz>,
     pub shutdown: Sender<()>,
 }

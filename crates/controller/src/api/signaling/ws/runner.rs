@@ -18,6 +18,7 @@ use crate::api::signaling::ws_modules::control::{
 };
 use crate::api::signaling::{Role, SignalingRoomId};
 use crate::ha_sync::user_update;
+use crate::redis_wrapper::RedisConnection;
 use actix::Addr;
 use actix_http::ws::{CloseCode, CloseReason, Message};
 use actix_web_actors::ws;
@@ -34,7 +35,6 @@ use kustos::Authz;
 use lapin::message::DeliveryResult;
 use lapin::options::{ExchangeDeclareOptions, QueueDeclareOptions};
 use lapin::{BasicProperties, ExchangeKind};
-use redis::aio::ConnectionManager;
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -62,7 +62,7 @@ pub struct Builder {
     pub(super) events: SelectAll<AnyStream>,
     pub(super) db: Arc<Db>,
     pub(super) authz: Arc<Authz>,
-    pub(super) redis_conn: ConnectionManager,
+    pub(super) redis_conn: RedisConnection,
     pub(super) rabbitmq_channel: lapin::Channel,
     resumption_keep_alive: ResumptionTokenKeepAlive,
 }
@@ -356,7 +356,7 @@ pub struct Runner {
     events: SelectAll<AnyStream>,
 
     /// Redis connection manager
-    redis_conn: ConnectionManager,
+    redis_conn: RedisConnection,
 
     /// RabbitMQ queue consumer for this participant, will contain any events about room and
     /// participant changes
@@ -405,7 +405,7 @@ impl Runner {
         protocol: &'static str,
         db: Arc<Db>,
         authz: Arc<Authz>,
-        redis_conn: ConnectionManager,
+        redis_conn: RedisConnection,
         rabbitmq_channel: lapin::Channel,
         resumption_keep_alive: ResumptionTokenKeepAlive,
     ) -> Builder {

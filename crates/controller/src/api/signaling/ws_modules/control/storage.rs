@@ -1,9 +1,9 @@
 use crate::api::signaling::{SignalingRoomId, Timestamp};
+use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
 use controller_shared::ParticipantId;
 use displaydoc::Display;
 use r3dlock::Mutex;
-use redis::aio::ConnectionManager;
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use std::convert::identity;
 use std::fmt::Debug;
@@ -54,7 +54,7 @@ pub fn room_mutex(room: SignalingRoomId) -> Mutex<RoomLock> {
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_all_participants(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Vec<ParticipantId>> {
     redis_conn
@@ -65,7 +65,7 @@ pub async fn get_all_participants(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn remove_participant_set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<()> {
     redis_conn
@@ -76,7 +76,7 @@ pub async fn remove_participant_set(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn participants_contains(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<bool> {
@@ -88,7 +88,7 @@ pub async fn participants_contains(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn check_participants_exist(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participants: &[ParticipantId],
 ) -> Result<bool> {
@@ -104,7 +104,7 @@ pub async fn check_participants_exist(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn add_participant_to_set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<usize> {
@@ -120,7 +120,7 @@ pub async fn add_participant_to_set(
 /// true if all participants in the room are marked as left
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn participants_all_left(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<bool> {
     let participants = get_all_participants(redis_conn, room).await?;
@@ -133,7 +133,7 @@ pub async fn participants_all_left(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn remove_attribute_key(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     name: &str,
 ) -> Result<()> {
@@ -148,7 +148,7 @@ pub async fn remove_attribute_key(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn remove_attribute(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
     name: &str,
@@ -167,7 +167,7 @@ pub async fn remove_attribute(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_attribute<V>(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
     name: &str,
@@ -253,7 +253,7 @@ impl AttrPipeline {
 
     pub async fn query_async<T: FromRedisValue>(
         &mut self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
     ) -> redis::RedisResult<T> {
         self.pipe.query_async(redis_conn).await
     }
@@ -261,7 +261,7 @@ impl AttrPipeline {
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_attribute<V>(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
     name: &str,
@@ -287,7 +287,7 @@ where
 ///
 /// The index of the attributes in the returned vector is a direct mapping to the provided list of participants.
 pub async fn get_attribute_for_participants<V>(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     name: &str,
     participants: &[ParticipantId],
@@ -321,7 +321,7 @@ pub struct ParticipantIdRunnerLock {
 impl_to_redis_args!(ParticipantIdRunnerLock);
 
 pub async fn participant_id_in_use(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     participant_id: ParticipantId,
 ) -> Result<bool> {
     redis_conn

@@ -12,7 +12,6 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -29,7 +28,7 @@ impl_to_redis_args!(RoomAutoModAllowList);
 /// the entry will just be deleted.
 #[tracing::instrument(name = "set_allow_list", skip(redis_conn, allow_list))]
 pub async fn set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     allow_list: &[ParticipantId],
 ) -> Result<()> {
@@ -51,7 +50,7 @@ pub async fn set(
 /// Remove the given participant from the allow_list
 #[tracing::instrument(name = "remove_from_allow_list", skip(redis_conn))]
 pub async fn remove(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<usize> {
@@ -64,7 +63,7 @@ pub async fn remove(
 /// Get a random `participant` from the allow_list. Will return `None` if the allow_list if empty.
 #[tracing::instrument(name = "random_member_allow_list", skip(redis_conn))]
 pub async fn random(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Option<ParticipantId>> {
     redis_conn
@@ -76,7 +75,7 @@ pub async fn random(
 /// Pop a random `participant` from the allow_list. Will return `None` if the allow_list if empty.
 #[tracing::instrument(skip(redis_conn))]
 pub async fn pop_random(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Option<ParticipantId>> {
     redis_conn
@@ -88,7 +87,7 @@ pub async fn pop_random(
 /// Check if the given `participant` is allowed by the `allow_list`.
 #[tracing::instrument(skip(redis_conn))]
 pub async fn is_allowed(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<bool> {
@@ -101,7 +100,7 @@ pub async fn is_allowed(
 /// Return all members of the `allow_list`.
 #[tracing::instrument(name = "get_all_allow_list", skip(redis_conn))]
 pub async fn get_all(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Vec<ParticipantId>> {
     redis_conn
@@ -112,7 +111,7 @@ pub async fn get_all(
 
 /// Delete the `allow_list`.
 #[tracing::instrument(name = "del_allow_list", skip(redis_conn))]
-pub async fn del(redis_conn: &mut ConnectionManager, room: SignalingRoomId) -> Result<()> {
+pub async fn del(redis_conn: &mut RedisConnection, room: SignalingRoomId) -> Result<()> {
     redis_conn
         .del(RoomAutoModAllowList { room })
         .await

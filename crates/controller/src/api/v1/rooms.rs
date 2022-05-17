@@ -10,6 +10,7 @@ use crate::api::signaling::resumption::{ResumptionData, ResumptionToken};
 use crate::api::signaling::ticket::{TicketData, TicketToken};
 use crate::api::v1::{ApiResponse, PagePaginationQuery};
 use crate::api::Participant;
+use crate::redis_wrapper::RedisConnection;
 use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, post, put};
 use anyhow::Context;
@@ -21,7 +22,6 @@ use db_storage::sip_configs::{NewSipConfig, SipConfig, SipId, SipPassword};
 use db_storage::users::{User, UserId};
 use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
 use kustos::prelude::*;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -348,7 +348,7 @@ impl From<StartRoomError> for ApiError {
 #[post("/rooms/{room_id}/start")]
 pub async fn start(
     db: Data<Db>,
-    redis_ctx: Data<ConnectionManager>,
+    redis_conn: Data<RedisConnection>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
     request: Json<StartRequest>,
@@ -373,7 +373,7 @@ pub async fn start(
         }
     }
 
-    let mut redis_conn = (**redis_ctx).clone();
+    let mut redis_conn = (**redis_conn).clone();
 
     // check if user is banned from room
     if moderation::storage::is_banned(&mut redis_conn, room.id, current_user.id).await? {
@@ -419,7 +419,7 @@ pub struct InvitedStartRequest {
 #[post("/rooms/{room_id}/start_invited")]
 pub async fn start_invited(
     db: Data<Db>,
-    redis_ctx: Data<ConnectionManager>,
+    redis_ctx: Data<RedisConnection>,
     room_id: Path<RoomId>,
     request: Json<InvitedStartRequest>,
 ) -> Result<ApiResponse<StartResponse>, ApiError> {
@@ -506,7 +506,7 @@ pub struct SipStartRequest {
 #[post("/rooms/sip/start")]
 pub async fn sip_start(
     db: Data<Db>,
-    redis_ctx: Data<ConnectionManager>,
+    redis_ctx: Data<RedisConnection>,
     request: Json<SipStartRequest>,
 ) -> Result<ApiResponse<StartResponse>, ApiError> {
     let mut redis_conn = (**redis_ctx).clone();
@@ -544,7 +544,7 @@ pub async fn sip_start(
 ///
 /// If the given resumption token is correct, a exit-msg is sent via rabbitmq to the runner of the to-resume session.
 async fn generate_response(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     participant: Participant<UserId>,
     room: RoomId,
     breakout_room: Option<BreakoutRoomId>,

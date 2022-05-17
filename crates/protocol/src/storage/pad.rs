@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -17,7 +16,7 @@ impl_to_redis_args!(ReadonlyPadKey);
 
 #[tracing::instrument(name = "set_protocol_readonly_pad", skip(redis_conn))]
 pub(crate) async fn set_readonly(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     readonly_id: &str,
 ) -> Result<()> {
@@ -29,7 +28,7 @@ pub(crate) async fn set_readonly(
 
 #[tracing::instrument(name = "get_protocol_readonly_pad", skip(redis_conn))]
 pub(crate) async fn get_readonly(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
 ) -> Result<String> {
     redis_conn
@@ -40,7 +39,7 @@ pub(crate) async fn get_readonly(
 
 #[tracing::instrument(name = "delete_protocol_readonly_pad", skip(redis_conn))]
 pub(crate) async fn del_readonly(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
 ) -> Result<()> {
     redis_conn

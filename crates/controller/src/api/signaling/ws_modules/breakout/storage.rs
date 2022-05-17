@@ -1,9 +1,9 @@
 use super::BreakoutRoom;
 use crate::prelude::*;
+use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
 use db_storage::rooms::RoomId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
@@ -51,7 +51,7 @@ impl_from_redis_value_de!(BreakoutConfig);
 impl_to_redis_args_se!(&BreakoutConfig);
 
 pub async fn set_config(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: RoomId,
     config: &BreakoutConfig,
 ) -> Result<()> {
@@ -73,7 +73,7 @@ pub async fn set_config(
 }
 
 pub async fn get_config(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: RoomId,
 ) -> Result<Option<BreakoutConfig>> {
     redis_conn
@@ -82,7 +82,7 @@ pub async fn get_config(
         .context("Failed to get breakout-room config")
 }
 
-pub async fn del_config(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<bool> {
+pub async fn del_config(redis_conn: &mut RedisConnection, room: RoomId) -> Result<bool> {
     redis_conn
         .del(BreakoutRoomConfig { room })
         .await

@@ -3,7 +3,6 @@ use controller::prelude::*;
 use db_storage::legal_votes::types::Parameters;
 use db_storage::legal_votes::LegalVoteId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -21,7 +20,7 @@ impl_to_redis_args!(VoteParametersKey);
 /// Set the vote [`Parameters`] for the provided `legal_vote_id`
 #[tracing::instrument(name = "legal_vote_set_parameters", skip(redis_conn, parameters))]
 pub(crate) async fn set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
     parameters: &Parameters,
@@ -46,7 +45,7 @@ pub(crate) async fn set(
 /// Get the [`Parameters`] for the provided `legal_vote_id`
 #[tracing::instrument(name = "legal_vote_get_parameters", skip(redis_conn))]
 pub(crate) async fn get(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
 ) -> Result<Option<Parameters>> {

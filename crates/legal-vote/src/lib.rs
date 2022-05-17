@@ -31,7 +31,6 @@ use kustos::Resource;
 use outgoing::{Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess};
 use rabbitmq::Canceled;
 use rabbitmq::StopKind;
-use redis::aio::ConnectionManager;
 use std::sync::Arc;
 use std::time::Duration;
 use storage::protocol;
@@ -429,7 +428,7 @@ impl LegalVote {
     /// Set all vote related redis keys
     async fn start_vote_routine(
         &self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
         incoming_parameters: UserParameters,
     ) -> Result<Parameters, Error> {
@@ -466,7 +465,7 @@ impl LegalVote {
     /// Add the start entry to the protocol of this vote
     async fn init_vote_protocol(
         &self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
         start_time: DateTime<Utc>,
         parameters: Parameters,
@@ -489,7 +488,7 @@ impl LegalVote {
     /// Returns the maximum number of possible votes
     async fn init_allowed_list(
         &self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
         allowed_participants: &[ParticipantId],
     ) -> Result<u32, Error> {
@@ -696,7 +695,7 @@ impl LegalVote {
     /// Returns [`ErrorKind::NoVoteActive`] when no vote is active.
     async fn is_current_vote_id(
         &self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
     ) -> Result<bool, Error> {
         if let Some(current_legal_vote_id) =
@@ -711,7 +710,7 @@ impl LegalVote {
     /// Check if the participant is the vote initiator of the provided `legal_vote_id`
     async fn is_vote_initiator(
         &self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
     ) -> Result<bool, Error> {
         let parameters = storage::parameters::get(redis_conn, self.room_id, legal_vote_id)
@@ -760,7 +759,7 @@ impl LegalVote {
     /// Get the vote results for the specified `legal_vote_id`
     async fn get_vote_results(
         &self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
     ) -> Result<outgoing::Results, Error> {
         let parameters = storage::parameters::get(redis_conn, self.room_id, legal_vote_id)
@@ -789,7 +788,7 @@ impl LegalVote {
     /// before canceling the vote.
     async fn cancel_vote(
         &self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
         reason: String,
     ) -> Result<(), Error> {
@@ -811,7 +810,7 @@ impl LegalVote {
     /// Adds a `ProtocolEntry` with `VoteEvent::Cancel` to the vote protocol when successful.
     async fn cancel_vote_unchecked(
         &self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
         reason: CancelReason,
     ) -> Result<(), Error> {
@@ -924,7 +923,7 @@ impl LegalVote {
     }
 
     /// Remove the all vote related redis keys belonging to this room
-    async fn cleanup_room(&self, redis_conn: &mut ConnectionManager) -> Result<()> {
+    async fn cleanup_room(&self, redis_conn: &mut RedisConnection) -> Result<()> {
         let vote_history = storage::history::get(redis_conn, self.room_id).await?;
 
         for legal_vote_id in vote_history.iter() {
@@ -965,7 +964,7 @@ impl LegalVote {
     /// Save the protocol for `legal_vote_id` in the database
     async fn save_protocol_in_database(
         &self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
     ) -> Result<()> {
         let entries = storage::protocol::get(redis_conn, self.room_id, legal_vote_id).await?;
@@ -987,7 +986,7 @@ impl LegalVote {
     /// Returns the parameters and results of the current vote
     async fn handle_joined(
         &self,
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
     ) -> Result<Option<(Parameters, outgoing::Results)>, Error> {
         if let Some(current_vote_id) =
             storage::current_legal_vote_id::get(redis_conn, self.room_id).await?

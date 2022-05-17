@@ -7,14 +7,13 @@
 //! based features to recognize the reconnected client as the previously disconnected one.
 
 use super::ws_modules::breakout::BreakoutRoomId;
-use crate::api::Participant;
+use crate::{api::Participant, redis_wrapper::RedisConnection};
 use anyhow::{bail, Context, Result};
 use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
 use db_storage::users::UserId;
 use displaydoc::Display;
 use rand::Rng;
-use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use tokio::time::sleep_until;
@@ -82,7 +81,7 @@ impl ResumptionTokenKeepAlive {
         }
     }
 
-    pub async fn set_initial(&mut self, redis_conn: &mut ConnectionManager) -> Result<()> {
+    pub async fn set_initial(&mut self, redis_conn: &mut RedisConnection) -> Result<()> {
         redis::cmd("SET")
             .arg(&self.redis_key)
             .arg(&self.data)
@@ -98,7 +97,7 @@ impl ResumptionTokenKeepAlive {
         sleep_until(self.next_refresh.into()).await;
     }
 
-    pub async fn refresh(&mut self, redis_conn: &mut ConnectionManager) -> Result<()> {
+    pub async fn refresh(&mut self, redis_conn: &mut RedisConnection) -> Result<()> {
         self.next_refresh = Instant::now() + Duration::from_secs(60);
 
         // Set the value with an timeout of 120 seconds (EX 120)

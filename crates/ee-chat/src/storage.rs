@@ -6,7 +6,6 @@ use controller_shared::ParticipantId;
 use db_storage::groups::GroupId;
 use displaydoc::Display;
 use r3dlock::{Mutex, MutexGuard};
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +41,7 @@ impl_to_redis_args!(RoomGroupParticipantsLock);
 impl_to_redis_args!(RoomGroupChatHistory);
 
 pub async fn add_participant_to_set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     group: GroupId,
     participant: ParticipantId,
@@ -69,7 +68,7 @@ pub async fn add_participant_to_set(
 
 pub async fn remove_participant_from_set(
     _set_guard: &MutexGuard<'_, RoomGroupParticipantsLock>,
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     group: GroupId,
     participant: ParticipantId,
@@ -99,7 +98,7 @@ impl_to_redis_args_se!(&StoredMessage);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_group_chat_history(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     group: GroupId,
 ) -> Result<Vec<StoredMessage>> {
@@ -111,7 +110,7 @@ pub async fn get_group_chat_history(
 
 #[tracing::instrument(level = "debug", skip(redis_conn, message))]
 pub async fn add_message_to_group_chat_history(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     group: GroupId,
     message: &StoredMessage,
@@ -129,7 +128,7 @@ pub async fn add_message_to_group_chat_history(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn delete_group_chat_history(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     group: GroupId,
 ) -> Result<()> {

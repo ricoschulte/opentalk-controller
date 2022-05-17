@@ -13,7 +13,6 @@ use db_storage::users::UserId;
 use history::VoteHistoryKey;
 use parameters::VoteParametersKey;
 use protocol::ProtocolKey;
-use redis::aio::ConnectionManager;
 use redis::FromRedisValue;
 use vote_count::VoteCountKey;
 
@@ -58,7 +57,7 @@ return 1
 /// `Err(anyhow::Error)` when a redis error occurred
 #[tracing::instrument(name = "legal_vote_end_current_vote", skip(redis_conn, end_entry))]
 pub(crate) async fn end_current_vote(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
     end_entry: ProtocolEntry,
@@ -108,7 +107,7 @@ redis.call("del", KEYS[5])
 /// Deletes all entries associated with the room & vote id.
 #[tracing::instrument(name = "legal_vote_cleanup_vote", skip(redis_conn))]
 pub(crate) async fn cleanup_vote(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
 ) -> Result<()> {
@@ -224,7 +223,7 @@ impl FromRedisValue for VoteScriptResult {
 /// See [`VOTE_SCRIPT`] for more details.
 #[tracing::instrument(name = "legal_vote_cast_vote", skip(redis_conn, user_id, vote_event))]
 pub(crate) async fn vote(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
     user_id: UserId,
@@ -307,7 +306,7 @@ impl FromRedisValue for VoteStatus {
 }
 
 pub(crate) async fn get_vote_status(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
 ) -> Result<VoteStatus> {
