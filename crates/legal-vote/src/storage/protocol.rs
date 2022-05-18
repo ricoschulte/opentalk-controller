@@ -5,7 +5,6 @@ use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, VoteEvent};
 use db_storage::legal_votes::types::VoteOption;
 use db_storage::legal_votes::LegalVoteId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use std::collections::HashMap;
 
@@ -25,7 +24,7 @@ impl_to_redis_args!(ProtocolKey);
 /// Add an entry to the vote protocol of `legal_vote_id`
 #[tracing::instrument(name = "legal_vote_add_protocol_entry", skip(redis_conn, entry))]
 pub(crate) async fn add_entry(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
     entry: ProtocolEntry,
@@ -47,7 +46,7 @@ pub(crate) async fn add_entry(
 /// Get the vote protocol for `legal_vote_id`
 #[tracing::instrument(name = "legal_vote_get_protocol", skip(redis_conn))]
 pub(crate) async fn get(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
 ) -> Result<Vec<ProtocolEntry>> {

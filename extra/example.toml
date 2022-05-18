@@ -132,3 +132,10 @@ from_routing_key = "from-janus-2"
 #[endpoints]
 # Disable the /users/find endpoint for performance or privacy reasons
 #disable_users_find = false
+
+# Configuration for the /metric HTTP endpoint
+#[metrics]
+# Allowlist for the /metrics endpoint
+#
+# Example: Allow all traffic from localhost
+#allowlist = ["127.0.0.0/24", "::ffff:0:0/96"]

@@ -2,7 +2,6 @@ use super::TimedMessage;
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -17,7 +16,7 @@ impl_to_redis_args!(RoomChatHistory);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_room_chat_history(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Vec<TimedMessage>> {
     let messages = redis_conn
@@ -30,7 +29,7 @@ pub async fn get_room_chat_history(
 
 #[tracing::instrument(level = "debug", skip(redis_conn, message))]
 pub async fn add_message_to_room_chat_history(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     message: &TimedMessage,
 ) -> Result<()> {
@@ -44,7 +43,7 @@ pub async fn add_message_to_room_chat_history(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn delete_room_chat_history(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<()> {
     redis_conn

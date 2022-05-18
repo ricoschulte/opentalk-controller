@@ -73,6 +73,7 @@ use access::AccessMethod;
 use casbin::{CoreApi, MgmtApi, RbacApi};
 use database::Db;
 use internal::{synced_enforcer::SyncedEnforcer, ToCasbin, ToCasbinMultiple, ToCasbinString};
+use metrics::KustosMetrics;
 use policy::{GroupPolicies, Policy, RolePolicies, UserPolicies, UserPolicy};
 use std::{str::FromStr, sync::Arc, time::Duration};
 use subject::{
@@ -88,6 +89,7 @@ pub mod actix_web;
 pub mod db;
 mod error;
 mod internal;
+pub mod metrics;
 pub mod policies_builder;
 pub mod policy;
 pub mod prelude;
@@ -127,6 +129,26 @@ impl Authz {
         let enforcer = Arc::new(tokio::sync::RwLock::new(
             SyncedEnforcer::new(acl_model, adapter).await?,
         ));
+
+        let handle =
+            SyncedEnforcer::start_autoload_policy(enforcer.clone(), interval, shutdown_channel)
+                .await?;
+
+        Ok((Self { inner: enforcer }, handle))
+    }
+
+    pub async fn new_with_autoload_and_metrics(
+        db: Arc<Db>,
+        shutdown_channel: Receiver<()>,
+        interval: Duration,
+        metrics: Arc<KustosMetrics>,
+    ) -> Result<(Self, JoinHandle<Result<()>>)> {
+        let acl_model = internal::default_acl_model().await;
+        let adapter = internal::diesel_adapter::CasbinAdapter::new(db.clone());
+        let mut enforcer = SyncedEnforcer::new(acl_model, adapter).await?;
+        enforcer.set_metrics(metrics);
+
+        let enforcer = Arc::new(tokio::sync::RwLock::new(enforcer));
 
         let handle =
             SyncedEnforcer::start_autoload_policy(enforcer.clone(), interval, shutdown_channel)

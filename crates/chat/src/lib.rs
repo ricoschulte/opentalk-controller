@@ -9,7 +9,6 @@ use control::rabbitmq;
 use controller::prelude::*;
 use controller::{impl_from_redis_value_de, impl_to_redis_args_se};
 use controller_shared::ParticipantId;
-use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::{from_utf8, FromStr};
@@ -125,7 +124,7 @@ pub struct ChatHistory {
 
 impl ChatHistory {
     pub async fn for_current_room(
-        redis_conn: &mut ConnectionManager,
+        redis_conn: &mut RedisConnection,
         room: SignalingRoomId,
     ) -> Result<Self> {
         let room_history = storage::get_room_chat_history(redis_conn, room).await?;

@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use db_storage::legal_votes::LegalVoteId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -31,7 +30,7 @@ impl_to_redis_args!(CurrentVoteIdKey);
 /// - `Err(anyhow::Error)` when a redis error occurred.
 #[tracing::instrument(name = "legal_vote_set_current_vote_id", skip(redis_conn))]
 pub(crate) async fn set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     new_vote_id: LegalVoteId,
 ) -> Result<bool> {
@@ -51,7 +50,7 @@ pub(crate) async fn set(
 /// Get the currently active vote id
 #[tracing::instrument(name = "legal_vote_get_current_vote_id", skip(redis_conn))]
 pub(crate) async fn get(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
 ) -> Result<Option<LegalVoteId>> {
     redis_conn
@@ -63,7 +62,7 @@ pub(crate) async fn get(
 /// Delete the current vote id key
 #[tracing::instrument(name = "legal_vote_delete_current_vote_id", skip(redis_conn))]
 pub(crate) async fn delete(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
 ) -> Result<()> {
     redis_conn

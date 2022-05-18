@@ -6,6 +6,7 @@ use crate::api::signaling::ticket::{TicketData, TicketRedisKey};
 use crate::api::signaling::ws::actor::WebSocketActor;
 use crate::api::v1::response::ApiError;
 use crate::api::Participant;
+use crate::redis_wrapper::RedisConnection;
 use crate::settings::SharedSettingsActix;
 use actix_web::http::header;
 use actix_web::web::Data;
@@ -16,7 +17,6 @@ use database::Db;
 use db_storage::rooms::Room;
 use db_storage::users::User;
 use kustos::Authz;
-use redis::aio::ConnectionManager;
 use std::marker::PhantomData;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task;
@@ -51,7 +51,7 @@ pub(crate) async fn ws_service(
     shutdown: Data<broadcast::Sender<()>>,
     db: Data<Db>,
     authz: Data<Authz>,
-    redis_conn: Data<ConnectionManager>,
+    redis_conn: Data<RedisConnection>,
     rabbit_mq_channel: Data<lapin::Channel>,
     protocols: Data<SignalingProtocols>,
     modules: Data<SignalingModules>,
@@ -214,7 +214,7 @@ fn read_request_header<'t>(
 }
 
 async fn get_ticket_data_from_redis(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     ticket: TicketRedisKey<'_>,
 ) -> Result<TicketData, ApiError> {
     // GETDEL available since redis 6.2.0, missing direct support by redis crate

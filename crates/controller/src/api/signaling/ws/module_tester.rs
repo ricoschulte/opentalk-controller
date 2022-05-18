@@ -15,6 +15,7 @@ use crate::api::signaling::prelude::{BreakoutRoomId, InitContext, ModuleContext}
 use crate::api::signaling::ws_modules::control::ParticipationKind;
 use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
+use crate::redis_wrapper::RedisConnection;
 use actix_http::ws::CloseCode;
 use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
@@ -24,7 +25,6 @@ use db_storage::rooms::Room;
 use db_storage::users::{User, UserId};
 use futures::stream::SelectAll;
 use kustos::Authz;
-use redis::aio::ConnectionManager;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -50,7 +50,7 @@ where
     M: SignalingModule,
 {
     /// The redis interface
-    pub redis_conn: ConnectionManager,
+    pub redis_conn: RedisConnection,
     /// The database interface
     pub db: Arc<Db>,
     /// Authz
@@ -71,7 +71,7 @@ where
     M: SignalingModule,
 {
     /// Create a new ModuleTester instance
-    pub fn new(db: Arc<Db>, authz: Arc<Authz>, redis_conn: ConnectionManager, room: Room) -> Self {
+    pub fn new(db: Arc<Db>, authz: Arc<Authz>, redis_conn: RedisConnection, room: Room) -> Self {
         let (rabbitmq_sender, _) = broadcast::channel(10);
 
         Self {
@@ -321,7 +321,7 @@ struct MockRunner<M>
 where
     M: SignalingModule,
 {
-    redis_conn: ConnectionManager,
+    redis_conn: RedisConnection,
     room_id: SignalingRoomId,
     room: Room,
     participant_id: ParticipantId,
@@ -349,7 +349,7 @@ where
         role: Role,
         db: Arc<Db>,
         authz: Arc<Authz>,
-        mut redis_conn: ConnectionManager,
+        mut redis_conn: RedisConnection,
         params: M::Params,
         interface: ClientInterface<M>,
         rabbitmq_sender: broadcast::Sender<RabbitMqPublish>,

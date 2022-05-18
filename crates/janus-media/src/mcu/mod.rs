@@ -6,7 +6,6 @@ use controller::settings::SharedSettings;
 use janus_client::outgoing::VideoRoomPluginConfigureSubscriber;
 use janus_client::types::{SdpAnswer, SdpOffer};
 use janus_client::{ClientId, JanusMessage, JsepType, RoomId as JanusRoomId, TrickleCandidate};
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::borrow::{Borrow, Cow};
@@ -82,7 +81,7 @@ pub struct McuPool {
     events_sender: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
 
     rabbitmq: Arc<lapin::Connection>,
-    redis: ConnectionManager,
+    redis: RedisConnection,
 
     // Mcu shutdown signal to all janus-client tasks.
     // This is separate from the global application shutdown signal since
@@ -95,7 +94,7 @@ impl McuPool {
         settings: &controller::settings::Settings,
         shared_settings: SharedSettings,
         rabbitmq: Arc<lapin::Connection>,
-        mut redis: ConnectionManager,
+        mut redis: RedisConnection,
         controller_shutdown_sig: broadcast::Receiver<()>,
         controller_reload_sig: broadcast::Receiver<()>,
     ) -> Result<Arc<Self>> {
@@ -220,7 +219,7 @@ impl McuPool {
 
     async fn choose_client<'guard>(
         &self,
-        redis: &mut ConnectionManager,
+        redis: &mut RedisConnection,
         clients: &'guard RwLockReadGuard<'guard, HashSet<McuClient>>,
     ) -> Result<&'guard McuClient> {
         // Get all mcu's in order lowest to highest
@@ -539,7 +538,7 @@ impl McuClient {
     #[tracing::instrument(level = "debug", skip(rabbitmq_channel, redis, events_sender))]
     pub async fn connect(
         rabbitmq_channel: lapin::Channel,
-        redis: &mut ConnectionManager,
+        redis: &mut RedisConnection,
         config: settings::Connection,
         events_sender: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
     ) -> Result<Self> {
@@ -644,7 +643,7 @@ pub struct JanusPublisher {
     handle: janus_client::Handle,
     room_id: JanusRoomId,
     media_session_key: MediaSessionKey,
-    redis: ConnectionManager,
+    redis: RedisConnection,
     destroy: oneshot::Sender<()>,
 }
 
@@ -790,7 +789,7 @@ pub struct JanusSubscriber {
     room_id: JanusRoomId,
     mcu_id: McuId,
     media_session_key: MediaSessionKey,
-    redis: ConnectionManager,
+    redis: RedisConnection,
     destroy: oneshot::Sender<()>,
 }
 

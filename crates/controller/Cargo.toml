@@ -22,10 +22,13 @@ tracing-opentelemetry = "0.17"
 opentelemetry = { version = "0.17", default-features = false, features = [
     "trace",
     "rt-tokio-current-thread",
+    "metrics",
 ] }
 opentelemetry-jaeger = { version = "0.16", features = [
     "rt-tokio-current-thread",
 ] }
+opentelemetry-prometheus = "0.10"
+prometheus = "0.13"
 tracing-actix-web = { version = "0.5" }
 
 ### Config

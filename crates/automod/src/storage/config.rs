@@ -5,7 +5,6 @@ use crate::config::StorageConfig;
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -23,7 +22,7 @@ impl_from_redis_value_de!(StorageConfig);
 /// Set the current config.
 #[tracing::instrument(name = "set_config", level = "debug", skip(redis_conn, config))]
 pub async fn set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     config: &StorageConfig,
 ) -> Result<()> {
@@ -38,7 +37,7 @@ pub async fn set(
 /// If it returns `Some`, one must assume the automod is active.
 #[tracing::instrument(name = "get_config", level = "debug", skip(redis_conn))]
 pub async fn get(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Option<StorageConfig>> {
     redis_conn
@@ -49,7 +48,7 @@ pub async fn get(
 
 /// Delete the config.
 #[tracing::instrument(name = "del_config", level = "debug", skip(redis_conn))]
-pub async fn del(redis_conn: &mut ConnectionManager, room: SignalingRoomId) -> Result<()> {
+pub async fn del(redis_conn: &mut RedisConnection, room: SignalingRoomId) -> Result<()> {
     redis_conn
         .del(RoomAutoModConfig { room })
         .await

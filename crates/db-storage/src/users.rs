@@ -7,7 +7,7 @@ use controller_shared::{impl_from_redis_value, impl_to_redis_args};
 use database::{DatabaseError, DbConnection, Paginate, Result};
 use diesel::{
     BelongingToDsl, BoolExpressionMethods, Connection, ExpressionMethods, GroupedBy, Identifiable,
-    Insertable, PgConnection, QueryDsl, Queryable, RunQueryDsl, TextExpressionMethods,
+    Insertable, QueryDsl, Queryable, RunQueryDsl, TextExpressionMethods,
 };
 use kustos::subject::PolicyUser;
 use std::fmt;
@@ -326,7 +326,7 @@ impl UpdateUser {
 // If the group is currently not stored, create a new group and returns the ID along the already present ones.
 // Does not preserve the order of groups passed to the function
 fn get_ids_for_group_names(
-    conn: &PgConnection,
+    conn: &DbConnection,
     user: &User,
     groups: Vec<String>,
 ) -> Result<Vec<(GroupId, String)>> {
@@ -361,7 +361,7 @@ fn get_ids_for_group_names(
 
 #[tracing::instrument(err, skip_all)]
 fn insert_user_into_user_groups(
-    conn: &PgConnection,
+    conn: &DbConnection,
     user: &User,
     groups: Vec<(GroupId, String)>,
 ) -> Result<()> {

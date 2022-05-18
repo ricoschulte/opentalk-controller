@@ -3,7 +3,6 @@ use crate::{ChoiceId, PollId};
 use anyhow::{bail, Context, Result};
 use controller::prelude::*;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use std::collections::HashMap;
 
@@ -18,7 +17,7 @@ impl_to_redis_args!(PollConfig);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub(super) async fn get_config(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Option<Config>> {
     redis_conn
@@ -30,7 +29,7 @@ pub(super) async fn get_config(
 /// Set the current config if one doesn't already exist returns true if set was successful
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub(super) async fn set_config(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     config: &Config,
 ) -> Result<bool> {
@@ -53,7 +52,7 @@ pub(super) async fn set_config(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub(super) async fn del_config(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<()> {
     redis_conn
@@ -73,7 +72,7 @@ struct PollResults {
 impl_to_redis_args!(PollResults);
 
 pub(super) async fn del_results(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     poll_id: PollId,
 ) -> Result<()> {
@@ -87,7 +86,7 @@ pub(super) async fn del_results(
 }
 
 pub(super) async fn vote(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     poll_id: PollId,
     choice_id: ChoiceId,
@@ -106,7 +105,7 @@ pub(super) async fn vote(
 }
 
 async fn results(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     poll: PollId,
 ) -> Result<HashMap<ChoiceId, u32>> {
@@ -117,7 +116,7 @@ async fn results(
 }
 
 pub(super) async fn poll_results(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     config: &Config,
 ) -> Result<Vec<crate::outgoing::Item>> {
@@ -146,7 +145,7 @@ impl_to_redis_args!(PollList);
 
 /// Add a poll to the list
 pub(super) async fn list_add(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     poll_id: PollId,
 ) -> Result<()> {
@@ -158,7 +157,7 @@ pub(super) async fn list_add(
 
 /// Get all polls for the room
 pub(super) async fn list_members(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Vec<PollId>> {
     redis_conn

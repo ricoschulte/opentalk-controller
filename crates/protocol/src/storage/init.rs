@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use controller::prelude::redis::AsyncCommands;
 use controller::prelude::*;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use serde::{Deserialize, Serialize};
 
 #[derive(Display)]
@@ -34,7 +33,7 @@ impl_from_redis_value_de!(InitState);
 /// When the key was empty and the `Initializing` state was set, Ok(None) will be returned.
 #[tracing::instrument(name = "protocol_try_start_init", skip(redis_conn))]
 pub(crate) async fn try_start_init(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
 ) -> Result<Option<InitState>> {
     let affected_entries: i64 = redis_conn
@@ -67,7 +66,7 @@ pub(crate) async fn try_start_init(
 /// Sets the room state to [`InitState::Initialized`]
 #[tracing::instrument(name = "protocol_set_initialized", skip(redis_conn))]
 pub(crate) async fn set_initialized(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
 ) -> Result<()> {
     redis_conn
@@ -78,7 +77,7 @@ pub(crate) async fn set_initialized(
 
 #[tracing::instrument(name = "get_protocol_init_state", skip(redis_conn))]
 pub(crate) async fn get(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
 ) -> Result<Option<InitState>> {
     redis_conn
@@ -88,10 +87,7 @@ pub(crate) async fn get(
 }
 
 #[tracing::instrument(name = "delete_protocol_init_state", skip(redis_conn))]
-pub(crate) async fn del(
-    redis_conn: &mut ConnectionManager,
-    room_id: SignalingRoomId,
-) -> Result<()> {
+pub(crate) async fn del(redis_conn: &mut RedisConnection, room_id: SignalingRoomId) -> Result<()> {
     redis_conn
         .del::<_, i64>(InitKey { room_id })
         .await

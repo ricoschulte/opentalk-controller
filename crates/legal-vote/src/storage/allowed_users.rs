@@ -3,7 +3,6 @@ use controller::prelude::*;
 use db_storage::legal_votes::LegalVoteId;
 use db_storage::users::UserId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -26,7 +25,7 @@ impl_to_redis_args!(AllowedUsersKey);
 /// Set the list of allowed users for the provided `legal_vote_id`
 #[tracing::instrument(name = "legal_vote_set_allowed_users", skip(redis_conn, allowed_users))]
 pub(crate) async fn set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
     allowed_users: Vec<UserId>,

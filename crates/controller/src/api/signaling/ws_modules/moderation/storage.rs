@@ -1,7 +1,7 @@
+use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
 use db_storage::{rooms::RoomId, users::UserId};
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -16,7 +16,7 @@ impl_to_redis_args!(Bans);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn ban_user(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: RoomId,
     user_id: UserId,
 ) -> Result<()> {
@@ -28,7 +28,7 @@ pub async fn ban_user(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn unban_user(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: RoomId,
     user_id: UserId,
 ) -> Result<()> {
@@ -40,7 +40,7 @@ pub async fn unban_user(
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn is_banned(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: RoomId,
     user_id: UserId,
 ) -> Result<bool> {
@@ -51,7 +51,7 @@ pub async fn is_banned(
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
-pub async fn delete_bans(redis_conn: &mut ConnectionManager, room: RoomId) -> Result<()> {
+pub async fn delete_bans(redis_conn: &mut RedisConnection, room: RoomId) -> Result<()> {
     redis_conn
         .del(Bans { room })
         .await

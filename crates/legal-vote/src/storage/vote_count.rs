@@ -3,7 +3,7 @@ use controller::prelude::*;
 use db_storage::legal_votes::types::{VoteOption, Votes};
 use db_storage::legal_votes::LegalVoteId;
 use displaydoc::Display;
-use redis::{aio::ConnectionManager, AsyncCommands};
+use redis::AsyncCommands;
 use std::collections::HashMap;
 
 #[derive(Display)]
@@ -24,7 +24,7 @@ impl_to_redis_args!(VoteCountKey);
 /// Get the vote count for the specified `legal_vote_id`
 #[tracing::instrument(name = "legal_vote_get_vote_count", skip(redis_conn))]
 pub(crate) async fn get(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
     enable_abstain: bool,

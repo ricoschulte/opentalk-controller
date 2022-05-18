@@ -21,6 +21,7 @@
 //! ```
 
 use crate::acl::check_or_create_kustos_default_permissions;
+use crate::api::v1::middleware::metrics::RequestMetrics;
 use crate::api::v1::response::error::json_error_handler;
 use crate::settings::{Settings, SharedSettings};
 use crate::trace::ReducedSpanBuilder;
@@ -36,7 +37,6 @@ use db_storage::groups::NewGroup;
 use moderation::ModerationModule;
 use oidc::OidcContext;
 use prelude::*;
-use redis::aio::ConnectionManager;
 use std::fs::File;
 use std::io::BufReader;
 use std::net::Ipv6Addr;
@@ -58,7 +58,9 @@ pub mod api;
 mod acl;
 mod cli;
 mod ha_sync;
+mod metrics;
 mod oidc;
+mod redis_wrapper;
 mod trace;
 
 pub mod settings;
@@ -66,6 +68,7 @@ pub mod settings;
 pub mod prelude {
     pub use crate::api::signaling::prelude::*;
     pub use crate::api::Participant;
+    pub use crate::redis_wrapper::RedisConnection;
     pub use crate::{impl_from_redis_value_de, impl_to_redis_args, impl_to_redis_args_se};
 
     // re-export commonly used crates to reduce dependency management in module-crates
@@ -154,7 +157,7 @@ pub struct Controller {
     pub rabbitmq_channel: lapin::Channel,
 
     /// Cloneable redis connection manager, can be used to write/read to the controller's redis.
-    pub redis: ConnectionManager,
+    pub redis: RedisConnection,
 
     /// Reload signal which can be triggered by a user.
     /// When received a module should try to re-read it's config and act accordingly.
@@ -174,6 +177,9 @@ pub struct Controller {
     ///
     /// Can and should be used to extend the controllers signaling endpoint's capabilities.
     pub signaling: SignalingModules,
+
+    /// All metrics of the Application
+    pub metrics: metrics::CombinedMetrics,
 }
 
 impl Controller {
@@ -207,6 +213,8 @@ impl Controller {
         let settings = Arc::new(settings);
         let shared_settings: SharedSettings = Arc::new(ArcSwap::from(settings.clone()));
 
+        let metrics = metrics::CombinedMetrics::init(&settings);
+
         db_storage::migrations::migrate_from_url(&settings.database.url)
             .await
             .context("Failed to migrate database")?;
@@ -232,8 +240,9 @@ impl Controller {
             .context("Failed to init ha_sync")?;
 
         // Connect to postgres
-        let db =
-            Arc::new(Db::connect(&settings.database).context("Failed to connect to database")?);
+        let mut db = Db::connect(&settings.database).context("Failed to connect to database")?;
+        db.set_metrics(metrics.database.clone());
+        let db = Arc::new(db);
 
         // Discover OIDC Provider
         let oidc = Arc::new(
@@ -247,6 +256,7 @@ impl Controller {
         let redis_conn = redis::aio::ConnectionManager::new(redis)
             .await
             .context("Failed to create redis connection manager")?;
+        let redis_conn = RedisConnection::new(redis_conn).with_metrics(metrics.redis.clone());
 
         let (shutdown, _) = broadcast::channel::<()>(1);
         let (reload, _) = broadcast::channel::<()>(4);
@@ -269,6 +279,7 @@ impl Controller {
             shutdown,
             reload,
             signaling,
+            metrics,
         })
     }
 
@@ -311,10 +322,11 @@ impl Controller {
             let redis = self.redis;
 
             // TODO(r.floren) what to do with the handle
-            let (enforcer, _) = kustos::Authz::new_with_autoload(
+            let (authz, _) = kustos::Authz::new_with_autoload_and_metrics(
                 db.upgrade().unwrap(),
                 self.shutdown.subscribe(),
                 self.startup_settings.authz.reload_interval,
+                self.metrics.kustos.clone(),
             )
             .await?;
 
@@ -332,9 +344,11 @@ impl Controller {
             // Drop early to avoid holding a single connection from the pool for the whole runtime
             drop(conn);
 
-            check_or_create_kustos_default_permissions(&enforcer, vec![admin_group]).await?;
+            check_or_create_kustos_default_permissions(&authz, vec![admin_group]).await?;
 
-            let authz_middleware = enforcer.actix_web_middleware(true).await?;
+            let authz_middleware = authz.actix_web_middleware(true).await?;
+
+            let metrics = Data::new(self.metrics);
 
             HttpServer::new(move || {
                 let cors = setup_cors(&cors);
@@ -344,7 +358,7 @@ impl Controller {
 
                 let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
                 let redis = Data::new(redis.clone());
-                let authz = Data::new(enforcer.clone());
+                let authz = Data::new(authz.clone());
 
                 let acl = authz_middleware.clone();
 
@@ -354,6 +368,7 @@ impl Controller {
                     .wrap(api::v1::middleware::headers::Headers {})
                     .wrap(TracingLogger::<ReducedSpanBuilder>::new())
                     .wrap(cors)
+                    .wrap(RequestMetrics::new(metrics.endpoint.clone()))
                     .app_data(web::JsonConfig::default().error_handler(json_error_handler))
                     .app_data(Data::from(shared_settings.clone()))
                     .app_data(db.clone())
@@ -364,7 +379,9 @@ impl Controller {
                     .app_data(rabbitmq_channel.clone())
                     .app_data(signaling_modules)
                     .app_data(SignalingProtocols::data())
+                    .app_data(metrics.clone())
                     .service(api::signaling::ws_service)
+                    .service(metrics::metrics)
                     .service(v1_scope(db, oidc_ctx, acl))
             })
         };

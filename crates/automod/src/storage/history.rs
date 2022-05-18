@@ -11,7 +11,6 @@ use chrono::{DateTime, Utc};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 
@@ -69,7 +68,7 @@ impl Entry {
 /// Adds the given entry to the history
 #[tracing::instrument(name = "add_history", level = "debug", skip(redis_conn, entry))]
 pub async fn add(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     entry: &Entry,
 ) -> Result<()> {
@@ -87,7 +86,7 @@ pub async fn add(
 /// timestamp.
 #[tracing::instrument(name = "get_history", level = "debug", skip(redis_conn))]
 pub async fn get(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     since: DateTime<Utc>,
 ) -> Result<Vec<ParticipantId>> {
@@ -111,7 +110,7 @@ pub async fn get(
 
 /// Delete the history.
 #[tracing::instrument(name = "del_history", level = "debug", skip(redis_conn))]
-pub async fn del(redis_conn: &mut ConnectionManager, room: SignalingRoomId) -> Result<()> {
+pub async fn del(redis_conn: &mut RedisConnection, room: SignalingRoomId) -> Result<()> {
     redis_conn
         .del(RoomAutoModHistory { room })
         .await
@@ -120,7 +119,7 @@ pub async fn del(redis_conn: &mut ConnectionManager, room: SignalingRoomId) -> R
 
 #[cfg(test)]
 pub(crate) async fn get_entries(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     since: DateTime<Utc>,
 ) -> Result<Vec<Entry>> {

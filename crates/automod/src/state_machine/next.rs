@@ -5,12 +5,11 @@ use anyhow::Result;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use rand::Rng;
-use redis::aio::ConnectionManager;
 
 /// Depending on the config will inspect/change the state_machine's state to select the next
 /// user to be speaker.
 pub async fn select_next<R: Rng>(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     config: &StorageConfig,
     user_selected: Option<ParticipantId>,
@@ -45,7 +44,7 @@ pub async fn select_next<R: Rng>(
 
 /// Returns the next (if any) participant to be selected inside a `Nomination` selection strategy.
 async fn select_next_nomination(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     user_selected: Option<ParticipantId>,
     allow_double_selection: bool,

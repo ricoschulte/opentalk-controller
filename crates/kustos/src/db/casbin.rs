@@ -50,7 +50,7 @@ pub fn remove_policy(conn: &DbConnection, pt: &str, rule: Vec<String>) -> Result
 
 #[tracing::instrument(err, skip_all)]
 pub fn remove_policies(conn: &DbConnection, pt: &str, rules: Vec<Vec<String>>) -> Result<bool> {
-    conn.build_transaction().run::<bool, DatabaseError, _>(|| {
+    conn.transaction(|| {
         for rule in rules {
             let rule = normalize_casbin_rule(rule, 0);
 

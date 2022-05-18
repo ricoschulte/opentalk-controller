@@ -5,7 +5,6 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 
 #[derive(Display)]
@@ -21,7 +20,7 @@ impl_to_redis_args!(RoomAutoModSpeaker);
 /// Get the current speaker. Returns [`None`] if there is no active speaker.
 #[tracing::instrument(name = "get_speaker", level = "debug", skip(redis_conn))]
 pub async fn get(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Option<ParticipantId>> {
     redis_conn
@@ -33,7 +32,7 @@ pub async fn get(
 /// Sets the new current speaker and returns the old one if it was set
 #[tracing::instrument(name = "set_speaker", level = "debug", skip(redis_conn))]
 pub async fn set(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
 ) -> Result<Option<ParticipantId>> {
@@ -49,7 +48,7 @@ pub async fn set(
 /// Delete the current speaker and return if there was any speaker.
 #[tracing::instrument(name = "del_speaker", level = "debug", skip(redis_conn))]
 pub async fn del(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
 ) -> Result<Option<ParticipantId>> {
     redis::cmd("GETDEL")

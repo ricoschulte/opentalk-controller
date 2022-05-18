@@ -2,7 +2,6 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use db_storage::legal_votes::LegalVoteId;
 use displaydoc::Display;
-use redis::aio::ConnectionManager;
 use redis::AsyncCommands;
 use std::collections::HashSet;
 
@@ -23,7 +22,7 @@ impl_to_redis_args!(VoteHistoryKey);
 /// Get the vote history as a hashset
 #[tracing::instrument(name = "legal_vote_get_history", skip(redis_conn))]
 pub(crate) async fn get(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
 ) -> Result<HashSet<LegalVoteId>> {
     redis_conn
@@ -35,7 +34,7 @@ pub(crate) async fn get(
 /// Delete the vote history key
 #[tracing::instrument(name = "legal_vote_delete_history", skip(redis_conn))]
 pub(crate) async fn delete(
-    redis_conn: &mut ConnectionManager,
+    redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
 ) -> Result<()> {
     redis_conn
