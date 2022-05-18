@@ -11,8 +11,6 @@ use database::{DatabaseError, Db};
 use db_storage::invites::{Invite, InviteCodeId, NewInvite, UpdateInvite};
 use db_storage::rooms::{Room, RoomId};
 use db_storage::users::User;
-use kustos::policies_builder::PoliciesBuilder;
-use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -63,7 +61,6 @@ pub struct PostInviteBody {
 pub async fn add_invite(
     settings: SharedSettingsActix,
     db: Data<Db>,
-    authz: Data<Authz>,
     current_user: ReqData<User>,
     room_id: Path<RoomId>,
     data: Json<PostInviteBody>,
@@ -89,24 +86,6 @@ pub async fn add_invite(
     })
     .await??;
 
-    // TODO(r.floren) Do we want to rollback if this failed?
-    let rel_invite_path = format!("/rooms/{}/invites/{}", room_id, db_invite.id);
-    let invite_path = db_invite.id.resource_id();
-
-    let policies = PoliciesBuilder::new()
-        .grant_user_access(current_user.id)
-        .add_resource(
-            rel_invite_path,
-            [AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
-        )
-        .add_resource(
-            invite_path,
-            [AccessMethod::Get, AccessMethod::Put, AccessMethod::Delete],
-        )
-        .finish();
-
-    authz.add_policies(policies).await?;
-
     let created_by = PublicUserProfile::from_db(&settings, current_user.clone());
     let updated_by = PublicUserProfile::from_db(&settings, current_user);
 
@@ -122,35 +101,19 @@ pub async fn add_invite(
 pub async fn get_invites(
     settings: SharedSettingsActix,
     db: Data<Db>,
-    authz: Data<Authz>,
-    current_user: ReqData<User>,
     room_id: Path<RoomId>,
     pagination: Query<PagePaginationQuery>,
 ) -> DefaultApiResult<Vec<InviteResource>> {
     let settings = settings.load_full();
     let room_id = room_id.into_inner();
-    let current_user = current_user.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
-
-    let accessible_rooms: kustos::AccessibleResources<InviteCodeId> = authz
-        .get_accessible_resources_for_user(current_user.id, AccessMethod::Get)
-        .await?;
 
     let (invites_with_users, total_invites) = crate::block(move || {
         let conn = db.get_conn()?;
 
         let room = Room::get(&conn, room_id)?;
 
-        match accessible_rooms {
-            kustos::AccessibleResources::All => {
-                Invite::get_all_for_room_with_users_paginated(&conn, room.id, per_page, page)
-            }
-            kustos::AccessibleResources::List(list) => {
-                Invite::get_all_for_room_with_users_by_ids_paginated(
-                    &conn, room.id, &list, per_page, page,
-                )
-            }
-        }
+        Invite::get_all_for_room_with_users_paginated(&conn, room.id, per_page, page)
     })
     .await??;
 
@@ -279,7 +242,6 @@ pub async fn update_invite(
 #[delete("/rooms/{room_id}/invites/{invite_code}")]
 pub async fn delete_invite(
     db: Data<Db>,
-    authz: Data<kustos::Authz>,
     current_user: ReqData<User>,
     path_params: Path<RoomIdAndInviteCode>,
 ) -> Result<NoContent, ApiError> {
@@ -302,23 +264,6 @@ pub async fn delete_invite(
         changeset.apply(&conn, room_id, invite_code)
     })
     .await??;
-
-    let rel_invite_path = format!("/rooms/{}/invites/{}", room_id, invite_code);
-    let invite_path = invite_code.resource_id();
-
-    if let Err(e) = authz
-        .remove_explicit_resource_permissions(rel_invite_path)
-        .await
-    {
-        log::error!("failed to remove resource {}", e);
-    }
-
-    if let Err(e) = authz
-        .remove_explicit_resource_permissions(invite_path)
-        .await
-    {
-        log::error!("failed to remove resource {}", e);
-    }
 
     Ok(NoContent)
 }
