@@ -1922,6 +1922,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "keycloak-admin"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "thiserror",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "kustos"
 version = "0.1.0"
 dependencies = [
