@@ -16,5 +16,5 @@ pub enum Event {
 #[serde(rename_all = "snake_case")]
 pub struct GenerateUrl {
     /// A list of participants that get write access
-    pub writer: Vec<ParticipantId>,
+    pub writers: Vec<ParticipantId>,
 }

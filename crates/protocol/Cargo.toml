@@ -11,3 +11,7 @@ etherpad-client = { path = "../etherpad-client", package = "etherpad-client" }
 controller = { path = "../controller", package = "k3k-controller-core" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 serde = { version = "1", features = ["derive"] }
+
+
+[dev-dependencies]
+test-util = { path = "../test-util", package = "k3k-test-util" }

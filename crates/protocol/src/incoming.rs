@@ -4,13 +4,14 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "action")]
 pub enum Message {
-    SelectWriter(SelectWriter),
+    SelectWriter(ParticipantSelection),
+    DeselectWriter(ParticipantSelection),
 }
 
 /// Give a list of participants write access to the protocol
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub struct SelectWriter {
+pub struct ParticipantSelection {
     /// The targeted participants
     pub participant_ids: Vec<ParticipantId>,
 }
@@ -29,13 +30,32 @@ mod test {
         }
         "#;
 
-        let select_writer: Message = serde_json::from_str(json_str).unwrap();
+        if let Message::SelectWriter(ParticipantSelection { participant_ids }) =
+            serde_json::from_str(json_str).unwrap()
+        {
+            assert_eq!(participant_ids[0], ParticipantId::new_test(0));
+            assert_eq!(participant_ids[1], ParticipantId::new_test(1));
+        } else {
+            panic!("expected SelectWriter variant");
+        }
+    }
 
-        let Message::SelectWriter(SelectWriter { participant_ids }) = select_writer;
+    #[test]
+    fn deselect_writer() {
+        let json_str = r#"
+        {
+            "action": "deselect_writer",
+            "participant_ids": ["00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001"]
+        }
+        "#;
 
-        assert_eq!(
-            vec![ParticipantId::new_test(0), ParticipantId::new_test(1)],
-            participant_ids
-        );
+        if let Message::DeselectWriter(ParticipantSelection { participant_ids }) =
+            serde_json::from_str(json_str).unwrap()
+        {
+            assert_eq!(participant_ids[0], ParticipantId::new_test(0));
+            assert_eq!(participant_ids[1], ParticipantId::new_test(1));
+        } else {
+            panic!("expected SelectWriter variant");
+        }
     }
 }

@@ -2,6 +2,7 @@
 
 ### Added
 
+- protocol: added the `deselect_writer` action to revoke write access
 - controller: added the spacedeck module that allows participants to collaboratively edit a whiteboard
 
 ### Fixed
