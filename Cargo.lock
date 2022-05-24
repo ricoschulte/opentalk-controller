@@ -1752,6 +1752,7 @@ dependencies = [
  "k3k-database",
  "k3k-db-storage",
  "k3k-test-util",
+ "keycloak-admin",
  "kustos",
  "lapin",
  "log",

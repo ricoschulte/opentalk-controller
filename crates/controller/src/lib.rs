@@ -34,6 +34,7 @@ use arc_swap::ArcSwap;
 use breakout::BreakoutRooms;
 use database::Db;
 use db_storage::groups::NewGroup;
+use keycloak_admin::KeycloakAdminClient;
 use moderation::ModerationModule;
 use oidc::OidcContext;
 use prelude::*;
@@ -150,6 +151,8 @@ pub struct Controller {
 
     oidc: Arc<OidcContext>,
 
+    kc_admin_client: Arc<KeycloakAdminClient>,
+
     /// RabbitMQ connection, can be used to create channels
     pub rabbitmq: Arc<lapin::Connection>,
 
@@ -248,10 +251,17 @@ impl Controller {
 
         // Discover OIDC Provider
         let oidc = Arc::new(
-            OidcContext::from_config(settings.oidc.clone())
+            OidcContext::from_config(settings.keycloak.clone())
                 .await
                 .context("Failed to initialize OIDC Context")?,
         );
+
+        let kc_admin_client = Arc::new(KeycloakAdminClient::new(
+            settings.keycloak.base_url.clone(),
+            settings.keycloak.realm.clone(),
+            settings.keycloak.client_id.clone().into(),
+            settings.keycloak.client_secret.secret().clone(),
+        )?);
 
         // Build redis client. Does not check if redis is reachable.
         let redis = redis::Client::open(settings.redis.url.clone()).context("Invalid redis url")?;
@@ -275,6 +285,7 @@ impl Controller {
             args,
             db,
             oidc,
+            kc_admin_client,
             rabbitmq,
             rabbitmq_channel,
             redis: redis_conn,
@@ -323,6 +334,8 @@ impl Controller {
             let shared_settings = self.shared_settings.clone();
             let redis = self.redis;
 
+            let kc_admin_client = Data::from(self.kc_admin_client);
+
             // TODO(r.floren) what to do with the handle
             let (authz, _) = kustos::Authz::new_with_autoload_and_metrics(
                 db.upgrade().unwrap(),
@@ -339,7 +352,7 @@ impl Controller {
             // either by creating one admin Group per issuer or making the role assignment a manual task for more security.
             let conn = self.db.get_conn()?;
             let admin_group = NewGroup {
-                oidc_issuer: shared_settings.load().oidc.provider.issuer.to_string(),
+                oidc_issuer: self.oidc.provider.metadata.issuer().to_string(),
                 name: "/OpenTalk_Administrator".into(),
             }
             .insert_or_get(&conn)?;
@@ -375,6 +388,7 @@ impl Controller {
                     .app_data(Data::from(shared_settings.clone()))
                     .app_data(db.clone())
                     .app_data(oidc_ctx.clone())
+                    .app_data(kc_admin_client.clone())
                     .app_data(authz)
                     .app_data(redis)
                     .app_data(Data::new(shutdown.clone()))

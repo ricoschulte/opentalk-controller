@@ -140,6 +140,24 @@ impl User {
         Ok(user)
     }
 
+    /// Get all users filtered by the issuer and subs
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_all_by_oidc_subs(
+        conn: &DbConnection,
+        issuer: &str,
+        subs: &[&str],
+    ) -> Result<Vec<User>> {
+        let users = users::table
+            .filter(
+                users::oidc_issuer
+                    .eq(issuer)
+                    .and(users::oidc_sub.eq_any(subs)),
+            )
+            .load(conn)?;
+
+        Ok(users)
+    }
+
     /// Find users by search string
     ///
     /// This looks for similarities of the search_str in the display_name, first+lastname and email

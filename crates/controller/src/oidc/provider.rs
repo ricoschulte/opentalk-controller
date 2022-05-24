@@ -1,9 +1,9 @@
 use super::http::async_http_client;
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use controller_shared::settings;
 use openidconnect::core::CoreClient;
 use openidconnect::url::Url;
-use openidconnect::{ClientId, IntrospectionUrl};
+use openidconnect::{ClientId, IntrospectionUrl, IssuerUrl};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -43,16 +43,24 @@ impl ProviderClient {
     /// Discover Provider information from given settings
     pub async fn discover(
         http_client: reqwest::Client,
-        provider: settings::OidcProvider,
+        config: settings::Keycloak,
     ) -> Result<ProviderClient> {
-        let metadata =
-            ProviderMetadata::discover_async(provider.issuer, async_http_client(http_client))
-                .await
-                .context("Failed to discover provider metadata")?;
+        let mut issuer_url = config.base_url.clone();
+        issuer_url
+            .path_segments_mut()
+            .map_err(|_| anyhow!("keycloak base url cannot be a base"))?
+            .extend(["realms", &config.realm]);
+
+        let metadata = ProviderMetadata::discover_async(
+            IssuerUrl::from_url(issuer_url),
+            async_http_client(http_client),
+        )
+        .await
+        .context("Failed to discover provider metadata")?;
 
         let client = CoreClient::new(
-            provider.client_id.clone(),
-            Some(provider.client_secret),
+            config.client_id.clone(),
+            Some(config.client_secret),
             metadata.issuer().clone(),
             metadata.authorization_endpoint().clone(),
             metadata.token_endpoint().cloned(),
@@ -68,7 +76,7 @@ impl ProviderClient {
 
         Ok(ProviderClient {
             metadata,
-            client_id: ClientId::new(provider.client_id.into()),
+            client_id: ClientId::new(config.client_id.into()),
             client,
         })
     }

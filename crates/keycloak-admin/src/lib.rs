@@ -19,28 +19,29 @@ pub enum Error {
 }
 
 #[derive(Serialize)]
-pub struct Credentials {
+struct Credentials {
     client_id: String,
     client_secret: String,
 }
 
 /// HTTP client to access some Keycloak admin APIs
-pub struct KeycloakClient {
+pub struct KeycloakAdminClient {
     base_url: Url,
     realm: String,
     credentials: Credentials,
 
     client: reqwest::Client,
+
     token: RwLock<Option<String>>,
 }
 
-impl KeycloakClient {
+impl KeycloakAdminClient {
     /// Create a new client from all required configurations
     pub fn new(
-        client: reqwest::Client,
-        credentials: Credentials,
         base_url: Url,
         realm: String,
+        client_id: String,
+        client_secret: String,
     ) -> Result<Self, Error> {
         if base_url.cannot_be_a_base() {
             return Err(Error::NotBaseUrl);
@@ -49,8 +50,11 @@ impl KeycloakClient {
         Ok(Self {
             base_url,
             realm,
-            credentials,
-            client,
+            credentials: Credentials {
+                client_id,
+                client_secret,
+            },
+            client: reqwest::Client::new(),
             token: RwLock::new(None),
         })
     }

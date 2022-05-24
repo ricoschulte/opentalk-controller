@@ -55,7 +55,7 @@ pub async fn get_invites_for_event(
 /// Request body for the `POST /events/{event_id}/invites` endpoint
 #[derive(Deserialize)]
 pub struct PostEventInviteBody {
-    /// ID of the user to invite
+    /// ID or email of the user to invite
     pub invitee: UserId,
 }
 

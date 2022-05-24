@@ -4,12 +4,14 @@
 //! structs are defined in the Database crate [`db_storage`] for database operations.
 
 use super::response::{ApiError, NoContent};
+use crate::oidc::OidcContext;
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{get, patch, Either};
 use controller_shared::settings::Settings;
 use database::Db;
 use db_storage::users::{UpdateUser, User, UserId};
+use keycloak_admin::KeycloakAdminClient;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -29,11 +31,7 @@ pub struct PublicUserProfile {
 
 impl PublicUserProfile {
     pub fn from_db(settings: &Settings, user: User) -> Self {
-        let avatar_url = format!(
-            "{}{:x}",
-            settings.avatar.libravatar_url,
-            md5::compute(&user.email)
-        );
+        let avatar_url = email_to_libravatar_url(&settings.avatar.libravatar_url, &user.email);
 
         Self {
             id: user.id,
@@ -45,6 +43,10 @@ impl PublicUserProfile {
             avatar_url,
         }
     }
+}
+
+fn email_to_libravatar_url(libravatar_url: &str, email: &str) -> String {
+    format!("{}{:x}", libravatar_url, md5::compute(email))
 }
 
 /// Private user profile.
@@ -207,32 +209,96 @@ pub struct FindQuery {
     q: String,
 }
 
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum UserFindResponseItem {
+    Registered(PublicUserProfile),
+    Unregistered(UnregisteredUser),
+}
+
+#[derive(Debug, Serialize)]
+pub struct UnregisteredUser {
+    pub email: String,
+    pub firstname: String,
+    pub lastname: String,
+    pub avatar_url: String,
+}
+
 /// API Endpoint *GET /users/find?name=$input*
 ///
 /// Returns a list with a limited size of users matching the query
 #[get("/users/find")]
 pub async fn find(
     settings: SharedSettingsActix,
+    kc_admin_client: Data<KeycloakAdminClient>,
+    oidc: Data<OidcContext>,
     db: Data<Db>,
     query: Query<FindQuery>,
-) -> Result<Json<Vec<PublicUserProfile>>, ApiError> {
+) -> Result<Json<Vec<UserFindResponseItem>>, ApiError> {
     let settings = settings.load_full();
 
     if settings.endpoints.disable_users_find {
         return Err(ApiError::not_found());
     }
 
-    let found_users = crate::block(move || {
-        let conn = db.get_conn()?;
+    let found_users = if settings.endpoints.users_find_use_kc {
+        let mut found_kc_users = kc_admin_client
+            .search_user(&query.q)
+            .await
+            .map_err(anyhow::Error::from)?;
 
-        User::find(&conn, &query.q)
-    })
-    .await??;
+        let (db_users, kc_users) = crate::block(move || -> database::Result<_> {
+            let conn = db.get_conn()?;
 
-    let found_users = found_users
-        .into_iter()
-        .map(|user| PublicUserProfile::from_db(&settings, user))
-        .collect();
+            let kc_subs: Vec<&str> = found_kc_users
+                .iter()
+                .map(|kc_user| kc_user.id.as_str())
+                .collect();
+
+            let users = User::get_all_by_oidc_subs(
+                &conn,
+                oidc.provider.metadata.issuer().as_str(),
+                &kc_subs,
+            )?;
+
+            found_kc_users.retain(|kc_user| !users.iter().any(|user| user.oidc_sub == kc_user.id));
+
+            Ok((users, found_kc_users))
+        })
+        .await??;
+
+        db_users
+            .into_iter()
+            .map(|user| {
+                UserFindResponseItem::Registered(PublicUserProfile::from_db(&settings, user))
+            })
+            .chain(kc_users.into_iter().map(|kc_user| {
+                let avatar_url =
+                    email_to_libravatar_url(&settings.avatar.libravatar_url, &kc_user.email);
+
+                UserFindResponseItem::Unregistered(UnregisteredUser {
+                    email: kc_user.email,
+                    firstname: kc_user.first_name,
+                    lastname: kc_user.last_name,
+                    avatar_url,
+                })
+            }))
+            .collect()
+    } else {
+        let found_users = crate::block(move || {
+            let conn = db.get_conn()?;
+
+            User::find(&conn, &query.q)
+        })
+        .await??;
+
+        found_users
+            .into_iter()
+            .map(|user| {
+                UserFindResponseItem::Registered(PublicUserProfile::from_db(&settings, user))
+            })
+            .collect()
+    };
 
     Ok(Json(found_users))
 }

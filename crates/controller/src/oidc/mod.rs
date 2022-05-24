@@ -14,7 +14,7 @@ pub use jwt::VerifyError;
 /// The `OidcContext` contains all information about the Oidc provider and permissions matrix.
 #[derive(Debug)]
 pub struct OidcContext {
-    provider: ProviderClient,
+    pub(crate) provider: ProviderClient,
     http_client: reqwest::Client,
 }
 
@@ -22,13 +22,13 @@ impl OidcContext {
     /// Create the OidcContext from the configuration.
     /// This reads the OidcProvider configuration and tries to fetch the metadata from it.
     /// If a provider is misconfigured or not reachable this function will fail.
-    #[tracing::instrument(name = "oidc_discover", skip(oidc_config))]
-    pub async fn from_config(oidc_config: settings::Oidc) -> Result<Self> {
-        log::debug!("OIDC config: {:?}", oidc_config);
+    #[tracing::instrument(name = "oidc_discover", skip(config))]
+    pub async fn from_config(config: settings::Keycloak) -> Result<Self> {
+        log::debug!("OIDC config: {:?}", config);
 
         let http_client = http::make_client()?;
 
-        let client = ProviderClient::discover(http_client.clone(), oidc_config.provider).await?;
+        let client = ProviderClient::discover(http_client.clone(), config).await?;
 
         Ok(Self {
             provider: client,

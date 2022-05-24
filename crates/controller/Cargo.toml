@@ -113,7 +113,7 @@ nix = "0.23.0"
 
 ### Access Control
 kustos = { path = "../kustos" }
-
+keycloak-admin = { path = "../keycloak-admin" } 
 regex = "1.5"
 
 rrule = "0.7"
