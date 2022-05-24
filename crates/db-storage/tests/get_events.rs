@@ -219,6 +219,7 @@ async fn get_event_invites() {
         event_id: event1.id,
         invitee: louise.id,
         created_by: ferdinand.id,
+        created_at: None,
     }
     .insert(&conn)
     .unwrap();
@@ -227,6 +228,7 @@ async fn get_event_invites() {
         event_id: event1.id,
         invitee: gerhard.id,
         created_by: ferdinand.id,
+        created_at: None,
     }
     .insert(&conn)
     .unwrap();
@@ -238,6 +240,7 @@ async fn get_event_invites() {
         event_id: event2.id,
         invitee: louise.id,
         created_by: gerhard.id,
+        created_at: None,
     }
     .insert(&conn)
     .unwrap();
@@ -246,6 +249,7 @@ async fn get_event_invites() {
         event_id: event2.id,
         invitee: ferdinand.id,
         created_by: gerhard.id,
+        created_at: None,
     }
     .insert(&conn)
     .unwrap();

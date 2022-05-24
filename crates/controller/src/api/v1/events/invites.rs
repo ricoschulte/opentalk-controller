@@ -85,6 +85,7 @@ pub async fn create_invite_to_event(
             event_id,
             invitee: create_invite.invitee,
             created_by: current_user.id,
+            created_at: None,
         }
         .insert(&conn);
 

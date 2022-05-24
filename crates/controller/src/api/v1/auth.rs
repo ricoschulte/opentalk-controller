@@ -1,4 +1,6 @@
 //! Auth related API structs and Endpoints
+use super::events::EventPoliciesBuilderExt;
+use super::rooms::RoomsPoliciesBuilderExt;
 use crate::api::v1::response::error::AuthenticationError;
 use crate::api::v1::response::ApiError;
 use crate::ha_sync::user_update;
@@ -7,9 +9,12 @@ use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
 use database::{Db, OptionalExt};
+use db_storage::events::email_invites::EventEmailInvite;
+use db_storage::events::EventId;
 use db_storage::groups::GroupId;
+use db_storage::rooms::RoomId;
 use db_storage::users::{NewUser, NewUserWithGroups, UpdateUser, User, UserUpdatedInfo};
-use either::Either;
+use kustos::prelude::PoliciesBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -66,7 +71,7 @@ pub async fn login(
 
                         let updated_info = changeset.apply(&conn, user.id, Some(info.x_grp))?;
 
-                        Ok(Either::Left(updated_info))
+                        Ok(LoginResult::UserUpdated(updated_info))
                     }
                     None => {
                         let settings = settings.load_full();
@@ -89,15 +94,22 @@ pub async fn login(
                             groups: info.x_grp,
                         };
 
-                        let user_with_groups = new_user.insert(&conn)?;
+                        let (user, group_ids) = new_user.insert(&conn)?;
 
-                        Ok(Either::Right(user_with_groups))
+                        let event_and_room_ids =
+                            EventEmailInvite::migrate_to_user_invites(&conn, user.id, &user.email)?;
+
+                        Ok(LoginResult::UserCreated {
+                            user,
+                            group_ids,
+                            event_and_room_ids,
+                        })
                     }
                 }
             })
             .await??;
 
-            if let Either::Left(updated_info) = &db_result {
+            if let LoginResult::UserUpdated(updated_info) = &db_result {
                 // The user was updated.
                 let message = user_update::Message {
                     groups: updated_info.groups_changed,
@@ -147,12 +159,21 @@ pub async fn oidc_provider(oidc_ctx: Data<OidcContext>) -> Json<Provider> {
     Json(Provider { oidc: provider })
 }
 
+enum LoginResult {
+    UserCreated {
+        user: User,
+        group_ids: Vec<GroupId>,
+        event_and_room_ids: Vec<(EventId, RoomId)>,
+    },
+    UserUpdated(UserUpdatedInfo),
+}
+
 async fn update_core_user_permissions(
     authz: &kustos::Authz,
-    db_result: Either<UserUpdatedInfo, (User, Vec<GroupId>)>,
+    db_result: LoginResult,
 ) -> Result<(), ApiError> {
     match db_result {
-        Either::Left(modified_user) => {
+        LoginResult::UserUpdated(modified_user) => {
             // TODO(r.floren) this could be optimized I guess, with a user_to_groups?
             // But this is currently not a hot path.
             for group in modified_user.groups_added {
@@ -167,13 +188,35 @@ async fn update_core_user_permissions(
                     .await?;
             }
         }
-        Either::Right((user, groups)) => {
+        LoginResult::UserCreated {
+            user,
+            group_ids,
+            event_and_room_ids,
+        } => {
             authz.add_user_to_role(user.id, "user").await?;
 
-            for group in groups {
+            for group in group_ids {
                 authz.add_user_to_group(user.id, group).await?;
             }
+
+            // Migrate email invites to user invites
+            // Add permissions for user to events that the email was invited to
+            if event_and_room_ids.is_empty() {
+                return Ok(());
+            }
+
+            let mut policies = PoliciesBuilder::new().grant_user_access(user.id);
+
+            for (event_id, room_id) in event_and_room_ids {
+                policies = policies
+                    .event_read_access(event_id)
+                    .room_read_access(room_id)
+                    .event_invite_invitee_access(event_id);
+            }
+
+            authz.add_policies(policies.finish()).await?;
         }
     }
+
     Ok(())
 }

@@ -16,6 +16,17 @@ table! {
 table! {
     use crate::sql_types::*;
 
+    event_email_invites (event_id, email) {
+        event_id -> Uuid,
+        email -> Varchar,
+        created_by -> Uuid,
+        created_at -> Timestamptz,
+    }
+}
+
+table! {
+    use crate::sql_types::*;
+
     event_exceptions (id) {
         id -> Uuid,
         event_id -> Uuid,
@@ -187,6 +198,8 @@ table! {
     }
 }
 
+joinable!(event_email_invites -> events (event_id));
+joinable!(event_email_invites -> users (created_by));
 joinable!(event_exceptions -> events (event_id));
 joinable!(event_exceptions -> users (created_by));
 joinable!(event_favorites -> events (event_id));
@@ -203,6 +216,7 @@ joinable!(user_groups -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
     casbin_rule,
+    event_email_invites,
     event_exceptions,
     event_favorites,
     event_invites,
