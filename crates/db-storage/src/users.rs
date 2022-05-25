@@ -67,6 +67,20 @@ impl User {
         Ok(user)
     }
 
+    /// Get a user with the given id
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_by_email(conn: &DbConnection, oidc_issuer: &str, email: &str) -> Result<User> {
+        let user = users::table
+            .filter(
+                users::oidc_issuer
+                    .eq(oidc_issuer)
+                    .and(users::email.eq(email)),
+            )
+            .get_result(conn)?;
+
+        Ok(user)
+    }
+
     /// Get all users alongside their current groups
     #[tracing::instrument(err, skip_all)]
     pub fn get_all_with_groups(conn: &DbConnection) -> Result<Vec<(User, Vec<Group>)>> {

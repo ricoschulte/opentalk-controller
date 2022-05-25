@@ -36,14 +36,16 @@ port = 11311
 # URLs that requests are allowed from. Leave empty to allow all.
 cors.allowed_origin = ["https://localhost:8080"]
 
-[oidc.provider]
-# OIDC Issuer URL according to RFC8414.
-issuer = "http://localhost:8080/auth/realms/K3K"
-
-# OIDC Client ID.
+# Settings for the keycloak which is the user provider
+# and allows authentication via OIDC
+[keycloak]
+# URL to the keycloak
+base_url = "http://localhost:8080/auth"
+# Name of the keycloak realm
+realm = "MyRealm"
+# Client ID
 client_id = "Controller"
-
-# OIDC Client secret (application requires confidential client).
+# Client secret (application requires confidential client).
 client_secret = "c64c5854-3f02-4728-a617-bbe98ec42b8f"
 
 [room_server]

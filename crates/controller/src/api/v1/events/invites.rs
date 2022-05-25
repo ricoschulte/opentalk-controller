@@ -6,13 +6,16 @@ use crate::api::v1::users::PublicUserProfile;
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{delete, get, patch, post, Either};
-use database::Db;
+use database::{Db, OptionalExt};
+use db_storage::events::email_invites::NewEventEmailInvite;
 use db_storage::events::{
     Event, EventFavorite, EventId, EventInvite, EventInviteStatus, NewEventInvite,
     UpdateEventInvite,
 };
+use db_storage::rooms::RoomId;
 use db_storage::users::{User, UserId};
 use diesel::Connection;
+use keycloak_admin::KeycloakAdminClient;
 use kustos::policies_builder::PoliciesBuilder;
 use kustos::Authz;
 use serde::{Deserialize, Serialize};
@@ -54,9 +57,10 @@ pub async fn get_invites_for_event(
 
 /// Request body for the `POST /events/{event_id}/invites` endpoint
 #[derive(Deserialize)]
-pub struct PostEventInviteBody {
-    /// ID or email of the user to invite
-    pub invitee: UserId,
+#[serde(untagged)]
+pub enum PostEventInviteBody {
+    User { invitee: UserId },
+    Email { email: String },
 }
 
 /// API Endpoint `POST /events/{event_id}/invites`
@@ -66,24 +70,50 @@ pub struct PostEventInviteBody {
 pub async fn create_invite_to_event(
     db: Data<Db>,
     authz: Data<Authz>,
+    kc_admin_client: Data<KeycloakAdminClient>,
     current_user: ReqData<User>,
     event_id: Path<EventId>,
     create_invite: Json<PostEventInviteBody>,
 ) -> Result<Either<Created, NoContent>, ApiError> {
     let event_id = event_id.into_inner();
 
+    match create_invite.into_inner() {
+        PostEventInviteBody::User { invitee } => {
+            create_user_event_invite(db, authz, current_user.into_inner(), event_id, invitee).await
+        }
+        PostEventInviteBody::Email { email } => {
+            create_email_event_invite(
+                db,
+                authz,
+                kc_admin_client,
+                current_user.into_inner(),
+                event_id,
+                email,
+            )
+            .await
+        }
+    }
+}
+
+async fn create_user_event_invite(
+    db: Data<Db>,
+    authz: Data<Authz>,
+    current_user: User,
+    event_id: EventId,
+    invitee: UserId,
+) -> Result<Either<Created, NoContent>, ApiError> {
     let res = crate::block(move || -> database::Result<Either<_, NoContent>> {
         let conn = db.get_conn()?;
 
         let event = Event::get(&conn, event_id)?;
 
-        if event.created_by == current_user.id {
+        if event.created_by == invitee {
             return Ok(Either::Right(NoContent));
         }
 
         let res = NewEventInvite {
             event_id,
-            invitee: create_invite.invitee,
+            invitee,
             created_by: current_user.id,
             created_at: None,
         }
@@ -115,6 +145,124 @@ pub async fn create_invite_to_event(
             Ok(Either::Left(Created))
         }
         Either::Right(response) => Ok(Either::Right(response)),
+    }
+}
+
+/// Create an invite to an event via email address
+///
+/// Checks first if a user exists with the email address in our database and creates a regular invite
+/// else checks if the email is registered with the keycloak and then creates an email invite
+async fn create_email_event_invite(
+    db: Data<Db>,
+    authz: Data<Authz>,
+    kc_admin_client: Data<KeycloakAdminClient>,
+    current_user: User,
+    event_id: EventId,
+    email: String,
+) -> Result<Either<Created, NoContent>, ApiError> {
+    enum UserState {
+        ExistsAndIsAlreadyInvited,
+        ExistsAndWasInvited(RoomId, EventInvite),
+        DoesNotExist,
+    }
+
+    let state = {
+        let email = email.clone();
+        let current_user = current_user.clone();
+        let db = db.clone();
+
+        crate::block(move || -> Result<_, ApiError> {
+            let conn = db.get_conn()?;
+
+            let event = Event::get(&conn, event_id)?;
+
+            let invitee_user =
+                User::get_by_email(&conn, &current_user.oidc_issuer, &email).optional()?;
+
+            if let Some(invitee_user) = invitee_user {
+                if event.created_by == invitee_user.id {
+                    return Ok(UserState::ExistsAndIsAlreadyInvited);
+                }
+
+                let res = NewEventInvite {
+                    event_id,
+                    invitee: invitee_user.id,
+                    created_by: current_user.id,
+                    created_at: None,
+                }
+                .insert(&conn);
+
+                match res {
+                    Ok(invite) => Ok(UserState::ExistsAndWasInvited(event.room, invite)),
+                    Err(database::DatabaseError::DieselError(
+                        diesel::result::Error::DatabaseError(
+                            diesel::result::DatabaseErrorKind::UniqueViolation,
+                            ..,
+                        ),
+                    )) => Ok(UserState::ExistsAndIsAlreadyInvited),
+                    Err(e) => Err(e.into()),
+                }
+            } else {
+                Ok(UserState::DoesNotExist)
+            }
+        })
+        .await??
+    };
+
+    match state {
+        UserState::ExistsAndIsAlreadyInvited => Ok(Either::Right(NoContent)),
+        UserState::ExistsAndWasInvited(room_id, invite) => {
+            let policies = PoliciesBuilder::new()
+                // Grant invitee access
+                .grant_user_access(invite.invitee)
+                .event_read_access(event_id)
+                .room_read_access(room_id)
+                .event_invite_invitee_access(event_id)
+                .finish();
+
+            authz.add_policies(policies).await?;
+
+            Ok(Either::Left(Created))
+        }
+        UserState::DoesNotExist => {
+            let email_exists = kc_admin_client
+                .verify_email(&email)
+                .await
+                .map_err(anyhow::Error::from)?;
+
+            if email_exists {
+                // TODO: send email
+
+                let res = crate::block(move || {
+                    let conn = db.get_conn()?;
+
+                    NewEventEmailInvite {
+                        event_id,
+                        email,
+                        created_by: current_user.id,
+                    }
+                    .insert(&conn)
+                })
+                .await?;
+
+                match res {
+                    Ok(()) => Ok(Either::Left(Created)),
+                    Err(database::DatabaseError::DieselError(
+                        diesel::result::Error::DatabaseError(
+                            diesel::result::DatabaseErrorKind::UniqueViolation,
+                            ..,
+                        ),
+                    )) => Ok(Either::Right(NoContent)),
+                    Err(e) => Err(e.into()),
+                }
+            } else {
+                Err(ApiError::conflict()
+                    .with_code("unknown_email")
+                    .with_message(
+                    "Only emails registered with the systems are allowed to be used for invites",
+                ))
+            }
+        }
     }
 }
 

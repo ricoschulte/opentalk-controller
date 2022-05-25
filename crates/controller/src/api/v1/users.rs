@@ -4,7 +4,6 @@
 //! structs are defined in the Database crate [`db_storage`] for database operations.
 
 use super::response::{ApiError, NoContent};
-use crate::oidc::OidcContext;
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{get, patch, Either};
@@ -231,7 +230,7 @@ pub struct UnregisteredUser {
 pub async fn find(
     settings: SharedSettingsActix,
     kc_admin_client: Data<KeycloakAdminClient>,
-    oidc: Data<OidcContext>,
+    current_user: ReqData<User>,
     db: Data<Db>,
     query: Query<FindQuery>,
 ) -> Result<Json<Vec<UserFindResponseItem>>, ApiError> {
@@ -247,7 +246,7 @@ pub async fn find(
             .await
             .map_err(anyhow::Error::from)?;
 
-        let (db_users, kc_users) = crate::block(move || -> database::Result<_> {
+        let (db_users, kc_users) = crate::block(move || -> Result<_, ApiError> {
             let conn = db.get_conn()?;
 
             let kc_subs: Vec<&str> = found_kc_users
@@ -255,11 +254,7 @@ pub async fn find(
                 .map(|kc_user| kc_user.id.as_str())
                 .collect();
 
-            let users = User::get_all_by_oidc_subs(
-                &conn,
-                oidc.provider.metadata.issuer().as_str(),
-                &kc_subs,
-            )?;
+            let users = User::get_all_by_oidc_subs(&conn, &current_user.oidc_issuer, &kc_subs)?;
 
             found_kc_users.retain(|kc_user| !users.iter().any(|user| user.oidc_sub == kc_user.id));
 
