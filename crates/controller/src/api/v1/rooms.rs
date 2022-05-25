@@ -235,7 +235,6 @@ pub async fn delete(
     authz: Data<Authz>,
 ) -> Result<NoContent, ApiError> {
     let room_id = room_id.into_inner();
-    let room_path = format!("/rooms/{}", room_id);
 
     crate::block(move || {
         let conn = db.get_conn()?;
@@ -244,12 +243,9 @@ pub async fn delete(
     })
     .await??;
 
-    if !authz
-        .remove_explicit_resource_permissions(room_path.clone())
-        .await?
-    {
-        log::error!("Failed to delete permissions for {}", room_path);
-    }
+    let resources = associated_resource_ids(room_id);
+
+    authz.remove_explicit_resources(resources).await?;
 
     Ok(NoContent {})
 }
@@ -651,5 +647,18 @@ where
             room_id.resource_id().with_suffix("/invites"),
             [AccessMethod::Post],
         )
+        .add_resource(
+            room_id.resource_id().with_suffix("/invites/*"),
+            [AccessMethod::GET, AccessMethod::PUT, AccessMethod::DELETE],
+        )
     }
+}
+
+pub(crate) fn associated_resource_ids(room_id: RoomId) -> impl IntoIterator<Item = ResourceId> {
+    [
+        ResourceId::from(format!("/room/{room_id}")),
+        ResourceId::from(format!("/room/{room_id}/invites")),
+        ResourceId::from(format!("/room/{room_id}/invites/*")),
+        ResourceId::from(format!("/room/{room_id}/start")),
+    ]
 }

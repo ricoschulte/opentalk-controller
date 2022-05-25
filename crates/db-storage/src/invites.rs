@@ -11,7 +11,7 @@ use diesel::{
 use std::collections::{HashMap, HashSet};
 
 diesel_newtype! {
-    #[derive(Copy)] InviteCodeId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/invites/",
+    #[derive(Copy)] InviteCodeId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid",
     #[derive(Copy)] InviteCodeSerialId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt"
 }
 
