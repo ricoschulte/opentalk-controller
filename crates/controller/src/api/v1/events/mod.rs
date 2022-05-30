@@ -6,7 +6,7 @@ use super::users::PublicUserProfile;
 use super::{ApiResponse, DefaultApiResult, PagePaginationQuery};
 use crate::api::v1::response::CODE_IGNORED_VALUE;
 use crate::api::v1::rooms::RoomsPoliciesBuilderExt;
-use crate::api::v1::util::GetUserProfilesBatched;
+use crate::api::v1::util::{deserialize_some, GetUserProfilesBatched};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{delete, get, patch, post, Either};
@@ -18,7 +18,7 @@ use db_storage::events::{
     Event, EventException, EventExceptionKind, EventId, EventInvite, EventInviteStatus, NewEvent,
     TimeZone, UpdateEvent,
 };
-use db_storage::rooms::{NewRoom, Room, RoomId};
+use db_storage::rooms::{NewRoom, Room, RoomId, UpdateRoom};
 use db_storage::sip_configs::{NewSipConfig, SipConfig};
 use db_storage::users::User;
 use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
@@ -999,6 +999,11 @@ pub struct PatchEventBody {
     #[validate(length(max = 4096))]
     description: Option<String>,
 
+    /// Patch the password of the event's room
+    #[validate(length(min = 1, max = 255))]
+    #[serde(default, deserialize_with = "deserialize_some")]
+    password: Option<Option<String>>,
+
     /// Patch the time independence of the event
     ///
     /// If it changes the independence from true false this body has to have
@@ -1031,6 +1036,7 @@ impl PatchEventBody {
         let PatchEventBody {
             title,
             description,
+            password,
             is_time_independent,
             is_all_day,
             starts_at,
@@ -1040,6 +1046,30 @@ impl PatchEventBody {
 
         title.is_none()
             && description.is_none()
+            && password.is_none()
+            && is_time_independent.is_none()
+            && is_all_day.is_none()
+            && starts_at.is_none()
+            && ends_at.is_none()
+            && recurrence_pattern.is_empty()
+    }
+
+    // special case to only patch the events room
+    fn is_only_password(&self) -> bool {
+        let PatchEventBody {
+            title,
+            description,
+            password,
+            is_time_independent,
+            is_all_day,
+            starts_at,
+            ends_at,
+            recurrence_pattern,
+        } = self;
+
+        title.is_none()
+            && description.is_none()
+            && password.is_some()
             && is_time_independent.is_none()
             && is_all_day.is_none()
             && starts_at.is_none()
@@ -1083,24 +1113,41 @@ pub async fn patch_event(
         let (event, invite, room, sip_config, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
 
-        let update_event = match (event.is_time_independent, patch.is_time_independent) {
-            (true, Some(false)) => {
-                // The patch changes the event from an time-independent event
-                // to a time dependent event
-                patch_event_change_to_time_dependent(&current_user, patch)?
+        // Update the event's room if the password is set
+        let room = if let Some(password) = &patch.password {
+            UpdateRoom {
+                password: password.clone(),
+                wait_for_moderator: None,
+                listen_only: None,
             }
-            (true, _) | (false, Some(true)) => {
-                // The patch will modify an time-independent event or
-                // change an event to a time-independent event
-                patch_time_independent_event(&conn, &current_user, &event, patch)?
-            }
-            _ => {
-                // The patch modifies an time dependent event
-                patch_time_dependent_event(&conn, &current_user, &event, patch)?
-            }
+            .apply(&conn, event.room)?
+        } else {
+            room
         };
 
-        let event = update_event.apply(&conn, event_id)?;
+        // Special case: if the patch only modifies the password do not update the event
+        let event = if patch.is_only_password() {
+            event
+        } else {
+            let update_event = match (event.is_time_independent, patch.is_time_independent) {
+                (true, Some(false)) => {
+                    // The patch changes the event from an time-independent event
+                    // to a time dependent event
+                    patch_event_change_to_time_dependent(&current_user, patch)?
+                }
+                (true, _) | (false, Some(true)) => {
+                    // The patch will modify an time-independent event or
+                    // change an event to a time-independent event
+                    patch_time_independent_event(&conn, &current_user, &event, patch)?
+                }
+                _ => {
+                    // The patch modifies an time dependent event
+                    patch_time_dependent_event(&conn, &current_user, &event, patch)?
+                }
+            };
+
+            update_event.apply(&conn, event_id)?
+        };
 
         let created_by = if event.created_by == current_user.id {
             current_user.clone()
