@@ -546,6 +546,8 @@ async fn generate_response(
     breakout_room: Option<BreakoutRoomId>,
     resumption: Option<ResumptionToken>,
 ) -> Result<StartResponse, ApiError> {
+    let mut resuming = false;
+
     // Get participant id, check resumption token if it exists, if not generate random one
     let participant_id = if let Some(resumption) = resumption {
         let resumption_redis_key = resumption.into_redis_key();
@@ -573,6 +575,7 @@ async fn generate_response(
                     .await
                     .context("failed to remove resumption token")?
                 {
+                    resuming = true;
                     data.participant_id
                 } else {
                     // edge case: we successfully GET the resumption token but failed to delete it from redis
@@ -598,6 +601,7 @@ async fn generate_response(
 
     let ticket_data = TicketData {
         participant_id,
+        resuming,
         participant,
         room,
         breakout_room,

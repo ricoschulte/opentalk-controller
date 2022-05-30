@@ -51,6 +51,7 @@ use uuid::Uuid;
 pub struct Builder {
     runner_id: Uuid,
     pub(super) id: ParticipantId,
+    resuming: bool,
     pub(super) room: Room,
     pub(super) breakout_room: Option<BreakoutRoomId>,
     pub(super) participant: api::Participant<User>,
@@ -299,6 +300,7 @@ impl Builder {
         Ok(Runner {
             runner_id: self.runner_id,
             id: self.id,
+            resuming: self.resuming,
             room_id,
             participant: self.participant,
             role: self.role,
@@ -335,6 +337,9 @@ pub struct Runner {
 
     /// participant id that the runner is connected to
     id: ParticipantId,
+
+    /// True if a resumption token was used
+    resuming: bool,
 
     /// Full signaling room id
     room_id: SignalingRoomId,
@@ -399,6 +404,7 @@ impl Runner {
     pub fn builder(
         runner_id: Uuid,
         id: ParticipantId,
+        resuming: bool,
         room: Room,
         breakout_room: Option<BreakoutRoomId>,
         participant: api::Participant<User>,
@@ -424,6 +430,7 @@ impl Runner {
         Builder {
             runner_id,
             id,
+            resuming,
             room,
             breakout_room,
             participant,
@@ -902,7 +909,7 @@ impl Runner {
 
         // Check that SADD doesn't return 0. That would mean that the participant id would be a
         // duplicate which cannot be allowed. Since this should never happen just error and exit.
-        if num_added == 0 {
+        if !self.resuming && num_added == 0 {
             bail!("participant-id is already taken inside participant set");
         }
 

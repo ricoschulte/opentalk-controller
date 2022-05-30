@@ -40,6 +40,7 @@ impl_to_redis_args!(TicketRedisKey<'_>);
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct TicketData {
     pub participant_id: ParticipantId,
+    pub resuming: bool,
     pub participant: Participant<UserId>,
     pub room: RoomId,
     pub breakout_room: Option<BreakoutRoomId>,
