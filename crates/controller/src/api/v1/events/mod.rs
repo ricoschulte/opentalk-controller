@@ -423,11 +423,7 @@ impl EventRoomInfo {
         };
         Self {
             id: room.id,
-            password: if room.password.is_empty() {
-                None
-            } else {
-                Some(room.password)
-            },
+            password: room.password,
             sip_tel,
             sip_uri: None, // TODO SIP URI support
             sip_id,
@@ -594,9 +590,7 @@ fn create_time_independent_event(
 ) -> Result<EventResource, ApiError> {
     let room = NewRoom {
         created_by: current_user.id,
-        password: password.unwrap_or_default(),
-        wait_for_moderator: false,
-        listen_only: false,
+        password,
     }
     .insert(conn)?;
 
@@ -664,9 +658,7 @@ fn create_time_dependent_event(
 
     let room = NewRoom {
         created_by: current_user.id,
-        password: password.unwrap_or_default(),
-        wait_for_moderator: false,
-        listen_only: false,
+        password,
     }
     .insert(conn)?;
 
@@ -1116,9 +1108,7 @@ pub async fn patch_event(
         // Update the event's room if the password is set
         let room = if let Some(password) = &patch.password {
             UpdateRoom {
-                password: password.clone(),
-                wait_for_moderator: None,
-                listen_only: None,
+                password: Some(password.clone()),
             }
             .apply(&conn, event.room)?
         } else {

@@ -5,15 +5,18 @@
 
 use super::response::error::{ApiError, ValidationErrorEntry};
 use super::response::{NoContent, CODE_INVALID_VALUE};
+use super::users::PublicUserProfile;
 use crate::api::signaling::prelude::*;
 use crate::api::signaling::resumption::{ResumptionData, ResumptionToken};
 use crate::api::signaling::ticket::{TicketData, TicketToken};
 use crate::api::v1::{ApiResponse, PagePaginationQuery};
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
+use crate::settings::SharedSettingsActix;
 use actix_web::web::{self, Data, Json, Path, ReqData};
-use actix_web::{delete, get, post, put};
+use actix_web::{delete, get, patch, post};
 use anyhow::Context;
+use chrono::{DateTime, Utc};
 use controller_shared::ParticipantId;
 use database::{Db, OptionalExt};
 use db_storage::invites::{Invite, InviteCodeId};
@@ -25,7 +28,7 @@ use kustos::prelude::*;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use validator::{Validate, ValidationError};
+use validator::Validate;
 
 /// A Room
 ///
@@ -33,70 +36,24 @@ use validator::{Validate, ValidationError};
 /// appropriate permissions.
 #[derive(Debug, Serialize)]
 pub struct RoomResource {
-    pub uuid: RoomId,
-    pub owner: UserId,
-    pub password: String,
-    pub wait_for_moderator: bool,
-    pub listen_only: bool,
-}
-
-/// Public room details
-///
-/// Contains general public information about a room.
-#[derive(Debug, Serialize)]
-pub struct RoomDetails {
-    pub uuid: RoomId,
-    pub owner: UserId,
-    pub wait_for_moderator: bool,
-    pub listen_only: bool,
-}
-
-/// API request parameters to create a new room
-#[derive(Debug, Validate, Deserialize)]
-pub struct NewRoom {
-    #[validate(length(max = 255))]
-    pub password: String,
-    pub wait_for_moderator: bool,
-    pub listen_only: bool,
-    /// Enable/Disable sip for this room; defaults to false when not set
-    #[serde(default)]
-    pub enable_sip: bool,
-}
-
-/// API request parameters to modify a room.
-#[derive(Debug, Validate, Deserialize)]
-#[validate(schema(function = "disallow_empty"))]
-pub struct ModifyRoom {
-    #[validate(length(max = 255))]
+    pub id: RoomId,
+    pub created_by: PublicUserProfile,
+    pub created_at: DateTime<Utc>,
     pub password: Option<String>,
-    pub wait_for_moderator: Option<bool>,
-    pub listen_only: Option<bool>,
-}
-
-fn disallow_empty(modify_room: &ModifyRoom) -> Result<(), ValidationError> {
-    let ModifyRoom {
-        password,
-        wait_for_moderator,
-        listen_only,
-    } = modify_room;
-
-    if password.is_none() && wait_for_moderator.is_none() && listen_only.is_none() {
-        Err(ValidationError::new("empty"))
-    } else {
-        Ok(())
-    }
 }
 
 /// API Endpoint *GET /rooms*
 ///
-/// Returns a JSON array of all owned rooms as [`Room`]
+/// Returns a JSON array of all accessible rooms as [`Room`]
 #[get("/rooms")]
-pub async fn owned(
+pub async fn accessible(
+    settings: SharedSettingsActix,
     db: Data<Db>,
     current_user: ReqData<User>,
     pagination: web::Query<PagePaginationQuery>,
     authz: Data<Authz>,
 ) -> Result<ApiResponse<Vec<RoomResource>>, ApiError> {
+    let settings = settings.load();
     let current_user = current_user.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
@@ -108,9 +65,11 @@ pub async fn owned(
         let conn = db.get_conn()?;
 
         match accessible_rooms {
-            kustos::AccessibleResources::All => Room::get_all_paginated(&conn, per_page, page),
+            kustos::AccessibleResources::All => {
+                Room::get_all_with_creator_paginated(&conn, per_page, page)
+            }
             kustos::AccessibleResources::List(list) => {
-                Room::get_by_ids_paginated(&conn, &list, per_page, page)
+                Room::get_by_ids_with_creator_paginated(&conn, &list, per_page, page)
             }
         }
     })
@@ -118,43 +77,53 @@ pub async fn owned(
 
     let rooms = rooms
         .into_iter()
-        .map(|db_room| RoomResource {
-            uuid: db_room.id,
-            owner: db_room.created_by,
-            password: db_room.password,
-            wait_for_moderator: db_room.wait_for_moderator,
-            listen_only: db_room.listen_only,
+        .map(|(room, user)| RoomResource {
+            id: room.id,
+            created_by: PublicUserProfile::from_db(&settings, user),
+            created_at: room.created_at,
+            password: room.password,
         })
         .collect::<Vec<RoomResource>>();
 
     Ok(ApiResponse::new(rooms).with_page_pagination(per_page, page, room_count))
 }
 
+/// API request parameters to create a new room
+#[derive(Debug, Validate, Deserialize)]
+pub struct PostRoomsBody {
+    #[validate(length(min = 1, max = 255))]
+    pub password: Option<String>,
+    /// Enable/Disable sip for this room; defaults to false when not set
+    #[serde(default)]
+    pub enable_sip: bool,
+}
+
 /// API Endpoint *POST /rooms*
 ///
-/// Uses the provided [`NewRoom`] to create a new room.
-/// Returns the created [`Room`].
+/// Uses the provided [`PostRoomsBody`] to create a new room.
+/// Returns the created [`RoomResource`].
 #[post("/rooms")]
 pub async fn new(
+    settings: SharedSettingsActix,
     db: Data<Db>,
-    current_user: ReqData<User>,
-    room_parameters: Json<NewRoom>,
     authz: Data<Authz>,
+    current_user: ReqData<User>,
+    body: Json<PostRoomsBody>,
 ) -> Result<Json<RoomResource>, ApiError> {
-    let room_parameters = room_parameters.into_inner();
+    let settings = settings.load();
+    let current_user = current_user.into_inner();
+    let room_parameters = body.into_inner();
 
     room_parameters.validate()?;
 
     let current_user_id = current_user.id;
 
-    let db_room = crate::block(move || -> database::Result<_> {
+    let room = crate::block(move || -> database::Result<_> {
         let conn = db.get_conn()?;
 
         let new_room = db_rooms::NewRoom {
             created_by: current_user_id,
             password: room_parameters.password,
-            wait_for_moderator: room_parameters.wait_for_moderator,
-            listen_only: room_parameters.listen_only,
         };
 
         let room = new_room.insert(&conn)?;
@@ -167,62 +136,70 @@ pub async fn new(
     })
     .await??;
 
-    let room = RoomResource {
-        uuid: db_room.id,
-        owner: db_room.created_by,
-        password: db_room.password,
-        wait_for_moderator: db_room.wait_for_moderator,
-        listen_only: db_room.listen_only,
+    let room_resource = RoomResource {
+        id: room.id,
+        created_by: PublicUserProfile::from_db(&settings, current_user),
+        created_at: room.created_at,
+        password: room.password,
     };
 
     let policies = PoliciesBuilder::new()
-        .grant_user_access(current_user.id)
-        .room_read_access(room.uuid)
-        .room_write_access(room.uuid)
+        .grant_user_access(current_user_id)
+        .room_read_access(room_resource.id)
+        .room_write_access(room_resource.id)
         .finish();
 
     authz.add_policies(policies).await?;
 
-    Ok(Json(room))
+    Ok(Json(room_resource))
 }
 
-/// API Endpoint *PUT /rooms/{room_id}*
+/// API request parameters to patch a room
+#[derive(Debug, Validate, Deserialize)]
+pub struct PatchRoomsBody {
+    #[validate(length(min = 1, max = 255))]
+    #[serde(default, deserialize_with = "super::util::deserialize_some")]
+    pub password: Option<Option<String>>,
+}
+
+/// API Endpoint *PATCH /rooms/{room_id}*
 ///
-/// Uses the provided [`ModifyRoom`] to modify a specified room.
-/// Returns the modified [`Room`]
-#[put("/rooms/{room_id}")]
-pub async fn modify(
+/// Uses the provided [`PatchRoomsBody`] to modify a specified room.
+/// Returns the modified [`RoomResource`]
+#[patch("/rooms/{room_id}")]
+pub async fn patch(
+    settings: SharedSettingsActix,
     db: Data<Db>,
+    current_user: ReqData<User>,
     room_id: Path<RoomId>,
-    modify_room: Json<ModifyRoom>,
+    body: Json<PatchRoomsBody>,
 ) -> Result<Json<RoomResource>, ApiError> {
+    let settings = settings.load();
+    let current_user = current_user.into_inner();
     let room_id = room_id.into_inner();
-    let modify_room = modify_room.into_inner();
+    let modify_room = body.into_inner();
 
     modify_room.validate()?;
 
-    let db_room = crate::block(move || {
+    let room = crate::block(move || {
         let conn = db.get_conn()?;
 
         let changeset = db_rooms::UpdateRoom {
             password: modify_room.password,
-            wait_for_moderator: modify_room.wait_for_moderator,
-            listen_only: modify_room.listen_only,
         };
 
         changeset.apply(&conn, room_id)
     })
     .await??;
 
-    let room = RoomResource {
-        uuid: db_room.id,
-        owner: db_room.created_by,
-        password: db_room.password,
-        wait_for_moderator: db_room.wait_for_moderator,
-        listen_only: db_room.listen_only,
+    let room_resource = RoomResource {
+        id: room.id,
+        created_by: PublicUserProfile::from_db(&settings, current_user),
+        created_at: room.created_at,
+        password: room.password,
     };
 
-    Ok(Json(room))
+    Ok(Json(room_resource))
 }
 
 /// API Endpoint *DELETE /rooms/{room_id}*
@@ -247,31 +224,38 @@ pub async fn delete(
 
     authz.remove_explicit_resources(resources).await?;
 
-    Ok(NoContent {})
+    Ok(NoContent)
 }
 
 /// API Endpoint *GET /rooms/{room_id}*
 ///
-/// Returns the specified Room as [`RoomDetails`].
+/// Returns the specified Room as [`RoomResource`].
 #[get("/rooms/{room_id}")]
-pub async fn get(db: Data<Db>, room_id: Path<RoomId>) -> Result<Json<RoomDetails>, ApiError> {
+pub async fn get(
+    settings: SharedSettingsActix,
+    db: Data<Db>,
+    current_user: ReqData<User>,
+    room_id: Path<RoomId>,
+) -> Result<Json<RoomResource>, ApiError> {
+    let settings = settings.load();
+    let current_user = current_user.into_inner();
     let room_id = room_id.into_inner();
 
-    let db_room = crate::block(move || {
+    let room = crate::block(move || {
         let conn = db.get_conn()?;
 
         Room::get(&conn, room_id)
     })
     .await??;
 
-    let room_details = RoomDetails {
-        uuid: db_room.id,
-        owner: db_room.created_by,
-        wait_for_moderator: db_room.wait_for_moderator,
-        listen_only: db_room.listen_only,
+    let room_resource = RoomResource {
+        id: room.id,
+        created_by: PublicUserProfile::from_db(&settings, current_user),
+        created_at: room.created_at,
+        password: room.password,
     };
 
-    Ok(Json(room_details))
+    Ok(Json(room_resource))
 }
 
 /// The JSON body expected when making a *POST /rooms/{room_id}/start*
@@ -359,9 +343,9 @@ pub async fn start(
     })
     .await??;
 
-    if !room.password.is_empty() {
+    if let Some(password) = &room.password {
         if let Some(pw) = &request.password {
-            if pw != &room.password {
+            if pw != password {
                 return Err(StartRoomError::WrongRoomPassword.into());
             }
         } else {
@@ -449,9 +433,9 @@ pub async fn start_invited(
     })
     .await??;
 
-    if !room.password.is_empty() {
+    if let Some(password) = &room.password {
         if let Some(pw) = &request.password {
-            if pw != &room.password {
+            if pw != password {
                 return Err(StartRoomError::WrongRoomPassword.into());
             }
         } else {
