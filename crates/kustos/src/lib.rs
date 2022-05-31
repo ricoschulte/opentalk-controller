@@ -385,19 +385,21 @@ impl Authz {
 
     /// Checks in a batched way if the given user has access to the resources
     #[tracing::instrument(level = "debug", skip(self, user, res, access))]
-    pub async fn check_batched<U, R>(
+    pub async fn check_batched<U, R, I>(
         &self,
         user: U,
-        res: Vec<R>,
+        res: I,
         access: AccessMethod,
     ) -> Result<Vec<bool>>
     where
         U: Into<PolicyUser> + Clone,
         R: Into<ResourceId>,
+        I: IntoIterator<Item = R>,
     {
         let inner = self.inner.read().await;
-        let mut result = Vec::with_capacity(res.len());
-        for resource in res {
+        let iterator = res.into_iter();
+        let mut result = Vec::with_capacity(iterator.size_hint().0);
+        for resource in iterator {
             result.push(inner.enforce(UserPolicy::new(user.clone().into(), resource, access))?);
         }
         Ok(result)
