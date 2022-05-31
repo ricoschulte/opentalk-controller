@@ -163,6 +163,27 @@ impl Event {
     }
 
     #[tracing::instrument(err, skip_all)]
+    #[allow(clippy::type_complexity)]
+    pub fn get_with_room(
+        conn: &DbConnection,
+        event_id: EventId,
+    ) -> Result<(Event, Room, Option<SipConfig>)> {
+        let query = events::table
+            .inner_join(rooms::table.on(events::room.eq(rooms::id)))
+            .left_join(sip_configs::table.on(rooms::id.eq(sip_configs::room)))
+            .select((
+                events::all_columns,
+                rooms::all_columns,
+                sip_configs::all_columns.nullable(),
+            ))
+            .filter(events::id.eq(event_id));
+
+        let (event, room, sip_config) = query.first(conn)?;
+
+        Ok((event, room, sip_config))
+    }
+
+    #[tracing::instrument(err, skip_all)]
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn get_all_for_user_paginated(
         conn: &DbConnection,

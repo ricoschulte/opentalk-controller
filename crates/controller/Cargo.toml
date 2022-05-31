@@ -9,6 +9,9 @@ build = "build.rs"
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
 database = { path = "../database", package = "k3k-database" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
+mail-worker-proto = { path = "../mail-worker-proto", package = "mail-worker-proto", features = [
+    "client",
+] }
 
 ### Logging utilities
 log = { version = "0.4", features = ["serde"] }
@@ -52,6 +55,7 @@ diesel = { version = "1.4.6", features = [
     "chrono",
 ] }
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
+uuid_v1 = { package = "uuid", version = "1.0.0", features = ["serde", "v4"] }
 
 ### Web Framework & Runtime
 tokio = { version = "1", features = ["signal"] }
@@ -81,7 +85,9 @@ r3dlock = { path = "../r3dlock" }
 
 ### OpenID Connect & JWT
 openidconnect = { version = "2" }
-reqwest = { version = "0.11", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.11", default-features = false, features = [
+    "rustls-tls",
+] }
 jsonwebtoken = "7"
 base64 = "0.13"
 chrono = "0.4"

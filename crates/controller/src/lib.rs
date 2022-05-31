@@ -23,6 +23,7 @@
 use crate::acl::check_or_create_kustos_default_permissions;
 use crate::api::v1::middleware::metrics::RequestMetrics;
 use crate::api::v1::response::error::json_error_handler;
+use crate::services::MailService;
 use crate::settings::{Settings, SharedSettings};
 use crate::trace::ReducedSpanBuilder;
 use actix_cors::Cors;
@@ -65,6 +66,7 @@ mod oidc;
 mod redis_wrapper;
 mod trace;
 
+mod services;
 pub mod settings;
 
 pub mod prelude {
@@ -330,6 +332,11 @@ impl Controller {
 
             let kc_admin_client = Data::from(self.kc_admin_client);
 
+            let mail_service = Data::new(MailService::new(
+                self.shared_settings.clone(),
+                self.rabbitmq_channel,
+            ));
+
             // TODO(r.floren) what to do with the handle
             let (authz, _) = kustos::Authz::new_with_autoload_and_metrics(
                 db.upgrade().unwrap(),
@@ -369,6 +376,8 @@ impl Controller {
                 let redis = Data::new(redis.clone());
                 let authz = Data::new(authz.clone());
 
+                let mail_service = mail_service.clone();
+
                 let acl = authz_middleware.clone();
 
                 let signaling_modules = Data::from(signaling_modules.upgrade().unwrap());
@@ -391,6 +400,7 @@ impl Controller {
                     .app_data(signaling_modules)
                     .app_data(SignalingProtocols::data())
                     .app_data(metrics.clone())
+                    .app_data(mail_service)
                     .service(api::signaling::ws_service)
                     .service(metrics::metrics)
                     .service(v1_scope(db.clone(), oidc_ctx.clone(), acl))

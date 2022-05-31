@@ -19,6 +19,7 @@ COPY ./crates/keycloak-admin/Cargo.toml ./crates/keycloak-admin/Cargo.toml
 COPY ./crates/kustos/Cargo.toml ./crates/kustos/Cargo.toml
 COPY ./crates/lapin-pool/Cargo.toml ./crates/lapin-pool/Cargo.toml
 COPY ./crates/legal-vote/Cargo.toml ./crates/legal-vote/Cargo.toml
+COPY ./crates/mail-worker-proto/Cargo.toml ./crates/mail-worker-proto/Cargo.toml
 COPY ./crates/polls/Cargo.toml ./crates/polls/Cargo.toml
 COPY ./crates/r3dlock/Cargo.toml ./crates/r3dlock/Cargo.toml
 COPY ./crates/protocol/Cargo.toml ./crates/protocol/Cargo.toml
