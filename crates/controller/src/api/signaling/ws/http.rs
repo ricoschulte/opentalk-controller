@@ -103,6 +103,7 @@ pub(crate) async fn ws_service(
     let mut builder = Runner::builder(
         request_id,
         ticket_data.participant_id,
+        ticket_data.resuming,
         room,
         ticket_data.breakout_room,
         participant,
