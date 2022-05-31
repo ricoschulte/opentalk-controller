@@ -226,16 +226,20 @@ impl SignalingModule for BreakoutRooms {
             Event::Ext(TimerEvent::RoomExpired) => {
                 ctx.ws_send(outgoing::Message::Expired);
 
-                // Create timer to force leave the room after 5min
-                ctx.add_event_stream(futures::stream::once(
-                    sleep(Duration::from_secs(60 * 5)).map(|_| TimerEvent::LeavePeriodExpired),
-                ));
+                if self.breakout_room.is_some() {
+                    // Create timer to force leave the room after 5min
+                    ctx.add_event_stream(futures::stream::once(
+                        sleep(Duration::from_secs(60 * 5)).map(|_| TimerEvent::LeavePeriodExpired),
+                    ));
+                }
 
                 Ok(())
             }
             Event::Ext(TimerEvent::LeavePeriodExpired) => {
-                // The 5min leave period expired, force quit
-                ctx.exit(None);
+                if self.breakout_room.is_some() {
+                    // The 5min leave period expired, force quit
+                    ctx.exit(None);
+                }
 
                 Ok(())
             }
@@ -377,10 +381,12 @@ impl BreakoutRooms {
             rabbitmq::Message::Stop => {
                 ctx.ws_send(outgoing::Message::Stopped);
 
-                // Create timer to force leave the room after 5min
-                ctx.add_event_stream(futures::stream::once(
-                    sleep(Duration::from_secs(60 * 5)).map(|_| TimerEvent::LeavePeriodExpired),
-                ));
+                if self.breakout_room.is_some() {
+                    // Create timer to force leave the room after 5min
+                    ctx.add_event_stream(futures::stream::once(
+                        sleep(Duration::from_secs(60 * 5)).map(|_| TimerEvent::LeavePeriodExpired),
+                    ));
+                }
             }
             rabbitmq::Message::Joined(participant) => {
                 if self.breakout_room == participant.breakout_room {
