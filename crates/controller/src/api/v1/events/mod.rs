@@ -23,7 +23,7 @@ use db_storage::sip_configs::{NewSipConfig, SipConfig};
 use db_storage::users::User;
 use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
 use kustos::prelude::{AccessMethod, IsSubject};
-use kustos::{Authz, Resource};
+use kustos::{Authz, Resource, ResourceId};
 use rrule::{Frequency, RRuleSet};
 use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
@@ -1337,18 +1337,24 @@ pub async fn delete_event(
     })
     .await??;
 
-    let resources = vec![
-        format!("/events/{event_id}"),
-        format!("/events/{event_id}/instances"),
-        format!("/events/{event_id}/instances/*"),
-        format!("/events/{event_id}/invites"),
-        format!("/events/{event_id}/invite"),
-        format!("/users/me/event_favorites/{event_id}"),
-    ];
+    let resources = associated_resource_ids(event_id);
 
     authz.remove_explicit_resources(resources).await?;
 
     Ok(NoContent)
+}
+
+pub(crate) fn associated_resource_ids(event_id: EventId) -> impl IntoIterator<Item = ResourceId> {
+    [
+        ResourceId::from(format!("/events/{event_id}")),
+        ResourceId::from(format!("/events/{event_id}/instances")),
+        ResourceId::from(format!("/events/{event_id}/instances/*")),
+        ResourceId::from(format!("/events/{event_id}/invites")),
+        ResourceId::from(format!("/events/{event_id}/invites/*")),
+        ResourceId::from(format!("/events/{event_id}/invite")),
+        ResourceId::from(format!("/events/{event_id}/reschedule")),
+        ResourceId::from(format!("/users/me/event_favorites/{event_id}")),
+    ]
 }
 
 #[derive(Deserialize, Validate)]

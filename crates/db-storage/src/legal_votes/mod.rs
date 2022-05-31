@@ -113,6 +113,28 @@ impl LegalVote {
 
         Ok(legal_votes_with_total)
     }
+
+    /// Get all `LegalVotes` for room
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_all_ids_for_room(conn: &DbConnection, room_id: RoomId) -> Result<Vec<LegalVoteId>> {
+        let query = legal_votes::table
+            .select(legal_votes::id)
+            .filter(legal_votes::room.eq(room_id));
+
+        let legal_votes_with_total = query.load(conn)?;
+
+        Ok(legal_votes_with_total)
+    }
+
+    /// Delete all `LegalVotes` for room
+    #[tracing::instrument(err, skip_all)]
+    pub fn delete_by_room(conn: &DbConnection, room_id: RoomId) -> Result<()> {
+        diesel::delete(legal_votes::table)
+            .filter(legal_votes::room.eq(room_id))
+            .execute(conn)?;
+
+        Ok(())
+    }
 }
 
 /// LegalVote insert values
@@ -160,8 +182,8 @@ impl NewLegalVote {
             }
         }
 
-        Err(DatabaseError::Custom(
-            "Unable to create legal vote after 3 attempts with unique violation".into(),
+        Err(DatabaseError::custom(
+            "Unable to create legal vote after 3 attempts with unique violation",
         ))
     }
 }
@@ -175,7 +197,7 @@ pub fn set_protocol(
     protocol: NewProtocol,
 ) -> Result<()> {
     let protocol =
-        serde_json::to_value(protocol).map_err(|e| DatabaseError::Custom(e.to_string()))?;
+        serde_json::to_value(protocol).map_err(|e| DatabaseError::Custom(e.to_string().into()))?;
 
     let query = diesel::update(legal_votes::table.filter(legal_votes::id.eq(&legal_vote_id)))
         .set(legal_votes::protocol.eq(protocol));

@@ -55,6 +55,8 @@ mod api;
 #[cfg(doc)]
 pub mod api;
 
+mod internal_api;
+
 mod acl;
 mod cli;
 mod ha_sync;
@@ -301,7 +303,7 @@ impl Controller {
                     .app_data(db)
                     .app_data(oidc_ctx)
                     .app_data(Data::new(shutdown.clone()))
-                    .service(api::internal::introspect)
+                    .service(internal_api::introspect::post)
             })
         };
 
@@ -382,7 +384,8 @@ impl Controller {
                     .app_data(metrics.clone())
                     .service(api::signaling::ws_service)
                     .service(metrics::metrics)
-                    .service(v1_scope(db, oidc_ctx, acl))
+                    .service(v1_scope(db.clone(), oidc_ctx.clone(), acl))
+                    .service(internal_scope(db, oidc_ctx))
             })
         };
 
@@ -550,6 +553,15 @@ fn v1_scope(
                 .service(api::v1::invites::update_invite)
                 .service(api::v1::invites::delete_invite),
         )
+}
+
+fn internal_scope(db: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
+    // internal apis
+    web::scope("/internal").service(
+        web::scope("")
+            .wrap(api::v1::middleware::oidc_auth::OidcAuth { db, oidc_ctx })
+            .service(api::internal::rooms::delete),
+    )
 }
 
 fn setup_cors(settings: &settings::HttpCors) -> Cors {

@@ -159,7 +159,7 @@ impl NewSipConfig {
             return Ok(config);
         }
 
-        Err(DatabaseError::Custom(format!(
+        Err(DatabaseError::custom(format!(
             "Failed to insert new sip config for room {room} 3 times (collision)",
             room = self.room
         )))

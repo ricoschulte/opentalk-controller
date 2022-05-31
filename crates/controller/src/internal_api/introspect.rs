@@ -37,7 +37,7 @@ enum TokenType {
 /// This a minimal implementation for access tokens
 ///
 #[post("/introspect")]
-pub async fn introspect(
+pub async fn post(
     body: Json<IntrospectRequest>,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
