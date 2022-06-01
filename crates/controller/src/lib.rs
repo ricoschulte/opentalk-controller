@@ -35,6 +35,7 @@ use breakout::BreakoutRooms;
 use database::Db;
 use db_storage::groups::NewGroup;
 use keycloak_admin::KeycloakAdminClient;
+use lapin_pool::{RabbitMqChannel, RabbitMqPool};
 use moderation::ModerationModule;
 use oidc::OidcContext;
 use prelude::*;
@@ -47,8 +48,6 @@ use tokio::signal::ctrl_c;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::broadcast;
 use tokio::time::sleep;
-use tokio_executor_trait::Tokio as TokioExecutor;
-use tokio_reactor_trait::Tokio as TokioReactor;
 use tracing_actix_web::TracingLogger;
 
 #[cfg(not(doc))]
@@ -153,13 +152,11 @@ pub struct Controller {
 
     kc_admin_client: Arc<KeycloakAdminClient>,
 
-    /// RabbitMQ connection, can be used to create channels
-    pub rabbitmq: Arc<lapin::Connection>,
+    /// RabbitMQ connection pool, can be used to create connections and channels
+    pub rabbitmq_pool: Arc<RabbitMqPool>,
 
-    /// RabbitMQ channel, can be cloned and used directly.
-    ///
-    /// If RabbitMQ is used extensively by a module it should create its own channel.
-    pub rabbitmq_channel: lapin::Channel,
+    /// General purpose rabbitmq channel
+    pub rabbitmq_channel: Arc<RabbitMqChannel>,
 
     /// Cloneable redis connection manager, can be used to write/read to the controller's redis.
     pub redis: RedisConnection,
@@ -224,21 +221,18 @@ impl Controller {
             .await
             .context("Failed to migrate database")?;
 
-        let rabbitmq = Arc::new(
-            lapin::Connection::connect(
-                &settings.rabbit_mq.url,
-                lapin::ConnectionProperties::default()
-                    .with_executor(TokioExecutor::current())
-                    .with_reactor(TokioReactor),
-            )
-            .await
-            .context("failed to connect to rabbitmq")?,
+        let rabbitmq_pool = RabbitMqPool::from_config(
+            &settings.rabbit_mq.url,
+            settings.rabbit_mq.min_connections,
+            settings.rabbit_mq.max_channels_per_connection,
         );
-
-        let rabbitmq_channel = rabbitmq
-            .create_channel()
-            .await
-            .context("Could not create rabbitmq channel")?;
+        // create a general purpose rabbitmq channel for endpoints
+        let rabbitmq_channel = Arc::new(
+            rabbitmq_pool
+                .create_channel()
+                .await
+                .context("Could not create rabbitmq channel")?,
+        );
 
         ha_sync::init(&rabbitmq_channel)
             .await
@@ -286,7 +280,7 @@ impl Controller {
             db,
             oidc,
             kc_admin_client,
-            rabbitmq,
+            rabbitmq_pool,
             rabbitmq_channel,
             redis: redis_conn,
             shutdown,
@@ -324,8 +318,8 @@ impl Controller {
         let ext_http_server = {
             let cors = self.startup_settings.http.cors.clone();
 
-            let rabbitmq_channel = Data::new(self.rabbitmq_channel);
-
+            let rabbitmq_pool = Data::from(self.rabbitmq_pool.clone());
+            let rabbitmq_channel = Data::from(self.rabbitmq_channel.clone());
             let signaling_modules = Arc::downgrade(&signaling_modules);
             let db = Arc::downgrade(&self.db);
 
@@ -392,6 +386,7 @@ impl Controller {
                     .app_data(authz)
                     .app_data(redis)
                     .app_data(Data::new(shutdown.clone()))
+                    .app_data(rabbitmq_pool.clone())
                     .app_data(rabbitmq_channel.clone())
                     .app_data(signaling_modules)
                     .app_data(SignalingProtocols::data())
@@ -498,7 +493,7 @@ impl Controller {
 
         // Close all rabbitmq connections
         // TODO what code and text to use here
-        if let Err(e) = self.rabbitmq.close(0, "shutting down").await {
+        if let Err(e) = self.rabbitmq_pool.close(0, "shutting down").await {
             log::error!("Failed to close RabbitMQ connections, {}", e);
         }
 

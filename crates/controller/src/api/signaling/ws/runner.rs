@@ -35,6 +35,7 @@ use kustos::Authz;
 use lapin::message::DeliveryResult;
 use lapin::options::{ExchangeDeclareOptions, QueueDeclareOptions};
 use lapin::{BasicProperties, ExchangeKind};
+use lapin_pool::RabbitMqChannel;
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -65,7 +66,7 @@ pub struct Builder {
     pub(super) db: Arc<Db>,
     pub(super) authz: Arc<Authz>,
     pub(super) redis_conn: RedisConnection,
-    pub(super) rabbitmq_channel: lapin::Channel,
+    pub(super) rabbitmq_channel: RabbitMqChannel,
     resumption_keep_alive: ResumptionTokenKeepAlive,
 }
 
@@ -316,7 +317,7 @@ impl Builder {
             redis_conn: self.redis_conn,
             consumer,
             consumer_delegated: false,
-            rabbit_mq_channel: self.rabbitmq_channel,
+            rabbitmq_channel: self.rabbitmq_channel,
             room_exchange,
             resumption_keep_alive: self.resumption_keep_alive,
             shutdown_sig,
@@ -370,7 +371,7 @@ pub struct Runner {
     consumer_delegated: bool,
 
     /// RabbitMQ channel to send events
-    rabbit_mq_channel: lapin::Channel,
+    rabbitmq_channel: RabbitMqChannel,
 
     /// Name of the rabbitmq room exchange
     room_exchange: String,
@@ -429,7 +430,7 @@ impl Runner {
         db: Arc<Db>,
         authz: Arc<Authz>,
         redis_conn: RedisConnection,
-        rabbitmq_channel: lapin::Channel,
+        rabbitmq_channel: RabbitMqChannel,
         resumption_keep_alive: ResumptionTokenKeepAlive,
     ) -> Builder {
         // TODO(r.floren) Change this when the permissions system gets introduced
@@ -636,7 +637,7 @@ impl Runner {
 
         // Cancel subscription to not poison the rabbitmq channel with unacknowledged messages
         if let Err(e) = self
-            .rabbit_mq_channel
+            .rabbitmq_channel
             .basic_cancel(self.consumer.tag().as_str(), Default::default())
             .await
         {
@@ -1398,7 +1399,7 @@ impl Runner {
         log::trace!("publish {}", message);
         let properties = BasicProperties::default().with_timestamp(timestamp.timestamp() as u64);
         if let Err(e) = self
-            .rabbit_mq_channel
+            .rabbitmq_channel
             .basic_publish(
                 exchange.unwrap_or(&self.room_exchange),
                 routing_key,

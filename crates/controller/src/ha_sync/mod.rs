@@ -2,10 +2,11 @@
 
 use anyhow::{Context, Result};
 use lapin::ExchangeKind;
+use lapin_pool::RabbitMqChannel;
 
 pub mod user_update;
 
-pub async fn init(rabbitmq_channel: &lapin::Channel) -> Result<()> {
+pub async fn init(rabbitmq_channel: &RabbitMqChannel) -> Result<()> {
     rabbitmq_channel
         .exchange_declare(
             user_update::EXCHANGE,

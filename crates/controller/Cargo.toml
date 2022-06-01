@@ -72,8 +72,7 @@ bytestring = "1"
 
 ### RabbitMQ
 lapin = { version = "2", default-features = false }
-tokio-reactor-trait = "1"
-tokio-executor-trait = "2"
+lapin-pool = { path = "../lapin-pool" }
 
 ### Redis
 redis = { version = "0.21", features = ["tokio-comp", "connection-manager"] }

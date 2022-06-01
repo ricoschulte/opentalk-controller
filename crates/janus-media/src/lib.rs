@@ -647,7 +647,7 @@ pub async fn register(controller: &mut Controller) -> Result<()> {
     let mcu_pool = McuPool::build(
         &controller.startup_settings,
         controller.shared_settings.clone(),
-        controller.rabbitmq.clone(),
+        controller.rabbitmq_pool.make_connection().await?,
         controller.redis.clone(),
         controller.shutdown.subscribe(),
         controller.reload.subscribe(),

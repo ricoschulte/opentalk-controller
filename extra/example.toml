@@ -88,6 +88,12 @@ from_routing_key = "from-janus-2"
 # The URL to use to connect to the rabbit mq broker
 #url = "amqp://username:password@host/%2F"
 
+# Minimum amount of connections to retain when removing stale connections
+#min_connections = 10
+
+# Maximum number of amqp channels per connection
+#max_channels_per_connection = 100
+
 [redis]
 # Redis URL used to connect the redis server
 #url = "redis://localhost:6379/"

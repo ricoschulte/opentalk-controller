@@ -80,7 +80,7 @@ pub struct McuPool {
     // which are being reconnected
     events_sender: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
 
-    rabbitmq: Arc<lapin::Connection>,
+    rabbitmq: lapin::Connection,
     redis: RedisConnection,
 
     // Mcu shutdown signal to all janus-client tasks.
@@ -93,7 +93,7 @@ impl McuPool {
     pub async fn build(
         settings: &controller::settings::Settings,
         shared_settings: SharedSettings,
-        rabbitmq: Arc<lapin::Connection>,
+        rabbitmq: lapin::Connection,
         mut redis: RedisConnection,
         controller_shutdown_sig: broadcast::Receiver<()>,
         controller_reload_sig: broadcast::Receiver<()>,
