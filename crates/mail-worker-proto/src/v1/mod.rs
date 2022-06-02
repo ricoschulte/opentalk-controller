@@ -3,6 +3,12 @@ use serde::Deserialize;
 use serde::Serialize;
 use uuid::Uuid;
 
+mod registered_invite;
+mod unregistered_invite;
+
+pub use registered_invite::RegisteredEventInvite;
+pub use unregistered_invite::UnregisteredEventInvite;
+
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct User {
     pub email: String,
@@ -11,6 +17,7 @@ pub struct User {
     pub last_name: String,
     pub language: String,
 }
+
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct Time {
     pub time: chrono::DateTime<Utc>,
@@ -42,15 +49,15 @@ pub struct CallIn {
     pub sip_password: Option<String>,
 }
 
+/// The different kinds of MailTasks that are currently supported
 #[derive(Deserialize, PartialEq, Debug)]
 #[cfg_attr(any(test, feature = "client"), derive(Serialize))]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
-    RegisteredEventInvite {
-        invitee: User,
-        event: Event,
-        inviter: User,
-    },
+    /// A mail sent to registered users on invite
+    RegisteredEventInvite(RegisteredEventInvite),
+    /// A mail sent to unregistered users on invite
+    UnregisteredEventInvite(UnregisteredEventInvite),
 }
 
 #[cfg(test)]
@@ -62,7 +69,7 @@ mod test {
 
     #[test]
     fn test_basic_format() {
-        let basic_invite = MailTask::V1(Message::RegisteredEventInvite {
+        let basic_invite = MailTask::V1(Message::RegisteredEventInvite(RegisteredEventInvite {
             inviter: User {
                 email: "bob@example.org".into(),
                 title: "Prof. Dr.".into(),
@@ -108,7 +115,7 @@ mod test {
                 last_name: "LastName".into(),
                 language: "de".into(),
             },
-        });
+        }));
 
         assert_eq!(
             basic_invite,
@@ -152,7 +159,7 @@ mod test {
 
     #[test]
     fn test_no_time() {
-        let basic_invite = MailTask::V1(Message::RegisteredEventInvite {
+        let basic_invite = MailTask::V1(Message::RegisteredEventInvite(RegisteredEventInvite {
             inviter: User {
                 email: "bob@example.org".into(),
                 title: "Prof. Dr.".into(),
@@ -184,7 +191,7 @@ mod test {
                 last_name: "LastName".into(),
                 language: "de".into(),
             },
-        });
+        }));
 
         assert_eq!(
             basic_invite,
