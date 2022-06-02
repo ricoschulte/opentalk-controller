@@ -4,23 +4,18 @@ use serde::Serialize;
 use std::collections::HashMap;
 
 #[derive(Debug, Serialize, PartialEq)]
-#[serde(tag = "message")]
+#[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
-    #[serde(rename = "join_success")]
     JoinSuccess(JoinSuccess),
-
     /// State change of this participant
-    #[serde(rename = "update")]
     Update(Participant),
     /// A participant that joined the room
-    #[serde(rename = "joined")]
     Joined(Participant),
     /// This participant left the room
-    #[serde(rename = "left")]
     Left(AssociatedParticipant),
-
-    #[serde(rename = "error")]
-    Error { text: &'static str },
+    Error {
+        text: &'static str,
+    },
 }
 
 #[derive(Debug, Serialize, PartialEq)]

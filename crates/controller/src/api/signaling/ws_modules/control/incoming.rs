@@ -4,7 +4,9 @@ use serde::Deserialize;
 #[serde(tag = "action", rename_all = "snake_case")]
 pub enum Message {
     Join(Join),
-
+    /// Enter into the room while being in the waiting room
+    /// after being accepted by a moderator
+    EnterRoom,
     RaiseHand,
     LowerHand,
 }

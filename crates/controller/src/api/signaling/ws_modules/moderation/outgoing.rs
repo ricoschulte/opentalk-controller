@@ -1,3 +1,4 @@
+use crate::api::signaling::prelude::*;
 use serde::Serialize;
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -5,6 +6,17 @@ use serde::Serialize;
 pub enum Message {
     Kicked,
     Banned,
+
+    InWaitingRoom,
+
+    JoinedWaitingRoom(control::outgoing::Participant),
+    LeftWaitingRoom(control::outgoing::AssociatedParticipant),
+
+    WaitingRoomEnabled,
+    WaitingRoomDisabled,
+
+    Accepted,
+
     Error(Error),
 }
 
@@ -32,6 +44,15 @@ mod test {
         let expected = r#"{"message":"banned"}"#;
 
         let produced = serde_json::to_string(&Message::Banned).unwrap();
+
+        assert_eq!(expected, produced);
+    }
+
+    #[test]
+    fn in_waiting_room() {
+        let expected = r#"{"message":"in_waiting_room"}"#;
+
+        let produced = serde_json::to_string(&Message::InWaitingRoom).unwrap();
 
         assert_eq!(expected, produced);
     }

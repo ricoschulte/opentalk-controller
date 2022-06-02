@@ -7,4 +7,7 @@ use serde::{Deserialize, Serialize};
 pub enum Message {
     Kicked(ParticipantId),
     Banned(ParticipantId),
+    JoinedWaitingRoom(ParticipantId),
+    LeftWaitingRoom(ParticipantId),
+    WaitingRoomEnableUpdated,
 }
