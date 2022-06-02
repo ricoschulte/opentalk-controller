@@ -34,7 +34,7 @@ impl MailTask {
 impl From<db_storage::users::User> for v1::User {
     fn from(val: db_storage::users::User) -> Self {
         Self {
-            email: val.email,
+            email: val.email.into(),
             title: val.title,
             first_name: val.firstname,
             last_name: val.lastname,

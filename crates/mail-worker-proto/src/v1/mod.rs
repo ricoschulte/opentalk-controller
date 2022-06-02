@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
@@ -10,8 +12,23 @@ pub use registered_invite::RegisteredEventInvite;
 pub use unregistered_invite::UnregisteredEventInvite;
 
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
+pub struct Email(String);
+
+impl From<&str> for Email {
+    fn from(s: &str) -> Self {
+        Self(s.to_owned())
+    }
+}
+
+impl From<String> for Email {
+    fn from(s: String) -> Self {
+        Self(s)
+    }
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct User {
-    pub email: String,
+    pub email: Email,
     pub title: String,
     pub first_name: String,
     pub last_name: String,
