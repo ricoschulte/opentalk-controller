@@ -27,7 +27,7 @@ impl From<GroupId> for PolicyGroup {
 pub struct Group {
     pub id: GroupId,
     pub id_serial: SerialGroupId,
-    pub oidc_issuer: Option<String>,
+    pub oidc_issuer: String,
     pub name: String,
 }
 
@@ -48,8 +48,7 @@ impl Group {
 #[derive(Debug, Insertable)]
 #[table_name = "groups"]
 pub struct NewGroup {
-    // TODO make this non-null
-    pub oidc_issuer: Option<String>,
+    pub oidc_issuer: String,
     pub name: String,
 }
 

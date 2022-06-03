@@ -339,7 +339,7 @@ impl Controller {
             // either by creating one admin Group per issuer or making the role assignment a manual task for more security.
             let conn = self.db.get_conn()?;
             let admin_group = NewGroup {
-                oidc_issuer: Some(shared_settings.load().oidc.provider.issuer.to_string()),
+                oidc_issuer: shared_settings.load().oidc.provider.issuer.to_string(),
                 name: "/OpenTalk_Administrator".into(),
             }
             .insert_or_get(&conn)?;

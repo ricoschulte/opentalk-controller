@@ -34,8 +34,7 @@ pub struct User {
     pub id: UserId,
     pub id_serial: SerialUserId,
     pub oidc_sub: String,
-    // TODO make this non-null
-    pub oidc_issuer: Option<String>,
+    pub oidc_issuer: String,
     pub email: String,
     pub title: String,
     pub firstname: String,
@@ -334,7 +333,7 @@ fn get_ids_for_group_names(
         .select((groups::id, groups::name))
         .filter(
             groups::oidc_issuer
-                .eq(user.oidc_issuer.as_ref())
+                .eq(&user.oidc_issuer)
                 .and(groups::name.eq_any(&groups)),
         )
         .load(conn)?;
