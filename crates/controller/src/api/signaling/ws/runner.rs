@@ -957,7 +957,7 @@ impl Runner {
         self.ws
             .send(Message::Text(
                 NamespacedOutgoing {
-                    namespace: NAMESPACE,
+                    namespace: moderation::NAMESPACE,
                     timestamp,
                     payload: moderation::outgoing::Message::InWaitingRoom,
                 }
