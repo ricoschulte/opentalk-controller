@@ -1752,6 +1752,7 @@ dependencies = [
  "k3k-database",
  "k3k-db-storage",
  "k3k-test-util",
+ "keycloak-admin",
  "kustos",
  "lapin",
  "log",
@@ -1919,6 +1920,17 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "keycloak-admin"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "thiserror",
+ "tokio",
+ "url",
 ]
 
 [[package]]

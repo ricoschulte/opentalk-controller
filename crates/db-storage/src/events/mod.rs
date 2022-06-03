@@ -33,6 +33,8 @@ diesel_newtype! {
     #[derive(Copy)] EventInviteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid"
 }
 
+pub mod email_invites;
+
 #[derive(Debug, Copy, Clone, PartialEq, FromSqlRow, AsExpression, Serialize, Deserialize)]
 #[sql_type = "diesel::sql_types::Text"]
 pub struct TimeZone(pub chrono_tz::Tz);
@@ -682,6 +684,7 @@ pub struct NewEventInvite {
     pub event_id: EventId,
     pub invitee: UserId,
     pub created_by: UserId,
+    pub created_at: Option<DateTime<Utc>>,
 }
 
 impl NewEventInvite {

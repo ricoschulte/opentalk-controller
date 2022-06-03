@@ -29,20 +29,21 @@
 ///
 use arc_swap::ArcSwap;
 use config::{Config, ConfigError, Environment, File, FileFormat};
-use openidconnect::{ClientId, ClientSecret, IssuerUrl};
+use openidconnect::{ClientId, ClientSecret};
 use serde::{Deserialize, Deserializer};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use url::Url;
 
 pub type SharedSettings = Arc<ArcSwap<Settings>>;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct Settings {
     pub database: Database,
-    pub oidc: Oidc,
+    pub keycloak: Keycloak,
     pub http: Http,
     #[serde(default)]
     pub turn: Option<Turn>,
@@ -105,16 +106,11 @@ fn default_min_idle_connections() -> u32 {
     10
 }
 
-/// Settings for OpenID Connect protocol which is used for user management.
+/// Settings for Keycloak
 #[derive(Debug, Clone, Deserialize)]
-pub struct Oidc {
-    pub provider: OidcProvider,
-}
-
-/// Information about the OIDC Provider
-#[derive(Debug, Clone, Deserialize)]
-pub struct OidcProvider {
-    pub issuer: IssuerUrl,
+pub struct Keycloak {
+    pub base_url: Url,
+    pub realm: String,
     pub client_id: ClientId,
     pub client_secret: ClientSecret,
 }
@@ -348,6 +344,8 @@ fn default_user_language() -> String {
 pub struct Endpoints {
     #[serde(default)]
     pub disable_users_find: bool,
+    #[serde(default)]
+    pub users_find_use_kc: bool,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]
