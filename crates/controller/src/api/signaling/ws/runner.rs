@@ -47,6 +47,8 @@ use tokio::time::sleep;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
+mod sip;
+
 /// Builder to the runner type.
 ///
 /// Passed into [`ModuleBuilder::build`](super::modules::ModuleBuilder::build) function to create an [`InitContext`](super::InitContext).
@@ -303,6 +305,7 @@ impl Builder {
             runner_id: self.runner_id,
             id: self.id,
             resuming: self.resuming,
+            room: self.room,
             room_id,
             participant: self.participant,
             role: self.role,
@@ -314,6 +317,7 @@ impl Builder {
             },
             modules: self.modules,
             events: self.events,
+            db: self.db,
             redis_conn: self.redis_conn,
             consumer,
             consumer_delegated: false,
@@ -343,6 +347,9 @@ pub struct Runner {
     /// True if a resumption token was used
     resuming: bool,
 
+    /// The database repr of the current room at the time of joining
+    room: Room,
+
     /// Full signaling room id
     room_id: SignalingRoomId,
 
@@ -361,6 +368,9 @@ pub struct Runner {
     /// All registered and initialized modules
     modules: Modules,
     events: SelectAll<AnyStream>,
+
+    /// Database connection pool
+    db: Arc<Db>,
 
     /// Redis connection manager
     redis_conn: RedisConnection,
@@ -828,21 +838,39 @@ impl Runner {
                     return Ok(());
                 }
 
-                let avatar_url = if let api::Participant::User(user) = &self.participant {
-                    Some(format!(
-                        "{}{:x}",
-                        self.settings.load().avatar.libravatar_url,
-                        md5::compute(&user.email)
-                    ))
-                } else {
-                    None
+                let (display_name, avatar_url) = match &self.participant {
+                    api::Participant::User(user) => {
+                        let avatar_url = Some(format!(
+                            "{}{:x}",
+                            self.settings.load().avatar.libravatar_url,
+                            md5::compute(&user.email)
+                        ));
+
+                        (join.display_name, avatar_url)
+                    }
+                    api::Participant::Guest => (join.display_name, None),
+                    api::Participant::Sip => {
+                        if let Some(call_in) = self.settings.load().call_in.as_ref() {
+                            let display_name = sip::display_name(
+                                &self.db,
+                                call_in,
+                                self.room.created_by,
+                                join.display_name,
+                            )
+                            .await;
+
+                            (display_name, None)
+                        } else {
+                            (join.display_name, None)
+                        }
+                    }
                 };
 
-                self.set_control_attributes(timestamp, &join.display_name, avatar_url.as_deref())
+                self.set_control_attributes(timestamp, &display_name, avatar_url.as_deref())
                     .await?;
 
                 let control_data = ControlData {
-                    display_name: join.display_name.clone(),
+                    display_name,
                     avatar_url,
                     participation_kind: match &self.participant {
                         api::Participant::User(_) => ParticipationKind::User,

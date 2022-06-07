@@ -17,6 +17,7 @@ pub fn make_user(conn: &DbConnection, firstname: &str, lastname: &str, display_n
             language: "".into(),
             oidc_sub: format!("{}{}", firstname, lastname),
             oidc_issuer: "".into(),
+            phone: None,
         },
         groups: vec![],
     }

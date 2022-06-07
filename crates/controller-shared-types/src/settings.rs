@@ -342,6 +342,8 @@ fn default_libravatar_url() -> String {
 #[derive(Clone, Debug, Deserialize)]
 pub struct CallIn {
     pub tel: String,
+    pub enable_phone_mapping: bool,
+    pub default_country_code: phonenumber::country::Id,
 }
 
 #[derive(Clone, Default, Debug, Deserialize)]

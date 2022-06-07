@@ -71,6 +71,7 @@ impl DatabaseContext {
             id_token_exp: 0,
             display_name: "test tester".into(),
             language: "en".into(),
+            phone: None,
         };
 
         let new_user_with_groups = NewUserWithGroups { new_user, groups };
