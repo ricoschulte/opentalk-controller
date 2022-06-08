@@ -21,6 +21,7 @@ pub struct ModerationModule {
 
 #[derive(Debug, Serialize)]
 pub struct ModerationModuleFrontendData {
+    waiting_room_enabled: bool,
     waiting_room: Vec<control::outgoing::Participant>,
 }
 
@@ -60,6 +61,10 @@ impl SignalingModule for ModerationModule {
                 participants: _,
             } => {
                 if self.role == Role::Moderator {
+                    let waiting_room_enabled =
+                        storage::is_waiting_room_enabled(ctx.redis_conn(), self.room.room_id())
+                            .await?;
+
                     let list =
                         storage::waiting_room_all(ctx.redis_conn(), self.room.room_id()).await?;
 
@@ -80,7 +85,10 @@ impl SignalingModule for ModerationModule {
                         waiting_room.push(control::outgoing::Participant { id, module_data });
                     }
 
-                    *frontend_data = Some(ModerationModuleFrontendData { waiting_room });
+                    *frontend_data = Some(ModerationModuleFrontendData {
+                        waiting_room_enabled,
+                        waiting_room,
+                    });
                 }
             }
             Event::Leaving => {}
