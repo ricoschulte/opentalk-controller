@@ -1020,6 +1020,10 @@ impl Runner {
         let mut participants = vec![];
 
         for id in participant_ids {
+            if self.id == id {
+                continue;
+            }
+
             match self.build_participant(id).await {
                 Ok(participant) => participants.push(participant),
                 Err(e) => log::error!("Failed to build participant {}, {}", id, e),
