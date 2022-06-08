@@ -26,6 +26,12 @@ impl From<String> for Email {
     }
 }
 
+impl AsRef<str> for Email {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct User {
     pub email: Email,
