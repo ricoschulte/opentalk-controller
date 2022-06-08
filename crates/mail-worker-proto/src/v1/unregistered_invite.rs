@@ -1,10 +1,7 @@
-use serde::Deserialize;
-use serde::Serialize;
-
 use super::{Email, Event, User};
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, PartialEq, Debug)]
-#[cfg_attr(any(test, feature = "client"), derive(Serialize))]
+#[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct UnregisteredEventInvite {
     pub invitee: Email,
     pub event: Event,

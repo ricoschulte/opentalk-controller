@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use chrono::Utc;
 use serde::Deserialize;
 use serde::Serialize;
@@ -13,6 +11,12 @@ pub use unregistered_invite::UnregisteredEventInvite;
 
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct Email(String);
+
+impl Email {
+    pub fn new(s: String) -> Self {
+        Self(s)
+    }
+}
 
 impl From<&str> for Email {
     fn from(s: &str) -> Self {

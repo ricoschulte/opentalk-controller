@@ -1,8 +1,8 @@
 use serde::Deserialize;
 #[cfg(any(test, feature = "client"))]
 use serde::Serialize;
+
 pub mod v1;
-use v1::RegisteredEventInvite;
 
 /// Versioned Mail Task Protocol
 #[derive(Deserialize, PartialEq, Debug)]
@@ -22,11 +22,13 @@ impl MailTask {
         E: Into<v1::Event>,
         U: Into<v1::User>,
     {
-        Self::V1(v1::Message::RegisteredEventInvite(RegisteredEventInvite {
-            invitee: invitee.into(),
-            event: event.into(),
-            inviter: inviter.into(),
-        }))
+        Self::V1(v1::Message::RegisteredEventInvite(
+            v1::RegisteredEventInvite {
+                invitee: invitee.into(),
+                event: event.into(),
+                inviter: inviter.into(),
+            },
+        ))
     }
 }
 

@@ -67,6 +67,7 @@ impl MailService {
                 )
                 .await?;
         }
+
         Ok(())
     }
 
@@ -80,15 +81,38 @@ impl MailService {
         invitee: User,
     ) -> Result<()> {
         let settings = &*self.settings.load();
-        if let Some(queue_name) = &settings.rabbit_mq.mail_task_queue {
-            // Create MailTask
-            let mail_task = MailTask::registered_invite(
-                inviter,
-                to_event(event, room, sip_config, settings),
-                invitee,
-            );
-            self.send_to_rabbitmq(mail_task).await?;
-        }
+
+        // Create MailTask
+        let mail_task = MailTask::registered_invite(
+            inviter,
+            to_event(event, room, sip_config, settings),
+            invitee,
+        );
+
+        self.send_to_rabbitmq(mail_task).await?;
+        Ok(())
+    }
+
+    /// Sends a Unregistered Invite mail task to the rabbit mq queue, if configured.
+    pub async fn send_unregistered_invite(
+        &self,
+        inviter: User,
+        event: Event,
+        room: Room,
+        sip_config: Option<SipConfig>,
+        invitee: &str,
+    ) -> Result<()> {
+        let settings = &*self.settings.load();
+
+        // TODO
+        // Create MailTask
+        // let mail_task = MailTask::unregistered_invite(
+        //     inviter,
+        //     to_event(event, room, sip_config, settings),
+        //     invitee,
+        // );
+
+        // self.send_to_rabbitmq(mail_task).await?;
         Ok(())
     }
 }

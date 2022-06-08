@@ -77,7 +77,6 @@ pub async fn create_invite_to_event(
     current_user: ReqData<User>,
     event_id: Path<EventId>,
     create_invite: Json<PostEventInviteBody>,
-    rabbit_mq_channel: Data<lapin::Channel>,
     mail_service: Data<MailService>,
 ) -> Result<Either<Created, NoContent>, ApiError> {
     let event_id = event_id.into_inner();
@@ -91,7 +90,7 @@ pub async fn create_invite_to_event(
                 current_user.into_inner(),
                 event_id,
                 invitee,
-                mail_service.into_inner(),
+                &mail_service.into_inner(),
             )
             .await
         }
@@ -185,6 +184,7 @@ async fn create_email_event_invite(
     email: String,
     mail_service: &MailService,
 ) -> Result<Either<Created, NoContent>, ApiError> {
+    #[allow(clippy::large_enum_variant)]
     enum UserState {
         ExistsAndIsAlreadyInvited,
         ExistsAndWasInvited {
