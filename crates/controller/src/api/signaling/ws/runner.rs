@@ -493,15 +493,6 @@ impl Runner {
     pub async fn destroy(mut self) {
         self.delegate_consumer();
 
-        // Cancel subscription to not poison the rabbitmq channel with unacknowledged messages
-        if let Err(e) = self
-            .rabbit_mq_channel
-            .basic_cancel(self.consumer.tag().as_str(), Default::default())
-            .await
-        {
-            log::error!("Failed to cancel consumer, {}", e);
-        }
-
         if let RunnerState::Joined(_) | RunnerState::Waiting { .. } = &self.state {
             // The retry/wait_time values are set extra high
             // since a lot of operations are being done while holding the lock
@@ -605,31 +596,32 @@ impl Runner {
                 log::error!("Failed to unlock set_guard r3dlock, {}", e);
             }
 
-            match &self.state {
-                RunnerState::None => unreachable!("state was checked before"),
-                RunnerState::Waiting { .. } => {
-                    self.rabbitmq_publish(
-                        Timestamp::now(),
-                        Some(
-                            breakout::rabbitmq::global_exchange_name(self.room_id.room_id())
-                                .as_str(),
-                        ),
-                        control::rabbitmq::room_all_routing_key(),
-                        Namespaced {
-                            namespace: moderation::NAMESPACE,
-                            payload: moderation::rabbitmq::Message::LeftWaitingRoom(self.id),
-                        }
-                        .to_json(),
-                    )
-                    .await;
-                }
-                RunnerState::Joined(_) => {
-                    self.rabbitmq_publish_control(
-                        Timestamp::now(),
-                        None,
-                        rabbitmq::Message::Left(self.id),
-                    )
-                    .await;
+            if !destroy_room {
+                match &self.state {
+                    RunnerState::None => unreachable!("state was checked before"),
+                    RunnerState::Waiting { .. } => {
+                        self.rabbitmq_publish(
+                            Timestamp::now(),
+                            Some(&breakout::rabbitmq::global_exchange_name(
+                                self.room_id.room_id(),
+                            )),
+                            control::rabbitmq::room_all_routing_key(),
+                            Namespaced {
+                                namespace: moderation::NAMESPACE,
+                                payload: moderation::rabbitmq::Message::LeftWaitingRoom(self.id),
+                            }
+                            .to_json(),
+                        )
+                        .await;
+                    }
+                    RunnerState::Joined(_) => {
+                        self.rabbitmq_publish_control(
+                            Timestamp::now(),
+                            None,
+                            rabbitmq::Message::Left(self.id),
+                        )
+                        .await;
+                    }
                 }
             }
         } else {
@@ -640,6 +632,15 @@ impl Runner {
             };
 
             self.modules.destroy(ctx).await;
+        }
+
+        // Cancel subscription to not poison the rabbitmq channel with unacknowledged messages
+        if let Err(e) = self
+            .rabbit_mq_channel
+            .basic_cancel(self.consumer.tag().as_str(), Default::default())
+            .await
+        {
+            log::error!("Failed to cancel consumer, {}", e);
         }
 
         // release participant id
