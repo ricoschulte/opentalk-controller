@@ -19,7 +19,6 @@ mod storage;
 pub struct ExpiredEvent(PollId);
 
 pub struct Polls {
-    role: Role,
     room: SignalingRoomId,
     config: Option<Config>,
 }
@@ -45,7 +44,6 @@ impl SignalingModule for Polls {
         _: &'static str,
     ) -> Result<Option<Self>> {
         Ok(Some(Self {
-            role: ctx.role(),
             room: ctx.room_id(),
             config: None,
         }))
@@ -139,7 +137,7 @@ impl Polls {
                 choices,
                 duration,
             }) => {
-                if self.role != Role::Moderator {
+                if ctx.role() != Role::Moderator {
                     ctx.ws_send(outgoing::Message::Error(
                         outgoing::Error::InsufficientPermissions,
                     ));
@@ -261,7 +259,7 @@ impl Polls {
                 Ok(())
             }
             incoming::Message::Finish(finish) => {
-                if self.role != Role::Moderator {
+                if ctx.role() != Role::Moderator {
                     ctx.ws_send(outgoing::Message::Error(
                         outgoing::Error::InsufficientPermissions,
                     ));

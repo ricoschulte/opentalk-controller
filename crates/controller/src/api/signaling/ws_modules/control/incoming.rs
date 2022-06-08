@@ -1,3 +1,4 @@
+use controller_shared::ParticipantId;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -9,12 +10,19 @@ pub enum Message {
     EnterRoom,
     RaiseHand,
     LowerHand,
+    GrantModeratorRole(Target),
+    RevokeModeratorRole(Target),
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Join {
     /// The users display name
     pub display_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Target {
+    pub target: ParticipantId,
 }
 
 #[cfg(test)]

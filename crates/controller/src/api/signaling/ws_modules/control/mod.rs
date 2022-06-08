@@ -14,9 +14,10 @@ pub mod storage;
 pub const NAMESPACE: &str = "control";
 
 /// Control module's FrontendData
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ControlData {
     pub display_name: String,
+    pub role: Role,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub avatar_url: Option<String>,
     pub participation_kind: ParticipationKind,
@@ -35,6 +36,7 @@ impl ControlData {
         #[allow(clippy::type_complexity)]
         let (
             display_name,
+            role,
             avatar_url,
             joined_at,
             left_at,
@@ -43,6 +45,7 @@ impl ControlData {
             participation_kind,
         ): (
             Option<String>,
+            Option<Role>,
             Option<String>,
             Option<Timestamp>,
             Option<Timestamp>,
@@ -51,6 +54,7 @@ impl ControlData {
             Option<ParticipationKind>,
         ) = storage::AttrPipeline::new(room_id, participant_id)
             .get("display_name")
+            .get("role")
             .get("avatar_url")
             .get("joined_at")
             .get("left_at")
@@ -70,6 +74,7 @@ impl ControlData {
 
         Ok(Self {
             display_name: display_name.unwrap_or_else(|| "Participant".into()),
+            role: role.unwrap_or(Role::Guest),
             avatar_url,
             participation_kind: participation_kind.unwrap_or(ParticipationKind::Guest),
             hand_is_up: hand_is_up.unwrap_or_default(),
@@ -82,7 +87,7 @@ impl ControlData {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ParticipationKind {
     User,

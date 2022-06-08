@@ -409,6 +409,7 @@ where
             let mut exit = None;
 
             let ctx = ModuleContext {
+                role: self.role,
                 timestamp: Timestamp::now(),
                 ws_messages: &mut ws_messages,
                 rabbitmq_publish: &mut rabbitmq_publish,
@@ -532,6 +533,7 @@ where
 
                 let mut control_data = ControlData {
                     display_name: join.display_name.clone(),
+                    role: self.role,
                     avatar_url: avatar_url.clone(),
                     participation_kind: match &self.participant {
                         Participant::User(_) => ParticipationKind::User,
@@ -578,9 +580,9 @@ where
 
                 let join_success = control::outgoing::JoinSuccess {
                     id: self.participant_id,
+                    role: self.role,
                     display_name: join.display_name,
                     avatar_url,
-                    role: self.role,
                     module_data,
                     participants,
                 };
@@ -622,6 +624,8 @@ where
 
                 Ok(())
             }
+            control::incoming::Message::GrantModeratorRole(_) => unimplemented!(),
+            control::incoming::Message::RevokeModeratorRole(_) => unimplemented!(),
         }
     }
 
@@ -708,6 +712,7 @@ where
             control::rabbitmq::Message::Accepted(_participant_id) => {
                 todo!()
             }
+            control::rabbitmq::Message::SetModeratorStatus(_) => unimplemented!(),
         }
     }
 
@@ -832,6 +837,7 @@ where
         let mut exit = None;
 
         let ctx = ModuleContext {
+            role: self.role,
             timestamp: Timestamp::now(),
             ws_messages: &mut ws_messages,
             rabbitmq_publish: &mut rabbitmq_publish,
@@ -865,46 +871,12 @@ where
             module_data: Default::default(),
         };
 
-        #[allow(clippy::type_complexity)]
-        let (
-            display_name,
-            avatar_url,
-            joined_at,
-            left_at,
-            hand_is_up,
-            hand_updated_at,
-            participation_kind,
-        ): (
-            String,
-            Option<String>,
-            Timestamp,
-            Option<Timestamp>,
-            bool,
-            Timestamp,
-            ParticipationKind,
-        ) = storage::AttrPipeline::new(self.room_id, id)
-            .get("display_name")
-            .get("avatar_url")
-            .get("joined_at")
-            .get("left_at")
-            .get("hand_is_up")
-            .get("hand_updated_at")
-            .get("kind")
-            .query_async(&mut self.redis_conn)
-            .await?;
+        let control_data = ControlData::from_redis(&mut self.redis_conn, self.room_id, id).await?;
 
         participant.module_data.insert(
             NAMESPACE,
-            serde_json::to_value(ControlData {
-                display_name,
-                avatar_url,
-                participation_kind,
-                hand_is_up,
-                joined_at,
-                hand_updated_at,
-                left_at,
-            })
-            .expect("Failed to convert ControlData to serde_json::Value"),
+            serde_json::to_value(control_data)
+                .expect("Failed to convert ControlData to serde_json::Value"),
         );
 
         Ok(participant)
