@@ -2,8 +2,8 @@
 //!
 //! Current Endpoints. See their respective function:
 //! - `/auth/login` ([post](auth::login))
-//! - `/rooms` ([GET](rooms::owned), [POST](rooms::new))
-//! - `/rooms/{room_id}` ([GET](rooms::get), [PUT](rooms::modify))
+//! - `/rooms` ([GET](rooms::accessible), [POST](rooms::new))
+//! - `/rooms/{room_id}` ([GET](rooms::get), [PATCH](rooms::patch))
 //! - `/rooms/{room_id}/start` ([POST](rooms::start))
 //! - `/rooms/{room_id}/start_invited` ([POST](rooms::start_invited))
 //! - `/rooms/{room_id}/invites ([GET](invites::get_invites), [POST](invites::add_invite))

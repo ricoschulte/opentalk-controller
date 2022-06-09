@@ -24,9 +24,7 @@ pub struct Room {
     pub id_serial: SerialRoomId,
     pub created_by: UserId,
     pub created_at: DateTime<Utc>,
-    pub password: String,
-    pub wait_for_moderator: bool,
-    pub listen_only: bool,
+    pub password: Option<String>,
 }
 
 impl Room {
@@ -54,34 +52,38 @@ impl Room {
 
     /// Select all rooms paginated
     #[tracing::instrument(err, skip_all)]
-    pub fn get_all_paginated(
+    pub fn get_all_with_creator_paginated(
         conn: &DbConnection,
         limit: i64,
         page: i64,
-    ) -> Result<(Vec<Room>, i64)> {
+    ) -> Result<(Vec<(Room, User)>, i64)> {
         let query = rooms::table
+            .inner_join(users::table)
+            .select((rooms::all_columns, users::all_columns))
             .order_by(rooms::id.desc())
             .paginate_by(limit, page);
 
-        let rooms_with_total = query.load_and_count::<Room, _>(conn)?;
+        let rooms_with_total = query.load_and_count(conn)?;
 
         Ok(rooms_with_total)
     }
 
     /// Select all rooms filtered by ids
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_ids_paginated(
+    pub fn get_by_ids_with_creator_paginated(
         conn: &DbConnection,
         ids: &[RoomId],
         limit: i64,
         page: i64,
-    ) -> Result<(Vec<Room>, i64)> {
+    ) -> Result<(Vec<(Room, User)>, i64)> {
         let query = rooms::table
+            .inner_join(users::table)
+            .select((rooms::all_columns, users::all_columns))
             .filter(rooms::id.eq_any(ids))
             .order_by(rooms::id.desc())
             .paginate_by(limit, page);
 
-        let rooms_with_total = query.load_and_count::<Room, _>(conn)?;
+        let rooms_with_total = query.load_and_count(conn)?;
 
         Ok(rooms_with_total)
     }
@@ -109,9 +111,7 @@ impl Room {
 #[table_name = "rooms"]
 pub struct NewRoom {
     pub created_by: UserId,
-    pub password: String,
-    pub wait_for_moderator: bool,
-    pub listen_only: bool,
+    pub password: Option<String>,
 }
 
 impl NewRoom {
@@ -129,9 +129,7 @@ impl NewRoom {
 #[derive(Debug, AsChangeset)]
 #[table_name = "rooms"]
 pub struct UpdateRoom {
-    pub password: Option<String>,
-    pub wait_for_moderator: Option<bool>,
-    pub listen_only: Option<bool>,
+    pub password: Option<Option<String>>,
 }
 
 impl UpdateRoom {

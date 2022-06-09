@@ -83,9 +83,7 @@ impl DatabaseContext {
     pub fn create_test_room(&self, _room_id: RoomId, created_by: UserId) -> Result<Room> {
         let new_room = NewRoom {
             created_by,
-            password: "".into(),
-            wait_for_moderator: false,
-            listen_only: false,
+            password: None,
         };
 
         let conn = self.db.get_conn()?;

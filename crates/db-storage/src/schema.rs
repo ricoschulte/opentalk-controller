@@ -151,9 +151,7 @@ table! {
         id_serial -> Int8,
         created_by -> Uuid,
         created_at -> Timestamptz,
-        password -> Varchar,
-        wait_for_moderator -> Bool,
-        listen_only -> Bool,
+        password -> Nullable<Varchar>,
     }
 }
 
