@@ -6,6 +6,7 @@ use anyhow::{ensure, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use std::collections::HashMap;
+use std::future::Future;
 use tokio::sync::mpsc;
 
 pub struct MediaSessions {
@@ -187,21 +188,27 @@ impl MediaSessions {
     }
 
     /// Destroy all sessions
-    pub async fn destroy(mut self) {
-        for (_, subscriber) in self.subscribers.drain() {
-            log::debug!("Destroy subscriber {}", self.id);
-            if let Err(e) = subscriber.destroy(false).await {
-                log::error!("Failed to destroy subscriber, {}", e);
-            }
-        }
+    pub fn destroy(&mut self) -> impl Future<Output = ()> + 'static {
+        let id = self.id;
+        let subscribers: Vec<_> = self.subscribers.drain().collect();
+        let publishers: Vec<_> = self.publishers.drain().collect();
 
-        for (_, publisher) in self.publishers.drain() {
-            log::debug!("Destroy publisher {}", self.id);
-            if let Err(e) = publisher.destroy().await {
-                log::error!("Failed to destroy publisher, {}", e);
+        async move {
+            for (_, subscriber) in subscribers {
+                log::debug!("Destroy subscriber {}", id);
+                if let Err(e) = subscriber.destroy(false).await {
+                    log::error!("Failed to destroy subscriber, {}", e);
+                }
             }
-        }
 
-        log::debug!("Destroyed all sessions");
+            for (_, publisher) in publishers {
+                log::debug!("Destroy publisher {}", id);
+                if let Err(e) = publisher.destroy().await {
+                    log::error!("Failed to destroy publisher, {}", e);
+                }
+            }
+
+            log::debug!("Destroyed all sessions");
+        }
     }
 }
