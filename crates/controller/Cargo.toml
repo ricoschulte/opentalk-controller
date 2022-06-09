@@ -98,10 +98,11 @@ rustls = "0.20"
 rustls-pemfile = "0.3"
 md5 = "0.7"
 
-### QoL
+### QoL/Util
 displaydoc = "0.2"
 either = "1.6.1"
 itertools = "0.10"
+phonenumber = "0.3"
 
 # Random Distributions etc. Used for RR
 rand = "0.8.3"

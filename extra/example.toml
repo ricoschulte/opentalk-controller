@@ -124,6 +124,14 @@ from_routing_key = "from-janus-2"
 # Set a phone number which will be displayed to the user
 # for the call-in service
 #tel="03012345678"
+# Enable the mapping of user names to their phone number. This requires
+# the OIDC provider to have a phone number field configured for their users.
+#enable_phone_mapping=false
+# The default country code for call in numbers. Notated in Alpha-2 code (ISO 3166)
+# Phone numbers that do not fall in the category of the default country must be notated
+# in the international format.
+#default_country_code="DE"
+
 
 # The etherpad configuration for the protocol module
 #[etherpad]

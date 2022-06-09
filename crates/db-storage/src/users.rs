@@ -44,6 +44,7 @@ pub struct User {
     pub display_name: String,
     pub dashboard_theme: String,
     pub conference_theme: String,
+    pub phone: Option<String>,
 }
 
 impl fmt::Debug for User {
@@ -79,6 +80,20 @@ impl User {
             .get_result(conn)?;
 
         Ok(user)
+    }
+
+    /// Get one or more users with the given phone number
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_by_phone(conn: &DbConnection, oidc_issuer: &str, phone: &str) -> Result<Vec<User>> {
+        let users = users::table
+            .filter(
+                users::oidc_issuer
+                    .eq(oidc_issuer)
+                    .and(users::phone.eq(phone)),
+            )
+            .get_results(conn)?;
+
+        Ok(users)
     }
 
     /// Get all users alongside their current groups
@@ -238,6 +253,7 @@ pub struct NewUser {
     pub id_token_exp: i64,
     pub language: String,
     pub display_name: String,
+    pub phone: Option<String>,
 }
 
 pub struct NewUserWithGroups {

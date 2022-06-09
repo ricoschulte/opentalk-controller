@@ -8,6 +8,7 @@ use crate::oidc::OidcContext;
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
+use controller_shared::settings::CallIn;
 use database::{Db, OptionalExt};
 use db_storage::events::email_invites::EventEmailInvite;
 use db_storage::events::EventId;
@@ -16,6 +17,7 @@ use db_storage::rooms::RoomId;
 use db_storage::users::{NewUser, NewUserWithGroups, UpdateUser, User, UserUpdatedInfo};
 use kustos::prelude::PoliciesBuilder;
 use lapin_pool::RabbitMqChannel;
+use phonenumber::Mode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -77,6 +79,14 @@ pub async fn login(
                     None => {
                         let settings = settings.load_full();
 
+                        let phone_number = if let Some((call_in, phone_number)) =
+                            settings.call_in.as_ref().zip(info.phone_number)
+                        {
+                            parse_phone_number(call_in, phone_number)
+                        } else {
+                            None
+                        };
+
                         let new_user = NewUser {
                             oidc_sub: info.sub,
                             oidc_issuer: info.issuer,
@@ -88,6 +98,7 @@ pub async fn login(
                             id_token_exp: info.expiration.timestamp(),
                             // TODO: try to get user language from accept-language header
                             language: settings.defaults.user_language.clone(),
+                            phone: phone_number,
                         };
 
                         let new_user = NewUserWithGroups {
@@ -130,6 +141,29 @@ pub async fn login(
                 // TODO calculate permissions
                 permissions: Default::default(),
             }))
+        }
+    }
+}
+
+/// Parses the phone number and formats it as E.164
+fn parse_phone_number(call_in_settings: &CallIn, phone_number: String) -> Option<String> {
+    match phonenumber::parse(Some(call_in_settings.default_country_code), phone_number) {
+        Ok(phone) => {
+            if phone.is_valid() {
+                let phone = phone.format().mode(Mode::E164).to_string();
+
+                Some(phone)
+            } else {
+                log::warn!("A phone number provided by the oidc provider is invalid");
+                None
+            }
+        }
+        Err(err) => {
+            log::error!(
+                "Failed to parse a phone number provided by the oidc provider {}",
+                err
+            );
+            None
         }
     }
 }

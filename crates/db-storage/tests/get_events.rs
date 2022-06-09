@@ -51,6 +51,7 @@ async fn test() {
             display_name: "Test Tester".into(),
             oidc_sub: "testtestersoidcsub".into(),
             oidc_issuer: "".into(),
+            phone: None,
         },
         groups: vec![],
     }

@@ -193,6 +193,7 @@ table! {
         display_name -> Varchar,
         dashboard_theme -> Varchar,
         conference_theme -> Varchar,
+        phone -> Nullable<Varchar>,
     }
 }
 

@@ -46,6 +46,8 @@ pub struct VerifyClaims {
     /// Groups the user belongs to.
     /// This is a custom field not specified by the OIDC Standard
     pub x_grp: Vec<String>,
+    /// The users phone number, if configured
+    pub phone_number: Option<String>,
 }
 
 /// Verify a raw JWT.

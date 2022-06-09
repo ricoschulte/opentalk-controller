@@ -15,3 +15,4 @@ url = "2"
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
 redis = { version = "0.21", features = ["tokio-comp", "connection-manager"] }
 cidr = { version = "0.2", features = ["serde"] }
+phonenumber = "0.3"

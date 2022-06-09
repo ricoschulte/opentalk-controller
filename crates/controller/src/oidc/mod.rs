@@ -96,6 +96,7 @@ impl OidcContext {
             firstname: claims.given_name,
             lastname: claims.family_name,
             x_grp: claims.x_grp,
+            phone_number: claims.phone_number,
         })
     }
 
@@ -123,4 +124,5 @@ pub struct IdTokenInfo {
     pub firstname: String,
     pub lastname: String,
     pub x_grp: Vec<String>,
+    pub phone_number: Option<String>,
 }
