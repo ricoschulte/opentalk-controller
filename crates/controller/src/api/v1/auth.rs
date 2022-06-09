@@ -15,6 +15,7 @@ use db_storage::groups::GroupId;
 use db_storage::rooms::RoomId;
 use db_storage::users::{NewUser, NewUserWithGroups, UpdateUser, User, UserUpdatedInfo};
 use kustos::prelude::PoliciesBuilder;
+use lapin_pool::RabbitMqChannel;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -42,7 +43,7 @@ pub async fn login(
     settings: SharedSettingsActix,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
-    rabbitmq_channel: Data<lapin::Channel>,
+    rabbitmq_channel: Data<RabbitMqChannel>,
     body: Json<Login>,
     authz: Data<kustos::Authz>,
 ) -> Result<Json<LoginResponse>, ApiError> {

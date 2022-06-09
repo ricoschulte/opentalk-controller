@@ -256,18 +256,32 @@ fn redis_default_url() -> url::Url {
 pub struct RabbitMqConfig {
     #[serde(default = "rabbitmq_default_url")]
     pub url: String,
+    #[serde(default = "rabbitmq_default_min_connections")]
+    pub min_connections: u32,
+    #[serde(default = "rabbitmq_default_max_channels")]
+    pub max_channels_per_connection: u32,
 }
 
 impl Default for RabbitMqConfig {
     fn default() -> Self {
         Self {
             url: rabbitmq_default_url(),
+            min_connections: rabbitmq_default_min_connections(),
+            max_channels_per_connection: rabbitmq_default_max_channels(),
         }
     }
 }
 
 fn rabbitmq_default_url() -> String {
     "amqp://guest:guest@localhost:5672".to_owned()
+}
+
+fn rabbitmq_default_min_connections() -> u32 {
+    10
+}
+
+fn rabbitmq_default_max_channels() -> u32 {
+    100
 }
 
 #[derive(Clone, Debug, Deserialize)]

@@ -17,6 +17,7 @@ use database::Db;
 use db_storage::rooms::Room;
 use db_storage::users::User;
 use kustos::Authz;
+use lapin_pool::RabbitMqPool;
 use std::marker::PhantomData;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task;
@@ -52,7 +53,7 @@ pub(crate) async fn ws_service(
     db: Data<Db>,
     authz: Data<Authz>,
     redis_conn: Data<RedisConnection>,
-    rabbit_mq_channel: Data<lapin::Channel>,
+    rabbitmq_pool: Data<RabbitMqPool>,
     protocols: Data<SignalingProtocols>,
     modules: Data<SignalingModules>,
     request: HttpRequest,
@@ -100,6 +101,14 @@ pub(crate) async fn ws_service(
             .protocols(protocols.0)
             .start_with_addr()?;
 
+    let rabbitmq_channel = match rabbitmq_pool.create_channel().await {
+        Ok(rabbitmq_channel) => rabbitmq_channel,
+        Err(e) => {
+            log::error!("Failed to create rmq channel, {}", e);
+            return Ok(HttpResponse::InternalServerError().finish());
+        }
+    };
+
     let mut builder = Runner::builder(
         request_id,
         ticket_data.participant_id,
@@ -111,7 +120,7 @@ pub(crate) async fn ws_service(
         db.into_inner(),
         authz.into_inner(),
         redis_conn,
-        (**rabbit_mq_channel).clone(),
+        rabbitmq_channel,
         resumption_keep_alive,
     );
 

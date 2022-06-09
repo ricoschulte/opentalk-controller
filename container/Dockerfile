@@ -17,6 +17,7 @@ COPY ./crates/janus-client/Cargo.toml ./crates/janus-client/Cargo.toml
 COPY ./crates/janus-media/Cargo.toml ./crates/janus-media/Cargo.toml
 COPY ./crates/keycloak-admin/Cargo.toml ./crates/keycloak-admin/Cargo.toml
 COPY ./crates/kustos/Cargo.toml ./crates/kustos/Cargo.toml
+COPY ./crates/lapin-pool/Cargo.toml ./crates/lapin-pool/Cargo.toml
 COPY ./crates/legal-vote/Cargo.toml ./crates/legal-vote/Cargo.toml
 COPY ./crates/polls/Cargo.toml ./crates/polls/Cargo.toml
 COPY ./crates/r3dlock/Cargo.toml ./crates/r3dlock/Cargo.toml
