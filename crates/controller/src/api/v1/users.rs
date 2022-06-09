@@ -145,11 +145,15 @@ pub async fn patch_me(
         let conn = db.get_conn()?;
 
         let changeset = UpdateUser {
-            title: patch.title,
-            display_name: patch.display_name,
-            language: patch.language,
-            dashboard_theme: patch.dashboard_theme,
-            conference_theme: patch.conference_theme,
+            title: patch.title.as_deref(),
+            firstname: None,
+            lastname: None,
+            phone: None,
+            email: None,
+            display_name: patch.display_name.as_deref(),
+            language: patch.language.as_deref(),
+            dashboard_theme: patch.dashboard_theme.as_deref(),
+            conference_theme: patch.conference_theme.as_deref(),
             id_token_exp: None,
         };
 

@@ -1,14 +1,15 @@
 //! Auth related API structs and Endpoints
 use super::events::EventPoliciesBuilderExt;
 use super::rooms::RoomsPoliciesBuilderExt;
+use crate::api::util::parse_phone_number;
 use crate::api::v1::response::error::AuthenticationError;
 use crate::api::v1::response::ApiError;
 use crate::ha_sync::user_update;
-use crate::oidc::OidcContext;
+use crate::oidc::{IdTokenInfo, OidcContext};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
-use controller_shared::settings::CallIn;
+use controller_shared::settings::Settings;
 use database::{Db, OptionalExt};
 use db_storage::events::email_invites::EventEmailInvite;
 use db_storage::events::EventId;
@@ -17,7 +18,6 @@ use db_storage::rooms::RoomId;
 use db_storage::users::{NewUser, NewUserWithGroups, UpdateUser, User, UserUpdatedInfo};
 use kustos::prelude::PoliciesBuilder;
 use lapin_pool::RabbitMqChannel;
-use phonenumber::Mode;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -65,24 +65,22 @@ pub async fn login(
 
                 let user = User::get_by_oidc_sub(&conn, &info.issuer, &info.sub).optional()?;
 
+                let settings = settings.load_full();
+
                 match user {
                     Some(user) => {
-                        let changeset = UpdateUser {
-                            id_token_exp: Some(info.expiration.timestamp()),
-                            ..Default::default()
-                        };
+                        let changeset = create_changeset(&settings, &user, &info);
 
-                        let updated_info = changeset.apply(&conn, user.id, Some(info.x_grp))?;
+                        let updated_info = changeset.apply(&conn, user.id, Some(&info.x_grp))?;
 
                         Ok(LoginResult::UserUpdated(updated_info))
                     }
                     None => {
-                        let settings = settings.load_full();
-
                         let phone_number = if let Some((call_in, phone_number)) =
                             settings.call_in.as_ref().zip(info.phone_number)
                         {
-                            parse_phone_number(call_in, phone_number)
+                            parse_phone_number(&phone_number, call_in.default_country_code)
+                                .map(|p| p.format().mode(phonenumber::Mode::E164).to_string())
                         } else {
                             None
                         };
@@ -145,27 +143,62 @@ pub async fn login(
     }
 }
 
-/// Parses the phone number and formats it as E.164
-fn parse_phone_number(call_in_settings: &CallIn, phone_number: String) -> Option<String> {
-    match phonenumber::parse(Some(call_in_settings.default_country_code), phone_number) {
-        Ok(phone) => {
-            if phone.is_valid() {
-                let phone = phone.format().mode(Mode::E164).to_string();
+/// Create an [`UpdateUser`] changeset based on a comparison between `user` and `token_info`
+fn create_changeset<'a>(
+    settings: &Settings,
+    user: &User,
+    token_info: &'a IdTokenInfo,
+) -> UpdateUser<'a> {
+    let User {
+        id: _,
+        id_serial: _,
+        oidc_sub: _,
+        oidc_issuer: _,
+        email,
+        title: _,
+        firstname,
+        lastname,
+        id_token_exp: _,
+        language: _,
+        display_name: _,
+        dashboard_theme: _,
+        conference_theme: _,
+        phone,
+    } = user;
 
-                Some(phone)
-            } else {
-                log::warn!("A phone number provided by the oidc provider is invalid");
-                None
-            }
-        }
-        Err(err) => {
-            log::error!(
-                "Failed to parse a phone number provided by the oidc provider {}",
-                err
-            );
-            None
-        }
+    let mut changeset = UpdateUser {
+        id_token_exp: Some(token_info.expiration.timestamp()),
+        ..Default::default()
+    };
+
+    if firstname != &token_info.firstname {
+        changeset.firstname = Some(&token_info.firstname);
     }
+
+    if lastname != &token_info.lastname {
+        changeset.lastname = Some(&token_info.lastname)
+    }
+
+    if email != &token_info.email {
+        changeset.email = Some(&token_info.email);
+    }
+
+    let token_phone = if let Some((call_in, phone_number)) = settings
+        .call_in
+        .as_ref()
+        .zip(token_info.phone_number.as_deref())
+    {
+        parse_phone_number(phone_number, call_in.default_country_code)
+            .map(|p| p.format().mode(phonenumber::Mode::E164).to_string())
+    } else {
+        None
+    };
+
+    if phone != &token_phone {
+        changeset.phone = Some(token_phone)
+    }
+
+    changeset
 }
 
 /// Wrapper struct for the oidc provider
