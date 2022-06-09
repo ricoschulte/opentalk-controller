@@ -336,27 +336,26 @@ impl SignalingModule for Media {
                         .context("Failed to get peer participants state")?;
                 }
             }
-            Event::Leaving | Event::RaiseHand | Event::LowerHand { .. } => {}
+            Event::Leaving => {
+                if let Err(e) = storage::del_state(ctx.redis_conn(), self.room, self.id).await {
+                    log::error!(
+                        "Media module for {} failed to remove its data from redis, {}",
+                        self.id,
+                        e
+                    );
+                }
+
+                // Spawn destroying all the handles as it doesn't need to be synchronized
+                // and should not block the leaving process
+                tokio::task::spawn_local(self.media.destroy());
+            }
+            Event::RaiseHand | Event::LowerHand { .. } => {}
         }
 
         Ok(())
     }
 
-    async fn on_destroy(self, mut ctx: DestroyContext<'_>) {
-        if let Err(e) = storage::del_state(ctx.redis_conn(), self.room, self.id).await {
-            log::error!(
-                "Media module for {} failed to remove its data from redis, {}",
-                self.id,
-                e
-            );
-        }
-
-        // Spawn the destroy task since it doesn't need to be synchronized and errors cannot
-        // be handled in this context anyway.
-        // Not spawning it would make the runner take a lot of time to shutdown increasing
-        // contention on the participants redlock where it is not needed.
-        tokio::task::spawn_local(self.media.destroy());
-    }
+    async fn on_destroy(self, _: DestroyContext<'_>) {}
 }
 
 impl Media {
