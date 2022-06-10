@@ -10,7 +10,7 @@ use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
 use controller_shared::settings::Settings;
-use database::{Db, OptionalExt};
+use database::Db;
 use db_storage::events::email_invites::EventEmailInvite;
 use db_storage::events::EventId;
 use db_storage::groups::GroupId;
@@ -63,7 +63,7 @@ pub async fn login(
             let db_result = crate::block(move || -> database::Result<_> {
                 let conn = db.get_conn()?;
 
-                let user = User::get_by_oidc_sub(&conn, &info.issuer, &info.sub).optional()?;
+                let user = User::get_by_oidc_sub(&conn, &info.issuer, &info.sub)?;
 
                 let settings = settings.load_full();
 

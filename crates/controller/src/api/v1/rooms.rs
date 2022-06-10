@@ -18,7 +18,7 @@ use actix_web::{delete, get, patch, post};
 use anyhow::Context;
 use chrono::{DateTime, Utc};
 use controller_shared::ParticipantId;
-use database::{Db, OptionalExt};
+use database::Db;
 use db_storage::invites::{Invite, InviteCodeId};
 use db_storage::rooms::{self as db_rooms, Room, RoomId};
 use db_storage::sip_configs::{NewSipConfig, SipConfig, SipId, SipPassword};
@@ -499,7 +499,7 @@ pub async fn sip_start(
     let room_id = crate::block(move || -> Result<RoomId, ApiError> {
         let conn = db.get_conn()?;
 
-        if let Some(sip_config) = SipConfig::get(&conn, request.sip_id).optional()? {
+        if let Some(sip_config) = SipConfig::get(&conn, request.sip_id)? {
             if sip_config.password == request.password {
                 Ok(sip_config.room)
             } else {

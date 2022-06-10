@@ -9,7 +9,7 @@ use actix_web::web::Data;
 use actix_web::{HttpMessage, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use core::future::ready;
-use database::{Db, OptionalExt};
+use database::Db;
 use db_storage::users::User;
 use openidconnect::AccessToken;
 use std::future::{Future, Ready};
@@ -126,7 +126,7 @@ pub async fn check_access_token(
     let current_user = crate::block(move || {
         let conn = db.get_conn()?;
 
-        match User::get_by_oidc_sub(&conn, &issuer, &sub).optional()? {
+        match User::get_by_oidc_sub(&conn, &issuer, &sub)? {
             Some(user) => Ok(user),
             None => {
                 log::warn!("The requesting user could not be found in the database");
