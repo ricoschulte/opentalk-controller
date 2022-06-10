@@ -11,7 +11,7 @@ use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{get, patch, Either};
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
-use database::{Db, OptionalExt};
+use database::Db;
 use db_storage::events::{
     Event, EventException, EventExceptionKind, EventId, EventInviteStatus, NewEventException,
     UpdateEventException,
@@ -226,7 +226,7 @@ pub async fn get_event_instance(
         let (invitees, invitees_truncated) =
             super::get_invitees_for_event(&settings, &conn, event_id, query.invitees_max)?;
 
-        let exception = EventException::get_for_event(&conn, event_id, instance_id.0).optional()?;
+        let exception = EventException::get_for_event(&conn, event_id, instance_id.0)?;
 
         let users = GetUserProfilesBatched::new()
             .add(&event)
@@ -346,7 +346,7 @@ pub async fn patch_event_instance(
         verify_recurrence_date(&event, instance_id.0)?;
 
         let exception = if let Some(exception) =
-            EventException::get_for_event(&conn, event_id, instance_id.0).optional()?
+            EventException::get_for_event(&conn, event_id, instance_id.0)?
         {
             let is_all_day = patch
                 .is_all_day

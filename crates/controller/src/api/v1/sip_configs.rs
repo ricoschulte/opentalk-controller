@@ -1,7 +1,7 @@
 use super::response::error::ApiError;
 use actix_web::web::{Data, Json, Path};
 use actix_web::{delete, get, put, HttpResponse};
-use database::{Db, OptionalExt};
+use database::Db;
 use db_storage::rooms::RoomId;
 use db_storage::sip_configs::{NewSipConfig, SipConfig, SipId, SipPassword, UpdateSipConfig};
 use serde::{Deserialize, Serialize};
@@ -86,7 +86,7 @@ pub async fn put(
 
         // FIXME: use on_conflict().do_update() (UPSERT) for this PUT
         // Try to modify the sip config before creating a new one
-        if let Some(db_sip_config) = changeset.apply(&conn, room_id).optional()? {
+        if let Some(db_sip_config) = changeset.apply(&conn, room_id)? {
             let sip_config = SipConfigResource {
                 room: room_id,
                 sip_id: db_sip_config.sip_id,

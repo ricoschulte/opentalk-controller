@@ -7,7 +7,7 @@ use controller_shared::{impl_from_redis_value, impl_to_redis_args};
 use database::{DatabaseError, DbConnection, Paginate, Result};
 use diesel::{
     BelongingToDsl, BoolExpressionMethods, Connection, ExpressionMethods, GroupedBy, Identifiable,
-    Insertable, QueryDsl, Queryable, RunQueryDsl, TextExpressionMethods,
+    Insertable, OptionalExtension, QueryDsl, Queryable, RunQueryDsl, TextExpressionMethods,
 };
 use kustos::subject::PolicyUser;
 use std::fmt;
@@ -59,6 +59,8 @@ impl fmt::Debug for User {
 
 impl User {
     /// Get a user with the given id
+    ///
+    /// If no user exists with `user_id` this returns an Error
     #[tracing::instrument(err, skip_all)]
     pub fn get(conn: &DbConnection, user_id: UserId) -> Result<User> {
         let user = users::table
@@ -69,15 +71,22 @@ impl User {
     }
 
     /// Get a user with the given id
+    ///
+    /// Returns None if no user matches `oidc_issuer` and `email`
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_email(conn: &DbConnection, oidc_issuer: &str, email: &str) -> Result<User> {
+    pub fn get_by_email(
+        conn: &DbConnection,
+        oidc_issuer: &str,
+        email: &str,
+    ) -> Result<Option<User>> {
         let user = users::table
             .filter(
                 users::oidc_issuer
                     .eq(oidc_issuer)
                     .and(users::email.eq(email)),
             )
-            .get_result(conn)?;
+            .get_result(conn)
+            .optional()?;
 
         Ok(user)
     }
@@ -160,11 +169,14 @@ impl User {
     }
 
     /// Get user with the given issuer and sub
+    ///
+    /// Returns None if not user matched `issue` and `sub`
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_oidc_sub(conn: &DbConnection, issuer: &str, sub: &str) -> Result<User> {
+    pub fn get_by_oidc_sub(conn: &DbConnection, issuer: &str, sub: &str) -> Result<Option<User>> {
         let user = users::table
             .filter(users::oidc_issuer.eq(issuer).and(users::oidc_sub.eq(sub)))
-            .get_result(conn)?;
+            .get_result(conn)
+            .optional()?;
 
         Ok(user)
     }

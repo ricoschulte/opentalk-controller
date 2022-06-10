@@ -306,27 +306,6 @@ impl Event {
         Ok(())
     }
 
-    pub fn favorite_by_id(conn: &DbConnection, event_id: EventId, user_id: UserId) -> Result<()> {
-        NewEventFavorite { user_id, event_id }.insert(conn)
-    }
-
-    #[tracing::instrument(err, skip_all)]
-    pub fn unfavorite_by_id(conn: &DbConnection, event_id: EventId, user_id: UserId) -> Result<()> {
-        let query = diesel::delete(event_favorites::table).filter(
-            event_favorites::user_id
-                .eq(user_id)
-                .and(event_favorites::event_id.eq(event_id)),
-        );
-
-        let rows_affected = query.execute(conn)?;
-
-        if rows_affected == 0 {
-            Err(DatabaseError::NotFound)
-        } else {
-            Ok(())
-        }
-    }
-
     /// Returns all [`Event`]s in the given [`RoomId`].
     ///
     /// This is needed because when rescheduling an Event from time x onwards, we create a new Event and both reference the room.
@@ -460,14 +439,14 @@ impl EventException {
         conn: &DbConnection,
         event_id: EventId,
         datetime: DateTime<Utc>,
-    ) -> Result<EventException> {
+    ) -> Result<Option<EventException>> {
         let query = event_exceptions::table.filter(
             event_exceptions::event_id
                 .eq(event_id)
                 .and(event_exceptions::exception_date.eq(datetime)),
         );
 
-        let exceptions = query.first(conn)?;
+        let exceptions = query.first(conn).optional()?;
 
         Ok(exceptions)
     }
@@ -688,13 +667,23 @@ pub struct NewEventInvite {
 }
 
 impl NewEventInvite {
+    /// Tries to insert the EventInvite into the database
+    ///
+    /// When yielding a unique key violation, None is returned.
     #[tracing::instrument(err, skip_all)]
-    pub fn insert(self, conn: &DbConnection) -> Result<EventInvite> {
+    pub fn try_insert(self, conn: &DbConnection) -> Result<Option<EventInvite>> {
         let query = self.insert_into(event_invites::table);
 
-        let event_invite = query.get_result(conn)?;
+        let result = query.get_result(conn);
 
-        Ok(event_invite)
+        match result {
+            Ok(event_invite) => Ok(Some(event_invite)),
+            Err(diesel::result::Error::DatabaseError(
+                diesel::result::DatabaseErrorKind::UniqueViolation,
+                ..,
+            )) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 
@@ -735,7 +724,7 @@ impl UpdateEventInvite {
     }
 }
 
-#[derive(Associations, Identifiable)]
+#[derive(Associations, Identifiable, Queryable)]
 #[table_name = "event_favorites"]
 #[primary_key(user_id, event_id)]
 #[belongs_to(User)]
@@ -747,17 +736,19 @@ pub struct EventFavorite {
 
 impl EventFavorite {
     /// Deletes a EventFavorite entry by user_id and event_id
-    pub fn delete_by_id(conn: &DbConnection, user_id: UserId, event_id: EventId) -> Result<()> {
-        diesel::delete(event_favorites::table)
+    ///
+    /// Returns true if something was deleted
+    #[tracing::instrument(err, skip_all)]
+    pub fn delete_by_id(conn: &DbConnection, user_id: UserId, event_id: EventId) -> Result<bool> {
+        let lines_changes = diesel::delete(event_favorites::table)
             .filter(
                 event_favorites::user_id
                     .eq(user_id)
                     .and(event_favorites::event_id.eq(event_id)),
             )
-            .execute(conn)
-            .optional()?;
+            .execute(conn)?;
 
-        Ok(())
+        Ok(lines_changes > 0)
     }
 }
 
@@ -769,13 +760,23 @@ pub struct NewEventFavorite {
 }
 
 impl NewEventFavorite {
+    /// Tries to insert the NewEventFavorite into the database
+    ///
+    /// When yielding a unique key violation, None is returned.
     #[tracing::instrument(err, skip_all)]
-    pub fn insert(self, conn: &DbConnection) -> Result<()> {
+    pub fn try_insert(self, conn: &DbConnection) -> Result<Option<EventFavorite>> {
         let query = self.insert_into(event_favorites::table);
 
-        query.execute(conn)?;
+        let result = query.get_result(conn);
 
-        Ok(())
+        match result {
+            Ok(event_favorite) => Ok(Some(event_favorite)),
+            Err(diesel::result::Error::DatabaseError(
+                diesel::result::DatabaseErrorKind::UniqueViolation,
+                ..,
+            )) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 

@@ -6,7 +6,7 @@ use crate::api::v1::users::PublicUserProfile;
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{delete, get, patch, post, Either};
-use database::{Db, OptionalExt};
+use database::Db;
 use db_storage::events::email_invites::NewEventEmailInvite;
 use db_storage::events::{
     Event, EventFavorite, EventId, EventInvite, EventInviteStatus, NewEventInvite,
@@ -117,14 +117,11 @@ async fn create_user_event_invite(
             created_by: current_user.id,
             created_at: None,
         }
-        .insert(&conn);
+        .try_insert(&conn);
 
         match res {
-            Ok(invite) => Ok(Either::Left((event.room, invite))),
-            Err(database::DatabaseError::DieselError(diesel::result::Error::DatabaseError(
-                diesel::result::DatabaseErrorKind::UniqueViolation,
-                ..,
-            ))) => Ok(Either::Right(NoContent)),
+            Ok(Some(invite)) => Ok(Either::Left((event.room, invite))),
+            Ok(None) => Ok(Either::Right(NoContent)),
             Err(e) => Err(e),
         }
     })
@@ -176,8 +173,7 @@ async fn create_email_event_invite(
 
             let event = Event::get(&conn, event_id)?;
 
-            let invitee_user =
-                User::get_by_email(&conn, &current_user.oidc_issuer, &email).optional()?;
+            let invitee_user = User::get_by_email(&conn, &current_user.oidc_issuer, &email)?;
 
             if let Some(invitee_user) = invitee_user {
                 if event.created_by == invitee_user.id {
@@ -190,16 +186,11 @@ async fn create_email_event_invite(
                     created_by: current_user.id,
                     created_at: None,
                 }
-                .insert(&conn);
+                .try_insert(&conn);
 
                 match res {
-                    Ok(invite) => Ok(UserState::ExistsAndWasInvited(event.room, invite)),
-                    Err(database::DatabaseError::DieselError(
-                        diesel::result::Error::DatabaseError(
-                            diesel::result::DatabaseErrorKind::UniqueViolation,
-                            ..,
-                        ),
-                    )) => Ok(UserState::ExistsAndIsAlreadyInvited),
+                    Ok(Some(invite)) => Ok(UserState::ExistsAndWasInvited(event.room, invite)),
+                    Ok(None) => Ok(UserState::ExistsAndIsAlreadyInvited),
                     Err(e) => Err(e.into()),
                 }
             } else {
@@ -241,18 +232,13 @@ async fn create_email_event_invite(
                         email,
                         created_by: current_user.id,
                     }
-                    .insert(&conn)
+                    .try_insert(&conn)
                 })
                 .await?;
 
                 match res {
-                    Ok(()) => Ok(Either::Left(Created)),
-                    Err(database::DatabaseError::DieselError(
-                        diesel::result::Error::DatabaseError(
-                            diesel::result::DatabaseErrorKind::UniqueViolation,
-                            ..,
-                        ),
-                    )) => Ok(Either::Right(NoContent)),
+                    Ok(Some(_)) => Ok(Either::Left(Created)),
+                    Ok(None) => Ok(Either::Right(NoContent)),
                     Err(e) => Err(e.into()),
                 }
             } else {

@@ -16,13 +16,23 @@ pub struct NewEventEmailInvite {
 }
 
 impl NewEventEmailInvite {
+    /// Tries to insert the EventEmailInvite into the database
+    ///
+    /// When yielding a unique key violation, None is returned.
     #[tracing::instrument(err, skip_all)]
-    pub fn insert(self, conn: &DbConnection) -> Result<()> {
+    pub fn try_insert(self, conn: &DbConnection) -> Result<Option<EventEmailInvite>> {
         let query = self.insert_into(event_email_invites::table);
 
-        query.execute(conn)?;
+        let result = query.get_result(conn);
 
-        Ok(())
+        match result {
+            Ok(event_email_invites) => Ok(Some(event_email_invites)),
+            Err(diesel::result::Error::DatabaseError(
+                diesel::result::DatabaseErrorKind::UniqueViolation,
+                ..,
+            )) => Ok(None),
+            Err(e) => Err(e.into()),
+        }
     }
 }
 

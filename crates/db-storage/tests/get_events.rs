@@ -218,7 +218,7 @@ async fn get_event_invites() {
         created_by: ferdinand.id,
         created_at: None,
     }
-    .insert(&conn)
+    .try_insert(&conn)
     .unwrap();
 
     NewEventInvite {
@@ -227,7 +227,7 @@ async fn get_event_invites() {
         created_by: ferdinand.id,
         created_at: None,
     }
-    .insert(&conn)
+    .try_insert(&conn)
     .unwrap();
 
     // EVENT 2 MIT JEEZ LOUSE UND FERDINAND
@@ -239,7 +239,7 @@ async fn get_event_invites() {
         created_by: gerhard.id,
         created_at: None,
     }
-    .insert(&conn)
+    .try_insert(&conn)
     .unwrap();
 
     NewEventInvite {
@@ -248,7 +248,7 @@ async fn get_event_invites() {
         created_by: gerhard.id,
         created_at: None,
     }
-    .insert(&conn)
+    .try_insert(&conn)
     .unwrap();
 
     let events = &[&event1, &event2][..];

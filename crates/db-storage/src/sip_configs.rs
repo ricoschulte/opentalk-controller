@@ -82,9 +82,9 @@ pub struct SipConfig {
 impl SipConfig {
     /// Get the sip config for the specified sip_id
     #[tracing::instrument(err, skip_all)]
-    pub fn get(conn: &DbConnection, sip_id: SipId) -> Result<SipConfig> {
+    pub fn get(conn: &DbConnection, sip_id: SipId) -> Result<Option<SipConfig>> {
         let query = sip_configs::table.filter(sip_configs::sip_id.eq(&sip_id));
-        let sip_config = query.get_result(conn)?;
+        let sip_config = query.get_result(conn).optional()?;
 
         Ok(sip_config)
     }
@@ -175,11 +175,11 @@ pub struct UpdateSipConfig {
 }
 
 impl UpdateSipConfig {
-    pub fn apply(self, conn: &DbConnection, room_id: RoomId) -> Result<SipConfig> {
+    pub fn apply(self, conn: &DbConnection, room_id: RoomId) -> Result<Option<SipConfig>> {
         let query =
             diesel::update(sip_configs::table.filter(sip_configs::room.eq(&room_id))).set(self);
 
-        let config = query.get_result(conn)?;
+        let config = query.get_result(conn).optional()?;
 
         Ok(config)
     }
