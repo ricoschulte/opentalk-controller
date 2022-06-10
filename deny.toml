@@ -169,7 +169,7 @@ skip = [
     { name = "time-macros", version = "=0.1.1" },
     { name = "tokio-util", version = "=0.6.9" },
     { name = "wasi", version = "=0.10.0+wasi-snapshot-preview1" },
-    { name = "uuid", version = "=1.1.0" },
+    { name = "uuid", version = "=1.1.1" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive
