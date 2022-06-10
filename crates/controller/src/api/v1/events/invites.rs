@@ -137,7 +137,7 @@ async fn create_user_event_invite(
         .try_insert(&conn);
 
         match res {
-            Ok(Some(invite)) => Ok(Either::Left((event, room, sip_config, invitee))),
+            Ok(Some(_invite)) => Ok(Either::Left((event, room, sip_config, invitee))),
             Ok(None) => Ok(Either::Right(NoContent)),
             Err(e) => Err(e),
         }
@@ -159,10 +159,7 @@ async fn create_user_event_invite(
             mail_service
                 .send_registered_invite(inviter, event, room, sip_config, invitee)
                 .await
-                .map_err(|e| {
-                    log::error!("REST API threw internal error from lapin: {}", e);
-                    ApiError::internal()
-                })?;
+                .context("Failed to send with MailService")?;
 
             Ok(Either::Left(Created))
         }
@@ -269,10 +266,7 @@ async fn create_email_event_invite(
             mail_service
                 .send_registered_invite(current_user, event, room, sip_config, invitee)
                 .await
-                .map_err(|e| {
-                    log::error!("REST API threw internal error from lapin: {}", e);
-                    ApiError::internal()
-                })?;
+                .context("Failed to send with MailService")?;
 
             Ok(Either::Left(Created))
         }
@@ -304,12 +298,9 @@ async fn create_email_event_invite(
                 match res {
                     Ok(Some(_)) => {
                         mail_service
-                            .send_unregistered_invite(current_user, event, room, sip_config, &email)
+                            .send_unregistered_invite(inviter, event, room, sip_config, &invitee)
                             .await
-                            .map_err(|e| {
-                                log::error!("REST API threw internal error from lapin: {}", e);
-                                ApiError::internal()
-                            })?;
+                            .context("Failed to send with MailService")?;
 
                         Ok(Either::Left(Created))
                     }
