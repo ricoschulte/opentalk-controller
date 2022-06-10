@@ -8,6 +8,7 @@ use db_storage::users::{User, UserId};
 use serde::{Deserialize, Serialize};
 
 pub mod internal;
+mod util;
 #[macro_use]
 pub mod signaling;
 pub mod v1;

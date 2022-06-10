@@ -47,12 +47,12 @@ impl Group {
 }
 #[derive(Debug, Insertable)]
 #[table_name = "groups"]
-pub struct NewGroup {
+pub struct NewGroup<'a> {
     pub oidc_issuer: String,
-    pub name: String,
+    pub name: &'a str,
 }
 
-impl NewGroup {
+impl NewGroup<'_> {
     /// Insert the new group. If the group already exists for the OIDC issuer the group will be returned instead
     #[tracing::instrument(err, skip_all)]
     pub fn insert_or_get(self, conn: &DbConnection) -> Result<Group> {

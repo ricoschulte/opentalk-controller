@@ -272,7 +272,7 @@ impl NewUserWithGroups {
                 .values(self.new_user)
                 .get_result(conn)?;
 
-            let groups = get_ids_for_group_names(conn, &user, self.groups)?;
+            let groups = get_ids_for_group_names(conn, &user, &self.groups)?;
             let group_ids = groups.iter().map(|(id, _)| *id).collect();
             insert_user_into_user_groups(conn, &user, groups)?;
 
@@ -286,13 +286,17 @@ impl NewUserWithGroups {
 /// Is used in update queries. None fields will be ignored on update queries
 #[derive(Default, AsChangeset)]
 #[table_name = "users"]
-pub struct UpdateUser {
-    pub title: Option<String>,
-    pub display_name: Option<String>,
-    pub language: Option<String>,
+pub struct UpdateUser<'a> {
+    pub title: Option<&'a str>,
+    pub email: Option<&'a str>,
+    pub firstname: Option<&'a str>,
+    pub lastname: Option<&'a str>,
+    pub phone: Option<Option<String>>,
+    pub display_name: Option<&'a str>,
+    pub language: Option<&'a str>,
     pub id_token_exp: Option<i64>,
-    pub dashboard_theme: Option<String>,
-    pub conference_theme: Option<String>,
+    pub dashboard_theme: Option<&'a str>,
+    pub conference_theme: Option<&'a str>,
 }
 
 /// Ok type of [`UpdateUser::apply`]
@@ -308,13 +312,13 @@ pub struct UserUpdatedInfo {
     pub groups_removed: Vec<GroupId>,
 }
 
-impl UpdateUser {
+impl UpdateUser<'_> {
     #[tracing::instrument(err, skip_all)]
     pub fn apply(
         self,
         conn: &DbConnection,
         user_id: UserId,
-        groups: Option<Vec<String>>,
+        groups: Option<&[String]>,
     ) -> Result<UserUpdatedInfo> {
         conn.transaction::<UserUpdatedInfo, DatabaseError, _>(move || {
             let query = diesel::update(users::table.filter(users::id.eq(user_id))).set(self);
@@ -375,20 +379,20 @@ impl UpdateUser {
 fn get_ids_for_group_names(
     conn: &DbConnection,
     user: &User,
-    groups: Vec<String>,
+    groups: &[String],
 ) -> Result<Vec<(GroupId, String)>> {
     let present_groups: Vec<(GroupId, String)> = groups::table
         .select((groups::id, groups::name))
         .filter(
             groups::oidc_issuer
                 .eq(&user.oidc_issuer)
-                .and(groups::name.eq_any(&groups)),
+                .and(groups::name.eq_any(groups)),
         )
         .load(conn)?;
 
     let new_groups: Vec<NewGroup> = groups
-        .into_iter()
-        .filter(|wanted| !present_groups.iter().any(|(_, name)| name == wanted))
+        .iter()
+        .filter(|wanted| !present_groups.iter().any(|(_, name)| name == *wanted))
         .map(|name| NewGroup {
             oidc_issuer: user.oidc_issuer.clone(),
             name,
