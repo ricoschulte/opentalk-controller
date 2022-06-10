@@ -3,16 +3,19 @@ use crate::api::v1::events::{EventInvitee, EventPoliciesBuilderExt};
 use crate::api::v1::response::{ApiError, Created, NoContent};
 use crate::api::v1::rooms::RoomsPoliciesBuilderExt;
 use crate::api::v1::users::PublicUserProfile;
+use crate::services::MailService;
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{delete, get, patch, post, Either};
+use anyhow::Context;
 use database::Db;
 use db_storage::events::email_invites::NewEventEmailInvite;
 use db_storage::events::{
     Event, EventFavorite, EventId, EventInvite, EventInviteStatus, NewEventInvite,
     UpdateEventInvite,
 };
-use db_storage::rooms::RoomId;
+use db_storage::rooms::Room;
+use db_storage::sip_configs::SipConfig;
 use db_storage::users::{User, UserId};
 use diesel::Connection;
 use keycloak_admin::KeycloakAdminClient;
@@ -74,12 +77,21 @@ pub async fn create_invite_to_event(
     current_user: ReqData<User>,
     event_id: Path<EventId>,
     create_invite: Json<PostEventInviteBody>,
+    mail_service: Data<MailService>,
 ) -> Result<Either<Created, NoContent>, ApiError> {
     let event_id = event_id.into_inner();
 
     match create_invite.into_inner() {
         PostEventInviteBody::User { invitee } => {
-            create_user_event_invite(db, authz, current_user.into_inner(), event_id, invitee).await
+            create_user_event_invite(
+                db,
+                authz,
+                current_user.into_inner(),
+                event_id,
+                invitee,
+                &mail_service.into_inner(),
+            )
+            .await
         }
         PostEventInviteBody::Email { email } => {
             create_email_event_invite(
@@ -89,6 +101,7 @@ pub async fn create_invite_to_event(
                 current_user.into_inner(),
                 event_id,
                 email,
+                &mail_service.into_inner(),
             )
             .await
         }
@@ -100,27 +113,31 @@ async fn create_user_event_invite(
     authz: Data<Authz>,
     current_user: User,
     event_id: EventId,
-    invitee: UserId,
+    invitee_id: UserId,
+    mail_service: &MailService,
 ) -> Result<Either<Created, NoContent>, ApiError> {
+    let inviter = current_user.clone();
+
     let res = crate::block(move || -> database::Result<Either<_, NoContent>> {
         let conn = db.get_conn()?;
 
-        let event = Event::get(&conn, event_id)?;
+        let (event, room, sip_config) = Event::get_with_room(&conn, event_id)?;
+        let invitee = User::get(&conn, invitee_id)?;
 
-        if event.created_by == invitee {
+        if event.created_by == invitee_id {
             return Ok(Either::Right(NoContent));
         }
 
         let res = NewEventInvite {
             event_id,
-            invitee,
+            invitee: invitee_id,
             created_by: current_user.id,
             created_at: None,
         }
         .try_insert(&conn);
 
         match res {
-            Ok(Some(invite)) => Ok(Either::Left((event.room, invite))),
+            Ok(Some(_invite)) => Ok(Either::Left((event, room, sip_config, invitee))),
             Ok(None) => Ok(Either::Right(NoContent)),
             Err(e) => Err(e),
         }
@@ -128,16 +145,21 @@ async fn create_user_event_invite(
     .await??;
 
     match res {
-        Either::Left((room_id, invite)) => {
+        Either::Left((event, room, sip_config, invitee)) => {
             let policies = PoliciesBuilder::new()
                 // Grant invitee access
-                .grant_user_access(invite.invitee)
+                .grant_user_access(invitee.id)
                 .event_read_access(event_id)
-                .room_read_access(room_id)
+                .room_read_access(event.room)
                 .event_invite_invitee_access(event_id)
                 .finish();
 
             authz.add_policies(policies).await?;
+
+            mail_service
+                .send_registered_invite(inviter, event, room, sip_config, invitee)
+                .await
+                .context("Failed to send with MailService")?;
 
             Ok(Either::Left(Created))
         }
@@ -156,11 +178,23 @@ async fn create_email_event_invite(
     current_user: User,
     event_id: EventId,
     email: String,
+    mail_service: &MailService,
 ) -> Result<Either<Created, NoContent>, ApiError> {
+    #[allow(clippy::large_enum_variant)]
     enum UserState {
         ExistsAndIsAlreadyInvited,
-        ExistsAndWasInvited(RoomId, EventInvite),
-        DoesNotExist,
+        ExistsAndWasInvited {
+            event: Event,
+            room: Room,
+            invitee: User,
+            sip_config: Option<SipConfig>,
+            invite: EventInvite,
+        },
+        DoesNotExist {
+            event: Event,
+            room: Room,
+            sip_config: Option<SipConfig>,
+        },
     }
 
     let state = {
@@ -171,7 +205,7 @@ async fn create_email_event_invite(
         crate::block(move || -> Result<_, ApiError> {
             let conn = db.get_conn()?;
 
-            let event = Event::get(&conn, event_id)?;
+            let (event, room, sip_config) = Event::get_with_room(&conn, event_id)?;
 
             let invitee_user = User::get_by_email(&conn, &current_user.oidc_issuer, &email)?;
 
@@ -189,12 +223,22 @@ async fn create_email_event_invite(
                 .try_insert(&conn);
 
                 match res {
-                    Ok(Some(invite)) => Ok(UserState::ExistsAndWasInvited(event.room, invite)),
+                    Ok(Some(invite)) => Ok(UserState::ExistsAndWasInvited {
+                        event,
+                        room,
+                        invitee: invitee_user,
+                        sip_config,
+                        invite,
+                    }),
                     Ok(None) => Ok(UserState::ExistsAndIsAlreadyInvited),
                     Err(e) => Err(e.into()),
                 }
             } else {
-                Ok(UserState::DoesNotExist)
+                Ok(UserState::DoesNotExist {
+                    event,
+                    room,
+                    sip_config,
+                })
             }
         })
         .await??
@@ -202,28 +246,43 @@ async fn create_email_event_invite(
 
     match state {
         UserState::ExistsAndIsAlreadyInvited => Ok(Either::Right(NoContent)),
-        UserState::ExistsAndWasInvited(room_id, invite) => {
+        UserState::ExistsAndWasInvited {
+            event,
+            room,
+            invite,
+            sip_config,
+            invitee,
+        } => {
             let policies = PoliciesBuilder::new()
                 // Grant invitee access
                 .grant_user_access(invite.invitee)
                 .event_read_access(event_id)
-                .room_read_access(room_id)
+                .room_read_access(room.id)
                 .event_invite_invitee_access(event_id)
                 .finish();
 
             authz.add_policies(policies).await?;
 
+            mail_service
+                .send_registered_invite(current_user, event, room, sip_config, invitee)
+                .await
+                .context("Failed to send with MailService")?;
+
             Ok(Either::Left(Created))
         }
-        UserState::DoesNotExist => {
+        UserState::DoesNotExist {
+            event,
+            room,
+            sip_config,
+        } => {
             let email_exists = kc_admin_client
                 .verify_email(&email)
                 .await
                 .map_err(anyhow::Error::from)?;
 
             if email_exists {
-                // TODO: send email
-
+                let inviter = current_user.clone();
+                let invitee = email.clone();
                 let res = crate::block(move || {
                     let conn = db.get_conn()?;
 
@@ -237,7 +296,14 @@ async fn create_email_event_invite(
                 .await?;
 
                 match res {
-                    Ok(Some(_)) => Ok(Either::Left(Created)),
+                    Ok(Some(_)) => {
+                        mail_service
+                            .send_unregistered_invite(inviter, event, room, sip_config, &invitee)
+                            .await
+                            .context("Failed to send with MailService")?;
+
+                        Ok(Either::Left(Created))
+                    }
                     Ok(None) => Ok(Either::Right(NoContent)),
                     Err(e) => Err(e.into()),
                 }

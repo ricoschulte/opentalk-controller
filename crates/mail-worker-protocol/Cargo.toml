@@ -1,0 +1,19 @@
+[package]
+name = "k3k-mail-worker-protocol"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+serde = { version = "1.0.137", features = ["derive"] }
+uuid = { version = "1.0.0", features = ["serde"] }
+chrono = { version = "0.4.19", features = ["serde"] }
+db-storage = { path = "../db-storage", package = "k3k-db-storage", optional = true }
+
+[dev-dependencies]
+serde_json = "1.0"
+pretty_assertions = "1.2"
+
+[features]
+default = []
+client = ["db-storage"]
