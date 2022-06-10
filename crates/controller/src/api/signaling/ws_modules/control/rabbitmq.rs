@@ -21,6 +21,8 @@ pub enum Message {
     /// This message is only sent to the participant to be accepted and published by the `moderation` module.
     /// The control module only handles the joining into the waiting room and joining the actual room.
     Accepted(ParticipantId),
+
+    SetModeratorStatus(bool),
 }
 
 /// Returns the name of the RabbitMQ topic exchange used inside the current room.

@@ -13,6 +13,11 @@ pub enum Message {
     Joined(Participant),
     /// This participant left the room
     Left(AssociatedParticipant),
+
+    RoleUpdated {
+        new_role: Role,
+    },
+
     Error {
         text: &'static str,
     },
@@ -58,9 +63,9 @@ mod test {
 
         let produced = serde_json::to_string(&Message::JoinSuccess(JoinSuccess {
             id: ParticipantId::nil(),
+            role: Role::User,
             display_name: "name".into(),
             avatar_url: Some("http://url".into()),
-            role: Role::User,
             module_data: Default::default(),
             participants: vec![],
         }))

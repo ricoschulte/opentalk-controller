@@ -24,7 +24,6 @@ struct SessionInfo {
 pub struct Protocol {
     etherpad: EtherpadClient,
     participant_id: ParticipantId,
-    role: Role,
     room_id: SignalingRoomId,
 }
 
@@ -49,7 +48,6 @@ impl SignalingModule for Protocol {
         Ok(Some(Self {
             etherpad,
             participant_id: ctx.participant_id(),
-            role: ctx.role(),
             room_id: ctx.room_id(),
         }))
     }
@@ -110,7 +108,7 @@ impl Protocol {
             incoming::Message::SelectWriter(select_writer) => {
                 let targets = select_writer.participant_ids;
 
-                if self.role != Role::Moderator {
+                if ctx.role() != Role::Moderator {
                     ctx.ws_send(outgoing::Message::Error(
                         outgoing::Error::InsufficientPermissions,
                     ));

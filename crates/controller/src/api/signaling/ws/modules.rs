@@ -4,6 +4,7 @@ use crate::api::signaling::ws::runner::Builder;
 use crate::api::signaling::ws::{DestroyContext, InitContext, RabbitMqPublish};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::ControlData;
+use crate::api::signaling::Role;
 use crate::redis_wrapper::RedisConnection;
 use actix_http::ws::{CloseCode, Message};
 use anyhow::{Context, Result};
@@ -68,6 +69,7 @@ impl Modules {
         for module in self.modules.values_mut() {
             let ctx = DynEventCtx {
                 id: ctx.id,
+                role: ctx.role,
                 ws_messages: ctx.ws_messages,
                 rabbitmq_publish: ctx.rabbitmq_publish,
                 redis_conn: ctx.redis_conn,
@@ -124,6 +126,7 @@ pub enum DynBroadcastEvent<'evt> {
 /// Untyped version of a ModuleContext which is used in `on_event`
 pub(super) struct DynEventCtx<'ctx> {
     pub id: ParticipantId,
+    pub role: Role,
     pub timestamp: Timestamp,
     pub ws_messages: &'ctx mut Vec<Message>,
     pub rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
@@ -162,6 +165,7 @@ where
         dyn_event: DynTargetedEvent,
     ) -> Result<()> {
         let ctx = ModuleContext {
+            role: ctx.role,
             ws_messages: ctx.ws_messages,
             rabbitmq_publish: ctx.rabbitmq_publish,
             redis_conn: ctx.redis_conn,
@@ -198,6 +202,7 @@ where
         dyn_event: &mut DynBroadcastEvent<'_>,
     ) -> Result<()> {
         let ctx = ModuleContext {
+            role: ctx.role,
             ws_messages: ctx.ws_messages,
             rabbitmq_publish: ctx.rabbitmq_publish,
             redis_conn: ctx.redis_conn,
@@ -302,6 +307,7 @@ where
         let mut ws_messages = vec![];
 
         let ctx = ModuleContext {
+            role: dyn_ctx.role,
             timestamp: dyn_ctx.timestamp,
             ws_messages: &mut ws_messages,
             rabbitmq_publish: dyn_ctx.rabbitmq_publish,
@@ -333,6 +339,7 @@ where
         let mut ws_messages = vec![];
 
         let ctx = ModuleContext {
+            role: dyn_ctx.role,
             timestamp: dyn_ctx.timestamp,
             ws_messages: &mut ws_messages,
             rabbitmq_publish: dyn_ctx.rabbitmq_publish,

@@ -219,6 +219,7 @@ pub struct ModuleContext<'ctx, M>
 where
     M: SignalingModule,
 {
+    role: Role,
     ws_messages: &'ctx mut Vec<NamespacedOutgoing<'static, M::Outgoing>>,
     timestamp: Timestamp,
     rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
@@ -240,6 +241,10 @@ impl<M> ModuleContext<'_, M>
 where
     M: SignalingModule,
 {
+    pub fn role(&self) -> Role {
+        self.role
+    }
+
     /// Queue a outgoing message to be sent via the websocket
     /// after exiting the `on_event` function
     pub fn ws_send(&mut self, message: M::Outgoing) {

@@ -89,7 +89,6 @@ mod storage;
 pub struct AutoMod {
     id: ParticipantId,
     room: SignalingRoomId,
-    role: Role,
 
     current_expiry_id: Option<ExpiryId>,
     current_animation_id: Option<AnimationId>,
@@ -132,7 +131,6 @@ impl SignalingModule for AutoMod {
         Ok(Some(Self {
             id: ctx.participant_id(),
             room: ctx.room_id(),
-            role: ctx.role(),
             current_expiry_id: None,
             current_animation_id: None,
         }))
@@ -410,15 +408,17 @@ impl AutoMod {
         mut ctx: ModuleContext<'_, Self>,
         msg: incoming::Message,
     ) -> Result<()> {
-        match self.role {
-            Role::User if msg.requires_moderator_privileges() => {
-                ctx.ws_send(outgoing::Message::Error(
-                    outgoing::Error::InsufficientPermissions,
-                ));
+        match ctx.role() {
+            Role::User | Role::Guest => {
+                if msg.requires_moderator_privileges() {
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InsufficientPermissions,
+                    ));
 
-                return Ok(());
+                    return Ok(());
+                }
             }
-            _ => {}
+            Role::Moderator => {}
         }
 
         let mut mutex = storage::lock::new(self.room);

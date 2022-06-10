@@ -35,7 +35,6 @@ mod storage;
 pub struct Media {
     id: ParticipantId,
     room: SignalingRoomId,
-    role: Role,
 
     mcu: Arc<McuPool>,
     media: MediaSessions,
@@ -79,7 +78,6 @@ impl SignalingModule for Media {
 
         let id = ctx.participant_id();
         let room = ctx.room_id();
-        let role = ctx.role();
 
         storage::set_state(ctx.redis_conn(), room, id, &state).await?;
 
@@ -88,7 +86,6 @@ impl SignalingModule for Media {
         Ok(Some(Self {
             id,
             room,
-            role,
             mcu: mcu.clone(),
             media: MediaSessions::new(ctx.participant_id(), media_sender),
             state,
@@ -367,7 +364,7 @@ impl Media {
         ctx: &mut ModuleContext<'_, Self>,
         moderator_mute: RequestMute,
     ) -> Result<()> {
-        if self.role != Role::Moderator {
+        if ctx.role() != Role::Moderator {
             ctx.ws_send(outgoing::Message::Error(outgoing::Error::PermissionDenied));
 
             return Ok(());

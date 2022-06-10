@@ -29,7 +29,7 @@ use controller_shared::settings::SharedSettings;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
-use db_storage::users::User;
+use db_storage::users::{User, UserId};
 use futures::stream::SelectAll;
 use kustos::Authz;
 use lapin::message::DeliveryResult;
@@ -424,7 +424,7 @@ enum RunnerState {
     },
 
     /// Inside the actual room
-    Joined(ControlData),
+    Joined,
 }
 
 impl Runner {
@@ -504,7 +504,7 @@ impl Runner {
     pub async fn destroy(mut self) {
         self.delegate_consumer();
 
-        if let RunnerState::Joined(_) | RunnerState::Waiting { .. } = &self.state {
+        if let RunnerState::Joined | RunnerState::Waiting { .. } = &self.state {
             // The retry/wait_time values are set extra high
             // since a lot of operations are being done while holding the lock
             let mut room_mutex = storage::room_mutex(self.room_id);
@@ -527,7 +527,7 @@ impl Runner {
                 }
             };
 
-            if let RunnerState::Joined(_) = &self.state {
+            if let RunnerState::Joined = &self.state {
                 // first check if the list of joined participant is empty
                 if let Err(e) = storage::set_attribute(
                     &mut self.redis_conn,
@@ -625,7 +625,7 @@ impl Runner {
                         )
                         .await;
                     }
-                    RunnerState::Joined(_) => {
+                    RunnerState::Joined => {
                         self.rabbitmq_publish_control(
                             Timestamp::now(),
                             None,
@@ -673,6 +673,7 @@ impl Runner {
     async fn cleanup_redis(&mut self) -> Result<()> {
         storage::remove_participant_set(&mut self.redis_conn, self.room_id).await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "display_name").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "role").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "joined_at").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "left_at").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "hand_is_up").await?;
@@ -792,7 +793,7 @@ impl Runner {
                 }
             }
             // Do not handle any other messages than control-join before joined
-        } else if let RunnerState::Joined(_) = &self.state {
+        } else if let RunnerState::Joined = &self.state {
             match self
                 .handle_module_targeted_event(
                     namespaced.namespace,
@@ -822,18 +823,13 @@ impl Runner {
         match msg {
             incoming::Message::Join(join) => {
                 if join.display_name.is_empty() {
-                    self.ws
-                        .send(Message::Text(
-                            NamespacedOutgoing {
-                                namespace: NAMESPACE,
-                                timestamp,
-                                payload: outgoing::Message::Error {
-                                    text: "invalid username",
-                                },
-                            }
-                            .to_json(),
-                        ))
-                        .await;
+                    self.ws_send_control(
+                        timestamp,
+                        outgoing::Message::Error {
+                            text: "invalid username",
+                        },
+                    )
+                    .await;
 
                     return Ok(());
                 }
@@ -871,6 +867,7 @@ impl Runner {
 
                 let control_data = ControlData {
                     display_name,
+                    role: self.role,
                     avatar_url,
                     participation_kind: match &self.participant {
                         api::Participant::User(_) => ParticipationKind::User,
@@ -926,18 +923,13 @@ impl Runner {
                     state => {
                         self.state = state;
 
-                        self.ws
-                            .send(Message::Text(
-                                NamespacedOutgoing {
-                                    namespace: NAMESPACE,
-                                    timestamp,
-                                    payload: outgoing::Message::Error {
-                                        text: "not accepted or not in waiting room",
-                                    },
-                                }
-                                .to_json(),
-                            ))
-                            .await;
+                        self.ws_send_control(
+                            timestamp,
+                            outgoing::Message::Error {
+                                text: "not accepted or not in waiting room",
+                            },
+                        )
+                        .await;
                     }
                 }
             }
@@ -969,7 +961,72 @@ impl Runner {
                 self.handle_module_requested_actions(timestamp, actions)
                     .await;
             }
+            incoming::Message::GrantModeratorRole(incoming::Target { target }) => {
+                self.handle_grant_moderator_msg(timestamp, target, true)
+                    .await?;
+            }
+            incoming::Message::RevokeModeratorRole(incoming::Target { target }) => {
+                self.handle_grant_moderator_msg(timestamp, target, false)
+                    .await?;
+            }
         }
+
+        Ok(())
+    }
+
+    async fn handle_grant_moderator_msg(
+        &mut self,
+        timestamp: Timestamp,
+        target: ParticipantId,
+        grant: bool,
+    ) -> Result<()> {
+        if self.role != Role::Moderator {
+            self.ws_send_control(
+                timestamp,
+                outgoing::Message::Error {
+                    text: "not a moderator",
+                },
+            )
+            .await;
+
+            return Ok(());
+        }
+
+        let role: Option<Role> =
+            storage::get_attribute(&mut self.redis_conn, self.room_id, target, "role").await?;
+
+        let is_moderator = matches!(role, Some(Role::Moderator));
+
+        if is_moderator == grant {
+            self.ws_send_control(timestamp, outgoing::Message::Error { text: "noop" })
+                .await;
+
+            return Ok(());
+        }
+
+        let user_id: Option<UserId> =
+            storage::get_attribute(&mut self.redis_conn, self.room_id, target, "user_id").await?;
+
+        if let Some(user_id) = user_id {
+            if user_id == self.room.created_by {
+                self.ws_send_control(
+                    timestamp,
+                    outgoing::Message::Error {
+                        text: "target is room owner",
+                    },
+                )
+                .await;
+
+                return Ok(());
+            }
+        }
+
+        self.rabbitmq_publish_control(
+            timestamp,
+            Some(target),
+            rabbitmq::Message::SetModeratorStatus(grant),
+        )
+        .await;
 
         Ok(())
     }
@@ -1070,25 +1127,20 @@ impl Runner {
             )
             .await;
 
-        self.ws
-            .send(Message::Text(
-                NamespacedOutgoing {
-                    namespace: NAMESPACE,
-                    timestamp,
-                    payload: outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
-                        id: self.id,
-                        display_name: control_data.display_name.clone(),
-                        avatar_url: control_data.avatar_url.clone(),
-                        role: self.role,
-                        module_data,
-                        participants,
-                    }),
-                }
-                .to_json(),
-            ))
-            .await;
+        self.ws_send_control(
+            timestamp,
+            outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
+                id: self.id,
+                role: self.role,
+                display_name: control_data.display_name.clone(),
+                avatar_url: control_data.avatar_url.clone(),
+                module_data,
+                participants,
+            }),
+        )
+        .await;
 
-        self.state = RunnerState::Joined(control_data);
+        self.state = RunnerState::Joined;
 
         self.rabbitmq_publish_control(timestamp, None, rabbitmq::Message::Joined(self.id))
             .await;
@@ -1214,7 +1266,7 @@ impl Runner {
                 if let Err(e) = self.handle_rabbitmq_control_msg(timestamp, msg).await {
                     log::error!("Failed to handle incoming rabbitmq control msg, {}", e);
                 }
-            } else if let RunnerState::Joined(_) = &self.state {
+            } else if let RunnerState::Joined = &self.state {
                 // Only allow rmq messages outside the control namespace if the participant is fully joined
                 match self
                     .handle_module_targeted_event(
@@ -1266,7 +1318,7 @@ impl Runner {
         match msg {
             rabbitmq::Message::Joined(id) => {
                 // Ignore events of self and only if runner is joined
-                if self.id == id || !matches!(&self.state, RunnerState::Joined(_)) {
+                if self.id == id || !matches!(&self.state, RunnerState::Joined) {
                     return Ok(());
                 }
 
@@ -1280,15 +1332,7 @@ impl Runner {
                     )
                     .await;
 
-                self.ws
-                    .send(Message::Text(
-                        NamespacedOutgoing {
-                            namespace: NAMESPACE,
-                            timestamp,
-                            payload: outgoing::Message::Joined(participant),
-                        }
-                        .to_json(),
-                    ))
+                self.ws_send_control(timestamp, outgoing::Message::Joined(participant))
                     .await;
 
                 self.handle_module_requested_actions(timestamp, actions)
@@ -1296,7 +1340,7 @@ impl Runner {
             }
             rabbitmq::Message::Left(id) => {
                 // Ignore events of self and only if runner is joined
-                if self.id == id || !matches!(&self.state, RunnerState::Joined(_)) {
+                if self.id == id || !matches!(&self.state, RunnerState::Joined) {
                     return Ok(());
                 }
 
@@ -1308,25 +1352,18 @@ impl Runner {
                     )
                     .await;
 
-                self.ws
-                    .send(Message::Text(
-                        NamespacedOutgoing {
-                            namespace: NAMESPACE,
-                            timestamp,
-                            payload: outgoing::Message::Left(outgoing::AssociatedParticipant {
-                                id,
-                            }),
-                        }
-                        .to_json(),
-                    ))
-                    .await;
+                self.ws_send_control(
+                    timestamp,
+                    outgoing::Message::Left(outgoing::AssociatedParticipant { id }),
+                )
+                .await;
 
                 self.handle_module_requested_actions(timestamp, actions)
                     .await;
             }
             rabbitmq::Message::Update(id) => {
                 // Ignore updates of self and only if runner is joined
-                if self.id == id || !matches!(&self.state, RunnerState::Joined(_)) {
+                if self.id == id || !matches!(&self.state, RunnerState::Joined) {
                     return Ok(());
                 }
 
@@ -1340,15 +1377,7 @@ impl Runner {
                     )
                     .await;
 
-                self.ws
-                    .send(Message::Text(
-                        NamespacedOutgoing {
-                            namespace: NAMESPACE,
-                            timestamp,
-                            payload: outgoing::Message::Update(participant),
-                        }
-                        .to_json(),
-                    ))
+                self.ws_send_control(timestamp, outgoing::Message::Update(participant))
                     .await;
 
                 self.handle_module_requested_actions(timestamp, actions)
@@ -1380,6 +1409,47 @@ impl Runner {
                             .await;
                     }
                 }
+            }
+            rabbitmq::Message::SetModeratorStatus(grant_moderator) => {
+                let created_room = if let api::Participant::User(user) = &self.participant {
+                    self.room.created_by == user.id
+                } else {
+                    false
+                };
+
+                if created_room {
+                    return Ok(());
+                }
+
+                let new_role = if grant_moderator {
+                    Role::Moderator
+                } else {
+                    match &self.participant {
+                        api::Participant::User(_) => Role::User,
+                        api::Participant::Guest | api::Participant::Sip => Role::Guest,
+                    }
+                };
+
+                if self.role == new_role {
+                    return Ok(());
+                }
+
+                self.role = new_role;
+
+                storage::set_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.id,
+                    "role",
+                    new_role,
+                )
+                .await?;
+
+                self.ws_send_control(timestamp, outgoing::Message::RoleUpdated { new_role })
+                    .await;
+
+                self.rabbitmq_publish_control(timestamp, None, rabbitmq::Message::Update(self.id))
+                    .await;
             }
         }
 
@@ -1456,6 +1526,7 @@ impl Runner {
 
         let ctx = DynEventCtx {
             id: self.id,
+            role: self.role,
             timestamp,
             ws_messages: &mut ws_messages,
             rabbitmq_publish: &mut rabbitmq_publish,
@@ -1490,6 +1561,7 @@ impl Runner {
 
         let ctx = DynEventCtx {
             id: self.id,
+            role: self.role,
             timestamp,
             ws_messages: &mut ws_messages,
             rabbitmq_publish: &mut rabbitmq_publish,
@@ -1545,6 +1617,19 @@ impl Runner {
 
             self.ws.close(exit).await;
         }
+    }
+
+    async fn ws_send_control(&mut self, timestamp: Timestamp, payload: outgoing::Message) {
+        self.ws
+            .send(Message::Text(
+                NamespacedOutgoing {
+                    namespace: NAMESPACE,
+                    timestamp,
+                    payload,
+                }
+                .to_json(),
+            ))
+            .await;
     }
 }
 
