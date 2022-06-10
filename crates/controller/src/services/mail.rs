@@ -1,15 +1,15 @@
-use std::sync::Arc;
-
+//! MailService
+//!
+//! Used to have a clean interface for various kinds of mails
+//! that are sent from the Web-API and possibly other connected services.
+//!
+// TODO We probably can avoid the conversion to MailTasks if no rabbit_mq_queue is set in all mail fns
 use anyhow::{Context, Result};
 use controller_shared::settings::{Settings, SharedSettings};
-use db_storage::{
-    events::{self, Event},
-    rooms::{self, Room},
-    sip_configs::SipConfig,
-    users::User,
-};
+use db_storage::{events::Event, rooms::Room, sip_configs::SipConfig, users::User};
 use lapin_pool::RabbitMqChannel;
 use mail_worker_proto::*;
+use std::sync::Arc;
 
 fn to_event(
     event: Event,
@@ -104,15 +104,14 @@ impl MailService {
     ) -> Result<()> {
         let settings = &*self.settings.load();
 
-        // TODO
         // Create MailTask
-        // let mail_task = MailTask::unregistered_invite(
-        //     inviter,
-        //     to_event(event, room, sip_config, settings),
-        //     invitee,
-        // );
+        let mail_task = MailTask::unregistered_invite(
+            inviter,
+            to_event(event, room, sip_config, settings),
+            invitee,
+        );
 
-        // self.send_to_rabbitmq(mail_task).await?;
+        self.send_to_rabbitmq(mail_task).await?;
         Ok(())
     }
 }

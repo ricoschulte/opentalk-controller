@@ -1,7 +1,6 @@
 use serde::Deserialize;
 #[cfg(any(test, feature = "client"))]
 use serde::Serialize;
-
 pub mod v1;
 
 /// Versioned Mail Task Protocol
@@ -24,6 +23,22 @@ impl MailTask {
     {
         Self::V1(v1::Message::RegisteredEventInvite(
             v1::RegisteredEventInvite {
+                invitee: invitee.into(),
+                event: event.into(),
+                inviter: inviter.into(),
+            },
+        ))
+    }
+
+    /// Creates a MailTask for an unregistered invite
+    pub fn unregistered_invite<E, I, U>(inviter: I, event: E, invitee: U) -> MailTask
+    where
+        I: Into<v1::User>,
+        E: Into<v1::Event>,
+        U: Into<v1::Email>,
+    {
+        Self::V1(v1::Message::UnregisteredEventInvite(
+            v1::UnregisteredEventInvite {
                 invitee: invitee.into(),
                 event: event.into(),
                 inviter: inviter.into(),

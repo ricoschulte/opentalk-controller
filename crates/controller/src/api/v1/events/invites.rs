@@ -80,7 +80,6 @@ pub async fn create_invite_to_event(
     mail_service: Data<MailService>,
 ) -> Result<Either<Created, NoContent>, ApiError> {
     let event_id = event_id.into_inner();
-    let current_user_id = current_user.id;
 
     match create_invite.into_inner() {
         PostEventInviteBody::User { invitee } => {
@@ -117,7 +116,7 @@ async fn create_user_event_invite(
     invitee_id: UserId,
     mail_service: &MailService,
 ) -> Result<Either<Created, NoContent>, ApiError> {
-    let current_user_clone = current_user.clone();
+    let inviter = current_user.clone();
 
     let res = crate::block(move || -> database::Result<Either<_, NoContent>> {
         let conn = db.get_conn()?;
@@ -158,7 +157,7 @@ async fn create_user_event_invite(
             authz.add_policies(policies).await?;
 
             mail_service
-                .send_registered_invite(current_user_clone, event, room, sip_config, invitee)
+                .send_registered_invite(inviter, event, room, sip_config, invitee)
                 .await
                 .map_err(|e| {
                     log::error!("REST API threw internal error from lapin: {}", e);
@@ -288,6 +287,8 @@ async fn create_email_event_invite(
                 .map_err(anyhow::Error::from)?;
 
             if email_exists {
+                let inviter = current_user.clone();
+                let invitee = email.clone();
                 let res = crate::block(move || {
                     let conn = db.get_conn()?;
 
@@ -302,14 +303,13 @@ async fn create_email_event_invite(
 
                 match res {
                     Ok(Some(_)) => {
-                        // TODO
-                        // mail_service
-                        //     .send_unregistered_invite(current_user, event, room, sip_config, &email)
-                        //     .await
-                        //     .map_err(|e| {
-                        //         log::error!("REST API threw internal error from lapin: {}", e);
-                        //         ApiError::internal()
-                        //     })?;
+                        mail_service
+                            .send_unregistered_invite(current_user, event, room, sip_config, &email)
+                            .await
+                            .map_err(|e| {
+                                log::error!("REST API threw internal error from lapin: {}", e);
+                                ApiError::internal()
+                            })?;
 
                         Ok(Either::Left(Created))
                     }

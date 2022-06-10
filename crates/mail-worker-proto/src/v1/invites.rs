@@ -2,6 +2,13 @@ use super::{Email, Event, User};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
+pub struct RegisteredEventInvite {
+    pub invitee: User,
+    pub event: Event,
+    pub inviter: User,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct UnregisteredEventInvite {
     pub invitee: Email,
     pub event: Event,

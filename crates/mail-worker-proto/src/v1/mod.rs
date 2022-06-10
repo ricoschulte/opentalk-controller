@@ -3,11 +3,9 @@ use serde::Deserialize;
 use serde::Serialize;
 use uuid::Uuid;
 
-mod registered_invite;
-mod unregistered_invite;
+mod invites;
 
-pub use registered_invite::RegisteredEventInvite;
-pub use unregistered_invite::UnregisteredEventInvite;
+pub use invites::{RegisteredEventInvite, UnregisteredEventInvite};
 
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct Email(String);
