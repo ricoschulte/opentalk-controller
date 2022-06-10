@@ -9,7 +9,7 @@ build = "build.rs"
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
 database = { path = "../database", package = "k3k-database" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
-mail-worker-proto = { path = "../mail-worker-proto", package = "mail-worker-proto", features = [
+mail-worker-proto = { path = "../mail-worker-protocol", package = "k3k-mail-worker-protocol", features = [
     "client",
 ] }
 
@@ -119,7 +119,7 @@ nix = "0.23.0"
 
 ### Access Control
 kustos = { path = "../kustos" }
-keycloak-admin = { path = "../keycloak-admin" } 
+keycloak-admin = { path = "../keycloak-admin" }
 regex = "1.5"
 
 rrule = "0.7"
