@@ -1160,7 +1160,7 @@ async fn vote_twice() {
 
 #[actix_rt::test]
 #[serial]
-async fn ineligible_stop() {
+async fn non_moderator_stop() {
     let test_ctx = TestContext::new().await;
     let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
@@ -1174,7 +1174,7 @@ async fn ineligible_stop() {
         .unwrap();
 
     let expected_error_message =
-        WsMessageOutgoing::Module(outgoing::Message::Error(ErrorKind::Ineligible));
+        WsMessageOutgoing::Module(outgoing::Message::Error(ErrorKind::InsufficentPermissions));
 
     let message = module_tester
         .receive_ws_message(&USER_2.participant_id)
@@ -1188,7 +1188,7 @@ async fn ineligible_stop() {
 
 #[actix_rt::test]
 #[serial]
-async fn ineligible_cancel() {
+async fn non_moderator_cancel() {
     let test_ctx = TestContext::new().await;
     let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
@@ -1205,7 +1205,7 @@ async fn ineligible_cancel() {
         .unwrap();
 
     let expected_error_message =
-        WsMessageOutgoing::Module(outgoing::Message::Error(ErrorKind::Ineligible));
+        WsMessageOutgoing::Module(outgoing::Message::Error(ErrorKind::InsufficentPermissions));
 
     let message = module_tester
         .receive_ws_message(&USER_2.participant_id)

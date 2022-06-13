@@ -124,6 +124,8 @@ pub enum ErrorKind {
     BadRequest(InvalidFields),
     /// Failed to set or get permissions
     PermissionError,
+    /// The requesting user has insufficent permissions
+    InsufficentPermissions,
     /// A internal server error occurred
     ///
     /// This means the legal-vote module is broken, the source of this event are unrecoverable backend errors.
@@ -147,7 +149,6 @@ impl From<super::error::ErrorKind> for ErrorKind {
             crate::error::ErrorKind::VoteAlreadyActive => Self::VoteAlreadyActive,
             crate::error::ErrorKind::NoVoteActive => Self::NoVoteActive,
             crate::error::ErrorKind::InvalidVoteId => Self::InvalidVoteId,
-            crate::error::ErrorKind::Ineligible => Self::Ineligible,
             crate::error::ErrorKind::Inconsistency => Self::Inconsistency,
             crate::error::ErrorKind::AllowlistContainsGuests(guests) => {
                 Self::AllowlistContainsGuests(GuestParticipants { guests })
@@ -156,6 +157,7 @@ impl From<super::error::ErrorKind> for ErrorKind {
                 Self::BadRequest(InvalidFields { fields })
             }
             crate::error::ErrorKind::PermissionError => Self::PermissionError,
+            crate::error::ErrorKind::InsufficientPermissions => Self::InsufficentPermissions,
         }
     }
 }
@@ -589,6 +591,19 @@ mod test {
             {
                 "message": "error",
                 "error": "internal",
+            }
+        );
+    }
+
+    #[test]
+    fn insufficent_permissions_error_message() {
+        let message = Message::Error(ErrorKind::InsufficentPermissions);
+
+        assert_eq_json!(
+            message,
+            {
+                "message": "error",
+                "error": "insufficent_permissions",
             }
         );
     }

@@ -22,8 +22,6 @@ pub(crate) enum ErrorKind {
     NoVoteActive,
     #[error("The provided vote id is invalid")]
     InvalidVoteId,
-    #[error("The requesting user is ineligible")]
-    Ineligible,
     #[error("The given allowlist contains guests")]
     AllowlistContainsGuests(Vec<ParticipantId>),
     #[error("The vote results are inconsistent")]
@@ -32,6 +30,8 @@ pub(crate) enum ErrorKind {
     BadRequest(Vec<String>),
     #[error("Failed to set or get permissions")]
     PermissionError,
+    #[error("The requesting user has insufficent permissions")]
+    InsufficientPermissions,
 }
 
 impl From<ErrorKind> for Error {

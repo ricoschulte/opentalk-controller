@@ -235,7 +235,9 @@ impl LegalVote {
 
         match msg {
             incoming::Message::Start(incoming_parameters) => {
-                // todo: check permissions
+                if !matches!(ctx.role(), Role::Moderator) {
+                    return Err(ErrorKind::InsufficientPermissions.into());
+                }
 
                 let legal_vote_id = self
                     .new_vote_in_database()
@@ -290,12 +292,20 @@ impl LegalVote {
                 }
             }
             incoming::Message::Stop(incoming::Stop { legal_vote_id }) => {
+                if !matches!(ctx.role(), Role::Moderator) {
+                    return Err(ErrorKind::InsufficientPermissions.into());
+                }
+
                 self.stop_vote_routine(ctx, legal_vote_id).await?;
             }
             incoming::Message::Cancel(incoming::Cancel {
                 legal_vote_id,
                 reason,
             }) => {
+                if !matches!(ctx.role(), Role::Moderator) {
+                    return Err(ErrorKind::InsufficientPermissions.into());
+                }
+
                 self.cancel_vote(ctx.redis_conn(), legal_vote_id, reason.clone())
                     .await?;
 
@@ -539,8 +549,8 @@ impl LegalVote {
 
     /// Stop a vote
     ///
-    /// Checks if the provided `legal_vote_id` is currently active & if the participant is the initiator
-    /// before stopping the vote.
+    /// Checks if the provided `legal_vote_id` is currently active before stopping the vote.
+    ///
     /// Fails with `VoteError::InvalidVoteId` when the provided `legal_vote_id` does not match the active vote id.
     /// Adds a `ProtocolEntry` with `VoteEvent::Stop(Stop::UserStop(<user_id>))` to the vote protocol when successful.
     async fn stop_vote_routine(
@@ -553,13 +563,6 @@ impl LegalVote {
             .await?
         {
             return Err(ErrorKind::InvalidVoteId.into());
-        }
-
-        if !self
-            .is_vote_initiator(ctx.redis_conn(), legal_vote_id)
-            .await?
-        {
-            return Err(ErrorKind::Ineligible.into());
         }
 
         let stop_kind = StopKind::ByParticipant(self.participant_id);
@@ -707,19 +710,6 @@ impl LegalVote {
         }
     }
 
-    /// Check if the participant is the vote initiator of the provided `legal_vote_id`
-    async fn is_vote_initiator(
-        &self,
-        redis_conn: &mut RedisConnection,
-        legal_vote_id: LegalVoteId,
-    ) -> Result<bool, Error> {
-        let parameters = storage::parameters::get(redis_conn, self.room_id, legal_vote_id)
-            .await?
-            .ok_or(ErrorKind::InvalidVoteId)?;
-
-        Ok(parameters.initiator_id == self.participant_id)
-    }
-
     /// Cancel the active vote if the leaving participant is the initiator
     async fn handle_leaving(&self, ctx: &mut ModuleContext<'_, Self>) -> Result<(), Error> {
         let redis_conn = ctx.redis_conn();
@@ -784,8 +774,7 @@ impl LegalVote {
 
     /// Cancel a vote
     ///
-    /// Checks if the provided vote id is currently active & if the participant is the initiator
-    /// before canceling the vote.
+    /// Checks if the provided vote id is currently active before canceling the vote.
     async fn cancel_vote(
         &self,
         redis_conn: &mut RedisConnection,
@@ -794,10 +783,6 @@ impl LegalVote {
     ) -> Result<(), Error> {
         if !self.is_current_vote_id(redis_conn, legal_vote_id).await? {
             return Err(ErrorKind::InvalidVoteId.into());
-        }
-
-        if !self.is_vote_initiator(redis_conn, legal_vote_id).await? {
-            return Err(ErrorKind::Ineligible.into());
         }
 
         self.cancel_vote_unchecked(redis_conn, legal_vote_id, CancelReason::Custom(reason))
