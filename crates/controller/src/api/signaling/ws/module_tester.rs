@@ -492,6 +492,7 @@ where
 
                 attr_pipe
                     .set("display_name", &join.display_name)
+                    .set("role", self.role)
                     .set("avatar_url", &join.display_name)
                     .set("joined_at", ctx.timestamp)
                     .set("hand_is_up", false)

@@ -1197,6 +1197,7 @@ impl Runner {
         }
 
         pipe_attrs
+            .set("role", self.role)
             .set("hand_is_up", false)
             .set("hand_updated_at", timestamp)
             .set("display_name", display_name)
