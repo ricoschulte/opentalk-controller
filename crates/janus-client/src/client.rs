@@ -69,7 +69,7 @@ impl Transaction {
     /// This is needed as Janus may send the async response before the ACK to our request. ~skrrr~
     async fn do_receive_ack(&mut self, exclusive: bool) -> Result<(), error::Error> {
         loop {
-            let receive_result = match timeout(Duration::from_secs(2), self.next_message()).await {
+            let receive_result = match timeout(Duration::from_secs(30), self.next_message()).await {
                 Ok(Some(msg)) => msg.into_result(),
                 Ok(None) => Err(error::Error::NotConnected),
                 Err(_) => Err(error::Error::Timeout),
@@ -113,9 +113,9 @@ impl Transaction {
     async fn do_receive(mut self) -> Result<JanusMessage, error::Error> {
         let msg_timeout = if self.is_async {
             self.do_receive_ack(false).await?;
-            Duration::from_secs(10)
+            Duration::from_secs(60)
         } else {
-            Duration::from_secs(2)
+            Duration::from_secs(30)
         };
 
         if let Some(backlog) = self.backlog.take() {
