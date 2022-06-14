@@ -6,7 +6,6 @@ RUN apt-get update && apt-get install -y libpq-dev
 
 COPY ./crates/automod/Cargo.toml ./crates/automod/Cargo.toml
 COPY ./crates/chat/Cargo.toml ./crates/chat/Cargo.toml
-COPY ./crates/client/Cargo.toml ./crates/client/Cargo.toml
 COPY ./crates/controller/Cargo.toml ./crates/controller/Cargo.toml
 COPY ./crates/controller-shared-types/Cargo.toml ./crates/controller-shared-types/Cargo.toml
 COPY ./crates/database/Cargo.toml ./crates/database/Cargo.toml

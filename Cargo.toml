@@ -1,11 +1,8 @@
 [package]
 name = "k3k-controller"
-version = "0.1.0"
-authors = [
-    "Konstanin Baltruschat <k.baltruschat@heinlein-video.de>",
-    "Marvin Ankert <m.ankert@heinlein-video.de>",
-]
+version = "1.0.0-rc.1"
 edition = "2018"
+authors = ["OpenTalk Team <we@opentalk.eu>"]
 
 [workspace]
 members = ["crates/*", "xtask"]
@@ -21,4 +18,4 @@ chat = { path = "crates/chat", package = "k3k-chat" }
 legal-vote = { path = "crates/legal-vote", package = "k3k-legal-vote" }
 polls = { path = "crates/polls", package = "k3k-polls" }
 kustos = { path = "crates/kustos" }
-protocol = { path = "crates/protocol", package = "protocol" }
+protocol = { path = "crates/protocol", package = "k3k-protocol" }

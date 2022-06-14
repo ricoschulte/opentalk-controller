@@ -1444,15 +1444,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "html-escape"
-version = "0.2.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "816ea801a95538fc5f53c836697b3f8b64a9d664c4f0b91efe1fe7c92e4dbcb7"
-dependencies = [
- "utf8-width",
-]
-
-[[package]]
 name = "http"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1663,7 +1654,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-automod"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "actix-rt",
  "chrono",
@@ -1678,7 +1669,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-chat"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "k3k-controller-core",
  "k3k-controller-shared",
@@ -1687,7 +1678,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-controller"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -1698,30 +1689,8 @@ dependencies = [
  "k3k-janus-media",
  "k3k-legal-vote",
  "k3k-polls",
+ "k3k-protocol",
  "kustos",
- "protocol",
-]
-
-[[package]]
-name = "k3k-controller-client"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "chrono",
- "html-escape",
- "log",
- "oauth2",
- "openidconnect",
- "percent-encoding",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "serde_urlencoded",
- "thiserror",
- "tokio",
- "uuid 0.8.2",
 ]
 
 [[package]]
@@ -1748,12 +1717,10 @@ dependencies = [
  "diesel",
  "displaydoc",
  "either",
- "fern",
  "futures",
  "futures-util",
  "itertools 0.10.3",
  "jsonwebtoken",
- "k3k-controller-client",
  "k3k-controller-shared",
  "k3k-database",
  "k3k-db-storage",
@@ -1785,12 +1752,10 @@ dependencies = [
  "rustls-pemfile",
  "serde",
  "serde_json",
- "serial_test",
  "structopt",
  "sysinfo",
  "thiserror",
  "tokio",
- "tokio-postgres",
  "tokio-stream",
  "tracing",
  "tracing-actix-web",
@@ -1806,7 +1771,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-controller-shared"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "arc-swap",
  "chrono",
@@ -1822,7 +1787,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-database"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "diesel",
  "k3k-controller-shared",
@@ -1834,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-db-storage"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "anyhow",
  "barrel",
@@ -1863,7 +1828,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-ee-chat"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "actix-rt",
  "k3k-chat",
@@ -1878,7 +1843,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-janus-media"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "janus-client",
  "k3k-controller-core",
@@ -1889,7 +1854,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-legal-vote"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "actix-rt",
  "diesel",
@@ -1906,7 +1871,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-mail-worker-protocol"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "chrono",
  "k3k-db-storage",
@@ -1918,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-polls"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "actix-rt",
  "k3k-controller-core",
@@ -1928,8 +1893,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "k3k-protocol"
+version = "1.0.0-rc.1"
+dependencies = [
+ "etherpad-client",
+ "k3k-controller-core",
+ "k3k-controller-shared",
+ "k3k-db-storage",
+ "serde",
+]
+
+[[package]]
 name = "k3k-test-util"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "diesel",
  "fern",
@@ -2794,17 +2770,6 @@ name = "protobuf"
 version = "2.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf7e6d18738ecd0902d30d1ad232c9125985a3422929b16c65517b38adc14f96"
-
-[[package]]
-name = "protocol"
-version = "0.1.0"
-dependencies = [
- "etherpad-client",
- "k3k-controller-core",
- "k3k-controller-shared",
- "k3k-db-storage",
- "serde",
-]
 
 [[package]]
 name = "psl-types"
@@ -4110,12 +4075,6 @@ dependencies = [
  "percent-encoding",
  "serde",
 ]
-
-[[package]]
-name = "utf8-width"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7cf7d77f457ef8dfa11e4cd5933c5ddb5dc52a94664071951219a97710f0a32b"
 
 [[package]]
 name = "uuid"

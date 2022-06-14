@@ -1,8 +1,9 @@
 [package]
 name = "k3k-janus-media"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 edition = "2018"
-
+publish = false
+authors = ["OpenTalk Team <we@opentalk.eu>"]
 
 [dependencies]
 controller = { path = "../controller", package = "k3k-controller-core" }
