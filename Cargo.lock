@@ -1654,7 +1654,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-automod"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "actix-rt",
  "chrono",
@@ -1669,7 +1669,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-chat"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "k3k-controller-core",
  "k3k-controller-shared",
@@ -1678,7 +1678,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-controller"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -1689,8 +1689,8 @@ dependencies = [
  "k3k-janus-media",
  "k3k-legal-vote",
  "k3k-polls",
+ "k3k-protocol",
  "kustos",
- "protocol",
 ]
 
 [[package]]
@@ -1771,7 +1771,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-controller-shared"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "arc-swap",
  "chrono",
@@ -1787,7 +1787,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-database"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "diesel",
  "k3k-controller-shared",
@@ -1799,7 +1799,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-db-storage"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "anyhow",
  "barrel",
@@ -1828,7 +1828,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-ee-chat"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "actix-rt",
  "k3k-chat",
@@ -1843,7 +1843,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-janus-media"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "janus-client",
  "k3k-controller-core",
@@ -1854,7 +1854,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-legal-vote"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "actix-rt",
  "diesel",
@@ -1871,7 +1871,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-mail-worker-protocol"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "chrono",
  "k3k-db-storage",
@@ -1883,7 +1883,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-polls"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "actix-rt",
  "k3k-controller-core",
@@ -1893,8 +1893,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "k3k-protocol"
+version = "1.0.0-rc.1"
+dependencies = [
+ "etherpad-client",
+ "k3k-controller-core",
+ "k3k-controller-shared",
+ "k3k-db-storage",
+ "serde",
+]
+
+[[package]]
 name = "k3k-test-util"
-version = "0.1.0"
+version = "1.0.0-rc.1"
 dependencies = [
  "diesel",
  "fern",
@@ -2759,17 +2770,6 @@ name = "protobuf"
 version = "2.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf7e6d18738ecd0902d30d1ad232c9125985a3422929b16c65517b38adc14f96"
-
-[[package]]
-name = "protocol"
-version = "0.1.0"
-dependencies = [
- "etherpad-client",
- "k3k-controller-core",
- "k3k-controller-shared",
- "k3k-db-storage",
- "serde",
-]
 
 [[package]]
 name = "psl-types"
