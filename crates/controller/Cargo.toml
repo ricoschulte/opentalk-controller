@@ -125,12 +125,7 @@ regex = "1.5"
 rrule = "0.7"
 
 [dev-dependencies]
-fern = "0.6"
-k3k-controller-client = { path = "../client" }
-tokio-postgres = "0.7"
-serial_test = "0.6"
 test-util = { path = "../test-util", package = "k3k-test-util" }
-
 
 [build-dependencies]
 anyhow = "1.0"
