@@ -59,6 +59,7 @@ macro_rules! impl_to_redis_args_se {
     };
 }
 
+pub(crate) mod metrics;
 pub(crate) mod resumption;
 pub(crate) mod ticket;
 

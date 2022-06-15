@@ -7,6 +7,7 @@ use super::{
     RabbitMqPublish, Timestamp,
 };
 use crate::api;
+use crate::api::signaling::metrics::SignalingMetrics;
 use crate::api::signaling::prelude::*;
 use crate::api::signaling::resumption::{ResumptionTokenKeepAlive, ResumptionTokenUsed};
 use crate::api::signaling::ws::actor::WsCommand;
@@ -41,7 +42,7 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::mem::replace;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
@@ -61,6 +62,7 @@ pub struct Builder {
     pub(super) participant: api::Participant<User>,
     pub(super) role: Role,
     pub(super) protocol: &'static str,
+    pub(super) metrics: Arc<SignalingMetrics>,
     pub(super) modules: Modules,
     pub(super) rabbitmq_exchanges: Vec<RabbitMqExchange>,
     pub(super) rabbitmq_bindings: Vec<RabbitMqBinding>,
@@ -317,6 +319,7 @@ impl Builder {
             },
             modules: self.modules,
             events: self.events,
+            metrics: self.metrics,
             db: self.db,
             redis_conn: self.redis_conn,
             consumer,
@@ -368,6 +371,9 @@ pub struct Runner {
     /// All registered and initialized modules
     modules: Modules,
     events: SelectAll<AnyStream>,
+
+    /// Signaling metrics for this runner
+    metrics: Arc<SignalingMetrics>,
 
     /// Database connection pool
     db: Arc<Db>,
@@ -437,6 +443,7 @@ impl Runner {
         breakout_room: Option<BreakoutRoomId>,
         participant: api::Participant<User>,
         protocol: &'static str,
+        metrics: Arc<SignalingMetrics>,
         db: Arc<Db>,
         authz: Arc<Authz>,
         redis_conn: RedisConnection,
@@ -464,6 +471,7 @@ impl Runner {
             participant,
             role,
             protocol,
+            metrics,
             modules: Default::default(),
             rabbitmq_exchanges: vec![],
             rabbitmq_bindings: vec![],
@@ -502,6 +510,9 @@ impl Runner {
     /// Destroys the runner and all associated resources
     #[tracing::instrument(skip(self), fields(id = %self.id))]
     pub async fn destroy(mut self) {
+        let destroy_start_time = Instant::now();
+        let mut encountered_error = false;
+
         self.delegate_consumer();
 
         if let RunnerState::Joined | RunnerState::Waiting { .. } = &self.state {
@@ -516,10 +527,18 @@ impl Runner {
                     // There is a problem when accessing redis which could
                     // mean either the network or redis is broken.
                     // Both cases cannot be handled here, abort the cleanup
+
+                    self.metrics
+                        .record_destroy_time(destroy_start_time.elapsed().as_secs_f64(), false);
+
                     return;
                 }
                 Err(r3dlock::Error::CouldNotAcquireLock) => {
                     log::error!("Failed to acquire r3dlock, contention too high");
+
+                    self.metrics
+                        .record_destroy_time(destroy_start_time.elapsed().as_secs_f64(), false);
+
                     return;
                 }
                 Err(r3dlock::Error::FailedToUnlock | r3dlock::Error::AlreadyExpired) => {
@@ -539,6 +558,7 @@ impl Runner {
                 .await
                 {
                     log::error!("failed to mark participant as left, {:?}", e);
+                    encountered_error = true;
                 }
             } else if let RunnerState::Waiting { .. } = &self.state {
                 if let Err(e) = moderation::storage::waiting_room_remove(
@@ -552,6 +572,7 @@ impl Runner {
                         "failed to remove participant from waiting_room_list, {:?}",
                         e
                     );
+                    encountered_error = true;
                 }
             };
 
@@ -560,6 +581,7 @@ impl Runner {
                     Ok(room_is_empty) => room_is_empty,
                     Err(e) => {
                         log::error!("Failed to check if room is empty {:?}", e);
+                        encountered_error = true;
                         false
                     }
                 };
@@ -579,6 +601,7 @@ impl Runner {
                         Ok(waiting_room_len) => waiting_room_len == 0,
                         Err(e) => {
                             log::error!("failed to get waiting room len, {:?}", e);
+                            encountered_error = true;
                             false
                         }
                     };
@@ -600,11 +623,13 @@ impl Runner {
             if destroy_room {
                 if let Err(e) = self.cleanup_redis().await {
                     log::error!("Failed to remove all control attributes, {}", e);
+                    encountered_error = true;
                 }
             }
 
             if let Err(e) = room_guard.unlock(&mut self.redis_conn).await {
                 log::error!("Failed to unlock set_guard r3dlock, {}", e);
+                encountered_error = true;
             }
 
             if !destroy_room {
@@ -652,6 +677,7 @@ impl Runner {
             .await
         {
             log::error!("Failed to cancel consumer, {}", e);
+            encountered_error = true;
         }
 
         // release participant id
@@ -665,8 +691,16 @@ impl Runner {
                     log::warn!("removed runner id does not match the id of the runner");
                 }
             }
-            Err(e) => log::error!("failed to remove participant id, {}", e),
+            Err(e) => {
+                log::error!("failed to remove participant id, {}", e);
+                encountered_error = true;
+            }
         }
+
+        self.metrics.record_destroy_time(
+            destroy_start_time.elapsed().as_secs_f64(),
+            !encountered_error,
+        );
     }
 
     /// Remove all room and control module related data from redis  
