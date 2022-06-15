@@ -323,6 +323,7 @@ impl Controller {
             let rabbitmq_pool = Data::from(self.rabbitmq_pool.clone());
             let rabbitmq_channel = Data::from(self.rabbitmq_channel.clone());
             let signaling_modules = Arc::downgrade(&signaling_modules);
+            let signaling_metrics = Data::from(self.metrics.signaling.clone());
             let db = Arc::downgrade(&self.db);
 
             let oidc_ctx = Arc::downgrade(&self.oidc);
@@ -399,6 +400,7 @@ impl Controller {
                     .app_data(rabbitmq_channel.clone())
                     .app_data(signaling_modules)
                     .app_data(SignalingProtocols::data())
+                    .app_data(signaling_metrics.clone())
                     .app_data(metrics.clone())
                     .app_data(mail_service)
                     .service(api::signaling::ws_service)

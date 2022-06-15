@@ -1,6 +1,7 @@
 use super::modules::{ModuleBuilder, ModuleBuilderImpl};
 use super::runner::Runner;
 use super::SignalingModule;
+use crate::api::signaling::metrics::SignalingMetrics;
 use crate::api::signaling::resumption::{ResumptionData, ResumptionTokenKeepAlive};
 use crate::api::signaling::ticket::{TicketData, TicketRedisKey};
 use crate::api::signaling::ws::actor::WebSocketActor;
@@ -19,6 +20,7 @@ use db_storage::users::User;
 use kustos::Authz;
 use lapin_pool::RabbitMqPool;
 use std::marker::PhantomData;
+use std::time::Instant;
 use tokio::sync::{broadcast, mpsc};
 use tokio::task;
 use tracing_actix_web::RequestId;
@@ -54,6 +56,7 @@ pub(crate) async fn ws_service(
     authz: Data<Authz>,
     redis_conn: Data<RedisConnection>,
     rabbitmq_pool: Data<RabbitMqPool>,
+    metrics: Data<SignalingMetrics>,
     protocols: Data<SignalingProtocols>,
     modules: Data<SignalingModules>,
     request: HttpRequest,
@@ -117,6 +120,7 @@ pub(crate) async fn ws_service(
         ticket_data.breakout_room,
         participant,
         protocol,
+        metrics.clone().into_inner(),
         db.into_inner(),
         authz.into_inner(),
         redis_conn,
@@ -124,10 +128,15 @@ pub(crate) async fn ws_service(
         resumption_keep_alive,
     );
 
+    let startup_start_time = Instant::now();
+
     // add all modules
     for module in modules.0.iter() {
         if let Err(e) = module.build(&mut builder).await {
             log::error!("Failed to initialize module, {:?}", e);
+
+            metrics.record_startup_time(startup_start_time.elapsed().as_secs_f64(), false);
+
             builder.abort().await;
             return Ok(HttpResponse::InternalServerError().finish());
         }
@@ -146,12 +155,17 @@ pub(crate) async fn ws_service(
         Ok(runner) => runner,
         Err(e) => {
             log::error!("Failed to initialize runner, {}", e);
+
+            metrics.record_startup_time(startup_start_time.elapsed().as_secs_f64(), false);
+
             return Ok(HttpResponse::InternalServerError().finish());
         }
     };
 
     // Spawn the runner task
     task::spawn_local(runner.run());
+
+    metrics.record_startup_time(startup_start_time.elapsed().as_secs_f64(), true);
 
     Ok(response)
 }

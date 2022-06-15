@@ -1,3 +1,4 @@
+use crate::api::signaling::metrics::SignalingMetrics;
 use crate::redis_wrapper::RedisMetrics;
 use crate::settings::SharedSettingsActix;
 use actix_http::body::BoxBody;
@@ -25,6 +26,7 @@ pub struct EndpointMetrics {
 pub struct CombinedMetrics {
     exporter: PrometheusExporter,
     pub(super) endpoint: Arc<EndpointMetrics>,
+    pub(super) signaling: Arc<SignalingMetrics>,
     pub(super) database: Arc<DatabaseMetrics>,
     pub(super) kustos: Arc<KustosMetrics>,
     pub(super) redis: Arc<RedisMetrics>,
@@ -61,6 +63,12 @@ impl AggregatorSelector for OverrideAggregatorSelector {
                 descriptor,
                 &[100.0, 1_000.0, 10_000.0, 100_000.0],
             ))),
+            "signaling.runner_startup_time_seconds" | "signaling.runner_destroy_time_seconds" => {
+                Some(Arc::new(aggregators::histogram(
+                    descriptor,
+                    &[0.01, 0.25, 0.5, 1.0, 2.0, 5.0],
+                )))
+            }
             "sql.execution_time_seconds" => Some(Arc::new(aggregators::histogram(
                 descriptor,
                 &[0.01, 0.05, 0.1, 0.25, 0.5],
@@ -111,6 +119,19 @@ impl CombinedMetrics {
                 .init(),
         });
 
+        let signaling = Arc::new(SignalingMetrics {
+            runner_startup_time: meter
+                .f64_value_recorder("signaling.runner_startup_time_seconds")
+                .with_description("Time the runner takes to initialize")
+                .with_unit(Unit::new("seconds"))
+                .init(),
+            runner_destroy_time: meter
+                .f64_value_recorder("signaling.runner_destroy_time_seconds")
+                .with_description("Time the runner takes to stop")
+                .with_unit(Unit::new("seconds"))
+                .init(),
+        });
+
         let database = Arc::new(DatabaseMetrics {
             sql_execution_time: meter
                 .f64_value_recorder("sql.execution_time_seconds")
@@ -155,6 +176,7 @@ impl CombinedMetrics {
         Self {
             exporter,
             endpoint,
+            signaling,
             database,
             kustos,
             redis,
