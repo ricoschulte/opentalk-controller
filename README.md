@@ -15,7 +15,7 @@ USAGE:
 
 FLAGS:
     -h, --help       Prints help information
-        --reload     Triggers a reload of the Janus Server configuration
+        --reload     Triggers a reload of some controller settings
     -V, --version    Prints version information
 
 OPTIONS:
