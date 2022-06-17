@@ -75,14 +75,9 @@ max_screen_bitrate = "8000000"
 # Currently these should be equal to the settings in janus.transport.rabbitmq.jcfg
 # of the respective janus instance.
 [[room_server.connections]]
-to_routing_key = "to-janus-1"
+to_routing_key = "to-janus"
 exchange = "janus-exchange"
-from_routing_key = "from-janus-1"
-
-[[room_server.connections]]
-to_routing_key = "to-janus-2"
-exchange = "janus-exchange"
-from_routing_key = "from-janus-2"
+from_routing_key = "from-janus"
 
 [rabbit_mq]
 # The URL to use to connect to the rabbit mq broker
