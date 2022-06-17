@@ -26,6 +26,15 @@ pub(crate) fn reload_settings(
     // reload turn settings
     current_settings.turn = new_settings.turn;
 
+    // reload metrics
+    current_settings.metrics = new_settings.metrics;
+
+    // reload avatar
+    current_settings.avatar = new_settings.avatar;
+
+    // reload call in
+    current_settings.call_in = new_settings.call_in;
+
     // replace the shared settings with the modified ones
     shared_settings.store(Arc::new(current_settings));
 
