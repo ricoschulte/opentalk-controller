@@ -128,10 +128,9 @@ pub async fn check_access_token(
 
         match User::get_by_oidc_sub(&conn, &issuer, &sub)? {
             Some(user) => Ok(user),
-            None => {
-                log::warn!("The requesting user could not be found in the database");
-                Err(ApiError::internal())
-            }
+            None => Err(ApiError::unauthorized()
+                .with_code("unknown_sub")
+                .with_message("Unknown subject in access token. Please login first!")),
         }
     })
     .await??;
