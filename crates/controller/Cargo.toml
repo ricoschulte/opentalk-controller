@@ -109,6 +109,7 @@ displaydoc = "0.2"
 either = "1.6.1"
 itertools = "0.10"
 phonenumber = "0.3"
+email_address = "0.2.1"
 
 # Random Distributions etc. Used for RR
 rand = "0.8.3"

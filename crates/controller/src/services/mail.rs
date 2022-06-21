@@ -121,4 +121,28 @@ impl MailService {
         self.send_to_rabbitmq(mail_task).await?;
         Ok(())
     }
+
+    /// Sends a external Invite mail task to the rabbit mq queue, if configured.
+    pub async fn send_external_invite(
+        &self,
+        inviter: User,
+        event: Event,
+        room: Room,
+        sip_config: Option<SipConfig>,
+        invitee: &str,
+        invite_code: String,
+    ) -> Result<()> {
+        let settings = &*self.settings.load();
+
+        // Create MailTask
+        let mail_task = MailTask::external_invite(
+            inviter,
+            to_event(event, room, sip_config, settings),
+            invitee,
+            invite_code,
+        );
+
+        self.send_to_rabbitmq(mail_task).await?;
+        Ok(())
+    }
 }

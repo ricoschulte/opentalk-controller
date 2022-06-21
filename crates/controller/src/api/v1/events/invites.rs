@@ -14,10 +14,12 @@ use db_storage::events::{
     Event, EventFavorite, EventId, EventInvite, EventInviteStatus, NewEventInvite,
     UpdateEventInvite,
 };
+use db_storage::invites::NewInvite;
 use db_storage::rooms::Room;
 use db_storage::sip_configs::SipConfig;
 use db_storage::users::{User, UserId};
 use diesel::Connection;
+use email_address::EmailAddress;
 use keycloak_admin::KeycloakAdminClient;
 use kustos::policies_builder::PoliciesBuilder;
 use kustos::Authz;
@@ -63,14 +65,16 @@ pub async fn get_invites_for_event(
 #[serde(untagged)]
 pub enum PostEventInviteBody {
     User { invitee: UserId },
-    Email { email: String },
+    Email { email: EmailAddress },
 }
 
 /// API Endpoint `POST /events/{event_id}/invites`
 ///
 /// Invite a user to an event
 #[post("/events/{event_id}/invites")]
+#[allow(clippy::too_many_arguments)]
 pub async fn create_invite_to_event(
+    settings: SharedSettingsActix,
     db: Data<Db>,
     authz: Data<Authz>,
     kc_admin_client: Data<KeycloakAdminClient>,
@@ -95,6 +99,7 @@ pub async fn create_invite_to_event(
         }
         PostEventInviteBody::Email { email } => {
             create_email_event_invite(
+                settings,
                 db,
                 authz,
                 kc_admin_client,
@@ -171,13 +176,15 @@ async fn create_user_event_invite(
 ///
 /// Checks first if a user exists with the email address in our database and creates a regular invite
 /// else checks if the email is registered with the keycloak and then creates an email invite
+#[allow(clippy::too_many_arguments)]
 async fn create_email_event_invite(
+    settings: SharedSettingsActix,
     db: Data<Db>,
     authz: Data<Authz>,
     kc_admin_client: Data<KeycloakAdminClient>,
     current_user: User,
     event_id: EventId,
-    email: String,
+    email: EmailAddress,
     mail_service: &MailService,
 ) -> Result<Either<Created, NoContent>, ApiError> {
     #[allow(clippy::large_enum_variant)]
@@ -207,7 +214,8 @@ async fn create_email_event_invite(
 
             let (event, room, sip_config) = Event::get_with_room(&conn, event_id)?;
 
-            let invitee_user = User::get_by_email(&conn, &current_user.oidc_issuer, &email)?;
+            let invitee_user =
+                User::get_by_email(&conn, &current_user.oidc_issuer, email.as_ref())?;
 
             if let Some(invitee_user) = invitee_user {
                 if event.created_by == invitee_user.id {
@@ -275,46 +283,123 @@ async fn create_email_event_invite(
             room,
             sip_config,
         } => {
-            let email_exists = kc_admin_client
-                .verify_email(&email)
-                .await
-                .map_err(anyhow::Error::from)?;
-
-            if email_exists {
-                let inviter = current_user.clone();
-                let invitee = email.clone();
-                let res = crate::block(move || {
-                    let conn = db.get_conn()?;
-
-                    NewEventEmailInvite {
-                        event_id,
-                        email,
-                        created_by: current_user.id,
-                    }
-                    .try_insert(&conn)
-                })
-                .await?;
-
-                match res {
-                    Ok(Some(_)) => {
-                        mail_service
-                            .send_unregistered_invite(inviter, event, room, sip_config, &invitee)
-                            .await
-                            .context("Failed to send with MailService")?;
-
-                        Ok(Either::Left(Created))
-                    }
-                    Ok(None) => Ok(Either::Right(NoContent)),
-                    Err(e) => Err(e.into()),
-                }
-            } else {
-                Err(ApiError::conflict()
-                    .with_code("unknown_email")
-                    .with_message(
-                    "Only emails registered with the systems are allowed to be used for invites",
-                ))
-            }
+            create_invite_to_non_matching_email(
+                settings,
+                db,
+                kc_admin_client,
+                mail_service,
+                current_user,
+                event,
+                room,
+                sip_config,
+                email,
+            )
+            .await
         }
+    }
+}
+
+/// Invite a given email to the event
+/// Will check if the email exists in keycloak and sends an "unregistered" email invite
+/// or (if configured) sends an "external" email invite to the given email address
+#[allow(clippy::too_many_arguments)]
+async fn create_invite_to_non_matching_email(
+    settings: SharedSettingsActix,
+    db: Data<Db>,
+    kc_admin_client: Data<KeycloakAdminClient>,
+    mail_service: &MailService,
+    current_user: User,
+    event: Event,
+    room: Room,
+    sip_config: Option<SipConfig>,
+    email: EmailAddress,
+) -> Result<Either<Created, NoContent>, ApiError> {
+    let email_exists = kc_admin_client
+        .verify_email(email.as_ref())
+        .await
+        .map_err(anyhow::Error::from)?;
+
+    if email_exists
+        || settings
+            .load()
+            .endpoints
+            .event_invite_external_email_address
+    {
+        let inviter = current_user.clone();
+        let invitee = email.clone();
+
+        let res = {
+            let db = db.clone();
+            let event_id = event.id;
+            let current_user_id = current_user.id;
+
+            crate::block(move || {
+                let conn = db.get_conn()?;
+
+                NewEventEmailInvite {
+                    event_id,
+                    email: email.into(),
+                    created_by: current_user_id,
+                }
+                .try_insert(&conn)
+            })
+            .await?
+        };
+
+        match res {
+            Ok(Some(_)) => {
+                if email_exists {
+                    mail_service
+                        .send_unregistered_invite(
+                            inviter,
+                            event,
+                            room,
+                            sip_config,
+                            invitee.as_ref(),
+                        )
+                        .await
+                        .context("Failed to send with MailService")?;
+                } else {
+                    let room_id = room.id;
+
+                    let invite = crate::block(move || {
+                        let conn = db.get_conn()?;
+
+                        NewInvite {
+                            active: true,
+                            created_by: current_user.id,
+                            updated_by: current_user.id,
+                            room: room_id,
+                            expiration: None,
+                        }
+                        .insert(&conn)
+                    })
+                    .await??;
+
+                    mail_service
+                        .send_external_invite(
+                            inviter,
+                            event,
+                            room,
+                            sip_config,
+                            invitee.as_ref(),
+                            invite.id.to_string(),
+                        )
+                        .await
+                        .context("Failed to send with MailService")?;
+                }
+
+                Ok(Either::Left(Created))
+            }
+            Ok(None) => Ok(Either::Right(NoContent)),
+            Err(e) => Err(e.into()),
+        }
+    } else {
+        Err(ApiError::conflict()
+            .with_code("unknown_email")
+            .with_message(
+                "Only emails registered with the systems are allowed to be used for invites",
+            ))
     }
 }
 

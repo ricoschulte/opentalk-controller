@@ -146,6 +146,9 @@ from_routing_key = "from-janus"
 #[endpoints]
 # Disable the /users/find endpoint for performance or privacy reasons
 #disable_users_find = false
+# Allow inviting any unchecked email address.
+# Not recommended without proper outgoing anti-spam protection
+#event_invite_external_email_address = false
 
 # Configuration for the /metric HTTP endpoint
 #[metrics]

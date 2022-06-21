@@ -366,6 +366,8 @@ pub struct Endpoints {
     pub disable_users_find: bool,
     #[serde(default)]
     pub users_find_use_kc: bool,
+    #[serde(default)]
+    pub event_invite_external_email_address: bool,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]

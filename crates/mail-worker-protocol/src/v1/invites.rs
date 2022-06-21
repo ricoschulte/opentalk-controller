@@ -14,3 +14,11 @@ pub struct UnregisteredEventInvite {
     pub event: Event,
     pub inviter: User,
 }
+
+#[derive(Deserialize, Serialize, PartialEq, Debug)]
+pub struct ExternalEventInvite {
+    pub invitee: Email,
+    pub event: Event,
+    pub inviter: User,
+    pub invite_code: String,
+}
