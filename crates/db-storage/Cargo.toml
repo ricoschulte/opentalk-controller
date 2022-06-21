@@ -52,5 +52,5 @@ url = "2"
 rand = "0.8.3"
 
 [dev-dependencies]
-serial_test = "0.6"
+serial_test = "0.7"
 test-util = { path = "../test-util", package = "k3k-test-util" }
