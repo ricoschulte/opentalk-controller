@@ -21,6 +21,17 @@ fn to_event(
 
     let end_time: Option<v1::Time> = event.ends_at.zip(event.ends_at_tz).map(Into::into);
 
+    let call_in =
+        if let Some((call_in_settings, sip_config)) = settings.call_in.as_ref().zip(sip.as_ref()) {
+            Some(v1::CallIn {
+                sip_tel: call_in_settings.tel.clone(),
+                sip_id: sip_config.sip_id.to_string(),
+                sip_password: sip_config.password.to_string(),
+            })
+        } else {
+            None
+        };
+
     mail_worker_proto::v1::Event {
         // Fixme: Once we are down to a single uuid crate again. Diesel holds us back regarding the current version
         id: uuid_v1::Uuid::from_u128(event.id.inner().as_u128()),
@@ -31,13 +42,9 @@ fn to_event(
         rrule: event.recurrence_pattern,
         room: v1::Room {
             id: uuid_v1::Uuid::from_u128(room.id.inner().as_u128()),
-            password: room.password.unwrap_or_default(),
+            password: room.password,
         },
-        call_in: v1::CallIn {
-            sip_tel: settings.call_in.as_ref().map(|c| c.tel.clone()),
-            sip_id: sip.as_ref().map(|x| x.sip_id.to_string()),
-            sip_password: sip.as_ref().map(|x| x.password.to_string()),
-        },
+        call_in,
     }
 }
 

@@ -58,20 +58,20 @@ pub struct Event {
     pub rrule: Option<String>,
     pub description: String,
     pub room: Room,
-    pub call_in: CallIn,
+    pub call_in: Option<CallIn>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct Room {
     pub id: Uuid,
-    pub password: String,
+    pub password: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct CallIn {
-    pub sip_tel: Option<String>,
-    pub sip_id: Option<String>,
-    pub sip_password: Option<String>,
+    pub sip_tel: String,
+    pub sip_id: String,
+    pub sip_password: String,
 }
 
 /// The different kinds of MailTasks that are currently supported
@@ -125,13 +125,13 @@ mod test {
                 rrule: None,
                 room: Room {
                     id: Uuid::from_u128(0),
-                    password: "".into(),
+                    password: Some("password123".into()),
                 },
-                call_in: CallIn {
-                    sip_tel: Some("+497652917".into()),
-                    sip_id: Some("2".into()),
-                    sip_password: Some("987".into()),
-                },
+                call_in: Some(CallIn {
+                    sip_tel: "+497652917".into(),
+                    sip_id: "2".into(),
+                    sip_password: "987".into(),
+                }),
             },
             invitee: User {
                 email: "lastname@example.org".into(),
@@ -155,7 +155,7 @@ mod test {
                     "end_time": {"time": "2021-12-29T15:30:00+02:00", "timezone": "Europe/Berlin"},
                     "room": {
                         "id": Uuid::from_u128(0),
-                        "password": ""
+                        "password": "password123"
                     },
                     "call_in": {
                         "sip_tel": "+497652917",
@@ -201,13 +201,13 @@ mod test {
                 rrule: None,
                 room: Room {
                     id: Uuid::from_u128(0),
-                    password: "".into(),
+                    password: None,
                 },
-                call_in: CallIn {
-                    sip_tel: Some("+497652917".into()),
-                    sip_id: Some("2".into()),
-                    sip_password: Some("987".into()),
-                },
+                call_in: Some(CallIn {
+                    sip_tel: "+497652917".into(),
+                    sip_id: "2".into(),
+                    sip_password: "987".into(),
+                }),
             },
             invitee: User {
                 email: "lastname@example.org".into(),
@@ -229,7 +229,6 @@ mod test {
                     "description": "",
                     "room": {
                         "id": Uuid::from_u128(0),
-                        "password": ""
                     },
                     "call_in": {
                         "sip_tel": "+497652917",
