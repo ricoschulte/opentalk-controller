@@ -101,7 +101,7 @@ actix-web-actors = "4.1"
 ### Rust Encryption
 ring = "0.16"
 rustls = "0.20"
-rustls-pemfile = "0.3"
+rustls-pemfile = "1.0"
 md5 = "0.7"
 
 ### QoL/Util
