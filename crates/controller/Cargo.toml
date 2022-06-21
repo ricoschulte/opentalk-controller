@@ -35,7 +35,7 @@ prometheus = "0.13"
 tracing-actix-web = { version = "0.5" }
 
 ### Config
-config = { version = "0.12", default-features = false, features = ["toml"] }
+config = { version = "0.13.1", default-features = false, features = ["toml"] }
 serde = { version = "1", features = ["derive"] }
 structopt = "0.3"
 arc-swap = "1.3"
