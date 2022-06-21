@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 mod invites;
 
-pub use invites::{RegisteredEventInvite, UnregisteredEventInvite};
+pub use invites::{ExternalEventInvite, RegisteredEventInvite, UnregisteredEventInvite};
 
 #[derive(Deserialize, Serialize, PartialEq, Debug)]
 pub struct Email(String);
@@ -83,6 +83,8 @@ pub enum Message {
     RegisteredEventInvite(RegisteredEventInvite),
     /// A mail sent to unregistered users on invite
     UnregisteredEventInvite(UnregisteredEventInvite),
+    /// A mail sent to external emails on invite
+    ExternalEventInvite(ExternalEventInvite),
 }
 
 #[cfg(test)]

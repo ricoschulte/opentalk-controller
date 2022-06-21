@@ -45,6 +45,26 @@ impl MailTask {
             },
         ))
     }
+
+    /// Creates a MailTask for an unregistered invite
+    pub fn external_invite<E, I, U>(
+        inviter: I,
+        event: E,
+        invitee: U,
+        invite_code: String,
+    ) -> MailTask
+    where
+        I: Into<v1::User>,
+        E: Into<v1::Event>,
+        U: Into<v1::Email>,
+    {
+        Self::V1(v1::Message::ExternalEventInvite(v1::ExternalEventInvite {
+            invitee: invitee.into(),
+            event: event.into(),
+            inviter: inviter.into(),
+            invite_code,
+        }))
+    }
 }
 
 #[cfg(feature = "client")]
