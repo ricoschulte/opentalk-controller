@@ -115,8 +115,8 @@ email_address = "0.2.1"
 rand = "0.8.3"
 
 ### Reload controller process
-sysinfo = { version = "0.23", default-features = false }
-nix = "0.23.0"
+sysinfo = { version = "0.24", default-features = false }
+nix = "0.24.0"
 
 ### Access Control
 kustos = { path = "../kustos" }
