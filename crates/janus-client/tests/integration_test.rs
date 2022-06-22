@@ -1,4 +1,5 @@
-use janus_client::rabbitmq::RabbitMqConfig;
+use janus_client::transport::RabbitMqConfig;
+use janus_client::transport::WebSocketConfig;
 use janus_client::types::incoming;
 use janus_client::types::outgoing;
 use janus_client::*;
@@ -8,8 +9,7 @@ use std::sync::Arc;
 use test_log::test;
 use tokio::sync::mpsc;
 
-#[test(tokio::test)]
-async fn echo_external_channel() {
+async fn create_rmq_config() -> RabbitMqConfig {
     let rabbit_addr =
         std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://localhost:5672".to_owned());
     let connection = Connection::connect(&rabbit_addr, ConnectionProperties::default())
@@ -19,13 +19,24 @@ async fn echo_external_channel() {
         .create_channel()
         .await
         .expect("Could not create channel");
-    let config = RabbitMqConfig::new_from_channel(
+    RabbitMqConfig::new_from_channel(
         channel,
         "to-janus".to_owned(),
         "janus-exchange".to_owned(),
         "from-janus".to_owned(),
         "k3k-signaling-echo-external-channel".to_owned(),
-    );
+    )
+}
+
+fn create_ws_config() -> WebSocketConfig {
+    let ws_url = std::env::var("JANUS_HOST").unwrap_or_else(|_| "ws://localhost:8188".to_owned());
+
+    WebSocketConfig::new(ws_url)
+}
+
+#[test(tokio::test)]
+async fn echo_external_channel() {
+    let config = create_rmq_config().await;
 
     let id = ClientId(Arc::from("janus-test-echo"));
 
@@ -57,22 +68,7 @@ async fn echo_external_channel() {
 
 #[test(tokio::test)]
 async fn create_and_list_rooms() {
-    let rabbit_addr =
-        std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://localhost:5672".to_owned());
-    let connection = Connection::connect(&rabbit_addr, ConnectionProperties::default())
-        .await
-        .expect("Could not connect to rabbitmq");
-    let channel = connection
-        .create_channel()
-        .await
-        .expect("Could not create channel");
-    let config = RabbitMqConfig::new_from_channel(
-        channel,
-        "to-janus".to_owned(),
-        "janus-exchange".to_owned(),
-        "from-janus".to_owned(),
-        "k3k-signaling-create-and-list-rooms".to_owned(),
-    );
+    let config = create_rmq_config().await;
     let id = ClientId(Arc::from("janus-test-list"));
 
     let (sink, _recv) = mpsc::channel(48);
@@ -157,24 +153,73 @@ async fn create_and_list_rooms() {
 
 #[test(tokio::test)]
 async fn send_offer() {
-    let rabbit_addr =
-        std::env::var("AMQP_ADDR").unwrap_or_else(|_| "amqp://localhost:5672".to_owned());
+    let config = create_rmq_config().await;
 
-    let connection = Connection::connect(&rabbit_addr, ConnectionProperties::default())
-        .await
-        .expect("Could not connect to rabbitmq");
-    let channel = connection
-        .create_channel()
-        .await
-        .expect("Could not create channel");
+    let id = ClientId(Arc::from("janus-test-offer"));
 
-    let config = RabbitMqConfig::new_from_channel(
-        channel,
-        "to-janus".to_owned(),
-        "janus-exchange".to_owned(),
-        "from-janus".to_owned(),
-        "k3k-signaling-send-offer".to_owned(),
-    );
+    let (sink, _recv) = mpsc::channel(48);
+    let client = Client::new(config, id, sink).await.unwrap();
+    let mut session = client.create_session().await.unwrap();
+    let publisher_handle = session
+        .attach_to_plugin(JanusPlugin::VideoRoom)
+        .await
+        .unwrap();
+
+    let room1 = publisher_handle
+        .send(outgoing::VideoRoomPluginCreate {
+            description: "SendOfferTestroom1".to_owned(),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let room_id = match room1.0 {
+        incoming::VideoRoomPluginDataCreated::Ok { room, permanent } => {
+            assert!(Into::<u64>::into(room) > 0);
+            assert!(!permanent);
+            room
+        }
+        _ => panic!(),
+    };
+
+    let rooms = publisher_handle
+        .send(outgoing::VideoRoomPluginListRooms)
+        .await
+        .unwrap();
+    match rooms.0 {
+        incoming::VideoRoomPluginDataSuccess::List { list } => {
+            assert!(list
+                .iter()
+                .any(|s| *s.description() == "SendOfferTestroom1"));
+        }
+    }
+    publisher_handle
+        .send(outgoing::VideoRoomPluginJoinPublisher {
+            room: room_id,
+            id: Some(1),
+            display: None,
+            token: None,
+        })
+        .await
+        .unwrap();
+
+    publisher_handle
+        .send(outgoing::VideoRoomPluginDestroy {
+            room: room_id,
+            secret: None,
+            permanent: None,
+            token: None,
+        })
+        .await
+        .unwrap();
+
+    publisher_handle.detach(false).await.unwrap();
+    session.destroy(false).await.unwrap();
+}
+
+#[test(tokio::test)]
+async fn send_offer_websocket() {
+    let config = create_ws_config();
 
     let id = ClientId(Arc::from("janus-test-offer"));
 

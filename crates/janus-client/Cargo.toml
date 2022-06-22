@@ -11,6 +11,8 @@ edition = "2018"
 [dependencies]
 # RabbitMQ
 lapin = { version = "2", default-features = false }
+# Websockets
+tokio-tungstenite = { version = "0.17", features = ["__rustls-tls"] }
 
 # Random Generators
 rand = { version = "0.8.3", features = ["std", "std_rng"] }

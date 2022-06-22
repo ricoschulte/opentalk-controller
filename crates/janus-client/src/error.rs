@@ -7,6 +7,8 @@ use thiserror::Error;
 pub enum Error {
     /// RabbitMQ Error: {0}
     RabbitMq(#[from] lapin::Error),
+    /// WebSocket error {0}
+    Websocket(#[from] tokio_tungstenite::tungstenite::Error),
     /// Not connected to Janus
     NotConnected,
     /// Failed to create a session
