@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use jsonwebtoken::{self, dangerous_insecure_decode, Algorithm};
+use jsonwebtoken::{self, decode, Algorithm, DecodingKey, Validation};
 use openidconnect::core::{CoreJsonWebKeySet, CoreJwsSigningAlgorithm};
 use openidconnect::JsonWebKey;
 use serde::Deserialize;
@@ -100,18 +100,26 @@ pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, 
         }
     })?;
 
-    // Verify the signature
-    let signing_alg = map_algorithm(header.alg);
+    // Verify the signature using the openidconnect crate
+    let signing_alg = map_algorithm(header.alg).ok_or(VerifyError::InvalidSignature)?;
 
     let () = signing_key
         .verify_signature(&signing_alg, message.as_ref(), signature.as_ref())
         .map_err(|_| VerifyError::InvalidSignature)?;
 
+    // We can ignore the signature check of jsonwebtokens
+    // TODO use jsonwebtokens validation
+    let mut validation = Validation::default();
+    validation.insecure_disable_signature_validation();
+    // This is done manually at the end currently.
+    validation.validate_exp = false;
+
     // Just parse the token out, no verification
-    let token = dangerous_insecure_decode::<VerifyClaims>(token).map_err(|e| {
-        log::warn!("Unable to decode claims from provided id token, {}", e);
-        VerifyError::InvalidClaims
-    })?;
+    let token = decode::<VerifyClaims>(token, &DecodingKey::from_secret(&[]), &validation)
+        .map_err(|e| {
+            log::warn!("Unable to decode claims from provided id token, {}", e);
+            VerifyError::InvalidClaims
+        })?;
 
     let now = DateTime::<Utc>::from(SystemTime::now());
 
@@ -126,19 +134,20 @@ pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, 
 }
 
 /// Map jsonwebtoken `Algorithm` to `CoreJwsSigningAlgorithm`
-fn map_algorithm(alg: Algorithm) -> CoreJwsSigningAlgorithm {
+fn map_algorithm(alg: Algorithm) -> Option<CoreJwsSigningAlgorithm> {
     match alg {
-        Algorithm::HS256 => CoreJwsSigningAlgorithm::HmacSha256,
-        Algorithm::HS384 => CoreJwsSigningAlgorithm::HmacSha384,
-        Algorithm::HS512 => CoreJwsSigningAlgorithm::HmacSha512,
-        Algorithm::ES256 => CoreJwsSigningAlgorithm::EcdsaP256Sha256,
-        Algorithm::ES384 => CoreJwsSigningAlgorithm::EcdsaP384Sha384,
-        Algorithm::RS256 => CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256,
-        Algorithm::RS384 => CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha384,
-        Algorithm::RS512 => CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha512,
-        Algorithm::PS256 => CoreJwsSigningAlgorithm::RsaSsaPssSha256,
-        Algorithm::PS384 => CoreJwsSigningAlgorithm::RsaSsaPssSha384,
-        Algorithm::PS512 => CoreJwsSigningAlgorithm::RsaSsaPssSha512,
+        Algorithm::HS256 => Some(CoreJwsSigningAlgorithm::HmacSha256),
+        Algorithm::HS384 => Some(CoreJwsSigningAlgorithm::HmacSha384),
+        Algorithm::HS512 => Some(CoreJwsSigningAlgorithm::HmacSha512),
+        Algorithm::ES256 => Some(CoreJwsSigningAlgorithm::EcdsaP256Sha256),
+        Algorithm::ES384 => Some(CoreJwsSigningAlgorithm::EcdsaP384Sha384),
+        Algorithm::RS256 => Some(CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256),
+        Algorithm::RS384 => Some(CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha384),
+        Algorithm::RS512 => Some(CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha512),
+        Algorithm::PS256 => Some(CoreJwsSigningAlgorithm::RsaSsaPssSha256),
+        Algorithm::PS384 => Some(CoreJwsSigningAlgorithm::RsaSsaPssSha384),
+        Algorithm::PS512 => Some(CoreJwsSigningAlgorithm::RsaSsaPssSha512),
+        Algorithm::EdDSA => None,
     }
 }
 

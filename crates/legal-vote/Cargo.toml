@@ -11,12 +11,12 @@ controller-shared = { path = "../controller-shared-types", package = "k3k-contro
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 database = { path = "../database", package = "k3k-database" }
 serde = { version = "1", features = ["derive"] }
-validator = { version = "0.14", features = ["derive"] }
+validator = { version = "0.15", features = ["derive"] }
 kustos = { path = "../kustos" }
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util" }
-serial_test = "0.6"
+serial_test = "0.7"
 diesel = { version = "1.4.6", features = [
     "postgres",
     "uuid",

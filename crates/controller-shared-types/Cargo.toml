@@ -8,7 +8,7 @@ authors = ["OpenTalk Team <we@opentalk.eu>"]
 
 [dependencies]
 # Settings related
-config = { version = "0.12", default-features = false, features = ["toml"] }
+config = { version = "0.13.1", default-features = false, features = ["toml"] }
 arc-swap = "1.3"
 serde = { version = "1", features = ["derive"] }
 openidconnect = { version = "2" }

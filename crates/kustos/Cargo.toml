@@ -55,10 +55,9 @@ default-features = false
 features = ["runtime-tokio", "incremental"]
 
 [dev-dependencies]
-serial_test = "0.6"
+serial_test = "0.7"
 anyhow = "1.0"
 # TODO(r.floren) remove this in the future. Currently used to migrate in tests. Find something lighter.
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 url = "2"
 tokio = { version = "1", features = ["rt", "macros"] }
-

@@ -39,7 +39,7 @@ yanked = "deny"
 notice = "deny"
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
-ignore = ["RUSTSEC-2020-0056", "RUSTSEC-2020-0071", "RUSTSEC-2020-0159"]
+ignore = ["RUSTSEC-2020-0071"]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
 # will still output a note when they are encountered.
@@ -147,29 +147,22 @@ allow = []
 deny = []
 # Certain crates/versions that will be skipped when doing duplicate detection.
 skip = [
-    { name = "base64", version = "=0.12.3" },
     { name = "cfg-if", version = "=0.1.10" },
     { name = "nom", version = "=5.1.2" },
-    { name = "simple_asn1", version = "=0.4.1" },
     { name = "uuid", version = "=0.6.5" },
-    { name = "cookie", version = "=0.15.1" },
     { name = "itoa", version = "=0.4.8" },
     { name = "time", version = "=0.1.44" },
-    { name = "time", version = "=0.2.27" },
-    { name = "block-buffer", version = "=0.9" },
-    { name = "digest", version = "=0.9" },
     { name = "itertools", version = "=0.9" },
     { name = "num-bigint", version = "=0.4.3" },
     { name = "parking_lot", version = "=0.11.2" },
     { name = "parking_lot_core", version = "=0.8.5" },
-    { name = "rustc_version", version = "=0.2.3" },
-    { name = "semver", version = "=0.9.0" },
-    { name = "sha2", version = "=0.9.9" },
+    { name = "ordered-float", version = "=1.1.1" },
+    { name = "sha1", version = "=0.6.1" },
     { name = "spin", version = "=0.5.2" },
-    { name = "time-macros", version = "=0.1.1" },
-    { name = "tokio-util", version = "=0.6.9" },
+    { name = "tokio-util", version = "=0.6.10" },
     { name = "wasi", version = "=0.10.0+wasi-snapshot-preview1" },
-    { name = "uuid", version = "=1.1.1" },
+    { name = "uuid", version = "=1.1.2" },
+    { name = "hashbrown", version = "=0.11.2" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive

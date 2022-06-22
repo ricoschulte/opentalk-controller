@@ -18,7 +18,7 @@ serde_json = { version = "1", features = ["raw_value"] }
 ### Error handling
 anyhow = "1.0"
 thiserror = "1.0"
-validator = { version = "0.14", features = ["derive"] }
+validator = { version = "0.15", features = ["derive"] }
 
 ### Database ORM
 diesel = { version = "1.4.6", features = [
@@ -52,5 +52,5 @@ url = "2"
 rand = "0.8.3"
 
 [dev-dependencies]
-serial_test = "0.6"
+serial_test = "0.7"
 test-util = { path = "../test-util", package = "k3k-test-util" }
