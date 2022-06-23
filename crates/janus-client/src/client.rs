@@ -209,14 +209,14 @@ impl InnerClient {
             return Err(error::Error::NotConnected);
         };
 
-        let msg = TransactionalRequest {
-            transaction: id.clone(),
-            request,
-        };
-
-        self.send(&msg).instrument(span.clone()).await?;
-
         if let Some(TaskMessage::Registered) = messages.recv().await {
+            let msg = TransactionalRequest {
+                transaction: id.clone(),
+                request,
+            };
+
+            self.send(&msg).instrument(span.clone()).await?;
+
             Ok(Transaction {
                 id,
                 span,
