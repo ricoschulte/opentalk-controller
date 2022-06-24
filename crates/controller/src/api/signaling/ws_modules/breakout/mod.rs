@@ -53,7 +53,6 @@ pub struct AssocParticipantInOtherRoom {
 
 pub struct BreakoutRooms {
     id: ParticipantId,
-    role: Role,
     parent: RoomId,
     room: SignalingRoomId,
     breakout_room: Option<BreakoutRoomId>,
@@ -97,7 +96,6 @@ impl SignalingModule for BreakoutRooms {
     ) -> Result<Option<Self>> {
         Ok(Some(Self {
             id: ctx.participant_id(),
-            role: ctx.role(),
             parent: ctx.room().id,
             room: ctx.room_id(),
             breakout_room: ctx.breakout_room(),
@@ -291,7 +289,7 @@ impl BreakoutRooms {
         mut ctx: ModuleContext<'_, Self>,
         msg: incoming::Message,
     ) -> Result<()> {
-        if self.role != Role::Moderator {
+        if ctx.role() != Role::Moderator {
             ctx.ws_send(outgoing::Message::Error(
                 outgoing::Error::InsufficientPermissions,
             ));

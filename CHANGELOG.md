@@ -1,3 +1,9 @@
+# Unreleased
+
+### Fixed
+
+- remove static role assignment of participant in breakout and moderation module which led to inconsistent behavior if the participant's role was changed by a moderator
+
 # 1.0.0-rc.2 (22 June, 2022)
 
 ### Added
