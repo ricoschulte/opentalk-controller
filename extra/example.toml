@@ -142,10 +142,16 @@ from_routing_key = "from-janus"
 # Default language of a new user
 #user_language = "en-US"
 
-# Settings for endpoiints
+# Settings for endpoints
 #[endpoints]
 # Disable the /users/find endpoint for performance or privacy reasons
 #disable_users_find = false
+
+# Enable user-searching using keycloak's admin API
+# This allows for finding users which have not yet
+# logged into the controller
+#users_find_use_kc = false
+
 # Allow inviting any unchecked email address.
 # Not recommended without proper outgoing anti-spam protection
 #event_invite_external_email_address = false
