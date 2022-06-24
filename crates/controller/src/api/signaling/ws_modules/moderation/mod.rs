@@ -16,7 +16,6 @@ pub const NAMESPACE: &str = "moderation";
 pub struct ModerationModule {
     room: SignalingRoomId,
     id: ParticipantId,
-    role: Role,
 }
 
 #[derive(Debug, Serialize)]
@@ -45,7 +44,6 @@ impl SignalingModule for ModerationModule {
         Ok(Some(Self {
             room: ctx.room_id(),
             id: ctx.participant_id(),
-            role: ctx.role(),
         }))
     }
 
@@ -60,7 +58,7 @@ impl SignalingModule for ModerationModule {
                 frontend_data,
                 participants: _,
             } => {
-                if self.role == Role::Moderator {
+                if ctx.role() == Role::Moderator {
                     let waiting_room_enabled =
                         storage::is_waiting_room_enabled(ctx.redis_conn(), self.room.room_id())
                             .await?;
@@ -98,7 +96,7 @@ impl SignalingModule for ModerationModule {
             Event::ParticipantLeft(_) => {}
             Event::ParticipantUpdated(_, _) => {}
             Event::WsMessage(incoming::Message::Ban(incoming::Target { target })) => {
-                if self.role != Role::Moderator {
+                if ctx.role() != Role::Moderator {
                     return Ok(());
                 }
 
@@ -120,7 +118,7 @@ impl SignalingModule for ModerationModule {
                 );
             }
             Event::WsMessage(incoming::Message::Kick(incoming::Target { target })) => {
-                if self.role != Role::Moderator {
+                if ctx.role() != Role::Moderator {
                     return Ok(());
                 }
 
@@ -131,7 +129,7 @@ impl SignalingModule for ModerationModule {
                 );
             }
             Event::WsMessage(incoming::Message::EnableWaitingRoom) => {
-                if self.role != Role::Moderator {
+                if ctx.role() != Role::Moderator {
                     return Ok(());
                 }
 
@@ -145,7 +143,7 @@ impl SignalingModule for ModerationModule {
                 );
             }
             Event::WsMessage(incoming::Message::DisableWaitingRoom) => {
-                if self.role != Role::Moderator {
+                if ctx.role() != Role::Moderator {
                     return Ok(());
                 }
 
@@ -159,7 +157,7 @@ impl SignalingModule for ModerationModule {
                 );
             }
             Event::WsMessage(incoming::Message::Accept(incoming::Target { target })) => {
-                if self.role != Role::Moderator {
+                if ctx.role() != Role::Moderator {
                     return Ok(());
                 }
 
