@@ -714,7 +714,8 @@ impl Runner {
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "hand_updated_at")
             .await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "kind").await?;
-        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "user_id").await
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "user_id").await?;
+        storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "avatar_url").await
     }
 
     /// Runs the runner until the peer closes its websocket connection or a fatal error occurres.
