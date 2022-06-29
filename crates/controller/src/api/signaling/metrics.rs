@@ -1,4 +1,4 @@
-use opentelemetry::metrics::ValueRecorder;
+use opentelemetry::metrics::{Counter, ValueRecorder};
 use opentelemetry::Key;
 
 const STARTUP_SUCCESSFUL: Key = Key::from_static_str("successful");
@@ -7,6 +7,7 @@ const DESTROY_SUCCESSFUL: Key = Key::from_static_str("successful");
 pub struct SignalingMetrics {
     pub(crate) runner_startup_time: ValueRecorder<f64>,
     pub(crate) runner_destroy_time: ValueRecorder<f64>,
+    pub(crate) destroyed_rooms_count: Counter<u64>,
 }
 
 impl SignalingMetrics {
@@ -18,5 +19,9 @@ impl SignalingMetrics {
     pub fn record_destroy_time(&self, secs: f64, success: bool) {
         self.runner_destroy_time
             .record(secs, &[DESTROY_SUCCESSFUL.bool(success)]);
+    }
+
+    pub fn increment_destroyed_rooms_count(&self) {
+        self.destroyed_rooms_count.add(1, &[]);
     }
 }

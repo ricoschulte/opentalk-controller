@@ -625,6 +625,8 @@ impl Runner {
                     log::error!("Failed to remove all control attributes, {}", e);
                     encountered_error = true;
                 }
+
+                self.metrics.increment_destroyed_rooms_count();
             }
 
             if let Err(e) = room_guard.unlock(&mut self.redis_conn).await {
