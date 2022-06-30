@@ -24,7 +24,6 @@ use actix::Addr;
 use actix_http::ws::{CloseCode, CloseReason, Message};
 use actix_web_actors::ws;
 use anyhow::{bail, Context, Result};
-use bytestring::ByteString;
 use chrono::TimeZone;
 use controller_shared::settings::SharedSettings;
 use controller_shared::ParticipantId;
@@ -799,19 +798,19 @@ impl Runner {
             _ => unreachable!(),
         };
 
+        let timestamp = Timestamp::now();
+
         let namespaced = match value {
             Ok(value) => value,
             Err(e) => {
                 log::error!("Failed to parse namespaced message, {}", e);
 
-                self.ws
-                    .send(Message::Text(error("invalid json message")))
+                self.ws_send_control_error(timestamp, outgoing::Error::InvalidJson)
                     .await;
 
                 return;
             }
         };
-        let timestamp = Timestamp::now();
 
         if namespaced.namespace == NAMESPACE {
             match serde_json::from_value(namespaced.payload) {
@@ -824,8 +823,7 @@ impl Runner {
                 Err(e) => {
                     log::error!("Failed to parse control payload, {}", e);
 
-                    self.ws
-                        .send(Message::Text(error("invalid json payload")))
+                    self.ws_send_control_error(timestamp, outgoing::Error::InvalidJson)
                         .await;
                 }
             }
@@ -844,8 +842,7 @@ impl Runner {
                         .await
                 }
                 Err(NoSuchModuleError(())) => {
-                    self.ws
-                        .send(Message::Text(error("unknown namespace")))
+                    self.ws_send_control_error(timestamp, outgoing::Error::InvalidNamespace)
                         .await;
                 }
             }
@@ -859,14 +856,16 @@ impl Runner {
     ) -> Result<()> {
         match msg {
             incoming::Message::Join(join) => {
-                if join.display_name.is_empty() {
-                    self.ws_send_control(
-                        timestamp,
-                        outgoing::Message::Error(outgoing::Error::InvalidUsername),
-                    )
-                    .await;
+                if !matches!(self.state, RunnerState::None) {
+                    self.ws_send_control_error(timestamp, outgoing::Error::AlreadyJoined)
+                        .await;
 
                     return Ok(());
+                }
+
+                if join.display_name.is_empty() || join.display_name.len() > 255 {
+                    self.ws_send_control_error(timestamp, outgoing::Error::InvalidUsername)
+                        .await;
                 }
 
                 let (display_name, avatar_url) = match &self.participant {
@@ -961,11 +960,9 @@ impl Runner {
                     state => {
                         self.state = state;
 
-                        self.ws_send_control(
+                        self.ws_send_control_error(
                             timestamp,
-                            outgoing::Message::Error(
-                                outgoing::Error::NotAcceptedOrNotInWaitingRoom,
-                            ),
+                            outgoing::Error::NotAcceptedOrNotInWaitingRoom,
                         )
                         .await;
                     }
@@ -975,11 +972,8 @@ impl Runner {
                 if !moderation::storage::is_raise_hands_enabled(&mut self.redis_conn, self.room.id)
                     .await?
                 {
-                    self.ws_send_control(
-                        timestamp,
-                        outgoing::Message::Error(outgoing::Error::RaiseHandsDisabled),
-                    )
-                    .await;
+                    self.ws_send_control_error(timestamp, outgoing::Error::RaiseHandsDisabled)
+                        .await;
 
                     return Ok(());
                 }
@@ -990,10 +984,24 @@ impl Runner {
                 self.handle_raise_hand_change(timestamp, false).await?;
             }
             incoming::Message::GrantModeratorRole(incoming::Target { target }) => {
+                if !matches!(self.state, RunnerState::Joined) {
+                    self.ws_send_control_error(timestamp, outgoing::Error::NotYetJoined)
+                        .await;
+
+                    return Ok(());
+                }
+
                 self.handle_grant_moderator_msg(timestamp, target, true)
                     .await?;
             }
             incoming::Message::RevokeModeratorRole(incoming::Target { target }) => {
+                if !matches!(self.state, RunnerState::Joined) {
+                    self.ws_send_control_error(timestamp, outgoing::Error::NotYetJoined)
+                        .await;
+
+                    return Ok(());
+                }
+
                 self.handle_grant_moderator_msg(timestamp, target, false)
                     .await?;
             }
@@ -1009,11 +1017,8 @@ impl Runner {
         grant: bool,
     ) -> Result<()> {
         if self.role != Role::Moderator {
-            self.ws_send_control(
-                timestamp,
-                outgoing::Message::Error(outgoing::Error::InsufficientPermissions),
-            )
-            .await;
+            self.ws_send_control_error(timestamp, outgoing::Error::InsufficientPermissions)
+                .await;
 
             return Ok(());
         }
@@ -1024,11 +1029,8 @@ impl Runner {
         let is_moderator = matches!(role, Some(Role::Moderator));
 
         if is_moderator == grant {
-            self.ws_send_control(
-                timestamp,
-                outgoing::Message::Error(outgoing::Error::NothingToDo),
-            )
-            .await;
+            self.ws_send_control_error(timestamp, outgoing::Error::NothingToDo)
+                .await;
 
             return Ok(());
         }
@@ -1038,11 +1040,8 @@ impl Runner {
 
         if let Some(user_id) = user_id {
             if user_id == self.room.created_by {
-                self.ws_send_control(
-                    timestamp,
-                    outgoing::Message::Error(outgoing::Error::TargetIsRoomOwner),
-                )
-                .await;
+                self.ws_send_control_error(timestamp, outgoing::Error::TargetIsRoomOwner)
+                    .await;
 
                 return Ok(());
             }
@@ -1744,6 +1743,11 @@ impl Runner {
         }
     }
 
+    async fn ws_send_control_error(&mut self, timestamp: Timestamp, error: outgoing::Error) {
+        self.ws_send_control(timestamp, outgoing::Message::Error(error))
+            .await;
+    }
+
     async fn ws_send_control(&mut self, timestamp: Timestamp, payload: outgoing::Message) {
         self.ws
             .send(Message::Text(
@@ -1764,15 +1768,6 @@ struct ModuleRequestedActions {
     rabbitmq_publish: Vec<RabbitMqPublish>,
     invalidate_data: bool,
     exit: Option<CloseCode>,
-}
-
-fn error(text: &str) -> ByteString {
-    NamespacedOutgoing {
-        namespace: "error",
-        timestamp: Timestamp::now(),
-        payload: text,
-    }
-    .to_json()
 }
 
 struct Ws {
