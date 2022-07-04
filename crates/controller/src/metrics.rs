@@ -130,6 +130,10 @@ impl CombinedMetrics {
                 .with_description("Time the runner takes to stop")
                 .with_unit(Unit::new("seconds"))
                 .init(),
+            destroyed_rooms_count: meter
+                .u64_counter("signaling.destroyed_rooms_count")
+                .with_description("Number of destroyed rooms")
+                .init(),
         });
 
         let database = Arc::new(DatabaseMetrics {
