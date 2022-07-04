@@ -20,6 +20,16 @@ pub enum Participant<U> {
     Sip,
 }
 
+impl<U> Participant<U> {
+    pub fn as_kind_str(&self) -> &'static str {
+        match self {
+            Participant::User(_) => "user",
+            Participant::Guest => "guest",
+            Participant::Sip => "sip",
+        }
+    }
+}
+
 impl From<UserId> for Participant<UserId> {
     fn from(id: UserId) -> Self {
         Participant::User(id)

@@ -629,6 +629,8 @@ impl Runner {
                 self.metrics.increment_destroyed_rooms_count();
             }
 
+            self.metrics.decrement_participants_count(&self.participant);
+
             if let Err(e) = room_guard.unlock(&mut self.redis_conn).await {
                 log::error!("Failed to unlock set_guard r3dlock, {}", e);
                 encountered_error = true;
@@ -916,6 +918,8 @@ impl Runner {
                     hand_updated_at: timestamp,
                     left_at: None,
                 };
+
+                self.metrics.increment_participants_count(&self.participant);
 
                 let is_moderator = matches!(self.role, Role::Moderator);
 
