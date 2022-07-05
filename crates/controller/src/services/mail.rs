@@ -4,6 +4,7 @@
 //! that are sent from the Web-API and possibly other connected services.
 //!
 // TODO We probably can avoid the conversion to MailTasks if no rabbit_mq_queue is set in all mail fns
+use crate::metrics::EndpointMetrics;
 use anyhow::{Context, Result};
 use controller_shared::settings::{Settings, SharedSettings};
 use db_storage::{events::Event, rooms::Room, sip_configs::SipConfig, users::User};
@@ -51,13 +52,19 @@ fn to_event(
 #[derive(Clone)]
 pub struct MailService {
     settings: SharedSettings,
+    metrics: Arc<EndpointMetrics>,
     rabbit_mq_channel: Arc<RabbitMqChannel>,
 }
 
 impl MailService {
-    pub fn new(settings: SharedSettings, rabbit_mq_channel: Arc<RabbitMqChannel>) -> Self {
+    pub fn new(
+        settings: SharedSettings,
+        metrics: Arc<EndpointMetrics>,
+        rabbit_mq_channel: Arc<RabbitMqChannel>,
+    ) -> Self {
         Self {
             settings,
+            metrics,
             rabbit_mq_channel,
         }
     }
@@ -74,6 +81,8 @@ impl MailService {
                 )
                 .await?;
         }
+
+        self.metrics.increment_issued_email_tasks_count(&mail_task);
 
         Ok(())
     }
