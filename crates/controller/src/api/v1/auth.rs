@@ -5,7 +5,7 @@ use crate::api::util::parse_phone_number;
 use crate::api::v1::response::error::AuthenticationError;
 use crate::api::v1::response::ApiError;
 use crate::ha_sync::user_update;
-use crate::oidc::{IdTokenInfo, OidcContext};
+use crate::oidc::{IdTokenInfo, OidcContext, VerifyError};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
@@ -54,8 +54,18 @@ pub async fn login(
     match oidc_ctx.verify_id_token(&id_token) {
         Err(e) => {
             log::warn!("Got invalid ID Token {}", e);
-
-            Err(ApiError::unauthorized().with_www_authenticate(AuthenticationError::InvalidIdToken))
+            match e {
+                VerifyError::InvalidClaims => Err(ApiError::bad_request()
+                    .with_code("invalid_claims")
+                    .with_message("some required attributes are missing or malformed")),
+                VerifyError::Expired(_) => Err(ApiError::unauthorized()
+                    .with_www_authenticate(AuthenticationError::SessionExpired)),
+                VerifyError::MissingKeyID
+                | VerifyError::UnknownKeyID
+                | VerifyError::InvalidJwt(_)
+                | VerifyError::InvalidSignature => Err(ApiError::unauthorized()
+                    .with_www_authenticate(AuthenticationError::InvalidIdToken)),
+            }
         }
         Ok(info) => {
             // TODO(r.floren): Find a neater way for relaying the information here.

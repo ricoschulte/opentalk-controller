@@ -92,7 +92,7 @@ impl OidcContext {
             sub: claims.sub,
             issuer: claims.iss,
             expiration: claims.exp,
-            email: claims.email,
+            email: claims.email.into(),
             firstname: claims.given_name,
             lastname: claims.family_name,
             x_grp: claims.x_grp,

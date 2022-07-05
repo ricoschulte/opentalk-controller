@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use email_address::EmailAddress;
 use jsonwebtoken::{self, decode, Algorithm, DecodingKey, Validation};
 use openidconnect::core::{CoreJsonWebKeySet, CoreJwsSigningAlgorithm};
 use openidconnect::JsonWebKey;
@@ -38,7 +39,7 @@ pub struct VerifyClaims {
     /// Subject (User ID)
     pub sub: String,
     /// The users email
-    pub email: String,
+    pub email: EmailAddress,
     /// The users firstname
     pub given_name: String,
     /// The users lastname
@@ -128,6 +129,11 @@ pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, 
         let msg = format!("The provided token expired at {}", token.claims.exp);
         log::warn!("{}", msg);
         return Err(VerifyError::Expired(msg));
+    }
+
+    // FIXME: remove me when the Deserialize implementation of EmailAddress actually parses/validates the email
+    if !EmailAddress::is_valid(token.claims.email.as_ref()) {
+        return Err(VerifyError::InvalidClaims);
     }
 
     Ok(token.claims)
