@@ -7,6 +7,10 @@ pub fn parse_phone_number(
     phone_number: &str,
     country_code: phonenumber::country::Id,
 ) -> Option<PhoneNumber> {
+    // Remove characters from the phone number to make the parsing easier
+    // user input may include any of these characters, but may not always be used correctly
+    let phone_number = phone_number.replace(['(', ')', ' ', '-'], "");
+
     // Catch panics because the phonenumber crate has some questionable unwraps
     let result =
         std::panic::catch_unwind(move || phonenumber::parse(Some(country_code), phone_number));
