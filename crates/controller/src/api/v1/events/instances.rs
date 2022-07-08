@@ -1,6 +1,6 @@
 use super::{
-    ApiResponse, DateTimeTz, DefaultApiResult, EventAndInstanceId, EventInvitee, EventRoomInfo,
-    EventStatus, EventType, InstanceId, LOCAL_DT_FORMAT,
+    can_edit, ApiResponse, DateTimeTz, DefaultApiResult, EventAndInstanceId, EventInvitee,
+    EventRoomInfo, EventStatus, EventType, InstanceId, LOCAL_DT_FORMAT,
 };
 use crate::api::v1::cursor::Cursor;
 use crate::api::v1::response::{ApiError, NoContent};
@@ -67,6 +67,7 @@ pub struct EventInstance {
     pub status: EventStatus,
     pub invite_status: EventInviteStatus,
     pub is_favorite: bool,
+    pub can_edit: bool,
 }
 
 #[derive(Deserialize)]
@@ -153,6 +154,8 @@ pub async fn get_event_instances(
 
         let room = EventRoomInfo::from_room(&settings, room, sip_config);
 
+        let can_edit = can_edit(&event, &current_user);
+
         let mut exceptions = exceptions.into_iter().peekable();
 
         let mut instances = vec![];
@@ -170,6 +173,7 @@ pub async fn get_event_instances(
                 InstanceId(datetime),
                 invitees.clone(),
                 invitees_truncated,
+                can_edit,
             )?;
 
             instances.push(instance);
@@ -235,6 +239,8 @@ pub async fn get_event_instance(
 
         let room = EventRoomInfo::from_room(&settings, room, sip_config);
 
+        let can_edit = can_edit(&event, &current_user);
+
         let event_instance = create_event_instance(
             &users,
             event,
@@ -247,6 +253,7 @@ pub async fn get_event_instance(
             instance_id,
             invitees,
             invitees_truncated,
+            can_edit,
         )?;
 
         Ok(ApiResponse::new(event_instance))
@@ -427,6 +434,8 @@ pub async fn patch_event_instance(
 
         let room = EventRoomInfo::from_room(&settings, room, sip_config);
 
+        let can_edit = can_edit(&event, &current_user);
+
         let event_instance = create_event_instance(
             &users,
             event,
@@ -439,6 +448,7 @@ pub async fn patch_event_instance(
             instance_id,
             invitees,
             invitees_truncated,
+            can_edit,
         )?;
 
         Ok(Either::Left(ApiResponse::new(event_instance)))
@@ -457,6 +467,7 @@ fn create_event_instance(
     instance_id: InstanceId,
     invitees: Vec<EventInvitee>,
     invitees_truncated: bool,
+    can_edit: bool,
 ) -> database::Result<EventInstance> {
     let mut status = EventStatus::Ok;
 
@@ -516,6 +527,7 @@ fn create_event_instance(
         status,
         invite_status,
         is_favorite,
+        can_edit,
     })
 }
 
@@ -637,6 +649,7 @@ mod tests {
             status: EventStatus::Ok,
             invite_status: EventInviteStatus::Accepted,
             is_favorite: false,
+            can_edit: false,
         };
 
         assert_eq_json!(
@@ -697,7 +710,8 @@ mod tests {
                 "type": "instance",
                 "status": "ok",
                 "invite_status": "accepted",
-                "is_favorite": false
+                "is_favorite": false,
+                "can_edit": false,
             }
         );
     }

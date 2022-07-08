@@ -256,6 +256,9 @@ pub struct EventResource {
 
     /// Is this event in the current user's favorite list?
     pub is_favorite: bool,
+
+    /// Can the current user edit this resource
+    pub can_edit: bool,
 }
 
 /// Event exception resource
@@ -315,10 +318,17 @@ pub struct EventExceptionResource {
     ///
     /// This can be used to cancel a occurrence of an event
     pub status: EventStatus,
+
+    /// Can the current user edit this resource
+    pub can_edit: bool,
 }
 
 impl EventExceptionResource {
-    pub fn from_db(exception: EventException, created_by: PublicUserProfile) -> Self {
+    pub fn from_db(
+        exception: EventException,
+        created_by: PublicUserProfile,
+        can_edit: bool,
+    ) -> Self {
         Self {
             id: EventAndInstanceId(exception.event_id, InstanceId(exception.exception_date)),
             recurring_event_id: exception.event_id,
@@ -341,6 +351,7 @@ impl EventExceptionResource {
                 EventExceptionKind::Modified => EventStatus::Ok,
                 EventExceptionKind::Cancelled => EventStatus::Cancelled,
             },
+            can_edit,
         }
     }
 }
@@ -634,6 +645,7 @@ fn create_time_independent_event(
         status: EventStatus::Ok,
         invite_status: EventInviteStatus::Accepted,
         is_favorite: false,
+        can_edit: true, // just created by the current user
     })
 }
 
@@ -706,6 +718,7 @@ fn create_time_dependent_event(
         status: EventStatus::Ok,
         invite_status: EventInviteStatus::Accepted,
         is_favorite: false,
+        can_edit: true, // just created by the current user
     })
 }
 
@@ -858,6 +871,8 @@ pub async fn get_events(
             let starts_at = DateTimeTz::starts_at_of(&event);
             let ends_at = DateTimeTz::ends_at_of(&event);
 
+            let can_edit = can_edit(&event, &current_user);
+
             event_resources.push(EventOrException::Event(EventResource {
                 id: event.id,
                 created_by,
@@ -882,13 +897,14 @@ pub async fn get_events(
                 status: EventStatus::Ok,
                 invite_status,
                 is_favorite,
+                can_edit,
             }));
 
             for exception in exceptions {
                 let created_by = users.get(exception.created_by);
 
                 event_resources.push(EventOrException::Exception(
-                    EventExceptionResource::from_db(exception, created_by),
+                    EventExceptionResource::from_db(exception, created_by, can_edit),
                 ));
             }
         }
@@ -939,6 +955,8 @@ pub async fn get_event(
         let starts_at = DateTimeTz::starts_at_of(&event);
         let ends_at = DateTimeTz::ends_at_of(&event);
 
+        let can_edit = can_edit(&event, &current_user);
+
         let event_resource = EventResource {
             id: event.id,
             title: event.title,
@@ -965,6 +983,7 @@ pub async fn get_event(
                 .map(|inv| inv.status)
                 .unwrap_or(EventInviteStatus::Accepted),
             is_favorite,
+            can_edit,
         };
 
         Ok(ApiResponse::new(event_resource))
@@ -1151,6 +1170,8 @@ pub async fn patch_event(
         let starts_at = DateTimeTz::starts_at_of(&event);
         let ends_at = DateTimeTz::ends_at_of(&event);
 
+        let can_edit = can_edit(&event, &current_user);
+
         let event_resource = EventResource {
             id: event.id,
             created_by: PublicUserProfile::from_db(&settings, created_by),
@@ -1177,6 +1198,7 @@ pub async fn patch_event(
                 .map(|inv| inv.status)
                 .unwrap_or(EventInviteStatus::Accepted),
             is_favorite,
+            can_edit,
         };
 
         Ok(Either::Left(ApiResponse::new(event_resource)))
@@ -1583,6 +1605,13 @@ fn parse_event_dt_params(
     }
 }
 
+/// calculate if `user` can edit `event`
+fn can_edit(event: &Event, user: &User) -> bool {
+    // Its sufficient to check if the user created the event as here isn't currently a system which allows users to
+    // grant write access to event
+    event.created_by == user.id
+}
+
 /// Helper trait to to reduce boilerplate in the single route handlers
 ///
 /// Bundles multiple resources into groups.
@@ -1715,6 +1744,7 @@ mod tests {
             status: EventStatus::Ok,
             invite_status: EventInviteStatus::Accepted,
             is_favorite: false,
+            can_edit: true,
         };
 
         assert_eq_json!(
@@ -1774,7 +1804,8 @@ mod tests {
                 "type": "single",
                 "status": "ok",
                 "invite_status": "accepted",
-                "is_favorite": false
+                "is_favorite": false,
+                "can_edit": true,
             }
         );
     }
@@ -1823,6 +1854,7 @@ mod tests {
             status: EventStatus::Ok,
             invite_status: EventInviteStatus::Accepted,
             is_favorite: true,
+            can_edit: false,
         };
 
         assert_eq_json!(
@@ -1873,7 +1905,8 @@ mod tests {
                 "type": "single",
                 "status": "ok",
                 "invite_status": "accepted",
-                "is_favorite": true
+                "is_favorite": true,
+                "can_edit": false,
             }
         );
     }
@@ -1918,6 +1951,7 @@ mod tests {
             },
             type_: EventType::Exception,
             status: EventStatus::Ok,
+            can_edit: false,
         };
 
         assert_eq_json!(
@@ -1963,6 +1997,7 @@ mod tests {
                 },
                 "type": "exception",
                 "status": "ok",
+                "can_edit": false,
             }
         );
     }
