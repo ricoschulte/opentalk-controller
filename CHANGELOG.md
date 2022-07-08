@@ -1,8 +1,14 @@
+# Unreleased
+
+### Added
+
+- controller: added metric for number of created rooms
+
 # 1.0.0-rc.3 (20 July, 2022)
 
 ### Added
 
-- controller: added metric for number of participants
+- controller: added metrics for number of participants and number of destroyed rooms
 
 ### Fixed
 

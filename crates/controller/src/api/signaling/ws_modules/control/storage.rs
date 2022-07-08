@@ -45,11 +45,21 @@ impl_to_redis_args!(RoomParticipantAttributes<'_>);
 /// This allows for cleanups when the last user leaves without anyone joining.
 ///
 /// The redlock parameters are set a bit higher than usual to combat contention when a room gets
-/// gets destroyed while a large number of participants are inside it. (e.g. when a breakout room ends)
+/// destroyed while a large number of participants are inside it. (e.g. when a breakout room ends)
 pub fn room_mutex(room: SignalingRoomId) -> Mutex<RoomLock> {
     Mutex::new(RoomLock { room })
         .with_wait_time(Duration::from_millis(20)..Duration::from_millis(60))
         .with_retries(20)
+}
+
+pub async fn participant_set_exists(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+) -> Result<bool> {
+    redis_conn
+        .exists(RoomParticipants { room })
+        .await
+        .context("Failed to check if participants exist")
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
