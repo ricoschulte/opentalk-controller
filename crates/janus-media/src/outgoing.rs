@@ -38,6 +38,7 @@ pub enum Message {
     RequestMute(rabbitmq::RequestMute),
 
     /// Contains a error about what request failed. See [`Error`]
+    #[serde(rename = "error")]
     Error(Error),
 }
 
