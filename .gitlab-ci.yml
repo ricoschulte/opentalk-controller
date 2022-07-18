@@ -74,6 +74,7 @@ test:cargo_test:
     RABBITMQ_PORT: '5672'
     JANUS_EXCHANGE_TYPE: topic
     # Used for integration tests
+    JANUS_HOST: ws://janus-gateway:8188
     POSTGRES_BASE_URL: postgres://postgres:password123@postgres:5432
     DATABASE_NAME: k3k
     KUSTOS_TESTS_DATABASE_URL: postgres://postgres:password123@postgres:5432/kustos
@@ -84,7 +85,7 @@ test:cargo_test:
       alias: postgres
     - name: rabbitmq:3.8
       alias: rabbitmq
-    - name: quay.io/freswa/janus-gateway-rmq:latest
+    - name: quay.io/freswa/janus-gateway-rmq:0.12.2
       alias: janus-gateway
     - name: redis:6-alpine
       alias: redis

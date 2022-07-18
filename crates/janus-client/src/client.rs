@@ -1,7 +1,7 @@
 use crate::{
     error, incoming,
     outgoing::{AttachToPlugin, KeepAlive, PluginMessage, TransactionalRequest},
-    rabbitmq::{RabbitMqConfig, RabbitMqConnection},
+    transport::{Transport, TransportConfig},
     types::{
         incoming::JanusMessage,
         outgoing::PluginBody,
@@ -10,7 +10,7 @@ use crate::{
     },
     ClientId, HandleId, PluginRequest, SessionId, Success,
 };
-use futures::StreamExt;
+use futures::{stream::SplitStream, StreamExt};
 use lapin::{
     options::{BasicAckOptions, BasicNackOptions},
     Consumer,
@@ -23,8 +23,10 @@ use std::{
     sync::{Arc, Weak},
     time::Duration,
 };
+use tokio::net::TcpStream;
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::timeout;
+use tokio_tungstenite::{tungstenite::Message, MaybeTlsStream, WebSocketStream};
 use tracing::Instrument;
 
 enum TaskCmd {
@@ -143,41 +145,59 @@ pub(crate) struct InnerClient {
     id: ClientId,
 
     task_sender: mpsc::UnboundedSender<TaskCmd>,
-    connection: RabbitMqConnection,
+    transport: Transport,
     pub(crate) sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
 }
 
 impl InnerClient {
     /// Constructs a new [`InnerClient`] which is connected to the configured janus via RabbitMQ
     pub(crate) async fn new(
-        config: RabbitMqConfig,
+        config: impl Into<TransportConfig>,
         id: ClientId,
         sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
     ) -> Result<Self, error::Error> {
-        let (connection, consumer) = config.setup().await?;
-
+        let sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>> = Default::default();
         let (task_sender, cmd_receiver) = mpsc::unbounded_channel();
 
-        let sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>> = Default::default();
+        let transport = match config.into() {
+            TransportConfig::RabbitMq(config) => {
+                let (transport, consumer) = Transport::connect_rabbitmq(config).await?;
 
-        tokio::spawn(rabbitmq_event_handling_loop(
-            id.clone(),
-            consumer,
-            cmd_receiver,
-            sessions.clone(),
-            sink,
-        ));
+                tokio::spawn(rabbitmq_event_handling_loop(
+                    id.clone(),
+                    consumer,
+                    cmd_receiver,
+                    sessions.clone(),
+                    sink,
+                ));
+
+                transport
+            }
+            TransportConfig::WebSocket(config) => {
+                let (transport, stream) = Transport::connect_websocket(config).await?;
+
+                tokio::spawn(websocket_event_handling_loop(
+                    id.clone(),
+                    stream,
+                    cmd_receiver,
+                    sessions.clone(),
+                    sink,
+                ));
+
+                transport
+            }
+        };
 
         Ok(Self {
             id,
             task_sender,
-            connection,
+            transport,
             sessions,
         })
     }
 
     pub(crate) async fn destroy(&self) {
-        self.connection.destroy().await;
+        self.transport.destroy().await;
     }
 
     pub(crate) async fn create_transaction(
@@ -237,7 +257,7 @@ impl InnerClient {
 
         log::trace!("Sending message containing: {}", json);
 
-        self.connection.send(json).await?;
+        self.transport.send(json).await?;
 
         Ok(())
     }
@@ -700,6 +720,67 @@ async fn rabbitmq_event_handling_loop(
     }
 }
 
+async fn websocket_event_handling_loop(
+    id: ClientId,
+    mut stream: SplitStream<WebSocketStream<MaybeTlsStream<TcpStream>>>,
+    mut cmd_receiver: mpsc::UnboundedReceiver<TaskCmd>,
+    sessions: Arc<Mutex<HashMap<SessionId, Weak<InnerSession>>>>,
+    sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
+) {
+    let mut transactions: HashMap<TransactionId, StoredTransaction> = HashMap::new();
+
+    loop {
+        tokio::select! {
+            cmd = cmd_receiver.recv() => {
+                match cmd {
+                    Some(TaskCmd::Transaction { id, span, sender }) => {
+                        if sender.send(TaskMessage::Registered).await.is_ok() {
+                            transactions.insert(id, StoredTransaction { span, sender });
+                        } else {
+                            log::error!("Could not send registered message to transaction, receiver dropped.")
+                        }
+                    }
+                    Some(TaskCmd::TransactionEnd(id)) => {
+                        transactions.remove(&id);
+                    }
+                    None => {
+                        log::info!("Event handling loop exiting because cmd_receiver was dropped");
+                        return;
+                    }
+                }
+            }
+            Some(msg) = stream.next() => {
+                match msg {
+                    Ok(Message::Text(msg)) => {
+                        let res = event_handling_loop_inner(
+                            &id,
+                            &msg,
+                            &transactions,
+                            sessions.clone(),
+                            &sink,
+                        )
+                        .await;
+
+                        if let Err(e) = res {
+                            log::error!(
+                                "Error handling the incoming websocket msg: {}",
+                                e
+                            );
+                        }
+                    }
+                    Ok(msg) => {
+                        // TODO handle this
+                        log::error!("Got unexpected websocket message: {:?}", msg);
+                    }
+                    Err(e) => {
+                        log::error!("Encountered error while receiving websocket message: {}", e);
+                    }
+                }
+            }
+        }
+    }
+}
+
 async fn event_handling_loop_inner(
     id: &ClientId,
     msg: &str,
@@ -715,10 +796,7 @@ async fn event_handling_loop_inner(
             {
                 Some(tsx) => {
                     tsx.span.in_scope(|| {
-                        log::trace!(
-                            "Received RabbitMQ message for transaction containing: {}",
-                            msg
-                        );
+                        log::trace!("Received message for transaction containing: {}", msg);
                     });
 
                     if let Err(e) = tsx
@@ -732,7 +810,7 @@ async fn event_handling_loop_inner(
                     Ok(())
                 }
                 None => {
-                    log::trace!("Received RabbitMQ message containing: {}", msg);
+                    log::trace!("Received message containing: {}", msg);
 
                     // We could not find a transaction_id in our hashmap, try to route it based on the sessionId
                     route_message(id, &sessions, sink, Arc::new(janus_message)).await;
@@ -742,11 +820,7 @@ async fn event_handling_loop_inner(
             }
         }
         Err(e) => {
-            log::error!(
-                "Got invalid json from rabbitmq, {} (raw message: {})",
-                e,
-                msg
-            );
+            log::error!("Got invalid json, {} (raw message: {})", e, msg);
             Err(e.into())
         }
     }

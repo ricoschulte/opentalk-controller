@@ -99,15 +99,16 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::sleep;
+use transport::TransportConfig;
 
 #[macro_use]
 mod macros;
 mod client;
 pub mod error;
-pub mod rabbitmq;
+pub mod transport;
 pub mod types;
 
-pub use crate::rabbitmq::RabbitMqConfig;
+pub use crate::transport::RabbitMqConfig;
 pub use crate::types::incoming::JanusMessage;
 pub use crate::types::*;
 
@@ -124,12 +125,15 @@ impl Client {
     /// Creates a new [`Client`](Client)
     ///
     /// Returns the client itself and a broadcast receiver for messages from Janus that are not a response
-    #[tracing::instrument(name = "client_new", skip(sink, config))]
-    pub async fn new(
-        config: RabbitMqConfig,
+    #[tracing::instrument(name = "client_new", skip_all)]
+    pub async fn new<C>(
+        config: C,
         id: ClientId,
         sink: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
-    ) -> Result<Self, error::Error> {
+    ) -> Result<Self, error::Error>
+    where
+        C: Into<TransportConfig>,
+    {
         let inner_client = InnerClient::new(config, id, sink).await?;
 
         let client = Self {
