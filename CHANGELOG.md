@@ -3,6 +3,7 @@
 ### Added
 
  - controller: add metric for number of participants
+ - controller: Fixed wrong returned created_by for GET /rooms/{roomId}
 
 ### Fixed
 
