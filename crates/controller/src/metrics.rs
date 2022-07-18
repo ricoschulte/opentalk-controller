@@ -134,6 +134,10 @@ impl CombinedMetrics {
                 .u64_counter("signaling.destroyed_rooms_count")
                 .with_description("Number of destroyed rooms")
                 .init(),
+            participants_count: meter
+                .i64_up_down_counter("signaling.participants_count")
+                .with_description("Number of participants")
+                .init(),
         });
 
         let database = Arc::new(DatabaseMetrics {
