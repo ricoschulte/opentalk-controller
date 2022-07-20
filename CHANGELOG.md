@@ -5,6 +5,10 @@
 - controller: added metrics for number of created rooms and number of issued email tasks
 - mail-worker-protocol: added `as_kind_str` method to `MailTask`
 
+### Changed
+
+- controller: removed service_name from metrics
+
 # 1.0.0-rc.3 (20 July, 2022)
 
 ### Added

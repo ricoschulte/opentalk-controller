@@ -217,7 +217,7 @@ impl Controller {
         let settings = Arc::new(settings);
         let shared_settings: SharedSettings = Arc::new(ArcSwap::from(settings.clone()));
 
-        let metrics = metrics::CombinedMetrics::init(&settings);
+        let metrics = metrics::CombinedMetrics::init();
 
         db_storage::migrations::migrate_from_url(&settings.database.url)
             .await

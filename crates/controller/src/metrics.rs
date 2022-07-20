@@ -6,16 +6,13 @@ use actix_http::StatusCode;
 use actix_web::dev::PeerAddr;
 use actix_web::web::Data;
 use actix_web::{get, HttpResponse};
-use controller_shared::settings::Settings;
 use database::DatabaseMetrics;
 use kustos::metrics::KustosMetrics;
 use mail_worker_proto::MailTask;
 use opentelemetry::metrics::{Counter, Descriptor, MetricsError, Unit, ValueRecorder};
 use opentelemetry::sdk::export::metrics::{Aggregator, AggregatorSelector};
 use opentelemetry::sdk::metrics::selectors::simple::Selector;
-use opentelemetry::sdk::Resource;
-use opentelemetry::Key;
-use opentelemetry::{global, KeyValue};
+use opentelemetry::{global, Key};
 use opentelemetry_prometheus::PrometheusExporter;
 use prometheus::{Encoder, TextEncoder};
 use std::sync::Arc;
@@ -105,13 +102,9 @@ impl AggregatorSelector for OverrideAggregatorSelector {
 }
 
 impl CombinedMetrics {
-    pub fn init(settings: &Settings) -> Self {
+    pub fn init() -> Self {
         let exporter = opentelemetry_prometheus::exporter()
             .with_aggregator_selector(OverrideAggregatorSelector::default())
-            .with_resource(Resource::new([KeyValue::new(
-                "service_name",
-                settings.logging.service_name.clone(),
-            )]))
             .init();
 
         let meter = global::meter("ot-controller");
