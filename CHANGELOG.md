@@ -1,13 +1,20 @@
-# Unreleased
+# 1.0.0-rc.3 (20 July, 2022)
 
 ### Added
 
- - controller: add metric for number of participants
- - controller: Fixed wrong returned created_by for GET /rooms/{roomId}
+- controller: added metric for number of participants
 
 ### Fixed
 
-- remove static role assignment of participant in breakout and moderation module which led to inconsistent behavior if the participant's role was changed by a moderator
+- removed static role assignment of participant in breakout and moderation module which led to inconsistent behavior if the participant's role was changed by a moderator
+- controller: fixed wrong returned created_by for GET /rooms/{roomId}
+- janus-media: added a missing rename for the outgoing error websocket message
+- controller: remove special characters from phone numbers before parsing them
+
+### Changed
+
+- updated dependency version of pin-project
+- changed the login endpoint to return a bad-request with `invalid_claims` when invalid user claims were provided
 
 # 1.0.0-rc.2 (22 June, 2022)
 

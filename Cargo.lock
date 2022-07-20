@@ -1615,7 +1615,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-automod"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "actix-rt",
  "chrono",
@@ -1630,7 +1630,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-chat"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "k3k-controller-core",
  "k3k-controller-shared",
@@ -1639,7 +1639,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-controller"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -1656,7 +1656,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-controller-core"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "actix",
  "actix-cors",
@@ -1733,7 +1733,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-controller-shared"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "arc-swap",
  "chrono",
@@ -1749,7 +1749,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-database"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "diesel",
  "k3k-controller-shared",
@@ -1761,7 +1761,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-db-storage"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "anyhow",
  "barrel",
@@ -1790,7 +1790,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-ee-chat"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "actix-rt",
  "k3k-chat",
@@ -1805,7 +1805,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-janus-media"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "janus-client",
  "k3k-controller-core",
@@ -1816,7 +1816,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-legal-vote"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "actix-rt",
  "diesel",
@@ -1833,7 +1833,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-mail-worker-protocol"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "chrono",
  "k3k-db-storage",
@@ -1845,7 +1845,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-polls"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "actix-rt",
  "k3k-controller-core",
@@ -1856,7 +1856,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-protocol"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "etherpad-client",
  "k3k-controller-core",
@@ -1867,7 +1867,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-test-util"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 dependencies = [
  "diesel",
  "fern",
