@@ -49,6 +49,8 @@ pub struct VerifyClaims {
     pub x_grp: Vec<String>,
     /// The users phone number, if configured
     pub phone_number: Option<String>,
+    /// The users optional nickname
+    pub nickname: Option<String>,
 }
 
 /// Verify a raw JWT.

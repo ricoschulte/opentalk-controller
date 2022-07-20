@@ -95,12 +95,16 @@ pub async fn login(
                             None
                         };
 
+                        let display_name = info
+                            .display_name
+                            .unwrap_or_else(|| format!("{} {}", info.firstname, info.lastname));
+
                         let new_user = NewUser {
                             oidc_sub: info.sub,
                             oidc_issuer: info.issuer,
                             email: info.email,
                             title: String::new(),
-                            display_name: format!("{} {}", info.firstname, info.lastname),
+                            display_name,
                             firstname: info.firstname,
                             lastname: info.lastname,
                             id_token_exp: info.expiration.timestamp(),
