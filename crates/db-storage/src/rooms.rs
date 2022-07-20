@@ -38,6 +38,18 @@ impl Room {
         Ok(room)
     }
 
+    /// Select a room and the creator using the given room id
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_with_user(conn: &DbConnection, id: RoomId) -> Result<(Self, User)> {
+        let query = rooms::table
+            .filter(rooms::id.eq(id))
+            .inner_join(users::table);
+
+        let result: (Room, User) = query.get_result(conn)?;
+
+        Ok(result)
+    }
+
     /// Select all rooms joined with their creator
     #[tracing::instrument(err, skip_all)]
     pub fn get_all_with_creator(conn: &DbConnection) -> Result<Vec<(Room, User)>> {

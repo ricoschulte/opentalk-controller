@@ -234,23 +234,21 @@ pub async fn delete(
 pub async fn get(
     settings: SharedSettingsActix,
     db: Data<Db>,
-    current_user: ReqData<User>,
     room_id: Path<RoomId>,
 ) -> Result<Json<RoomResource>, ApiError> {
     let settings = settings.load();
-    let current_user = current_user.into_inner();
     let room_id = room_id.into_inner();
 
-    let room = crate::block(move || {
+    let (room, created_by) = crate::block(move || {
         let conn = db.get_conn()?;
 
-        Room::get(&conn, room_id)
+        Room::get_with_user(&conn, room_id)
     })
     .await??;
 
     let room_resource = RoomResource {
         id: room.id,
-        created_by: PublicUserProfile::from_db(&settings, current_user),
+        created_by: PublicUserProfile::from_db(&settings, created_by),
         created_at: room.created_at,
         password: room.password,
     };
