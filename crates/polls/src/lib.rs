@@ -354,13 +354,13 @@ impl FromRedisValue for PollId {
                 Uuid::from_str(from_utf8(bytes)?).map(Self).map_err(|_| {
                     redis::RedisError::from((
                         redis::ErrorKind::TypeError,
-                        "invalid data for ParticipantId",
+                        "invalid data for PollId",
                     ))
                 })
             }
             _ => RedisResult::Err(redis::RedisError::from((
                 redis::ErrorKind::TypeError,
-                "invalid data type for ParticipantId",
+                "invalid data type for PollId",
             ))),
         }
     }

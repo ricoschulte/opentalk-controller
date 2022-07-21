@@ -15,6 +15,7 @@ async fn run() -> Result<()> {
         legal_vote::register(&mut controller);
         polls::register(&mut controller);
         protocol::register(&mut controller);
+        timer::register(&mut controller);
         controller.run().await?;
     }
 

@@ -1652,6 +1652,7 @@ dependencies = [
  "k3k-legal-vote",
  "k3k-polls",
  "k3k-protocol",
+ "k3k-timer",
  "kustos",
 ]
 
@@ -1880,6 +1881,18 @@ dependencies = [
  "serde",
  "serde_json",
  "tokio",
+]
+
+[[package]]
+name = "k3k-timer"
+version = "0.1.0"
+dependencies = [
+ "actix-rt",
+ "k3k-controller-core",
+ "k3k-controller-shared",
+ "k3k-test-util",
+ "serde",
+ "serial_test",
 ]
 
 [[package]]

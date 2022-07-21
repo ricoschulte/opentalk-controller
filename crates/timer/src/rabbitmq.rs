@@ -1,0 +1,19 @@
+use crate::{outgoing, TimerId};
+use controller_shared::ParticipantId;
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum Event {
+    Start(outgoing::Started),
+    Stop(outgoing::Stopped),
+    /// A participant updated its ready status
+    UpdateReadyStatus(UpdateReadyStatus),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct UpdateReadyStatus {
+    /// The timer that the update is for
+    pub timer_id: TimerId,
+    /// The participant that issued the update
+    pub participant_id: ParticipantId,
+}

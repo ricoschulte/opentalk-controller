@@ -19,6 +19,7 @@ COPY ./crates/kustos/Cargo.toml ./crates/kustos/Cargo.toml
 COPY ./crates/lapin-pool/Cargo.toml ./crates/lapin-pool/Cargo.toml
 COPY ./crates/legal-vote/Cargo.toml ./crates/legal-vote/Cargo.toml
 COPY ./crates/mail-worker-protocol/Cargo.toml ./crates/mail-worker-protocol/Cargo.toml
+COPY ./crates/timer/Cargo.toml ./crates/timer/Cargo.toml
 COPY ./crates/polls/Cargo.toml ./crates/polls/Cargo.toml
 COPY ./crates/r3dlock/Cargo.toml ./crates/r3dlock/Cargo.toml
 COPY ./crates/protocol/Cargo.toml ./crates/protocol/Cargo.toml
