@@ -8,6 +8,7 @@
 ### Changed
 
 - controller: removed service_name from metrics
+- controller: Add error context to the keycloak-admin-client
 
 # 1.0.0-rc.3 (20 July, 2022)
 
