@@ -1193,6 +1193,13 @@ impl Runner {
     }
 
     async fn join_room_locked(&mut self) -> Result<Vec<ParticipantId>> {
+        let participant_set_exists =
+            control::storage::participant_set_exists(&mut self.redis_conn, self.room_id).await?;
+
+        if !participant_set_exists {
+            self.metrics.increment_created_rooms_count();
+        }
+
         let participants = storage::get_all_participants(&mut self.redis_conn, self.room_id)
             .await
             .context("Failed to get all active participants")?;

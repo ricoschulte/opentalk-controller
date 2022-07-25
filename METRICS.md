@@ -9,6 +9,7 @@
 | web.response_sizes                        | histogram | method, handler, status | summary of response sizes                                       |
 | signaling.runner_startup_time_seconds     | histogram | successful              | Time the runner takes to initialize                             |
 | signaling.runner_destroy_time_seconds     | histogram | successful              | Time the runner takes to stop                                   |
+| signaling.created_rooms_count             | counter   |                         | Number of created rooms                                         |
 | signaling.destroyed_rooms_count           | counter   |                         | Number of destroyed rooms                                       |
 | signaling.participants_count              | gauge     | participation_kind      | Number of participants                                          |
 | sql.dbpool_connections                    | gauge     |                         | Number of currently non-idling db connections                   |

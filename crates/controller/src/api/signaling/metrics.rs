@@ -9,6 +9,7 @@ const PARTICIPATION_KIND: Key = Key::from_static_str("participation_kind");
 pub struct SignalingMetrics {
     pub(crate) runner_startup_time: ValueRecorder<f64>,
     pub(crate) runner_destroy_time: ValueRecorder<f64>,
+    pub(crate) created_rooms_count: Counter<u64>,
     pub(crate) destroyed_rooms_count: Counter<u64>,
     pub(crate) participants_count: UpDownCounter<i64>,
 }
@@ -22,6 +23,10 @@ impl SignalingMetrics {
     pub fn record_destroy_time(&self, secs: f64, success: bool) {
         self.runner_destroy_time
             .record(secs, &[DESTROY_SUCCESSFUL.bool(success)]);
+    }
+
+    pub fn increment_created_rooms_count(&self) {
+        self.created_rooms_count.add(1, &[]);
     }
 
     pub fn increment_destroyed_rooms_count(&self) {
