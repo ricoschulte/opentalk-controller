@@ -65,6 +65,16 @@ impl MailTask {
             invite_code,
         }))
     }
+
+    pub fn as_kind_str(&self) -> &'static str {
+        match self {
+            MailTask::V1(message) => match message {
+                v1::Message::RegisteredEventInvite(_) => "registered",
+                v1::Message::UnregisteredEventInvite(_) => "unregistered",
+                v1::Message::ExternalEventInvite(_) => "external",
+            },
+        }
+    }
 }
 
 #[cfg(feature = "client")]

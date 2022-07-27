@@ -9,18 +9,30 @@ use actix_web::{get, HttpResponse};
 use controller_shared::settings::Settings;
 use database::DatabaseMetrics;
 use kustos::metrics::KustosMetrics;
-use opentelemetry::metrics::{Descriptor, MetricsError, Unit, ValueRecorder};
+use mail_worker_proto::MailTask;
+use opentelemetry::metrics::{Counter, Descriptor, MetricsError, Unit, ValueRecorder};
 use opentelemetry::sdk::export::metrics::{Aggregator, AggregatorSelector};
 use opentelemetry::sdk::metrics::selectors::simple::Selector;
 use opentelemetry::sdk::Resource;
+use opentelemetry::Key;
 use opentelemetry::{global, KeyValue};
 use opentelemetry_prometheus::PrometheusExporter;
 use prometheus::{Encoder, TextEncoder};
 use std::sync::Arc;
 
+const MAIL_TASK_KIND: Key = Key::from_static_str("mail_task_kind");
+
 pub struct EndpointMetrics {
     pub(crate) request_durations: ValueRecorder<f64>,
     pub(crate) response_sizes: ValueRecorder<u64>,
+    pub(crate) issued_email_tasks_count: Counter<u64>,
+}
+
+impl EndpointMetrics {
+    pub fn increment_issued_email_tasks_count(&self, mail_task: &MailTask) {
+        self.issued_email_tasks_count
+            .add(1, &[MAIL_TASK_KIND.string(mail_task.as_kind_str())]);
+    }
 }
 
 pub struct CombinedMetrics {
@@ -116,6 +128,10 @@ impl CombinedMetrics {
                     "HTTP response size for sized responses measured in actix-web middleware",
                 )
                 .with_unit(Unit::new("bytes"))
+                .init(),
+            issued_email_tasks_count: meter
+                .u64_counter("web.issued_email_tasks_count")
+                .with_description("Number of issued email tasks")
                 .init(),
         });
 

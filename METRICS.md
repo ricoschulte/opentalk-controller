@@ -7,6 +7,7 @@
 | ----------------------------------------- | --------- | ----------------------- | --------------------------------------------------------------- |
 | web.request_durations                     | histogram | method, handler, status | summary of request durations                                    |
 | web.response_sizes                        | histogram | method, handler, status | summary of response sizes                                       |
+| web.issued_email_tasks_count              | counter   | mail_task_kind          | Number of issued email tasks                                    |
 | signaling.runner_startup_time_seconds     | histogram | successful              | Time the runner takes to initialize                             |
 | signaling.runner_destroy_time_seconds     | histogram | successful              | Time the runner takes to stop                                   |
 | signaling.created_rooms_count             | counter   |                         | Number of created rooms                                         |

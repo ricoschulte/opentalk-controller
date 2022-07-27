@@ -335,6 +335,7 @@ impl Controller {
 
             let mail_service = Data::new(MailService::new(
                 self.shared_settings.clone(),
+                self.metrics.endpoint.clone(),
                 self.rabbitmq_channel,
             ));
 
