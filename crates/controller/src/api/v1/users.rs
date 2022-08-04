@@ -7,6 +7,7 @@ use super::response::{ApiError, NoContent};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{get, patch, Either};
+use anyhow::Context;
 use controller_shared::settings::Settings;
 use database::Db;
 use db_storage::users::{UpdateUser, User, UserId};
@@ -248,7 +249,7 @@ pub async fn find(
         let mut found_kc_users = kc_admin_client
             .search_user(&query.q)
             .await
-            .map_err(anyhow::Error::from)?;
+            .context("Failed to search for user in keycloak")?;
 
         let (db_users, kc_users) = crate::block(move || -> Result<_, ApiError> {
             let conn = db.get_conn()?;

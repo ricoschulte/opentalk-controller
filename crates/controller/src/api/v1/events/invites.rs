@@ -317,7 +317,7 @@ async fn create_invite_to_non_matching_email(
     let email_exists = kc_admin_client
         .verify_email(email.as_ref())
         .await
-        .map_err(anyhow::Error::from)?;
+        .context("Failed to verify email")?;
 
     if email_exists
         || settings
