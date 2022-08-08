@@ -1591,7 +1591,7 @@ fn parse_event_dt_params(
             starts_at
                 .datetime
                 .with_year(ends_at_dt.year() + 100)
-                .unwrap_or(chrono::MAX_DATETIME)
+                .unwrap_or(DateTime::<Utc>::MAX_UTC)
                 .with_timezone(&ends_at.timezone.0)
         };
 
