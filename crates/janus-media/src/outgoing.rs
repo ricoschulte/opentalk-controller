@@ -17,6 +17,10 @@ pub enum Message {
     #[serde(rename = "sdp_candidate")]
     SdpCandidate(SdpCandidate),
 
+    /// SDP End of Candidate, used for ICE negotiation
+    #[serde(rename = "sdp_end_of_candidates")]
+    SdpEndCandidates(Source),
+
     /// Signals that a webrtc connection has been established
     #[serde(rename = "webrtc_up")]
     WebRtcUp(Source),

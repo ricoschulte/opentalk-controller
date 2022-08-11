@@ -12,7 +12,7 @@ use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::borrow::{Borrow, Cow};
 use std::collections::HashSet;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
@@ -972,15 +972,24 @@ impl JanusSubscriber {
     }
 }
 
-impl From<janus_client::incoming::TrickleMessage> for TrickleMessage {
-    fn from(value: janus_client::incoming::TrickleMessage) -> Self {
-        if value.completed == Some(true) {
-            Self::Completed
-        } else {
-            Self::Candidate(TrickleCandidate {
-                sdp_m_line_index: value.candidate.sdp_m_line_index,
-                candidate: value.candidate.candidate,
-            })
+impl TryFrom<janus_client::incoming::TrickleMessage> for TrickleMessage {
+    type Error = anyhow::Error;
+
+    fn try_from(value: janus_client::incoming::TrickleMessage) -> Result<Self> {
+        match value.candidate {
+            janus_client::incoming::TrickleInnerMessage::Completed { completed } => {
+                if completed {
+                    Ok(Self::Completed)
+                } else {
+                    bail!("invalid trickle message. Recieved completed == false")
+                }
+            }
+            janus_client::incoming::TrickleInnerMessage::Candidate(candidate) => {
+                Ok(Self::Candidate(TrickleCandidate {
+                    sdp_m_line_index: candidate.sdp_m_line_index,
+                    candidate: candidate.candidate,
+                }))
+            }
         }
     }
 }
@@ -1079,7 +1088,7 @@ async fn forward_janus_message(
             event_sink
                 .send((
                     media_session_key,
-                    WebRtcEvent::Trickle(event.clone().into()),
+                    WebRtcEvent::Trickle(event.clone().try_into()?),
                 ))
                 .await?;
         }

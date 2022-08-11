@@ -112,8 +112,14 @@ pub struct Hangup {
 pub struct TrickleMessage {
     pub session_id: SessionId,
     pub sender: HandleId,
-    pub candidate: TrickleCandidate,
-    pub completed: Option<bool>,
+    pub candidate: TrickleInnerMessage,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+pub enum TrickleInnerMessage {
+    Completed { completed: bool },
+    Candidate(TrickleCandidate),
 }
 
 #[derive(Debug, Clone, Deserialize)]
