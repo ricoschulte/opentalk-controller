@@ -1,4 +1,5 @@
 use crate::TimerId;
+use controller::prelude::Timestamp;
 use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 
@@ -21,26 +22,17 @@ pub enum Message {
 pub struct Started {
     /// The timer id
     pub timer_id: TimerId,
-    /// The timer kind
-    pub kind: TimerKind,
-    /// The duration of the timer
+    /// start time of the timer
+    pub started_at: Timestamp,
+    /// optional end time of the timer
     ///
-    /// When the timer kind is `CountUp`, the duration indicates the already passed duration.
-    /// When the timer kind is `CountDown`, the duration indicates the remaining duration
-    pub duration: u64,
+    /// When no end is set, the timer has acts like a stopwatch (count up)
+    pub ends_at: Option<Timestamp>,
+
     /// The optional title of the timer
     pub title: Option<String>,
     /// Flag to allow/disallow participants to mark themselves as ready
     pub ready_check_enabled: bool,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "snake_case")]
-pub enum TimerKind {
-    /// Count up the timer (like a stopwatch)
-    CountUp,
-    /// Count down the timer
-    CountDown,
 }
 
 /// The current timer has been stopped
@@ -92,16 +84,26 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
+    use std::time::SystemTime;
+
     use super::*;
-    use controller::prelude::uuid::Uuid;
+    use controller::prelude::{
+        chrono::{DateTime, Duration},
+        uuid::Uuid,
+    };
     use test_util::assert_eq_json;
 
     #[test]
     fn started() {
+        let started_at: Timestamp = DateTime::from(SystemTime::UNIX_EPOCH).into();
+        let ends_at = started_at
+            .checked_add_signed(Duration::seconds(5))
+            .map(Timestamp::from);
+
         let started = Message::Started(Started {
             timer_id: TimerId(Uuid::nil()),
-            kind: TimerKind::CountUp,
-            duration: 5,
+            started_at,
+            ends_at,
             title: Some("Testing the timer!".into()),
             ready_check_enabled: false,
         });
@@ -110,8 +112,8 @@ mod test {
         {
             "message": "started",
             "timer_id": "00000000-0000-0000-0000-000000000000",
-            "kind": "count_up",
-            "duration": 5,
+            "started_at": "1970-01-01T00:00:00Z",
+            "ends_at": "1970-01-01T00:00:05Z",
             "title": "Testing the timer!",
             "ready_check_enabled": false
         });

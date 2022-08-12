@@ -1,6 +1,5 @@
 use crate::TimerId;
 use anyhow::{Context, Result};
-use controller::prelude::chrono::{DateTime, Utc};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use displaydoc::Display;
@@ -27,15 +26,15 @@ pub(crate) struct Timer {
     /// Used to match expire events to their respective timer
     pub(crate) id: TimerId,
     /// The creator of the timer
-    pub(crate) initiator: ParticipantId,
+    pub(crate) created_by: ParticipantId,
     /// The start of the timer
     ///
     /// Allows us to calculate the passed duration for joining participants
-    pub(crate) starts_at: DateTime<Utc>,
+    pub(crate) started_at: Timestamp,
     /// The end of the timer
     ///
     /// Allows us to calculate the remaining duration for joining participants
-    pub(crate) ends_at: Option<DateTime<Utc>>,
+    pub(crate) ends_at: Option<Timestamp>,
     /// The optional title
     pub(crate) title: Option<String>,
     /// Flag to allow/disallow participants to mark themselves as ready

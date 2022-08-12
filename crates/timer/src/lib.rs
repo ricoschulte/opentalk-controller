@@ -1,27 +1,26 @@
 use controller::impl_to_redis_args;
-use controller::prelude::anyhow::Context;
 use controller::prelude::anyhow::Result;
 use controller::prelude::chrono::{self, Utc};
 use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
+use controller::prelude::log;
 use controller::prelude::redis;
 use controller::prelude::redis::FromRedisValue;
 use controller::prelude::redis::RedisResult;
 use controller::prelude::tokio::time::sleep;
 use controller::prelude::uuid::Uuid;
 use controller::prelude::Event;
+use controller::prelude::Timestamp;
 use controller::prelude::{
     async_trait, control, InitContext, ModuleContext, Role, SignalingModule, SignalingRoomId,
 };
 use controller_shared::ParticipantId;
 use outgoing::StopKind;
-use outgoing::TimerKind;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
 use std::str::from_utf8;
 use std::str::FromStr;
-use std::time::Duration;
 use storage::ready_status::ReadyStatus;
 
 pub mod incoming;
@@ -115,21 +114,10 @@ impl SignalingModule for Timer {
                     None => return Ok(()),
                 };
 
-                let (kind, duration) = match timer.ends_at {
-                    Some(end_time) => (
-                        TimerKind::CountDown,
-                        (end_time - Utc::now()).num_seconds().max(0) as u64,
-                    ),
-                    None => (
-                        TimerKind::CountUp,
-                        (Utc::now() - timer.starts_at).num_seconds().max(0) as u64,
-                    ),
-                };
-
                 *frontend_data = Some(outgoing::Started {
                     timer_id: timer.id,
-                    kind,
-                    duration,
+                    started_at: timer.started_at,
+                    ends_at: timer.ends_at,
                     title: timer.title,
                     ready_check_enabled: timer.ready_check_enabled,
                 });
@@ -146,7 +134,7 @@ impl SignalingModule for Timer {
                 let timer = storage::timer::get(ctx.redis_conn(), self.room_id).await?;
 
                 if let Some(timer) = timer {
-                    if timer.initiator == self.participant_id {
+                    if timer.created_by == self.participant_id {
                         self.stop_current_timer(&mut ctx, StopKind::CreatorLeft, None)
                             .await?;
                     }
@@ -199,10 +187,10 @@ impl Timer {
 
                 let timer_id = TimerId(Uuid::new_v4());
 
-                let start_time = Utc::now();
+                let started_at = ctx.timestamp();
 
                 // determine the end time at the start of the timer to later calculate the remaining duration for joining participants
-                let end_time = match start.duration {
+                let ends_at = match start.duration {
                     Some(duration) => {
                         let duration = match duration.try_into() {
                             Ok(duration) => duration,
@@ -215,20 +203,26 @@ impl Timer {
                             }
                         };
 
-                        Some(
-                            start_time
-                                .checked_add_signed(chrono::Duration::seconds(duration))
-                                .context("DateTime overflow")?,
-                        )
+                        match started_at.checked_add_signed(chrono::Duration::seconds(duration)) {
+                            Some(ends_at) => Some(Timestamp::from(ends_at)),
+                            None => {
+                                log::error!("DateTime overflow in timer module");
+                                ctx.ws_send(outgoing::Message::Error(
+                                    outgoing::Error::InvalidDuration,
+                                ));
+
+                                None
+                            }
+                        }
                     }
                     None => None,
                 };
 
                 let timer = storage::timer::Timer {
                     id: timer_id,
-                    initiator: self.participant_id,
-                    starts_at: start_time,
-                    ends_at: end_time,
+                    created_by: self.participant_id,
+                    started_at,
+                    ends_at,
                     title: start.title.clone(),
                     ready_check_enabled: start.enable_ready_check,
                 };
@@ -242,22 +236,22 @@ impl Timer {
                     return Ok(());
                 }
 
-                let (kind, duration) = match start.duration {
-                    Some(duration) => {
-                        ctx.add_event_stream(once(
-                            sleep(Duration::from_secs(duration))
-                                .map(move |_| ExpiredEvent { timer_id }),
-                        ));
-
-                        (TimerKind::CountDown, duration)
-                    }
-                    None => (TimerKind::CountUp, 0),
-                };
+                if let Some(end_time) = ends_at {
+                    ctx.add_event_stream(once(
+                        sleep(
+                            end_time
+                                .signed_duration_since(Utc::now())
+                                .to_std()
+                                .unwrap_or_default(),
+                        )
+                        .map(move |_| ExpiredEvent { timer_id }),
+                    ));
+                }
 
                 let started = outgoing::Started {
                     timer_id,
-                    kind,
-                    duration,
+                    started_at,
+                    ends_at,
                     title: start.title,
                     ready_check_enabled: start.enable_ready_check,
                 };
