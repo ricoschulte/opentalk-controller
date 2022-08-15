@@ -65,6 +65,9 @@ pub struct Settings {
     pub etherpad: Option<Etherpad>,
 
     #[serde(default)]
+    pub spacedeck: Option<Spacedeck>,
+
+    #[serde(default)]
     pub call_in: Option<CallIn>,
 
     #[serde(default)]
@@ -312,6 +315,12 @@ fn default_authz_reload_interval() -> Duration {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct Etherpad {
+    pub url: url::Url,
+    pub api_key: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Spacedeck {
     pub url: url::Url,
     pub api_key: String,
 }

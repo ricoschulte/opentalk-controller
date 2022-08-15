@@ -1,5 +1,9 @@
 # Unreleased
 
+### Added
+
+- controller: added the spacedeck module that allows participants to collaboratively edit a whiteboard
+
 ### Fixed
 
 - controller: Fixed a bug where a wrong `ends_at` value for reoccurring events was sent to the mail worker
