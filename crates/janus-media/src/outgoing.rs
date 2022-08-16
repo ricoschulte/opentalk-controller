@@ -1,4 +1,4 @@
-use crate::mcu::{MediaSessionKey, MediaSessionType};
+use crate::mcu::{self, MediaSessionKey, MediaSessionType};
 use crate::rabbitmq;
 use controller_shared::ParticipantId;
 use janus_client::TrickleCandidate;
@@ -30,6 +30,10 @@ pub enum Message {
     /// This message can, but wont always be received when a participant disconnects
     #[serde(rename = "webrtc_down")]
     WebRtcDown(Source),
+
+    /// Signals the media status for a participant
+    #[serde(rename = "media_status")]
+    Media(Media),
 
     /// A webrtc connection experienced package loss
     #[serde(rename = "webrtc_slow")]
@@ -78,6 +82,24 @@ impl From<MediaSessionKey> for Source {
         Self {
             source: media_session_key.0,
             media_session_type: media_session_key.1,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Media {
+    #[serde(flatten)]
+    pub source: Source,
+    pub kind: String,
+    pub receiving: bool,
+}
+
+impl From<(MediaSessionKey, mcu::Media)> for Media {
+    fn from(value: (MediaSessionKey, mcu::Media)) -> Self {
+        Self {
+            source: value.0.into(),
+            kind: value.1.kind,
+            receiving: value.1.receiving,
         }
     }
 }
@@ -220,6 +242,29 @@ mod test {
                 "message": "webrtc_down",
                 "source": "00000000-0000-0000-0000-000000000000",
                 "media_session_type": "video"
+            }
+        );
+    }
+
+    #[test]
+    fn test_media_status() {
+        let webrtc_down = Message::Media(Media {
+            source: Source {
+                source: ParticipantId::nil(),
+                media_session_type: MediaSessionType::Video,
+            },
+            kind: "video".to_owned(),
+            receiving: true,
+        });
+
+        assert_eq_json!(
+            webrtc_down,
+            {
+                "message": "media_status",
+                "source": "00000000-0000-0000-0000-000000000000",
+                "media_session_type": "video",
+                "kind": "video",
+                "receiving": true
             }
         );
     }

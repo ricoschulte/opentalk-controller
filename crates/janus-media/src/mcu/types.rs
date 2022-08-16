@@ -36,11 +36,27 @@ pub enum Response {
 pub enum WebRtcEvent {
     WebRtcUp,
     WebRtcDown,
+    Media(Media),
     SlowLink(LinkDirection),
     Trickle(TrickleMessage),
     AssociatedMcuDied,
     StartedTalking,
     StoppedTalking,
+}
+
+#[derive(Debug)]
+pub struct Media {
+    pub kind: String,
+    pub receiving: bool,
+}
+
+impl From<janus_client::incoming::Media> for Media {
+    fn from(value: janus_client::incoming::Media) -> Self {
+        Self {
+            kind: value.kind,
+            receiving: value.receiving,
+        }
+    }
 }
 
 #[derive(Debug)]

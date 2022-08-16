@@ -253,6 +253,9 @@ impl SignalingModule for Media {
                 WebRtcEvent::WebRtcUp => {
                     ctx.ws_send(outgoing::Message::WebRtcUp(media_session_key.into()))
                 }
+                WebRtcEvent::Media(media) => {
+                    ctx.ws_send(outgoing::Message::Media((media_session_key, media).into()))
+                }
                 WebRtcEvent::WebRtcDown => {
                     ctx.ws_send(outgoing::Message::WebRtcDown(media_session_key.into()));
 
