@@ -14,7 +14,14 @@ pub enum Request {
     SdpAnswer(String),
     Candidate(TrickleCandidate),
     EndOfCandidates,
-    Configure(SubscriberConfiguration),
+    PublisherConfigure(PublishConfiguration),
+    SubscriberConfigure(SubscriberConfiguration),
+}
+
+#[derive(Debug)]
+pub struct PublishConfiguration {
+    pub video: bool,
+    pub audio: bool,
 }
 
 #[derive(Debug)]

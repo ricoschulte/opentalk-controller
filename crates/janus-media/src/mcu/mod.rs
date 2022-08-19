@@ -3,7 +3,9 @@ use crate::settings;
 use anyhow::{bail, Context, Result};
 use controller::prelude::*;
 use controller::settings::SharedSettings;
-use janus_client::outgoing::VideoRoomPluginConfigureSubscriber;
+use janus_client::outgoing::{
+    VideoRoomPluginConfigurePublisher, VideoRoomPluginConfigureSubscriber,
+};
 use janus_client::types::{SdpAnswer, SdpOffer};
 use janus_client::{ClientId, JanusMessage, JsepType, RoomId as JanusRoomId, TrickleCandidate};
 use redis::AsyncCommands;
@@ -674,7 +676,31 @@ impl JanusPublisher {
 
                 Ok(Response::None)
             }
+            Request::PublisherConfigure(configuration) => {
+                self.configure_publisher(configuration).await?;
+                Ok(Response::None)
+            }
             _ => panic!("Invalid request passed to JanusPublisher::send_message"),
+        }
+    }
+
+    /// Configure the publisher
+    async fn configure_publisher(&self, configuration: PublishConfiguration) -> Result<()> {
+        let configure_request = VideoRoomPluginConfigurePublisher::new()
+            .video(Some(configuration.video))
+            .audio(Some(configuration.audio));
+
+        match self.handle.send(configure_request).await {
+            Ok((configured_event, Some(jsep))) => {
+                log::debug!("Configure publisher got Event: {:?}", configured_event);
+                log::debug!("Configure publisher got Jsep/SDP: {:?}", jsep);
+                Ok(())
+            }
+            Ok((configured_event, None)) => {
+                log::debug!("Configure publisher got Event: {:?}", configured_event);
+                Ok(())
+            }
+            Err(e) => bail!("Failed to configure publisher, {}", e),
         }
     }
 
@@ -825,7 +851,7 @@ impl JanusSubscriber {
 
                 Ok(Response::None)
             }
-            Request::Configure(configuration) => {
+            Request::SubscriberConfigure(configuration) => {
                 self.configure_subscriber(configuration)
                     .await
                     .context("Failed to configure subscriber")?;
@@ -1071,12 +1097,7 @@ async fn forward_janus_message(
 
 async fn send_offer(handle: &janus_client::Handle, offer: SdpOffer) -> Result<SdpAnswer> {
     match handle
-        .send_with_jsep(
-            janus_client::outgoing::VideoRoomPluginConfigurePublisher {
-                ..Default::default()
-            },
-            offer.into(),
-        )
+        .send_with_jsep(VideoRoomPluginConfigurePublisher::new(), offer.into())
         .await
     {
         Ok((_, Some(answer))) => Ok(answer

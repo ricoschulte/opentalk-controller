@@ -166,6 +166,20 @@ impl From<VideoRoomPluginConfigurePublisher> for PluginBody {
     }
 }
 
+impl VideoRoomPluginConfigurePublisher {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn audio(self, audio: Option<bool>) -> Self {
+        Self { audio, ..self }
+    }
+
+    pub fn video(self, video: Option<bool>) -> Self {
+        Self { video, ..self }
+    }
+}
+
 /// Configure call for subscribing
 ///
 /// See [Janus Videoroom Plugin Docs for subscribing](https://janus.conf.meetecho.com/docs/videoroom.html#vroomsub) for more information

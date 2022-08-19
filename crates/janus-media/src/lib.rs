@@ -11,6 +11,7 @@ use focus::FocusDetection;
 use incoming::{RequestMute, TargetConfigure};
 use janus_client::TrickleCandidate;
 use mcu::McuPool;
+use mcu::PublishConfiguration;
 use mcu::{
     LinkDirection, MediaSessionKey, MediaSessionType, Request, Response, TrickleMessage,
     WebRtcEvent,
@@ -46,7 +47,7 @@ pub struct Media {
 
 type State = HashMap<MediaSessionType, MediaSessionState>;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct MediaSessionState {
     pub video: bool,
     pub audio: bool,
@@ -100,7 +101,8 @@ impl SignalingModule for Media {
     ) -> Result<()> {
         match event {
             Event::WsMessage(incoming::Message::PublishComplete(info)) => {
-                self.state
+                let old_state = self
+                    .state
                     .insert(info.media_session_type, info.media_session_state);
 
                 storage::set_state(ctx.redis_conn(), self.room, self.id, &self.state)
@@ -108,9 +110,15 @@ impl SignalingModule for Media {
                     .context("Failed to set state attribute in storage")?;
 
                 ctx.invalidate_data();
+
+                if Some(info.media_session_state) != old_state {
+                    self.handle_publish_state(info.media_session_type, info.media_session_state)
+                        .await?;
+                }
             }
             Event::WsMessage(incoming::Message::UpdateMediaSession(info)) => {
                 if let Some(state) = self.state.get_mut(&info.media_session_type) {
+                    let old_state = *state;
                     *state = info.media_session_state;
 
                     storage::set_state(ctx.redis_conn(), self.room, self.id, &self.state)
@@ -118,6 +126,14 @@ impl SignalingModule for Media {
                         .context("Failed to set state attribute in storage")?;
 
                     ctx.invalidate_data();
+
+                    if info.media_session_state != old_state {
+                        self.handle_publish_state(
+                            info.media_session_type,
+                            info.media_session_state,
+                        )
+                        .await?;
+                    }
                 }
             }
             Event::WsMessage(incoming::Message::ModeratorMute(moderator_mute)) => {
@@ -623,13 +639,33 @@ impl Media {
     }
 
     #[tracing::instrument(level = "debug", skip(self))]
+    async fn handle_publish_state(
+        &mut self,
+        media_session_type: MediaSessionType,
+        state: MediaSessionState,
+    ) -> Result<()> {
+        if let Some(publisher) = self.media.get_publisher(media_session_type) {
+            publisher
+                .send_message(Request::PublisherConfigure(PublishConfiguration {
+                    video: state.video,
+                    audio: state.audio,
+                }))
+                .await?;
+        } else {
+            log::info!("Attempt to configure none existing publisher");
+        }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self))]
     async fn handle_configure(&mut self, configure: TargetConfigure) -> Result<()> {
         if let Some(subscriber) = self
             .media
             .get_subscriber(configure.target.target, configure.target.media_session_type)
         {
             subscriber
-                .send_message(Request::Configure(configure.configuration))
+                .send_message(Request::SubscriberConfigure(configure.configuration))
                 .await?;
         } else {
             log::info!("Attempt to configure none existing subscriber");
