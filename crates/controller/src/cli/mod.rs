@@ -1,15 +1,15 @@
 use anyhow::{Context, Result};
+use clap::{Parser, Subcommand};
 use controller_shared::settings::Settings;
-use structopt::StructOpt;
 
 mod acl;
 mod fix_acl;
 mod reload;
 
-#[derive(StructOpt, Debug, Clone)]
-#[structopt(name = "k3k-controller")]
+#[derive(Parser, Debug, Clone)]
+#[clap(name = "k3k-controller")]
 pub struct Args {
-    #[structopt(
+    #[clap(
         short,
         long,
         default_value = "config.toml",
@@ -18,51 +18,52 @@ pub struct Args {
     pub config: String,
 
     /// Triggers a reload of the Janus Server configuration
-    #[structopt(long)]
+    #[clap(long)]
     pub reload: bool,
 
-    #[structopt(subcommand)]
+    #[clap(subcommand)]
     cmd: Option<SubCommand>,
 
-    #[structopt(long)]
+    #[clap(long)]
     version: bool,
 }
 
-#[derive(StructOpt, Debug, Clone)]
-#[structopt(rename_all = "kebab_case")]
+#[derive(Subcommand, Debug, Clone)]
+#[clap(rename_all = "kebab_case")]
 enum SubCommand {
     /// Rebuild ACLs based on current data
     FixAcl {
         /// Do not add user roles
-        #[structopt(long = "no-user-roles", parse(from_flag = std::ops::Not::not))]
+        #[clap(long = "no-user-roles", parse(from_flag = std::ops::Not::not))]
         user_roles: bool,
         /// Do not add user groups
-        #[structopt(long = "no-user-groups", parse(from_flag = std::ops::Not::not))]
+        #[clap(long = "no-user-groups", parse(from_flag = std::ops::Not::not))]
         user_groups: bool,
         /// Do not add room owner read/write access
-        #[structopt(long = "no-room-creators", parse(from_flag = std::ops::Not::not))]
+        #[clap(long = "no-room-creators", parse(from_flag = std::ops::Not::not))]
         room_creators: bool,
     },
     /// Modify the ACLs.
+    #[clap(subcommand)]
     Acl(AclSubCommand),
     /// Migrate the db. This is done automatically during start of the controller,
     /// but can be done without starting the controller using this command.
     MigrateDb,
 }
 
-#[derive(StructOpt, Debug, Clone)]
-#[structopt(rename_all = "kebab_case")]
+#[derive(Subcommand, Debug, Clone)]
+#[clap(rename_all = "kebab_case")]
 pub(crate) enum AclSubCommand {
     /// Allows all users access to all rooms
     UsersHaveAccessToAllRooms {
         /// Enable/Disable
-        #[structopt(subcommand)]
+        #[clap(subcommand)]
         action: EnableDisable,
     },
 }
 
-#[derive(StructOpt, Debug, Clone)]
-#[structopt(rename_all = "kebab_case")]
+#[derive(Parser, Debug, Clone)]
+#[clap(rename_all = "kebab_case")]
 pub(crate) enum EnableDisable {
     /// enable
     Enable,

@@ -39,7 +39,13 @@ yanked = "deny"
 notice = "deny"
 # A list of advisory IDs to ignore. Note that ignored advisories will still
 # output a note when they are encountered.
-ignore = ["RUSTSEC-2020-0071"]
+ignore = [
+    "RUSTSEC-2020-0071",
+    # See
+    # https://github.com/tokio-rs/tracing/pull/2040
+    # https://github.com/colin-kiegel/rust-pretty-assertions/pull/102
+    "RUSTSEC-2021-0139",
+    ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
 # will still output a note when they are encountered.
