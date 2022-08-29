@@ -1,15 +1,19 @@
-# Unreleased
+# 1.0.0-rc.4 (29 August, 2022)
 
 ### Added
 
 - controller: added metrics for number of created rooms and number of issued email tasks
 - mail-worker-protocol: added `as_kind_str` method to `MailTask`
+- controller: added the `timer` module that allows moderators to start a timer for a room
+- janus-media: added support for full trickle mode
 
 ### Changed
 
+- events-api: added can_edit fields to event related resources
 - controller: removed service_name from metrics
-- controller: Add error context to the keycloak-admin-client
+- controller: added error context to the keycloak-admin-client
 - controller: added the optional claim `nickname` to the login endpoint that will be used as the users `display_name` when set
+- janus-media: stopped forwarding RTP media packets while a client is muted
 
 # 1.0.0-rc.3 (20 July, 2022)
 
