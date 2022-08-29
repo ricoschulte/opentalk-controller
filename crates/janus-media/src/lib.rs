@@ -253,6 +253,9 @@ impl SignalingModule for Media {
                 WebRtcEvent::WebRtcUp => {
                     ctx.ws_send(outgoing::Message::WebRtcUp(media_session_key.into()))
                 }
+                WebRtcEvent::Media(media) => {
+                    ctx.ws_send(outgoing::Message::Media((media_session_key, media).into()))
+                }
                 WebRtcEvent::WebRtcDown => {
                     ctx.ws_send(outgoing::Message::WebRtcDown(media_session_key.into()));
 
@@ -270,20 +273,20 @@ impl SignalingModule for Media {
                         source: media_session_key.into(),
                     }))
                 }
-                WebRtcEvent::Trickle(trickle_msg) => {
-                    match trickle_msg {
-                        TrickleMessage::Completed => {
-                            log::warn!("Unimplemented TrickleMessage::Completed received");
-                            // TODO find out when janus sends this, never actually got this message yet
-                        }
-                        TrickleMessage::Candidate(candidate) => {
-                            ctx.ws_send(outgoing::Message::SdpCandidate(outgoing::SdpCandidate {
-                                candidate,
-                                source: media_session_key.into(),
-                            }));
-                        }
+                WebRtcEvent::Trickle(trickle_msg) => match trickle_msg {
+                    // This send by Janus when in full-trickle mode.
+                    TrickleMessage::Completed => {
+                        ctx.ws_send(outgoing::Message::SdpEndCandidates(
+                            media_session_key.into(),
+                        ));
                     }
-                }
+                    TrickleMessage::Candidate(candidate) => {
+                        ctx.ws_send(outgoing::Message::SdpCandidate(outgoing::SdpCandidate {
+                            candidate,
+                            source: media_session_key.into(),
+                        }));
+                    }
+                },
                 WebRtcEvent::StartedTalking => ctx.rabbitmq_publish(
                     control::rabbitmq::current_room_exchange_name(self.room),
                     control::rabbitmq::room_all_routing_key().into(),
