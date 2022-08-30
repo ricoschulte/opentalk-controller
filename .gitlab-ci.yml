@@ -91,7 +91,7 @@ test:cargo_test:
       alias: redis
   before_script:
     - rustup component add rustfmt
-    - cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"
+    - cargo install diesel_cli --version 1.4.1 --no-default-features --features="barrel-migrations,barrel/pg,postgres"
   script:
     - cargo test --workspace --locked
     # Verify that the HEAD schema.rs matches the actual HEAD migration database schema.

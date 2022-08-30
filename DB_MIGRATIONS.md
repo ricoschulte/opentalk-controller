@@ -1,6 +1,6 @@
 # Requirements
 
-* install the diesel cli tool with `cargo install diesel_cli --no-default-features --features="barrel-migrations,barrel/pg,postgres"`
+* install the diesel cli tool with `cargo install diesel_cli --version 1.4.1 --no-default-features --features="barrel-migrations,barrel/pg,postgres"`
 * make sure `rustfmt` is installed with `rustup component add rustfmt`
 
 # How to change the schema?
