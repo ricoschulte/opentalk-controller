@@ -1,15 +1,16 @@
 use super::{ApiResponse, DefaultApiResult, PagePaginationQuery};
-use crate::api::v1::events::{EventInvitee, EventPoliciesBuilderExt};
+use crate::api::v1::events::{
+    enrich_invitees_from_keycloak, EventInvitee, EventPoliciesBuilderExt,
+};
 use crate::api::v1::response::{ApiError, Created, NoContent};
 use crate::api::v1::rooms::RoomsPoliciesBuilderExt;
-use crate::api::v1::users::PublicUserProfile;
 use crate::services::MailService;
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{delete, get, patch, post, Either};
 use anyhow::Context;
 use database::Db;
-use db_storage::events::email_invites::NewEventEmailInvite;
+use db_storage::events::email_invites::{EventEmailInvite, NewEventEmailInvite};
 use db_storage::events::{
     Event, EventFavorite, EventId, EventInvite, EventInviteStatus, NewEventInvite,
     UpdateEventInvite,
@@ -32,32 +33,52 @@ use serde::{Deserialize, Serialize};
 pub async fn get_invites_for_event(
     settings: SharedSettingsActix,
     db: Data<Db>,
+    kc_admin_client: Data<KeycloakAdminClient>,
     event_id: Path<EventId>,
     pagination: Query<PagePaginationQuery>,
 ) -> DefaultApiResult<Vec<EventInvitee>> {
     let settings = settings.load_full();
+    let event_id = event_id.into_inner();
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
-    let (event_invitees, total_event_invitees) = crate::block(move || -> database::Result<_> {
+    let (invitees, invitees_total) = crate::block(move || -> database::Result<_> {
         let conn = db.get_conn()?;
 
-        let (event_invites_with_invitee, total) =
-            EventInvite::get_for_event_paginated(&conn, event_id.into_inner(), per_page, page)?;
+        // FIXME: Preliminary solution, consider using UNION when Diesel supports it.
+        // As in #[get("/events")], we simply get all invitees and truncate them afterwards.
+        // Note that get_for_event_paginated returns a total record count of 0 when paging beyond the end.
 
-        let mut event_invitees = vec![];
+        let (event_invites_with_user, event_invites_total) =
+            EventInvite::get_for_event_paginated(&conn, event_id, i64::max_value(), 1)?;
 
-        for (event_invite, invitee) in event_invites_with_invitee {
-            event_invitees.push(EventInvitee {
-                profile: PublicUserProfile::from_db(&settings, invitee),
-                status: event_invite.status,
-            });
-        }
+        let event_invitees_iter =
+            event_invites_with_user
+                .into_iter()
+                .map(|(event_invite, user)| {
+                    EventInvitee::from_invite_with_user(event_invite, user, &settings)
+                });
 
-        Ok((event_invitees, total))
+        let (event_email_invites, event_email_invites_total) =
+            EventEmailInvite::get_for_event_paginated(&conn, event_id, i64::max_value(), 1)?;
+
+        let event_email_invitees_iter = event_email_invites.into_iter().map(|event_email_invite| {
+            EventInvitee::from_email_invite(event_email_invite, &settings)
+        });
+
+        let invitees_to_skip_count = (page - 1) * per_page;
+        let invitees = event_invitees_iter
+            .chain(event_email_invitees_iter)
+            .skip(invitees_to_skip_count as usize)
+            .take(per_page as usize)
+            .collect();
+
+        Ok((invitees, event_invites_total + event_email_invites_total))
     })
     .await??;
 
-    Ok(ApiResponse::new(event_invitees).with_page_pagination(per_page, page, total_event_invitees))
+    let invitees = enrich_invitees_from_keycloak(&kc_admin_client, invitees).await;
+
+    Ok(ApiResponse::new(invitees).with_page_pagination(per_page, page, invitees_total))
 }
 
 /// Request body for the `POST /events/{event_id}/invites` endpoint

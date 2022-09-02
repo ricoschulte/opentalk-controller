@@ -2,7 +2,7 @@ use super::cursor::Cursor;
 use super::request::default_pagination_per_page;
 use super::response::error::ValidationErrorEntry;
 use super::response::{ApiError, NoContent, CODE_VALUE_REQUIRED};
-use super::users::PublicUserProfile;
+use super::users::{email_to_libravatar_url, PublicUserProfile, UnregisteredUser};
 use super::{ApiResponse, DefaultApiResult, PagePaginationQuery};
 use crate::api::v1::response::CODE_IGNORED_VALUE;
 use crate::api::v1::rooms::RoomsPoliciesBuilderExt;
@@ -16,12 +16,13 @@ use chrono_tz::Tz;
 use controller_shared::settings::Settings;
 use database::{Db, DbConnection};
 use db_storage::events::{
-    Event, EventException, EventExceptionKind, EventId, EventInvite, EventInviteStatus, NewEvent,
-    TimeZone, UpdateEvent,
+    email_invites::EventEmailInvite, Event, EventException, EventExceptionKind, EventId,
+    EventInvite, EventInviteStatus, NewEvent, TimeZone, UpdateEvent,
 };
 use db_storage::rooms::{NewRoom, Room, RoomId, UpdateRoom};
 use db_storage::sip_configs::{NewSipConfig, SipConfig};
 use db_storage::users::User;
+use keycloak_admin::KeycloakAdminClient;
 use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
 use kustos::prelude::{AccessMethod, IsSubject};
 use kustos::{Authz, Resource, ResourceId};
@@ -339,13 +340,47 @@ impl EventExceptionResource {
     }
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum EventInviteeProfile {
+    Registered(PublicUserProfile),
+    Unregistered(UnregisteredUser),
+    Email(EmailOnlyUser),
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EmailOnlyUser {
+    pub email: String,
+    pub avatar_url: String,
+}
+
 /// Invitee to an event
 ///
 ///  Contains user profile and invitee status
 #[derive(Debug, Clone, Serialize)]
 pub struct EventInvitee {
-    pub profile: PublicUserProfile,
+    pub profile: EventInviteeProfile,
     pub status: EventInviteStatus,
+}
+
+impl EventInvitee {
+    fn from_invite_with_user(invite: EventInvite, user: User, settings: &Settings) -> EventInvitee {
+        EventInvitee {
+            profile: EventInviteeProfile::Registered(PublicUserProfile::from_db(settings, user)),
+            status: invite.status,
+        }
+    }
+
+    fn from_email_invite(invite: EventEmailInvite, settings: &Settings) -> EventInvitee {
+        let avatar_url = email_to_libravatar_url(&settings.avatar.libravatar_url, &invite.email);
+        EventInvitee {
+            profile: EventInviteeProfile::Email(EmailOnlyUser {
+                email: invite.email,
+                avatar_url,
+            }),
+            status: EventInviteStatus::Pending,
+        }
+    }
 }
 
 /// Type of event resource.
@@ -773,6 +808,12 @@ pub enum EventOrException {
     Exception(EventExceptionResource),
 }
 
+struct GetPaginatedEventsData {
+    event_resources: Vec<EventOrException>,
+    before: Option<String>,
+    after: Option<String>,
+}
+
 /// API Endpoint `GET /events`
 ///
 /// Returns a paginated list of events and their exceptions inside the given time range
@@ -782,6 +823,7 @@ pub enum EventOrException {
 pub async fn get_events(
     settings: SharedSettingsActix,
     db: Data<Db>,
+    kc_admin_client: Data<KeycloakAdminClient>,
     current_user: ReqData<User>,
     query: Query<GetEventsQuery>,
 ) -> DefaultApiResult<Vec<EventOrException>> {
@@ -789,7 +831,9 @@ pub async fn get_events(
     let current_user = current_user.into_inner();
     let query = query.into_inner();
 
-    crate::block(move || {
+    let kc_admin_client_ref = &kc_admin_client;
+
+    let events_data = crate::block(move || -> Result<GetPaginatedEventsData, ApiError> {
         let per_page = query
             .per_page
             .unwrap_or_else(default_pagination_per_page)
@@ -828,7 +872,7 @@ pub async fn get_events(
 
         let event_refs: Vec<&Event> = events.iter().map(|(event, ..)| event).collect();
 
-        // Build list of event-invite with user, grouped by events
+        // Build list of event invites with user, grouped by events
         let invites_with_users_grouped_by_event = if query.invitees_max == 0 {
             // Do not query event invites if invitees_max is zero, instead create dummy value
             (0..events.len()).map(|_| Vec::new()).collect()
@@ -836,12 +880,28 @@ pub async fn get_events(
             EventInvite::get_for_events(&conn, &event_refs)?
         };
 
+        // Build list of additional email event invites, grouped by events
+        let email_invites_grouped_by_event = if query.invitees_max == 0 {
+            // Do not query email event invites if invitees_max is zero, instead create dummy value
+            (0..events.len()).map(|_| Vec::new()).collect()
+        } else {
+            EventEmailInvite::get_for_events(&conn, &event_refs)?
+        };
+
+        type InvitesByEvent = Vec<(Vec<(EventInvite, User)>, Vec<EventEmailInvite>)>;
+        let invites_grouped_by_event: InvitesByEvent = invites_with_users_grouped_by_event
+            .into_iter()
+            .zip(email_invites_grouped_by_event)
+            .collect();
+
         let mut event_resources = vec![];
 
         let mut ret_cursor_data = None;
 
-        for ((event, invite, room, sip_config, exceptions, is_favorite), mut invites_with_user) in
-            events.into_iter().zip(invites_with_users_grouped_by_event)
+        for (
+            (event, invite, room, sip_config, exceptions, is_favorite),
+            (mut invites_with_user, mut email_invites),
+        ) in events.into_iter().zip(invites_grouped_by_event)
         {
             ret_cursor_data = Some(GetEventsCursorData {
                 event_id: event.id,
@@ -856,17 +916,23 @@ pub async fn get_events(
                 .map(|invite| invite.status)
                 .unwrap_or(EventInviteStatus::Accepted);
 
-            let invitees_truncated =
-                query.invitees_max == 0 || invites_with_user.len() > query.invitees_max as usize;
+            let invitees_truncated = query.invitees_max == 0
+                || (invites_with_user.len() + email_invites.len()) > query.invitees_max as usize;
 
             invites_with_user.truncate(query.invitees_max as usize);
+            let email_invitees_max = query.invitees_max - invites_with_user.len().max(0) as u32;
+            email_invites.truncate(email_invitees_max as usize);
 
-            let invitees = invites_with_user
+            let registered_invitees_iter = invites_with_user
                 .into_iter()
-                .map(|(invite, user)| EventInvitee {
-                    profile: PublicUserProfile::from_db(&settings, user),
-                    status: invite.status,
-                })
+                .map(|(invite, user)| EventInvitee::from_invite_with_user(invite, user, &settings));
+
+            let unregistered_invitees_iter = email_invites
+                .into_iter()
+                .map(|invite| EventInvitee::from_email_invite(invite, &settings));
+
+            let invitees = registered_invitees_iter
+                .chain(unregistered_invitees_iter)
                 .collect();
 
             let starts_at = DateTimeTz::starts_at_of(&event);
@@ -910,10 +976,35 @@ pub async fn get_events(
             }
         }
 
-        Ok(ApiResponse::new(event_resources)
-            .with_cursor_pagination(None, ret_cursor_data.map(|c| Cursor(c).to_base64())))
+        Ok(GetPaginatedEventsData {
+            event_resources,
+            before: None,
+            after: ret_cursor_data.map(|c| Cursor(c).to_base64()),
+        })
     })
-    .await?
+    .await??;
+
+    let resource_mapping_futures =
+        events_data
+            .event_resources
+            .into_iter()
+            .map(|resource| async move {
+                match resource {
+                    EventOrException::Event(inner) => EventOrException::Event(EventResource {
+                        invitees: enrich_invitees_from_keycloak(
+                            kc_admin_client_ref,
+                            inner.invitees,
+                        )
+                        .await,
+                        ..inner
+                    }),
+                    EventOrException::Exception(inner) => EventOrException::Exception(inner),
+                }
+            });
+    let event_resources = futures::future::join_all(resource_mapping_futures).await;
+
+    Ok(ApiResponse::new(event_resources)
+        .with_cursor_pagination(events_data.before, events_data.after))
 }
 
 /// Path query parameters for the `GET /events/{event_id}` endpoint
@@ -933,6 +1024,7 @@ pub struct GetEventQuery {
 pub async fn get_event(
     settings: SharedSettingsActix,
     db: Data<Db>,
+    kc_admin_client: Data<KeycloakAdminClient>,
     current_user: ReqData<User>,
     event_id: Path<EventId>,
     query: Query<GetEventQuery>,
@@ -941,7 +1033,7 @@ pub async fn get_event(
     let event_id = event_id.into_inner();
     let query = query.into_inner();
 
-    crate::block(move || {
+    let event_resource = crate::block(move || -> Result<EventResource, ApiError> {
         let conn = db.get_conn()?;
 
         let (event, invite, room, sip_config, is_favorite) =
@@ -987,9 +1079,16 @@ pub async fn get_event(
             can_edit,
         };
 
-        Ok(ApiResponse::new(event_resource))
+        Ok(event_resource)
     })
-    .await?
+    .await??;
+
+    let event_resource = EventResource {
+        invitees: enrich_invitees_from_keycloak(&kc_admin_client, event_resource.invitees).await,
+        ..event_resource
+    };
+
+    Ok(ApiResponse::new(event_resource))
 }
 
 /// Path query parameters for the `PATCH /events/{event_id}` endpoint
@@ -1107,6 +1206,7 @@ impl PatchEventBody {
 pub async fn patch_event(
     settings: SharedSettingsActix,
     db: Data<Db>,
+    kc_admin_client: Data<KeycloakAdminClient>,
     current_user: ReqData<User>,
     event_id: Path<EventId>,
     query: Query<PatchEventQuery>,
@@ -1125,7 +1225,7 @@ pub async fn patch_event(
     let event_id = event_id.into_inner();
     let query = query.into_inner();
 
-    crate::block(move || {
+    let event_resource = crate::block(move || -> Result<EventResource, ApiError> {
         let conn = db.get_conn()?;
 
         let (event, invite, room, sip_config, is_favorite) =
@@ -1209,9 +1309,16 @@ pub async fn patch_event(
             can_edit,
         };
 
-        Ok(Either::Left(ApiResponse::new(event_resource)))
+        Ok(event_resource)
     })
-    .await?
+    .await??;
+
+    let event_resource = EventResource {
+        invitees: enrich_invitees_from_keycloak(&kc_admin_client, event_resource.invitees).await,
+        ..event_resource
+    };
+
+    Ok(Either::Left(ApiResponse::new(event_resource)))
 }
 
 /// Part of `PATCH /events/{event_id}` (see [`patch_event`])
@@ -1455,23 +1562,77 @@ fn get_invitees_for_event(
     invitees_max: i64,
 ) -> database::Result<(Vec<EventInvitee>, bool)> {
     if invitees_max > 0 {
-        let (invites_with_user, total_invites) =
+        // Get regular invitees up to the maximum invitee count specified.
+
+        let (invites_with_user, total_invites_count) =
             EventInvite::get_for_event_paginated(conn, event_id, invitees_max, 1)?;
 
-        let invitees_truncated = total_invites > invites_with_user.len() as i64;
-
-        let invitees = invites_with_user
+        let mut invitees: Vec<EventInvitee> = invites_with_user
             .into_iter()
-            .map(|(invite, user)| EventInvitee {
-                profile: PublicUserProfile::from_db(settings, user),
-                status: invite.status,
-            })
+            .map(|(invite, user)| EventInvitee::from_invite_with_user(invite, user, settings))
             .collect();
+
+        let loaded_invites_count = invitees.len() as i64;
+        let mut invitees_truncated = total_invites_count > loaded_invites_count;
+
+        // Now add email invitees until the maximum total invitee count specified is reached.
+
+        let invitees_max = invitees_max - loaded_invites_count;
+        if invitees_max > 0 {
+            let (email_invites, total_email_invites_count) =
+                EventEmailInvite::get_for_event_paginated(conn, event_id, invitees_max, 1)?;
+
+            let email_invitees: Vec<EventInvitee> = email_invites
+                .into_iter()
+                .map(|invite| EventInvitee::from_email_invite(invite, settings))
+                .collect();
+
+            let loaded_email_invites_count = email_invitees.len() as i64;
+            invitees_truncated =
+                invitees_truncated || (total_email_invites_count > loaded_email_invites_count);
+
+            invitees.extend(email_invitees);
+        }
 
         Ok((invitees, invitees_truncated))
     } else {
         Ok((vec![], true))
     }
+}
+
+async fn enrich_invitees_from_keycloak(
+    kc_admin_client: &Data<KeycloakAdminClient>,
+    invitees: Vec<EventInvitee>,
+) -> Vec<EventInvitee> {
+    let invitee_mapping_futures = invitees.into_iter().map(|invitee| async move {
+        if let EventInviteeProfile::Email(profile_details) = invitee.profile {
+            let user_for_email = kc_admin_client
+                .get_user_for_email(profile_details.email.as_ref())
+                .await
+                .unwrap_or_default();
+
+            if let Some(user) = user_for_email {
+                let profile_details = UnregisteredUser {
+                    email: profile_details.email,
+                    firstname: user.first_name,
+                    lastname: user.last_name,
+                    avatar_url: profile_details.avatar_url,
+                };
+                EventInvitee {
+                    profile: EventInviteeProfile::Unregistered(profile_details),
+                    ..invitee
+                }
+            } else {
+                EventInvitee {
+                    profile: EventInviteeProfile::Email(profile_details),
+                    ..invitee
+                }
+            }
+        } else {
+            invitee
+        }
+    });
+    futures::future::join_all(invitee_mapping_futures).await
 }
 
 fn recurrence_array_to_string(recurrence_pattern: Vec<String>) -> Option<String> {
@@ -1734,7 +1895,7 @@ mod tests {
             },
             invitees_truncated: false,
             invitees: vec![EventInvitee {
-                profile: user_profile,
+                profile: EventInviteeProfile::Registered(user_profile),
                 status: EventInviteStatus::Accepted,
             }],
             is_time_independent: false,
@@ -1788,6 +1949,7 @@ mod tests {
                 "invitees": [
                     {
                         "profile": {
+                            "kind": "registered",
                             "id": "00000000-0000-0000-0000-000000000000",
                             "email": "test@example.org",
                             "title": "",
@@ -1850,7 +2012,7 @@ mod tests {
             },
             invitees_truncated: false,
             invitees: vec![EventInvitee {
-                profile: user_profile,
+                profile: EventInviteeProfile::Registered(user_profile),
                 status: EventInviteStatus::Accepted,
             }],
             is_time_independent: true,
@@ -1898,6 +2060,7 @@ mod tests {
                 "invitees": [
                     {
                         "profile": {
+                            "kind": "registered",
                             "id": "00000000-0000-0000-0000-000000000000",
                             "email": "test@example.org",
                             "title": "",

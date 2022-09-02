@@ -3,6 +3,7 @@ use super::{
     EventRoomInfo, EventStatus, EventType, InstanceId, LOCAL_DT_FORMAT,
 };
 use crate::api::v1::cursor::Cursor;
+use crate::api::v1::events::enrich_invitees_from_keycloak;
 use crate::api::v1::response::{ApiError, NoContent};
 use crate::api::v1::users::PublicUserProfile;
 use crate::api::v1::util::{GetUserProfilesBatched, UserProfilesBatch};
@@ -17,6 +18,7 @@ use db_storage::events::{
     UpdateEventException,
 };
 use db_storage::users::User;
+use keycloak_admin::KeycloakAdminClient;
 use rrule::RRuleSet;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -85,10 +87,17 @@ struct GetEventInstancesCursorData {
     page: i64,
 }
 
+struct GetPaginatedEventInstancesData {
+    instances: Vec<EventInstance>,
+    before: Option<String>,
+    after: Option<String>,
+}
+
 #[get("/events/{event_id}/instances")]
 pub async fn get_event_instances(
     settings: SharedSettingsActix,
     db: Data<Db>,
+    kc_admin_client: Data<KeycloakAdminClient>,
     current_user: ReqData<User>,
     event_id: Path<EventId>,
     query: Query<GetEventInstancesQuery>,
@@ -109,85 +118,114 @@ pub async fn get_event_instances(
     let skip = per_page as usize;
     let offset = (page - 1) as usize;
 
-    crate::block(move || {
-        let conn = db.get_conn()?;
+    let kc_admin_client_ref = &kc_admin_client;
 
-        let (event, invite, room, sip_config, is_favorite) =
-            Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
+    let instances_data = crate::block(
+        move || -> Result<GetPaginatedEventInstancesData, ApiError> {
+            let conn = db.get_conn()?;
 
-        let (invitees, invitees_truncated) =
-            super::get_invitees_for_event(&settings, &conn, event.id, invitees_max)?;
+            let (event, invite, room, sip_config, is_favorite) =
+                Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
 
-        let invite_status = invite
-            .map(|inv| inv.status)
-            .unwrap_or(EventInviteStatus::Accepted);
+            let (invitees, invitees_truncated) =
+                super::get_invitees_for_event(&settings, &conn, event.id, invitees_max)?;
 
-        let rruleset = build_rruleset(&event)?;
+            let invite_status = invite
+                .map(|inv| inv.status)
+                .unwrap_or(EventInviteStatus::Accepted);
 
-        // limit of how far into the future we calculate instances (40 years)
-        let max_dt = Utc::now().with_timezone(&rruleset.dt_start.timezone())
-            + chrono::Duration::weeks(12 * 40);
+            let rruleset = build_rruleset(&event)?;
 
-        let mut iter: Box<dyn Iterator<Item = DateTime<Tz>>> =
-            Box::new(rruleset.into_iter().skip_while(move |&dt| dt > max_dt));
+            // limit of how far into the future we calculate instances (40 years)
+            let max_dt = Utc::now().with_timezone(&rruleset.dt_start.timezone())
+                + chrono::Duration::weeks(12 * 40);
 
-        if let Some(time_min) = time_min {
-            iter = Box::new(iter.skip_while(move |&dt| dt <= time_min));
-        }
+            let mut iter: Box<dyn Iterator<Item = DateTime<Tz>>> =
+                Box::new(rruleset.into_iter().skip_while(move |&dt| dt > max_dt));
 
-        if let Some(time_max) = time_max {
-            iter = Box::new(iter.skip_while(move |&dt| dt >= time_max));
-        }
+            if let Some(time_min) = time_min {
+                iter = Box::new(iter.skip_while(move |&dt| dt <= time_min));
+            }
 
-        let datetimes: Vec<DateTime<Utc>> = iter
-            .skip(skip * offset)
-            .take(skip)
-            .map(|dt| dt.with_timezone(&Utc))
-            .collect();
+            if let Some(time_max) = time_max {
+                iter = Box::new(iter.skip_while(move |&dt| dt >= time_max));
+            }
 
-        let exceptions = EventException::get_all_for_event(&conn, event_id, &datetimes)?;
+            let datetimes: Vec<DateTime<Utc>> = iter
+                .skip(skip * offset)
+                .take(skip)
+                .map(|dt| dt.with_timezone(&Utc))
+                .collect();
 
-        let users = GetUserProfilesBatched::new()
-            .add(&event)
-            .add(&exceptions)
-            .fetch(&settings, &conn)?;
+            let exceptions = EventException::get_all_for_event(&conn, event_id, &datetimes)?;
 
-        let room = EventRoomInfo::from_room(&settings, room, sip_config);
+            let users = GetUserProfilesBatched::new()
+                .add(&event)
+                .add(&exceptions)
+                .fetch(&settings, &conn)?;
 
-        let can_edit = can_edit(&event, &current_user);
+            let room = EventRoomInfo::from_room(&settings, room, sip_config);
 
-        let mut exceptions = exceptions.into_iter().peekable();
+            let can_edit = can_edit(&event, &current_user);
 
-        let mut instances = vec![];
+            let mut exceptions = exceptions.into_iter().peekable();
 
-        for datetime in datetimes {
-            let exception = exceptions.next_if(|exception| exception.exception_date == datetime);
+            let mut instances = vec![];
 
-            let instance = create_event_instance(
-                &users,
-                event.clone(),
-                invite_status,
-                is_favorite,
-                exception,
-                room.clone(),
-                InstanceId(datetime),
-                invitees.clone(),
-                invitees_truncated,
-                can_edit,
-            )?;
+            for datetime in datetimes {
+                let exception =
+                    exceptions.next_if(|exception| exception.exception_date == datetime);
 
-            instances.push(instance);
-        }
+                let instance = create_event_instance(
+                    &users,
+                    event.clone(),
+                    invite_status,
+                    is_favorite,
+                    exception,
+                    room.clone(),
+                    InstanceId(datetime),
+                    invitees.clone(),
+                    invitees_truncated,
+                    can_edit,
+                )?;
 
-        let next_cursor = if !instances.is_empty() {
-            Some(Cursor(GetEventInstancesCursorData { page: page + 1 }).to_base64())
-        } else {
-            None
-        };
+                instances.push(instance);
+            }
 
-        Ok(ApiResponse::new(instances).with_cursor_pagination(None, next_cursor))
-    })
-    .await?
+            let next_cursor = if !instances.is_empty() {
+                Some(Cursor(GetEventInstancesCursorData { page: page + 1 }).to_base64())
+            } else {
+                None
+            };
+
+            Ok(GetPaginatedEventInstancesData {
+                instances,
+                before: None,
+                after: next_cursor,
+            })
+        },
+    )
+    .await??;
+
+    // Enrich the invitees for the first instance only and reuse them as all instances have the same invitees.
+    let event_instances = if let Some(instance) = instances_data.instances.first() {
+        let enriched_invitees =
+            enrich_invitees_from_keycloak(kc_admin_client_ref, instance.invitees.clone()).await;
+
+        instances_data
+            .instances
+            .into_iter()
+            .map(|instance| EventInstance {
+                invitees: enriched_invitees.clone(),
+                ..instance
+            })
+            .collect()
+    } else {
+        instances_data.instances
+    };
+
+    Ok(ApiResponse::new(event_instances)
+        .with_cursor_pagination(instances_data.before, instances_data.after))
 }
 
 #[derive(Deserialize)]
@@ -209,6 +247,7 @@ pub struct GetEventInstanceQuery {
 pub async fn get_event_instance(
     settings: SharedSettingsActix,
     db: Data<Db>,
+    kc_admin_client: Data<KeycloakAdminClient>,
     current_user: ReqData<User>,
     path: Path<GetEventInstancePath>,
     query: Query<GetEventInstanceQuery>,
@@ -220,7 +259,7 @@ pub async fn get_event_instance(
     } = path.into_inner();
     let query = query.into_inner();
 
-    crate::block(move || {
+    let event_instance = crate::block(move || -> Result<EventInstance, ApiError> {
         let conn = db.get_conn()?;
 
         let (event, invite, room, sip_config, is_favorite) =
@@ -256,9 +295,16 @@ pub async fn get_event_instance(
             can_edit,
         )?;
 
-        Ok(ApiResponse::new(event_instance))
+        Ok(event_instance)
     })
-    .await?
+    .await??;
+
+    let event_instance = EventInstance {
+        invitees: enrich_invitees_from_keycloak(&kc_admin_client, event_instance.invitees).await,
+        ..event_instance
+    };
+
+    Ok(ApiResponse::new(event_instance))
 }
 
 /// Path parameters for the `PATCH /events/{event_id}/{instance_id}` endpoint
@@ -321,6 +367,7 @@ impl PatchEventInstanceBody {
 pub async fn patch_event_instance(
     settings: SharedSettingsActix,
     db: Data<Db>,
+    kc_admin_client: Data<KeycloakAdminClient>,
     current_user: ReqData<User>,
     path: Path<PatchEventInstancePath>,
     query: Query<PatchEventInstanceQuery>,
@@ -340,7 +387,7 @@ pub async fn patch_event_instance(
         instance_id,
     } = path.into_inner();
 
-    crate::block(move || {
+    let event_instance = crate::block(move || -> Result<EventInstance, ApiError> {
         let conn = db.get_conn()?;
 
         let (event, invite, room, sip_config, is_favorite) =
@@ -451,9 +498,16 @@ pub async fn patch_event_instance(
             can_edit,
         )?;
 
-        Ok(Either::Left(ApiResponse::new(event_instance)))
+        Ok(event_instance)
     })
-    .await?
+    .await??;
+
+    let event_instance = EventInstance {
+        invitees: enrich_invitees_from_keycloak(&kc_admin_client, event_instance.invitees).await,
+        ..event_instance
+    };
+
+    Ok(Either::Left(ApiResponse::new(event_instance)))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -590,6 +644,8 @@ fn verify_recurrence_date(
 
 #[cfg(test)]
 mod tests {
+    use crate::api::v1::events::EventInviteeProfile;
+
     use super::*;
     use db_storage::events::TimeZone;
     use db_storage::rooms::RoomId;
@@ -633,7 +689,7 @@ mod tests {
             },
             invitees_truncated: false,
             invitees: vec![EventInvitee {
-                profile: user_profile,
+                profile: EventInviteeProfile::Registered(user_profile),
                 status: EventInviteStatus::Accepted,
             }],
             is_all_day: false,
@@ -687,6 +743,7 @@ mod tests {
                 "invitees": [
                     {
                         "profile": {
+                            "kind": "registered",
                             "id": "00000000-0000-0000-0000-000000000000",
                             "email": "test@example.org",
                             "title": "",

@@ -45,7 +45,7 @@ impl PublicUserProfile {
     }
 }
 
-fn email_to_libravatar_url(libravatar_url: &str, email: &str) -> String {
+pub fn email_to_libravatar_url(libravatar_url: &str, email: &str) -> String {
     format!("{}{:x}", libravatar_url, md5::compute(email))
 }
 
@@ -220,7 +220,7 @@ pub enum UserFindResponseItem {
     Unregistered(UnregisteredUser),
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct UnregisteredUser {
     pub email: String,
     pub firstname: String,

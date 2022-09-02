@@ -2,7 +2,7 @@ use super::Result;
 use crate::KeycloakAdminClient;
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: String,
@@ -58,5 +58,24 @@ impl KeycloakAdminClient {
         let found_users: Vec<User> = response.json().await?;
 
         Ok(found_users.iter().any(|user| user.email == email))
+    }
+
+    /// Query keycloak to get the first user that matches the given email
+    pub async fn get_user_for_email(&self, email: &str) -> Result<Option<User>> {
+        let url = self.url(["admin", "realms", &self.realm, "users"])?;
+
+        let query = VerifyEmailQuery { email, exact: true };
+
+        let response = self
+            .send_authorized(move |c| c.get(url.clone()).query(&query))
+            .await?;
+
+        let found_users: Vec<User> = response.json().await?;
+        let first_matching_user = found_users.iter().find(|user| user.email == email);
+
+        if let Some(user) = first_matching_user {
+            return Ok(Some((*user).clone()));
+        }
+        Ok(None)
     }
 }
