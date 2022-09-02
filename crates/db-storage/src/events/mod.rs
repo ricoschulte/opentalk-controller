@@ -95,6 +95,28 @@ pub struct Event {
     pub recurrence_pattern: Option<String>,
 }
 
+impl Event {
+    /// Returns the ends_at value of the first occurrence of the event
+    pub fn ends_at_of_first_occurrence(&self) -> Option<(DateTime<Utc>, TimeZone)> {
+        if self.is_recurring.unwrap_or_default() {
+            // Recurring events have the last occurrence of the recurrence saved in the ends_at fields
+            // So we get the starts_at_dt and add the duration_secs field to it
+            if let (Some(starts_at_dt), Some(dur), Some(tz)) =
+                (self.starts_at, self.duration_secs, self.ends_at_tz)
+            {
+                Some((starts_at_dt + chrono::Duration::seconds(i64::from(dur)), tz))
+            } else {
+                None
+            }
+        } else if let (Some(dt), Some(tz)) = (self.ends_at, self.ends_at_tz) {
+            // Non recurring events just directly use the ends_at field from the db
+            Some((dt, tz))
+        } else {
+            None
+        }
+    }
+}
+
 impl HasUsers for &Event {
     fn populate(self, dst: &mut Vec<UserId>) {
         dst.push(self.created_by);

@@ -134,29 +134,11 @@ impl DateTimeTz {
     }
 
     /// Creates the `ends_at` DateTimeTz from an event
-    fn ends_at_of(event: &Event) -> Option<Self> {
-        if event.is_recurring.unwrap_or_default() {
-            // Recurring events have the last occurrence of the recurrence saved in the ends_at fields
-            // So we get the starts_at_dt and add the duration_secs field to it
-            if let (Some(starts_at_dt), Some(dur), Some(tz)) =
-                (event.starts_at, event.duration_secs, event.ends_at_tz)
-            {
-                Some(Self {
-                    datetime: starts_at_dt + chrono::Duration::seconds(i64::from(dur)),
-                    timezone: tz,
-                })
-            } else {
-                None
-            }
-        } else if let (Some(dt), Some(tz)) = (event.ends_at, event.ends_at_tz) {
-            // Non recurring events just directly use the ends_at field from the db
-            Some(Self {
-                datetime: dt,
-                timezone: tz,
-            })
-        } else {
-            None
-        }
+    pub fn ends_at_of(event: &Event) -> Option<Self> {
+        event.ends_at_of_first_occurrence().map(|(dt, tz)| Self {
+            datetime: dt,
+            timezone: tz,
+        })
     }
 
     /// Combine the inner UTC time with the inner timezone
