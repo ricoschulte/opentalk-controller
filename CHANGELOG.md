@@ -1,3 +1,7 @@
+# Unreleased
+
+- controller: Fix pagination serialization (#217)
+
 # 1.0.0-rc.4 (29 August, 2022)
 
 ### Added
