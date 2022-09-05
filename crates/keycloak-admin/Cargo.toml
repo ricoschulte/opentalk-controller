@@ -2,9 +2,12 @@
 name = "keycloak-admin"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [dependencies]
-reqwest = { version = "0.11", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.11", default-features = false, features = [
+    "rustls-tls",
+] }
 tokio = "1"
 url = "2"
 serde = { version = "1", features = ["derive"] }

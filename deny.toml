@@ -45,7 +45,7 @@ ignore = [
     # https://github.com/tokio-rs/tracing/pull/2040
     # https://github.com/colin-kiegel/rust-pretty-assertions/pull/102
     "RUSTSEC-2021-0139",
-    ]
+]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
 # will still output a note when they are encountered.
@@ -127,7 +127,7 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 [licenses.private]
 # If true, ignores workspace crates that aren't published, or are only
 # published to private registries
-ignore = false
+ignore = true
 # One or more private registries that you might publish crates to, if a crate
 # is only published to private registries, and ignore is true, the crate will
 # not have its license(s) checked
@@ -154,18 +154,15 @@ deny = []
 # Certain crates/versions that will be skipped when doing duplicate detection.
 skip = [
     { name = "cfg-if", version = "=0.1.10" },
+    { name = "ahash", version = "=0.7.6" },
     { name = "nom", version = "=5.1.2" },
     { name = "uuid", version = "=0.6.5" },
-    { name = "itoa", version = "=0.4.8" },
     { name = "time", version = "=0.1.44" },
     { name = "itertools", version = "=0.9" },
     { name = "num-bigint", version = "=0.4.3" },
-    { name = "parking_lot", version = "=0.11.2" },
-    { name = "parking_lot_core", version = "=0.8.5" },
     { name = "ordered-float", version = "=1.1.1" },
     { name = "sha1", version = "=0.6.1" },
     { name = "spin", version = "=0.5.2" },
-    { name = "tokio-util", version = "=0.6.10" },
     { name = "wasi", version = "=0.10.0+wasi-snapshot-preview1" },
     { name = "uuid", version = "=1.1.2" },
     { name = "hashbrown", version = "=0.11.2" },
