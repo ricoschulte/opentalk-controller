@@ -2,6 +2,7 @@
 name = "lapin-pool"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [dependencies]
 lapin = { version = "2", default-features = false }
