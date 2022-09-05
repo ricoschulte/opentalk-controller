@@ -1,6 +1,7 @@
 # Unreleased
 
 - controller: Fix pagination serialization (#217)
+- janus-media: added target and type to some error responses (#219)
 
 # 1.0.0-rc.4 (29 August, 2022)
 
