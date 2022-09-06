@@ -4,9 +4,14 @@ use database::DbConnection;
 use database::Result;
 use db_storage::users::{User, UserId};
 use db_storage::utils::HasUsers;
+use serde::de;
+use serde::de::Visitor;
 use serde::Deserialize;
 use serde::Deserializer;
 use std::collections::HashMap;
+use std::fmt;
+use std::marker::PhantomData;
+use std::str::FromStr;
 
 /// Utility to fetch user profiles batched
 ///
@@ -101,4 +106,38 @@ mod test {
             }
         );
     }
+}
+
+pub fn comma_separated<'de, V, T, D>(deserializer: D) -> Result<V, D::Error>
+where
+    V: FromIterator<T>,
+    T: FromStr,
+    T::Err: fmt::Display,
+    D: Deserializer<'de>,
+{
+    struct CommaSeparated<V, T>(PhantomData<(T, V)>);
+
+    impl<'de, V, T> Visitor<'de> for CommaSeparated<V, T>
+    where
+        V: FromIterator<T>,
+        T: FromStr,
+        T::Err: fmt::Display,
+    {
+        type Value = V;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("string containing comma-separated elements")
+        }
+
+        fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            let iter = s.split(',').map(FromStr::from_str);
+            iter.collect::<Result<_, _>>().map_err(de::Error::custom)
+        }
+    }
+
+    let visitor = CommaSeparated(PhantomData);
+    deserializer.deserialize_str(visitor)
 }
