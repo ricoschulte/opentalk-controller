@@ -1,6 +1,7 @@
 //! Breakout room module
 
 use self::storage::BreakoutConfig;
+use super::control::ParticipationKind;
 use crate::api::signaling::SignalingRoomId;
 use crate::prelude::*;
 use actix_http::ws::CloseCode;
@@ -43,6 +44,9 @@ pub struct ParticipantInOtherRoom {
     pub breakout_room: Option<BreakoutRoomId>,
     pub id: ParticipantId,
     pub display_name: String,
+    pub role: Role,
+    pub avatar_url: Option<String>,
+    pub participation_kind: ParticipationKind,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -145,6 +149,9 @@ impl SignalingModule for BreakoutRooms {
                             breakout_room: self.breakout_room,
                             id: self.id,
                             display_name: control_data.display_name.clone(),
+                            role: control_data.role,
+                            avatar_url: control_data.avatar_url.clone(),
+                            participation_kind: control_data.participation_kind,
                         }),
                     );
 
@@ -258,22 +265,25 @@ impl BreakoutRooms {
             control::storage::get_all_participants(ctx.redis_conn(), room).await?;
 
         for participant in breakout_room_participants {
-            let res = control::storage::get_attribute(
-                ctx.redis_conn(),
-                room,
-                participant,
-                "display_name",
-            )
-            .await;
+            let res = control::storage::AttrPipeline::new(room, participant)
+                .get("display_name")
+                .get("role")
+                .get("avatar_url")
+                .get("kind")
+                .query_async(ctx.redis_conn())
+                .await;
 
             match res {
-                Ok(display_name) => list.push(ParticipantInOtherRoom {
+                Ok((display_name, role, avatar_url, kind)) => list.push(ParticipantInOtherRoom {
                     breakout_room: room.1,
                     id: participant,
                     display_name,
+                    role,
+                    avatar_url,
+                    participation_kind: kind,
                 }),
                 Err(e) => log::error!(
-                    "Failed to fetch display_name from {} in {}, {:?}",
+                    "Failed to fetch participant data from {} in {}, {:?}",
                     participant,
                     room,
                     e

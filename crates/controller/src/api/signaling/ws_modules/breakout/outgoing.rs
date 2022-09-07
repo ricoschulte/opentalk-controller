@@ -31,8 +31,11 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
+    use crate::api::signaling::{prelude::control::ParticipationKind, Role};
+
     use super::*;
     use controller_shared::ParticipantId;
+    use test_util::assert_eq_json;
     use uuid::Uuid;
 
     #[test]
@@ -78,16 +81,22 @@ mod test {
 
     #[test]
     fn joined() {
-        let expected = r#"{"message":"joined","breakout_room":"00000000-0000-0000-0000-000000000000","id":"00000000-0000-0000-0000-000000000000","display_name":"test"}"#;
-
-        let produced = serde_json::to_string(&Message::Joined(ParticipantInOtherRoom {
+        assert_eq_json!(Message::Joined(ParticipantInOtherRoom {
             breakout_room: Some(BreakoutRoomId::nil()),
             id: ParticipantId::nil(),
             display_name: "test".into(),
-        }))
-        .unwrap();
-
-        assert_eq!(expected, produced);
+            role: Role::Moderator,
+            avatar_url: Some("example.org/avatar.png".into()),
+            participation_kind: ParticipationKind::User
+        }), {
+            "message": "joined",
+            "breakout_room": "00000000-0000-0000-0000-000000000000",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "display_name": "test",
+            "role": "moderator",
+            "avatar_url": "example.org/avatar.png",
+            "participation_kind": "user",
+        });
     }
 
     #[test]
