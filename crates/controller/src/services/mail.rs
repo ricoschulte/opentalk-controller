@@ -20,7 +20,7 @@ fn to_event(
 ) -> mail_worker_proto::v1::Event {
     let start_time: Option<v1::Time> = event.starts_at.zip(event.starts_at_tz).map(Into::into);
 
-    let end_time: Option<v1::Time> = event.ends_at.zip(event.ends_at_tz).map(Into::into);
+    let end_time: Option<v1::Time> = event.ends_at_of_first_occurrence().map(Into::into);
 
     let call_in =
         if let Some((call_in_settings, sip_config)) = settings.call_in.as_ref().zip(sip.as_ref()) {

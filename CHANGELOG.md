@@ -1,5 +1,8 @@
 # Unreleased
 
+### Fixed
+
+- controller: Fixed a bug where a wrong `ends_at` value for reoccurring events was sent to the mail worker
 - controller: Fix pagination serialization (#217)
 - janus-media: added target and type to some error responses (#219)
 
