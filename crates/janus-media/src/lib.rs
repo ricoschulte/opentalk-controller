@@ -232,15 +232,16 @@ impl SignalingModule for Media {
                         e
                     );
                     ctx.ws_send(outgoing::Message::Error(
-                        outgoing::Error::InvalidRequestOffer,
+                        outgoing::Error::InvalidRequestOffer(subscribe.target.into()),
                     ));
                 }
             }
-            Event::WsMessage(incoming::Message::Configure(target)) => {
-                if let Err(e) = self.handle_configure(target).await {
+            Event::WsMessage(incoming::Message::Configure(configure)) => {
+                let target = configure.target;
+                if let Err(e) = self.handle_configure(configure).await {
                     log::error!("Failed to handle configure request {:?}", e);
                     ctx.ws_send(outgoing::Message::Error(
-                        outgoing::Error::InvalidConfigureRequest,
+                        outgoing::Error::InvalidConfigureRequest(target.into()),
                     ));
                 }
             }

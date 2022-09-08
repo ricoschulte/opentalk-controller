@@ -96,7 +96,7 @@ pub struct TargetedCandidate {
     pub target: Target,
 }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
+#[derive(Debug, Deserialize, Clone, Copy, PartialEq)]
 pub struct Target {
     /// The target of this message.
     ///

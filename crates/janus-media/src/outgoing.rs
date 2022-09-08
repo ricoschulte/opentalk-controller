@@ -1,3 +1,4 @@
+use crate::incoming::Target;
 use crate::mcu::{self, MediaSessionKey, MediaSessionType};
 use crate::rabbitmq;
 use controller_shared::ParticipantId;
@@ -86,6 +87,15 @@ impl From<MediaSessionKey> for Source {
     }
 }
 
+impl From<Target> for Source {
+    fn from(target: Target) -> Self {
+        Self {
+            source: target.target,
+            media_session_type: target.media_session_type,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, PartialEq)]
 pub struct Media {
     #[serde(flatten)]
@@ -131,8 +141,8 @@ pub enum Error {
     HandleSdpAnswer,
     InvalidCandidate,
     InvalidEndOfCandidates,
-    InvalidRequestOffer,
-    InvalidConfigureRequest,
+    InvalidRequestOffer(Source),
+    InvalidConfigureRequest(Source),
     PermissionDenied,
 }
 
@@ -318,12 +328,18 @@ mod test {
                 "{\"error\":\"invalid_end_of_candidates\"}",
             ),
             (
-                Error::InvalidRequestOffer,
-                "{\"error\":\"invalid_request_offer\"}",
+                Error::InvalidRequestOffer(Source {
+                    source: ParticipantId::nil(),
+                    media_session_type: MediaSessionType::Video,
+                }),
+                r#"{"error":"invalid_request_offer","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#,
             ),
             (
-                Error::InvalidConfigureRequest,
-                "{\"error\":\"invalid_configure_request\"}",
+                Error::InvalidConfigureRequest(Source {
+                    source: ParticipantId::nil(),
+                    media_session_type: MediaSessionType::Video,
+                }),
+                r#"{"error":"invalid_configure_request","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#,
             ),
         ];
 
