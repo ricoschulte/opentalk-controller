@@ -282,6 +282,9 @@ impl Controller {
         // Add default modules
         signaling.add_module::<BreakoutRooms>(());
         signaling.add_module::<ModerationModule>(());
+        if let Some(queue) = settings.rabbit_mq.recording_task_queue.clone() {
+            signaling.add_module::<recording::Recording>(recording::RecordingParams { queue });
+        }
 
         Ok(Self {
             startup_settings: settings,
@@ -552,7 +555,8 @@ fn v1_scope(
                 .wrap(api::v1::middleware::service_auth::ServiceAuth::new(
                     oidc_ctx.clone(),
                 ))
-                .service(api::v1::services::call_in::services()),
+                .service(api::v1::services::call_in::services())
+                .service(api::v1::services::recording::services()),
         )
         .service(
             // empty scope to differentiate between auth endpoints

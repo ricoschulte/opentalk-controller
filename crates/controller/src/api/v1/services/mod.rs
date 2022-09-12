@@ -9,6 +9,7 @@ use futures::future::Either;
 use std::rc::Rc;
 
 pub mod call_in;
+pub mod recording;
 
 /// Middleware factory for [`RequiredRealmRoleMiddleware`]
 struct RequiredRealmRole {

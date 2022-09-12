@@ -462,7 +462,9 @@ impl Runner {
                     Role::User
                 }
             }
-            api::Participant::Guest | api::Participant::Sip => Role::Guest,
+            api::Participant::Guest | api::Participant::Sip | api::Participant::Recorder => {
+                Role::Guest
+            }
         };
 
         Builder {
@@ -657,12 +659,19 @@ impl Runner {
                         .await;
                     }
                     RunnerState::Joined => {
-                        self.rabbitmq_publish_control(
-                            Timestamp::now(),
-                            None,
-                            rabbitmq::Message::Left(self.id),
-                        )
-                        .await;
+                        // Skip sending the left message.
+                        // TODO:(kbalt): The left message is the only message not sent by the recorder, all other
+                        // messages are currently ignored by filtering in the `build_participant` function
+                        // It'd might be nicer to have a "visibility" check before sending any "joined"/"updated"/"left"
+                        // message
+                        if !matches!(&self.participant, api::Participant::Recorder) {
+                            self.rabbitmq_publish_control(
+                                Timestamp::now(),
+                                None,
+                                rabbitmq::Message::Left(self.id),
+                            )
+                            .await;
+                        }
                     }
                 }
             }
@@ -879,6 +888,7 @@ impl Runner {
                         (trim_display_name(join.display_name), avatar_url)
                     }
                     api::Participant::Guest => (trim_display_name(join.display_name), None),
+                    api::Participant::Recorder => (join.display_name, None),
                     api::Participant::Sip => {
                         if let Some(call_in) = self.settings.load().call_in.as_ref() {
                             let display_name = sip::display_name(
@@ -912,6 +922,7 @@ impl Runner {
                         api::Participant::User(_) => ParticipationKind::User,
                         api::Participant::Guest => ParticipationKind::Guest,
                         api::Participant::Sip => ParticipationKind::Sip,
+                        api::Participant::Recorder => ParticipationKind::Recorder,
                     },
                     joined_at: timestamp,
                     hand_is_up: false,
@@ -921,7 +932,12 @@ impl Runner {
 
                 self.metrics.increment_participants_count(&self.participant);
 
-                let is_moderator = matches!(self.role, Role::Moderator);
+                // Allow moderators and the recorder to skip the waiting room
+                let skip_waiting_room = matches!(self.role, Role::Moderator)
+                    || matches!(
+                        &control_data.participation_kind,
+                        ParticipationKind::Recorder
+                    );
 
                 let waiting_room_enabled = moderation::storage::init_waiting_room_key(
                     &mut self.redis_conn,
@@ -930,7 +946,7 @@ impl Runner {
                 )
                 .await?;
 
-                if !is_moderator && waiting_room_enabled {
+                if !skip_waiting_room && waiting_room_enabled {
                     // Waiting room is enabled; join the waiting room
                     self.join_waiting_room(timestamp, control_data).await?;
                 } else {
@@ -1169,7 +1185,8 @@ impl Runner {
             }
 
             match self.build_participant(id).await {
-                Ok(participant) => participants.push(participant),
+                Ok(Some(participant)) => participants.push(participant),
+                Ok(None) => { /* ignore invisible participants */ }
                 Err(e) => log::error!("Failed to build participant {}, {}", id, e),
             };
         }
@@ -1258,6 +1275,9 @@ impl Runner {
             api::Participant::Sip => {
                 pipe_attrs.set("kind", ParticipationKind::Sip);
             }
+            api::Participant::Recorder => {
+                pipe_attrs.set("kind", ParticipationKind::Recorder);
+            }
         }
 
         pipe_attrs
@@ -1273,7 +1293,11 @@ impl Runner {
         Ok(())
     }
 
-    async fn build_participant(&mut self, id: ParticipantId) -> Result<Participant> {
+    /// Fetch all control related data for the given participant id, building a "base" for a participant.
+    ///
+    /// If the participant is an invisible service (like the recorder) and shouldn't be shown to other participants
+    /// this function will return Ok(None)
+    async fn build_participant(&mut self, id: ParticipantId) -> Result<Option<Participant>> {
         let mut participant = outgoing::Participant {
             id,
             module_data: Default::default(),
@@ -1281,13 +1305,18 @@ impl Runner {
 
         let control_data = ControlData::from_redis(&mut self.redis_conn, self.room_id, id).await?;
 
+        // Do not build participants for invisible services
+        if matches!(control_data.participation_kind, ParticipationKind::Recorder) {
+            return Ok(None);
+        };
+
         participant.module_data.insert(
             NAMESPACE,
             serde_json::to_value(control_data)
                 .expect("Failed to convert ControlData to serde_json::Value"),
         );
 
-        Ok(participant)
+        Ok(Some(participant))
     }
 
     #[tracing::instrument(skip(self, delivery), fields(id = %self.id))]
@@ -1387,7 +1416,11 @@ impl Runner {
                     return Ok(());
                 }
 
-                let mut participant = self.build_participant(id).await?;
+                let mut participant = if let Some(participant) = self.build_participant(id).await? {
+                    participant
+                } else {
+                    return Ok(());
+                };
 
                 let actions = self
                     .handle_module_broadcast_event(
@@ -1432,7 +1465,12 @@ impl Runner {
                     return Ok(());
                 }
 
-                let mut participant = self.build_participant(id).await?;
+                let mut participant = if let Some(participant) = self.build_participant(id).await? {
+                    participant
+                } else {
+                    log::warn!("ignoring update of invisible participant");
+                    return Ok(());
+                };
 
                 let actions = self
                     .handle_module_broadcast_event(
@@ -1491,7 +1529,9 @@ impl Runner {
                 } else {
                     match &self.participant {
                         api::Participant::User(_) => Role::User,
-                        api::Participant::Guest | api::Participant::Sip => Role::Guest,
+                        api::Participant::Guest
+                        | api::Participant::Sip
+                        | api::Participant::Recorder => Role::Guest,
                     }
                 };
 
@@ -1729,7 +1769,7 @@ impl Runner {
         for publish in rabbitmq_publish {
             self.rabbitmq_publish(
                 timestamp,
-                Some(&publish.exchange),
+                publish.exchange.as_deref(),
                 &publish.routing_key,
                 publish.message,
             )

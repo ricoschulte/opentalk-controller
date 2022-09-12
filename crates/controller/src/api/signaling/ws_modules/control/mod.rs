@@ -93,6 +93,7 @@ pub enum ParticipationKind {
     User,
     Guest,
     Sip,
+    Recorder,
 }
 
 impl_to_redis_args_se!(ParticipationKind);

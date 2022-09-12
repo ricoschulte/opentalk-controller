@@ -18,6 +18,7 @@ pub enum Participant<U> {
     User(U),
     Guest,
     Sip,
+    Recorder,
 }
 
 impl<U> Participant<U> {
@@ -26,6 +27,7 @@ impl<U> Participant<U> {
             Participant::User(_) => "user",
             Participant::Guest => "guest",
             Participant::Sip => "sip",
+            Participant::Recorder => "recorder",
         }
     }
 }
@@ -49,6 +51,7 @@ impl Participant<User> {
             Participant::User(user) => Some(user.id),
             Participant::Guest => None,
             Participant::Sip => None,
+            Participant::Recorder => None,
         }
     }
 }

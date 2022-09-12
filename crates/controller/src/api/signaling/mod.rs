@@ -74,7 +74,7 @@ pub mod prelude {
         DestroyContext, Event, InitContext, ModuleContext, SignalingModule, SignalingModules,
         SignalingProtocols,
     };
-    pub use super::ws_modules::{breakout, control, moderation};
+    pub use super::ws_modules::{breakout, control, moderation, recording};
     pub use super::{Role, SignalingRoomId, Timestamp};
     pub use breakout::BreakoutRoomId;
 }
@@ -105,6 +105,10 @@ impl SignalingRoomId {
 
     pub const fn room_id(&self) -> RoomId {
         self.0
+    }
+
+    pub const fn breakout_room_id(&self) -> Option<BreakoutRoomId> {
+        self.1
     }
 }
 

@@ -265,9 +265,13 @@ pub struct RabbitMqConfig {
     pub min_connections: u32,
     #[serde(default = "rabbitmq_default_max_channels")]
     pub max_channels_per_connection: u32,
-    #[serde(default)]
     /// Mail sending is disabled when this is None
+    #[serde(default)]
     pub mail_task_queue: Option<String>,
+
+    /// Recording is disabled if this isn't set
+    #[serde(default)]
+    pub recording_task_queue: Option<String>,
 }
 
 impl Default for RabbitMqConfig {
@@ -277,6 +281,7 @@ impl Default for RabbitMqConfig {
             min_connections: rabbitmq_default_min_connections(),
             max_channels_per_connection: rabbitmq_default_max_channels(),
             mail_task_queue: None,
+            recording_task_queue: None,
         }
     }
 }

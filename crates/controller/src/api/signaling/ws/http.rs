@@ -90,6 +90,7 @@ pub(crate) async fn ws_service(
             Participant::User(user) => Participant::User(user.id),
             Participant::Guest => Participant::Guest,
             Participant::Sip => Participant::Sip,
+            Participant::Recorder => Participant::Recorder,
         },
         room: ticket_data.room,
         breakout_room: ticket_data.breakout_room,
@@ -283,6 +284,7 @@ async fn get_user_and_room_from_ticket_data(
             }
             Participant::Guest => Participant::Guest,
             Participant::Sip => Participant::Sip,
+            Participant::Recorder => Participant::Recorder,
         };
 
         let room = Room::get(&mut conn, room_id)?;
