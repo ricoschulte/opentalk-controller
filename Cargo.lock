@@ -1721,6 +1721,7 @@ dependencies = [
  "k3k-legal-vote",
  "k3k-polls",
  "k3k-protocol",
+ "k3k-spacedeck",
  "k3k-timer",
  "kustos",
 ]
@@ -1934,6 +1935,26 @@ dependencies = [
  "k3k-controller-shared",
  "k3k-db-storage",
  "serde",
+]
+
+[[package]]
+name = "k3k-spacedeck"
+version = "0.1.0"
+dependencies = [
+ "actix-rt",
+ "anyhow",
+ "bytes",
+ "chrono",
+ "k3k-controller-core",
+ "k3k-controller-shared",
+ "percent-encoding",
+ "rand",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "tokio",
+ "url",
 ]
 
 [[package]]

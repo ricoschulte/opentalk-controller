@@ -137,6 +137,11 @@ from_routing_key = "from-janus"
 # Etherpads api key
 #api_key = "secret"
 
+# Spacedeck configuration
+#[spacedeck]
+#url = "http://localhost:9666"
+#api_key = "secret"
+
 # Default/fallback values
 #[defaults]
 # Default language of a new user

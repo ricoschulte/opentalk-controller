@@ -16,6 +16,7 @@ async fn run() -> Result<()> {
         polls::register(&mut controller);
         protocol::register(&mut controller);
         timer::register(&mut controller);
+        spacedeck::register(&mut controller);
         controller.run().await?;
     }
 
