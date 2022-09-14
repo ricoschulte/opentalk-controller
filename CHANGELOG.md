@@ -4,6 +4,7 @@
 
 - protocol: added the `deselect_writer` action to revoke write access
 - controller: added the spacedeck module that allows participants to collaboratively edit a whiteboard
+- controller: Added a query parameter to the `GET /events` endpoint to allow filtering by `invite_status`
 
 ### Fixed
 

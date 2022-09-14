@@ -211,6 +211,7 @@ impl Event {
         conn: &DbConnection,
         user_id: UserId,
         only_favorites: bool,
+        invite_status_filter: Vec<EventInviteStatus>,
         time_min: Option<DateTime<Utc>>,
         time_max: Option<DateTime<Utc>>,
         cursor: Option<GetEventsCursor>,
@@ -305,6 +306,19 @@ impl Event {
 
         if only_favorites {
             query = query.filter(event_favorites::user_id.is_not_null());
+        }
+
+        if !invite_status_filter.is_empty() {
+            if invite_status_filter.contains(&EventInviteStatus::Accepted) {
+                // edge case to allow event creators to filter created events by 'accepted'
+                query = query.filter(
+                    event_invites::status
+                        .eq_any(invite_status_filter)
+                        .or(event_invites::status.is_null()),
+                );
+            } else {
+                query = query.filter(event_invites::status.eq_any(invite_status_filter));
+            }
         }
 
         let events_with_invite_and_room: Vec<(
@@ -582,7 +596,7 @@ impl UpdateEventException {
 }
 
 sql_enum!(
-    #[derive(Serialize)]
+    #[derive(Serialize, PartialEq)]
     #[serde(rename_all = "snake_case")]
     EventInviteStatus,
     "event_invite_status",
@@ -595,6 +609,20 @@ sql_enum!(
         Declined = b"declined",
     }
 );
+
+impl FromStr for EventInviteStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "pending" => Ok(Self::Pending),
+            "accepted" => Ok(Self::Accepted),
+            "tentative" => Ok(Self::Tentative),
+            "declined" => Ok(Self::Declined),
+            _ => Err(format!("unknown invite_status {s:?}")),
+        }
+    }
+}
 
 #[derive(Debug, Queryable, Identifiable, Associations)]
 #[table_name = "event_invites"]

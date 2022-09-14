@@ -6,6 +6,7 @@ use super::users::PublicUserProfile;
 use super::{ApiResponse, DefaultApiResult, PagePaginationQuery};
 use crate::api::v1::response::CODE_IGNORED_VALUE;
 use crate::api::v1::rooms::RoomsPoliciesBuilderExt;
+use crate::api::v1::util::comma_separated;
 use crate::api::v1::util::{deserialize_some, GetUserProfilesBatched};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
@@ -725,6 +726,11 @@ pub struct GetEventsQuery {
     #[serde(default)]
     favorites: bool,
 
+    /// Filter the events by invite status
+    #[serde(default)]
+    #[serde(deserialize_with = "comma_separated")]
+    invite_status: Vec<EventInviteStatus>,
+
     /// How many events to return per page
     per_page: Option<i64>,
 
@@ -794,6 +800,7 @@ pub async fn get_events(
             &conn,
             current_user.id,
             query.favorites,
+            query.invite_status,
             query.time_min,
             query.time_max,
             get_events_cursor,
