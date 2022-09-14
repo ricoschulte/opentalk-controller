@@ -1934,6 +1934,7 @@ dependencies = [
  "k3k-controller-core",
  "k3k-controller-shared",
  "k3k-db-storage",
+ "k3k-test-util",
  "serde",
 ]
 

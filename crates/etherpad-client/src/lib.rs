@@ -120,7 +120,7 @@ impl EtherpadClient {
     }
 
     pub async fn delete_group(&self, group_id: &str) -> Result<()> {
-        let mut url = self.base_url.join("api/1/deleteGroup")?;
+        let mut url = self.base_url.join("readSession/deleteGroup")?;
 
         url.query_pairs_mut()
             .append_pair("apikey", &self.api_key)
@@ -215,11 +215,50 @@ impl EtherpadClient {
 
         let response = verify_etherpad_response(response).await?;
 
-        let group_id = response
+        let session_id = response
             .get_str_data("sessionID")
             .context("Failed to call etherpad endpoint 'createSession'")?;
 
-        Ok(group_id.into())
+        Ok(session_id.into())
+    }
+
+    pub async fn create_read_session(
+        &self,
+        group_id: &str,
+        author_id: &str,
+        expires: i64,
+    ) -> Result<String> {
+        let mut url = self.base_url.join("readSession/createReadSession")?;
+
+        url.query_pairs_mut()
+            .append_pair("apikey", &self.api_key)
+            .append_pair("groupID", group_id)
+            .append_pair("authorID", author_id)
+            .append_pair("validUntil", &expires.to_string());
+
+        let response = self.client.get(url).send().await?;
+
+        let response = verify_etherpad_response(response).await?;
+
+        let session_id = response
+            .get_str_data("sessionID")
+            .context("Failed to call etherpad endpoint 'createReadSession'")?;
+
+        Ok(session_id.into())
+    }
+
+    pub async fn delete_session(&self, session_id: &str) -> Result<()> {
+        let mut url = self.base_url.join("readSession/deleteSession")?;
+
+        url.query_pairs_mut()
+            .append_pair("apikey", &self.api_key)
+            .append_pair("sessionID", session_id);
+
+        let response = self.client.get(url).send().await?;
+
+        verify_etherpad_response(response).await?;
+
+        Ok(())
     }
 
     /// Export the current content of the pad as PDF document

@@ -4,6 +4,7 @@ use controller::prelude::*;
 pub(crate) mod group;
 pub(crate) mod init;
 pub(crate) mod pad;
+pub(crate) mod session;
 
 /// Remove all redis keys related to this room & module
 #[tracing::instrument(name = "cleanup_protocol", skip(redis_conn))]
