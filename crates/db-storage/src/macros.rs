@@ -44,18 +44,16 @@ macro_rules! eq_empty {
 /// See <https://stackoverflow.com/a/59948116> for more information.
 #[macro_export]
 macro_rules! diesel_newtype {
-    ($($(#[$meta:meta])* $name:ident($to_wrap:ty) => $sql_type:ty, $sql_type_lit:literal $(, $kustos_prefix:literal)?),+) => {
+    ($($(#[$meta:meta])* $name:ident($to_wrap:ty) => $sql_type:ty $(, $kustos_prefix:literal)?),+) => {
         $(
             pub use __newtype_impl::$name;
         )+
 
         mod __newtype_impl {
-            use diesel::backend::Backend;
-            use diesel::deserialize;
-            use diesel::serialize::{self, Output};
-            use diesel::types::{FromSql, ToSql};
+            use diesel::backend::{Backend, RawValue};
+            use diesel::deserialize::{self, FromSql};
+            use diesel::serialize::{self, Output, ToSql};
             use serde::{Deserialize, Serialize};
-            use std::io::Write;
             use std::fmt;
 
             $(
@@ -74,7 +72,7 @@ macro_rules! diesel_newtype {
                 FromSqlRow,
             )]
             $(#[$meta])*
-            #[sql_type = $sql_type_lit]
+            #[diesel(sql_type = $sql_type)]
             pub struct $name($to_wrap);
 
             impl $name {
@@ -102,7 +100,7 @@ macro_rules! diesel_newtype {
                 DB: Backend,
                 $to_wrap: ToSql<$sql_type, DB>,
             {
-                fn to_sql<W: Write>(&self, out: &mut Output<W, DB>) -> serialize::Result {
+                fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, DB>) -> serialize::Result {
                     <$to_wrap as ToSql<$sql_type, DB>>::to_sql(&self.0, out)
                 }
             }
@@ -112,8 +110,12 @@ macro_rules! diesel_newtype {
                 DB: Backend,
                 $to_wrap: FromSql<$sql_type, DB>,
             {
-                fn from_sql(bytes: Option<&DB::RawValue>) -> deserialize::Result<Self> {
+                fn from_sql(bytes: RawValue<DB>) -> deserialize::Result<Self> {
                     <$to_wrap as FromSql<$sql_type, DB>>::from_sql(bytes).map(Self)
+                }
+
+                fn from_nullable_sql(bytes: Option<RawValue<DB>>) -> deserialize::Result<Self> {
+                    <$to_wrap as FromSql<$sql_type, DB>>::from_nullable_sql(bytes).map(Self)
                 }
             }
 
@@ -154,7 +156,6 @@ macro_rules! diesel_newtype {
 ///     CustomSqlEnum,          // Name of the Rust enum name
 ///     "custom_sql_enum",      // Name of the type name in sql
 ///     CustomSqlEnumType,      // Name of the diesel enum type repr
-///     "CustomSqlEnumType",    // Name of the diesel enum type as string literal (needed for diesel orm)
 ///     {
 ///         Variant1 = b"variant1", // the variants with their respective sql string representation
 ///         Variant2 = b"variant2",
@@ -163,40 +164,38 @@ macro_rules! diesel_newtype {
 /// ```
 macro_rules! sql_enum {
     ($(#[$enum_meta:meta])* $enum_ident:ident,
-    $sql_type_lit:literal,
+     $sql_type_lit:literal,
      $(#[$type_meta:meta])* $type_ident:ident,
-     $type_lit:literal,
      {$($variant_ident:ident = $variant_lit:literal),* $(,)?}
     ) => {
-
         $(#[$type_meta])*
         #[derive(SqlType, QueryId)]
-        #[postgres(type_name = $sql_type_lit)]
+        #[diesel(postgres_type(name = $sql_type_lit))]
         pub struct $type_ident;
 
         $(#[$enum_meta])*
         #[derive(Debug, Copy, Clone, FromSqlRow, AsExpression)]
-        #[sql_type = $type_lit]
+        #[diesel(sql_type = $type_ident)]
         pub enum $enum_ident {
             $($variant_ident),*
         }
 
 
-        impl ToSql<$type_ident, Pg> for $enum_ident {
-            fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
+        impl diesel::serialize::ToSql<$type_ident, Pg> for $enum_ident {
+            fn to_sql<'b>(&'b self, out: &mut ::diesel::serialize::Output<'b, '_, Pg>) -> ::diesel::serialize::Result {
                 match *self {
                     $(
                         Self::$variant_ident => out.write_all($variant_lit)?,
                     )*
                 }
 
-                Ok(IsNull::No)
+                Ok(::diesel::serialize::IsNull::No)
             }
         }
 
         impl FromSql<$type_ident, Pg> for $enum_ident {
-            fn from_sql(bytes: Option<&<Pg as Backend>::RawValue>) -> deserialize::Result<Self> {
-                match not_none!(bytes) {
+            fn from_sql(bytes: ::diesel::backend::RawValue<Pg>) -> ::diesel::deserialize::Result<Self> {
+                match bytes.as_bytes() {
                     $($variant_lit => Ok(Self::$variant_ident),)*
                     _ => Err("unknown enum variant".into()),
                 }

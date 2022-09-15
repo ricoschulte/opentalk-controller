@@ -4,12 +4,11 @@ use crate::schema::{event_email_invites, event_invites, events};
 use crate::users::UserId;
 use chrono::{DateTime, Utc};
 use database::{DbConnection, Paginate, Result};
-use diesel::associations::BelongsTo;
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, Queryable, RunQueryDsl};
 
 #[derive(Insertable)]
-#[table_name = "event_email_invites"]
+#[diesel(table_name = event_email_invites)]
 pub struct NewEventEmailInvite {
     pub event_id: EventId,
     pub email: String,
@@ -21,7 +20,7 @@ impl NewEventEmailInvite {
     ///
     /// When yielding a unique key violation, None is returned.
     #[tracing::instrument(err, skip_all)]
-    pub fn try_insert(self, conn: &DbConnection) -> Result<Option<EventEmailInvite>> {
+    pub fn try_insert(self, conn: &mut DbConnection) -> Result<Option<EventEmailInvite>> {
         let query = self.insert_into(event_email_invites::table);
 
         let result = query.get_result(conn);
@@ -38,9 +37,9 @@ impl NewEventEmailInvite {
 }
 
 #[derive(Debug, Associations, Identifiable, Queryable)]
-#[table_name = "event_email_invites"]
-#[primary_key(event_id, email)]
-#[belongs_to(Event)]
+#[diesel(table_name = event_email_invites)]
+#[diesel(primary_key(event_id, email))]
+#[diesel(belongs_to(Event))]
 pub struct EventEmailInvite {
     pub event_id: EventId,
     pub email: String,
@@ -50,11 +49,11 @@ pub struct EventEmailInvite {
 
 impl EventEmailInvite {
     pub fn migrate_to_user_invites(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         user_id: UserId,
         email: &str,
     ) -> Result<Vec<(EventId, RoomId)>> {
-        conn.transaction(|| {
+        conn.transaction(|conn| {
             let email_invites_with_room: Vec<(EventEmailInvite, RoomId)> =
                 event_email_invites::table
                     .filter(event_email_invites::email.eq(email))
@@ -92,7 +91,7 @@ impl EventEmailInvite {
 
     #[tracing::instrument(err, skip_all)]
     pub fn get_for_events(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         events: &[&Event],
     ) -> Result<Vec<Vec<EventEmailInvite>>> {
         let invites: Vec<EventEmailInvite> = EventEmailInvite::belonging_to(events).load(conn)?;
@@ -103,7 +102,7 @@ impl EventEmailInvite {
 
     #[tracing::instrument(err, skip_all)]
     pub fn get_for_event_paginated(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         event_id: EventId,
         limit: i64,
         page: i64,
@@ -117,21 +116,5 @@ impl EventEmailInvite {
         let invites: (Vec<EventEmailInvite>, i64) = query.load_and_count(conn)?;
 
         Ok(invites)
-    }
-}
-
-// Below impls allow for usage of diesel's BelongsTo traits on &[&Event] to avoid
-// cloning the events into a array just for the EventEmailInvite::get_for_events
-impl BelongsTo<&Event> for EventEmailInvite {
-    type ForeignKey = EventId;
-
-    type ForeignKeyColumn = event_email_invites::event_id;
-
-    fn foreign_key(&self) -> Option<&Self::ForeignKey> {
-        Some(&self.event_id)
-    }
-
-    fn foreign_key_column() -> Self::ForeignKeyColumn {
-        event_email_invites::event_id
     }
 }

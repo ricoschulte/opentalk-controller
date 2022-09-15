@@ -15,10 +15,9 @@ kustos = { path = "../kustos", package = "kustos" }
 database = { path = "../database", package = "k3k-database" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 tokio = { version = "1" }
-diesel = { version = "1.4.6", features = [
+diesel = { version = "2", features = [
     "postgres",
     "uuid",
-    "uuidv07",
     "r2d2",
     "serde_json",
 ] }

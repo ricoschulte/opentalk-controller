@@ -1,9 +1,12 @@
-use diesel::connection::SimpleConnection;
-use diesel::query_builder::{AsQuery, QueryFragment, QueryId};
-use diesel::query_source::QueryableByName;
+use diesel::connection::{
+    AnsiTransactionManager, Connection, ConnectionGatWorkaround, DefaultLoadingMode,
+    LoadConnection, LoadRowIter, SimpleConnection, TransactionManager,
+};
+use diesel::expression::QueryMetadata;
+use diesel::query_builder::{Query, QueryFragment, QueryId};
 use diesel::r2d2::{ConnectionManager, PooledConnection};
-use diesel::types::HasSqlType;
-use diesel::{Connection, ConnectionResult, PgConnection, QueryResult, Queryable};
+use diesel::result::{ConnectionResult, QueryResult};
+use diesel::PgConnection;
 use opentelemetry::metrics::{Counter, ValueRecorder};
 use opentelemetry::Key;
 use std::sync::Arc;
@@ -26,14 +29,14 @@ pub struct MetricsConnection<Conn> {
 }
 
 impl<Conn> MetricsConnection<Conn> {
-    fn instrument<F, T>(&self, f: F) -> QueryResult<T>
+    fn instrument<F, T>(&mut self, f: F) -> Result<T, diesel::result::Error>
     where
-        F: FnOnce(&Conn) -> QueryResult<T>,
+        F: FnOnce(&mut Conn) -> Result<T, diesel::result::Error>,
     {
         if let Some(metrics) = &self.metrics {
             let start = Instant::now();
 
-            match f(&self.conn) {
+            match f(&mut self.conn) {
                 res @ (Ok(_) | Err(diesel::result::Error::NotFound)) => {
                     metrics
                         .sql_execution_time
@@ -49,9 +52,19 @@ impl<Conn> MetricsConnection<Conn> {
                 }
             }
         } else {
-            f(&self.conn)
+            f(&mut self.conn)
         }
     }
+}
+
+impl<'conn, 'query, Conn: Connection>
+    ConnectionGatWorkaround<'conn, 'query, <Conn as Connection>::Backend>
+    for MetricsConnection<Conn>
+{
+    type Cursor =
+        <Conn as ConnectionGatWorkaround<'conn, 'query, <Conn as Connection>::Backend>>::Cursor;
+
+    type Row = <Conn as ConnectionGatWorkaround<'conn, 'query, <Conn as Connection>::Backend>>::Row;
 }
 
 fn get_metrics_label_for_error(error: &diesel::result::Error) -> &'static str {
@@ -78,14 +91,14 @@ impl<Conn> SimpleConnection for MetricsConnection<Conn>
 where
     Conn: SimpleConnection,
 {
-    fn batch_execute(&self, query: &str) -> diesel::QueryResult<()> {
+    fn batch_execute(&mut self, query: &str) -> diesel::QueryResult<()> {
         self.instrument(|conn| conn.batch_execute(query))
     }
 }
 
 impl Connection for MetricsConnection<Parent> {
     type Backend = <Parent as Connection>::Backend;
-    type TransactionManager = <Parent as Connection>::TransactionManager;
+    type TransactionManager = AnsiTransactionManager;
 
     fn establish(database_url: &str) -> ConnectionResult<Self> {
         Parent::establish(database_url).map(|conn| Self {
@@ -94,36 +107,45 @@ impl Connection for MetricsConnection<Parent> {
         })
     }
 
-    fn execute(&self, query: &str) -> QueryResult<usize> {
-        self.instrument(|conn| conn.execute(query))
-    }
-
-    fn query_by_index<T, U>(&self, source: T) -> QueryResult<Vec<U>>
-    where
-        T: AsQuery,
-        T::Query: QueryFragment<Self::Backend> + QueryId,
-        Self::Backend: HasSqlType<T::SqlType>,
-        U: Queryable<T::SqlType, Self::Backend>,
-    {
-        self.instrument(|conn| conn.query_by_index(source))
-    }
-
-    fn query_by_name<T, U>(&self, source: &T) -> QueryResult<Vec<U>>
-    where
-        T: QueryFragment<Self::Backend> + diesel::query_builder::QueryId,
-        U: QueryableByName<Self::Backend>,
-    {
-        self.instrument(|conn| conn.query_by_name(source))
-    }
-
-    fn execute_returning_count<T>(&self, source: &T) -> QueryResult<usize>
+    /// Execute a single SQL statements given by a query and return
+    /// number of affected rows
+    ///
+    /// Hidden in `diesel` behind the
+    /// `i-implement-a-third-party-backend-and-opt-into-breaking-changes` feature flag,
+    /// therefore not generally visible in the `diesel` generated docs.
+    fn execute_returning_count<T>(&mut self, source: &T) -> QueryResult<usize>
     where
         T: QueryFragment<Self::Backend> + QueryId,
     {
         self.instrument(|conn| conn.execute_returning_count(source))
     }
 
-    fn transaction_manager(&self) -> &Self::TransactionManager {
-        self.conn.transaction_manager()
+    /// Get access to the current transaction state of this connection
+    ///
+    /// Hidden in `diesel` behind the
+    /// `i-implement-a-third-party-backend-and-opt-into-breaking-changes` feature flag,
+    /// therefore not generally visible in the `diesel` generated docs.
+    fn transaction_state(
+        &mut self,
+    ) -> &mut <Self::TransactionManager as TransactionManager<Self>>::TransactionStateData {
+        self.conn.transaction_state()
+    }
+}
+
+impl LoadConnection for MetricsConnection<Parent> {
+    /// Executes a given query and returns any requested values
+    ///
+    /// Hidden in `diesel` behind the
+    /// `i-implement-a-third-party-backend-and-opt-into-breaking-changes` feature flag,
+    /// therefore not generally visible in the `diesel` generated docs.
+    fn load<'conn, 'query, T>(
+        &'conn mut self,
+        source: T,
+    ) -> QueryResult<LoadRowIter<'conn, 'query, Self, <Parent as Connection>::Backend>>
+    where
+        T: Query + QueryFragment<Self::Backend> + QueryId + 'query,
+        Self::Backend: QueryMetadata<T::SqlType>,
+    {
+        <Parent as LoadConnection<DefaultLoadingMode>>::load(&mut self.conn, source)
     }
 }

@@ -14,7 +14,7 @@ serde = { version = "1", features = ["derive"] }
 openidconnect = { version = "2" }
 chrono = "0.4"
 url = "2"
-uuid = { version = "0.8.2", features = ["serde", "v4"] }
+uuid = { version = "1.0.0", features = ["serde", "v4"] }
 redis = { version = "0.21", features = ["tokio-comp", "connection-manager"] }
 cidr = { version = "0.2", features = ["serde"] }
 phonenumber = "0.3"

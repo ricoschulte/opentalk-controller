@@ -5,7 +5,6 @@ use crate::users::UserId;
 use chrono::{DateTime, Utc};
 use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
 use database::{DatabaseError, DbConnection, Paginate, Result};
-use diesel::dsl::any;
 use diesel::prelude::*;
 use diesel::result::DatabaseErrorKind;
 use diesel::{ExpressionMethods, Identifiable, QueryDsl, Queryable, RunQueryDsl};
@@ -14,8 +13,8 @@ use types::protocol::Protocol;
 pub mod types;
 
 diesel_newtype! {
-    #[derive(Copy)] LegalVoteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/legal_vote/",
-    #[derive(Copy)] SerialLegalVoteId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt"
+    #[derive(Copy)] LegalVoteId(uuid::Uuid) => diesel::sql_types::Uuid, "/legal_vote/",
+    #[derive(Copy)] SerialLegalVoteId(i64) => diesel::sql_types::BigInt
 }
 
 impl_to_redis_args_se!(LegalVoteId);
@@ -37,7 +36,7 @@ pub struct LegalVote {
 impl LegalVote {
     /// Get the `LegalVote` with the provided `legal_vote_id`
     #[tracing::instrument(err, skip_all)]
-    pub fn get(conn: &DbConnection, legal_vote_id: LegalVoteId) -> Result<LegalVote> {
+    pub fn get(conn: &mut DbConnection, legal_vote_id: LegalVoteId) -> Result<LegalVote> {
         let query = legal_votes::table.filter(legal_votes::id.eq(legal_vote_id));
 
         let legal_vote = query.get_result(conn)?;
@@ -48,7 +47,7 @@ impl LegalVote {
     /// Get all `LegalVote` filtered by ids and room, paginated
     #[tracing::instrument(err, skip_all)]
     pub fn get_for_room_by_ids_paginated(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         room_id: RoomId,
         accessible_ids: &[LegalVoteId],
         limit: i64,
@@ -56,7 +55,7 @@ impl LegalVote {
     ) -> Result<(Vec<LegalVote>, i64)> {
         let query = legal_votes::table
             .filter(legal_votes::room.eq(room_id))
-            .filter(legal_votes::id.eq(any(accessible_ids)))
+            .filter(legal_votes::id.eq_any(accessible_ids))
             .paginate_by(limit, page);
 
         let legal_votes_with_total = query.load_and_count::<LegalVote, _>(conn)?;
@@ -67,13 +66,13 @@ impl LegalVote {
     /// Get all `LegalVote`s by ids, paginated
     #[tracing::instrument(err, skip_all)]
     pub fn get_by_ids_paginated(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         ids: &[LegalVoteId],
         limit: i64,
         page: i64,
     ) -> Result<(Vec<LegalVote>, i64)> {
         let query = legal_votes::table
-            .filter(legal_votes::id.eq(any(ids)))
+            .filter(legal_votes::id.eq_any(ids))
             .paginate_by(limit, page);
 
         let legal_votes_with_total = query.load_and_count::<LegalVote, _>(conn)?;
@@ -84,7 +83,7 @@ impl LegalVote {
     /// Get all `LegalVote`s, paginated
     #[tracing::instrument(err, skip_all)]
     pub fn get_all_paginated(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         limit: i64,
         page: i64,
     ) -> Result<(Vec<LegalVote>, i64)> {
@@ -100,7 +99,7 @@ impl LegalVote {
     /// Get all `LegalVotes` for room, paginated
     #[tracing::instrument(err, skip_all)]
     pub fn get_for_room_paginated(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         room_id: RoomId,
         limit: i64,
         page: i64,
@@ -116,7 +115,10 @@ impl LegalVote {
 
     /// Get all `LegalVotes` for room
     #[tracing::instrument(err, skip_all)]
-    pub fn get_all_ids_for_room(conn: &DbConnection, room_id: RoomId) -> Result<Vec<LegalVoteId>> {
+    pub fn get_all_ids_for_room(
+        conn: &mut DbConnection,
+        room_id: RoomId,
+    ) -> Result<Vec<LegalVoteId>> {
         let query = legal_votes::table
             .select(legal_votes::id)
             .filter(legal_votes::room.eq(room_id));
@@ -128,7 +130,7 @@ impl LegalVote {
 
     /// Delete all `LegalVotes` for room
     #[tracing::instrument(err, skip_all)]
-    pub fn delete_by_room(conn: &DbConnection, room_id: RoomId) -> Result<()> {
+    pub fn delete_by_room(conn: &mut DbConnection, room_id: RoomId) -> Result<()> {
         diesel::delete(legal_votes::table)
             .filter(legal_votes::room.eq(room_id))
             .execute(conn)?;
@@ -139,7 +141,7 @@ impl LegalVote {
 
 /// LegalVote insert values
 #[derive(Debug, Clone, Insertable)]
-#[table_name = "legal_votes"]
+#[diesel(table_name = legal_votes)]
 pub struct NewLegalVote {
     pub created_by: UserId,
     pub protocol: NewProtocol,
@@ -160,7 +162,7 @@ impl NewLegalVote {
     /// Generates a [`LegalVoteId`] (uuid) for the entry in the database. In case the insert statement fails with an `UniqueViolation`,
     /// the statement will be resend with a different [`LegalVoteId`] to counteract uuid collisions.
     #[tracing::instrument(err, skip_all)]
-    pub fn insert(self, conn: &DbConnection) -> Result<LegalVote> {
+    pub fn insert(self, conn: &mut DbConnection) -> Result<LegalVote> {
         // Try 3 times to generate a UUID without collision.
         // While a single collision is highly unlikely, this enforces
         // a unique ID in this sensitive topic. If this fails more than
@@ -192,7 +194,7 @@ impl NewLegalVote {
 // FIXME(r.floren): Is there a mentally better place for this? LegalVote does not make much sense, and NewProtocol neither.
 #[tracing::instrument(err, skip_all)]
 pub fn set_protocol(
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     legal_vote_id: LegalVoteId,
     protocol: NewProtocol,
 ) -> Result<()> {

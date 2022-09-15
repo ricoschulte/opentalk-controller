@@ -203,9 +203,9 @@ pub async fn check_access_token_or_invite(
             })?;
 
             crate::block(move || {
-                let conn = db.get_conn()?;
+                let mut conn = db.get_conn()?;
 
-                match Invite::get(&conn, InviteCodeId::from(invite_uuid)).optional()? {
+                match Invite::get(&mut conn, InviteCodeId::from(invite_uuid)).optional()? {
                     Some(invite) => Ok(invite),
                     None => {
                         log::warn!("The requesting user could not be found in the database");

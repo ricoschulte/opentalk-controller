@@ -34,15 +34,14 @@ fn to_event(
         };
 
     mail_worker_proto::v1::Event {
-        // Fixme: Once we are down to a single uuid crate again. Diesel holds us back regarding the current version
-        id: uuid_v1::Uuid::from_u128(event.id.inner().as_u128()),
+        id: *event.id.inner(),
         name: event.title,
         description: event.description,
         start_time,
         end_time,
         rrule: event.recurrence_pattern,
         room: v1::Room {
-            id: uuid_v1::Uuid::from_u128(room.id.inner().as_u128()),
+            id: *room.id.inner(),
             password: room.password,
         },
         call_in,

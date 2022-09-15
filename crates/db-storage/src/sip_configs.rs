@@ -12,9 +12,9 @@ use validator::{Validate, ValidationError, ValidationErrors};
 const NUMERIC: [char; 10] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
 diesel_newtype! {
-    NumericId(String) => diesel::sql_types::Text, "diesel::sql_types::Text" ,
-    SipId(NumericId) => diesel::sql_types::Text, "diesel::sql_types::Text",
-    SipPassword(NumericId) => diesel::sql_types::Text, "diesel::sql_types::Text"
+    NumericId(String) => diesel::sql_types::Text,
+    SipId(NumericId) => diesel::sql_types::Text,
+    SipPassword(NumericId) => diesel::sql_types::Text
 }
 
 impl NumericId {
@@ -82,7 +82,7 @@ pub struct SipConfig {
 impl SipConfig {
     /// Get the sip config for the specified sip_id
     #[tracing::instrument(err, skip_all)]
-    pub fn get(conn: &DbConnection, sip_id: SipId) -> Result<Option<SipConfig>> {
+    pub fn get(conn: &mut DbConnection, sip_id: SipId) -> Result<Option<SipConfig>> {
         let query = sip_configs::table.filter(sip_configs::sip_id.eq(&sip_id));
         let sip_config = query.get_result(conn).optional()?;
 
@@ -91,7 +91,7 @@ impl SipConfig {
 
     /// Get the sip config for the specified room
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_room(conn: &DbConnection, room_id: RoomId) -> Result<SipConfig> {
+    pub fn get_by_room(conn: &mut DbConnection, room_id: RoomId) -> Result<SipConfig> {
         let query = sip_configs::table.filter(sip_configs::room.eq(&room_id));
         let sip_config = query.get_result(conn)?;
 
@@ -100,7 +100,7 @@ impl SipConfig {
 
     /// Delete the sip config for the specified room
     #[tracing::instrument(err, skip_all)]
-    pub fn delete_by_room(conn: &DbConnection, room_id: RoomId) -> Result<()> {
+    pub fn delete_by_room(conn: &mut DbConnection, room_id: RoomId) -> Result<()> {
         let query = diesel::delete(sip_configs::table.filter(sip_configs::room.eq(&room_id)));
 
         query.execute(conn)?;
@@ -108,7 +108,7 @@ impl SipConfig {
         Ok(())
     }
 
-    pub fn delete(&self, conn: &DbConnection) -> Result<()> {
+    pub fn delete(&self, conn: &mut DbConnection) -> Result<()> {
         Self::delete_by_room(conn, self.room)
     }
 }
@@ -117,7 +117,7 @@ impl SipConfig {
 ///
 /// Represents fields that have to be provided on insertion.
 #[derive(Debug, Clone, Insertable)]
-#[table_name = "sip_configs"]
+#[diesel(table_name = sip_configs)]
 pub struct NewSipConfig {
     pub room: RoomId,
     pub sip_id: SipId,
@@ -140,7 +140,7 @@ impl NewSipConfig {
     }
 
     #[tracing::instrument(err, skip_all)]
-    pub fn insert(mut self, conn: &DbConnection) -> Result<SipConfig> {
+    pub fn insert(mut self, conn: &mut DbConnection) -> Result<SipConfig> {
         for _ in 0..3 {
             let query = self.clone().insert_into(sip_configs::table);
 
@@ -168,14 +168,14 @@ impl NewSipConfig {
 
 /// Diesel struct to modify a SipConfig
 #[derive(Debug, AsChangeset)]
-#[table_name = "sip_configs"]
+#[diesel(table_name = sip_configs)]
 pub struct UpdateSipConfig {
     pub password: Option<SipPassword>,
     pub enable_lobby: Option<bool>,
 }
 
 impl UpdateSipConfig {
-    pub fn apply(self, conn: &DbConnection, room_id: RoomId) -> Result<Option<SipConfig>> {
+    pub fn apply(self, conn: &mut DbConnection, room_id: RoomId) -> Result<Option<SipConfig>> {
         let query =
             diesel::update(sip_configs::table.filter(sip_configs::room.eq(&room_id))).set(self);
 

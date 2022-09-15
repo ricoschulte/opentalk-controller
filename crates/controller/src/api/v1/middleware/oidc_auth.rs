@@ -124,9 +124,9 @@ pub async fn check_access_token(
     };
 
     let current_user = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        match User::get_by_oidc_sub(&conn, &issuer, &sub)? {
+        match User::get_by_oidc_sub(&mut conn, &issuer, &sub)? {
             Some(user) => Ok(user),
             None => Err(ApiError::unauthorized()
                 .with_code("unknown_sub")

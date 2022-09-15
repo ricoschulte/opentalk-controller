@@ -22,7 +22,7 @@ use uuid::Uuid;
 async fn basic_vote() {
     let test_ctx = TestContext::new().await;
     let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
-    let db_conn = test_ctx.db_ctx.db.get_conn().unwrap();
+    let mut db_conn = test_ctx.db_ctx.db.get_conn().unwrap();
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -73,7 +73,7 @@ async fn basic_vote() {
     };
 
     // Expect a empty legal_vote with `legal_vote_id` to exist in database
-    let legal_vote = DbLegalVote::get(&db_conn, legal_vote_id).unwrap();
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
     assert_eq!(legal_vote.created_by, user1.id);
@@ -218,7 +218,7 @@ async fn basic_vote() {
     }
 
     // check the vote protocol
-    let legal_vote = DbLegalVote::get(&db_conn, legal_vote_id).unwrap();
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
     assert_eq!(legal_vote.created_by, user1.id);
@@ -234,7 +234,7 @@ async fn basic_vote() {
 async fn basic_vote_abstain() {
     let test_ctx = TestContext::new().await;
     let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
-    let db_conn = test_ctx.db_ctx.db.get_conn().unwrap();
+    let mut db_conn = test_ctx.db_ctx.db.get_conn().unwrap();
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -285,7 +285,7 @@ async fn basic_vote_abstain() {
     };
 
     // Expect a empty legal_vote with `legal_vote_id` to exist in database
-    let legal_vote = DbLegalVote::get(&db_conn, legal_vote_id).unwrap();
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
     assert_eq!(legal_vote.created_by, user1.id);
@@ -430,7 +430,7 @@ async fn basic_vote_abstain() {
     }
 
     // check the vote protocol
-    let legal_vote = DbLegalVote::get(&db_conn, legal_vote_id).unwrap();
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
     assert_eq!(legal_vote.created_by, user1.id);
@@ -446,7 +446,7 @@ async fn basic_vote_abstain() {
 async fn expired_vote() {
     let test_ctx = TestContext::new().await;
     let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
-    let db_conn = test_ctx.db_ctx.db.get_conn().unwrap();
+    let mut db_conn = test_ctx.db_ctx.db.get_conn().unwrap();
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -497,7 +497,7 @@ async fn expired_vote() {
     };
 
     // Expect a empty legal_vote with `legal_vote_id` to exist in database
-    let legal_vote = DbLegalVote::get(&db_conn, legal_vote_id).unwrap();
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
     assert_eq!(legal_vote.created_by, user1.id);
@@ -536,7 +536,7 @@ async fn expired_vote() {
     assert_eq!(expected_stop_message, stop_message);
 
     // check the vote protocol
-    let legal_vote = DbLegalVote::get(&db_conn, legal_vote_id).unwrap();
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
     assert_eq!(legal_vote.created_by, user1.id);
@@ -552,7 +552,7 @@ async fn expired_vote() {
 async fn auto_stop_vote() {
     let test_ctx = TestContext::new().await;
     let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
-    let db_conn = test_ctx.db_ctx.db.get_conn().unwrap();
+    let mut db_conn = test_ctx.db_ctx.db.get_conn().unwrap();
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
@@ -603,7 +603,7 @@ async fn auto_stop_vote() {
     };
 
     // Expect a empty legal_vote with `legal_vote_id` to exist in database
-    let legal_vote = DbLegalVote::get(&db_conn, legal_vote_id).unwrap();
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
     assert_eq!(legal_vote.created_by, user1.id);
@@ -745,7 +745,7 @@ async fn auto_stop_vote() {
     }
 
     // check the vote protocol
-    let legal_vote = DbLegalVote::get(&db_conn, legal_vote_id).unwrap();
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
 
     assert_eq!(legal_vote.id, legal_vote_id);
     assert_eq!(legal_vote.created_by, user1.id);

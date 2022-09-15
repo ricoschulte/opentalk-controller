@@ -122,13 +122,13 @@ pub async fn get_event_instances(
 
     let instances_data = crate::block(
         move || -> Result<GetPaginatedEventInstancesData, ApiError> {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
             let (event, invite, room, sip_config, is_favorite) =
-                Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
+                Event::get_with_invite_and_room(&mut conn, current_user.id, event_id)?;
 
             let (invitees, invitees_truncated) =
-                super::get_invitees_for_event(&settings, &conn, event.id, invitees_max)?;
+                super::get_invitees_for_event(&settings, &mut conn, event.id, invitees_max)?;
 
             let invite_status = invite
                 .map(|inv| inv.status)
@@ -157,12 +157,12 @@ pub async fn get_event_instances(
                 .map(|dt| dt.with_timezone(&Utc))
                 .collect();
 
-            let exceptions = EventException::get_all_for_event(&conn, event_id, &datetimes)?;
+            let exceptions = EventException::get_all_for_event(&mut conn, event_id, &datetimes)?;
 
             let users = GetUserProfilesBatched::new()
                 .add(&event)
                 .add(&exceptions)
-                .fetch(&settings, &conn)?;
+                .fetch(&settings, &mut conn)?;
 
             let room = EventRoomInfo::from_room(&settings, room, sip_config);
 
@@ -260,21 +260,21 @@ pub async fn get_event_instance(
     let query = query.into_inner();
 
     let event_instance = crate::block(move || -> Result<EventInstance, ApiError> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let (event, invite, room, sip_config, is_favorite) =
-            Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
+            Event::get_with_invite_and_room(&mut conn, current_user.id, event_id)?;
         verify_recurrence_date(&event, instance_id.0)?;
 
         let (invitees, invitees_truncated) =
-            super::get_invitees_for_event(&settings, &conn, event_id, query.invitees_max)?;
+            super::get_invitees_for_event(&settings, &mut conn, event_id, query.invitees_max)?;
 
-        let exception = EventException::get_for_event(&conn, event_id, instance_id.0)?;
+        let exception = EventException::get_for_event(&mut conn, event_id, instance_id.0)?;
 
         let users = GetUserProfilesBatched::new()
             .add(&event)
             .add(&exception)
-            .fetch(&settings, &conn)?;
+            .fetch(&settings, &mut conn)?;
 
         let room = EventRoomInfo::from_room(&settings, room, sip_config);
 
@@ -388,10 +388,10 @@ pub async fn patch_event_instance(
     } = path.into_inner();
 
     let event_instance = crate::block(move || -> Result<EventInstance, ApiError> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let (event, invite, room, sip_config, is_favorite) =
-            Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
+            Event::get_with_invite_and_room(&mut conn, current_user.id, event_id)?;
 
         if !event.is_recurring.unwrap_or_default() {
             return Err(ApiError::not_found());
@@ -400,7 +400,7 @@ pub async fn patch_event_instance(
         verify_recurrence_date(&event, instance_id.0)?;
 
         let exception = if let Some(exception) =
-            EventException::get_for_event(&conn, event_id, instance_id.0)?
+            EventException::get_for_event(&mut conn, event_id, instance_id.0)?
         {
             let is_all_day = patch
                 .is_all_day
@@ -435,7 +435,7 @@ pub async fn patch_event_instance(
                 ends_at_tz: patch.ends_at.map(|dt| Some(dt.timezone)),
             };
 
-            update_exception.apply(&conn, exception.id)?
+            update_exception.apply(&mut conn, exception.id)?
         } else {
             let is_all_day = patch.is_all_day.or(event.is_all_day).unwrap();
             let starts_at = patch
@@ -468,16 +468,16 @@ pub async fn patch_event_instance(
                 ends_at_tz: patch.ends_at.map(|dt| dt.timezone),
             };
 
-            new_exception.insert(&conn)?
+            new_exception.insert(&mut conn)?
         };
 
         let (invitees, invitees_truncated) =
-            super::get_invitees_for_event(&settings, &conn, event_id, query.invitees_max)?;
+            super::get_invitees_for_event(&settings, &mut conn, event_id, query.invitees_max)?;
 
         let users = GetUserProfilesBatched::new()
             .add(&event)
             .add(&exception)
-            .fetch(&settings, &conn)?;
+            .fetch(&settings, &mut conn)?;
 
         let room = EventRoomInfo::from_room(&settings, room, sip_config);
 

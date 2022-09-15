@@ -21,7 +21,7 @@ pub(crate) struct FixAclConfig {
 
 pub(crate) async fn fix_acl(settings: Settings, config: FixAclConfig) -> Result<()> {
     let db = Arc::new(Db::connect(&settings.database).context("Failed to connect to database")?);
-    let conn = db
+    let mut conn = db
         .get_conn()
         .context("Failed to get connection from connection pool")?;
 
@@ -30,10 +30,10 @@ pub(crate) async fn fix_acl(settings: Settings, config: FixAclConfig) -> Result<
     // Used to collect errors during looped operations
     let mut errors: Vec<Error> = Vec::new();
     if config.user_groups || config.user_roles {
-        fix_user(&config, &conn, &authz, &mut errors).await?;
+        fix_user(&config, &mut conn, &authz, &mut errors).await?;
     }
     if config.room_creators {
-        fix_rooms(&config, &conn, &authz, &mut errors).await?;
+        fix_rooms(&config, &mut conn, &authz, &mut errors).await?;
     }
 
     if errors.is_empty() {
@@ -52,7 +52,7 @@ pub(crate) async fn fix_acl(settings: Settings, config: FixAclConfig) -> Result<
 
 async fn fix_user(
     config: &FixAclConfig,
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     authz: &kustos::Authz,
     errors: &mut Vec<Error>,
 ) -> Result<()> {
@@ -106,7 +106,7 @@ async fn fix_user(
 
 async fn fix_rooms(
     _config: &FixAclConfig,
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     authz: &kustos::Authz,
     errors: &mut Vec<Error>,
 ) -> Result<()> {

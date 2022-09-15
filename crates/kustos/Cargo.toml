@@ -18,15 +18,14 @@ anyhow = "1.0.48"
 http = "0.2.5"
 
 ### Database ORM
-diesel = { version = "1.4.6", features = [
+diesel = { version = "2", features = [
     "postgres",
     "uuid",
-    "uuidv07",
     "r2d2",
     "serde_json",
     "chrono",
 ] }
-uuid = { version = "0.8.2", features = ["serde", "v4"] }
+uuid = { version = "1.0.0", features = ["serde", "v4"] }
 
 ### Logging utilities
 log = { version = "0.4", features = ["serde"] }

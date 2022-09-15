@@ -36,13 +36,13 @@ pub async fn delete(
     let db_clone = db.clone();
     let (mut linked_events, mut linked_legal_votes) =
         crate::block(move || -> database::Result<_> {
-            let conn = db_clone.get_conn()?;
+            let mut conn = db_clone.get_conn()?;
 
-            Room::get(&conn, room_id)?;
+            Room::get(&mut conn, room_id)?;
 
             Ok((
-                Event::get_all_ids_for_room(&conn, room_id)?,
-                LegalVote::get_all_ids_for_room(&conn, room_id)?,
+                Event::get_all_ids_for_room(&mut conn, room_id)?,
+                LegalVote::get_all_ids_for_room(&mut conn, room_id)?,
             ))
         })
         .await??;
@@ -75,27 +75,27 @@ pub async fn delete(
         .collect();
 
     crate::block(move || {
-        let conn = db.get_conn()?;
-        conn.transaction(|| {
+        let mut conn = db.get_conn()?;
+        conn.transaction(|conn| {
             // We check if in the meantime (during the permission check) another event got linked to
-            let mut current_events = Event::get_all_ids_for_room(&conn, room_id)?;
+            let mut current_events = Event::get_all_ids_for_room(conn, room_id)?;
             current_events.sort();
 
             if current_events != linked_events {
                 return Err(DatabaseError::custom("Race-condition during access checks"));
             }
 
-            let mut current_legal_votes = LegalVote::get_all_ids_for_room(&conn, room_id)?;
+            let mut current_legal_votes = LegalVote::get_all_ids_for_room(conn, room_id)?;
             current_legal_votes.sort();
 
             if current_legal_votes != linked_legal_votes {
                 return Err(DatabaseError::custom("Race-condition during access checks"));
             }
 
-            LegalVote::delete_by_room(&conn, room_id)?;
-            Event::delete_all_for_room(&conn, room_id)?;
-            SipConfig::delete_by_room(&conn, room_id)?;
-            Room::delete_by_id(&conn, room_id)?;
+            LegalVote::delete_by_room(conn, room_id)?;
+            Event::delete_all_for_room(conn, room_id)?;
+            SipConfig::delete_by_room(conn, room_id)?;
+            Room::delete_by_id(conn, room_id)?;
 
             Ok(())
         })
