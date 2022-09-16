@@ -47,6 +47,8 @@ pub struct ParticipantInOtherRoom {
     pub role: Role,
     pub avatar_url: Option<String>,
     pub participation_kind: ParticipationKind,
+    pub joined_at: Timestamp,
+    pub left_at: Option<Timestamp>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -152,6 +154,8 @@ impl SignalingModule for BreakoutRooms {
                             role: control_data.role,
                             avatar_url: control_data.avatar_url.clone(),
                             participation_kind: control_data.participation_kind,
+                            joined_at: control_data.joined_at,
+                            left_at: None,
                         }),
                     );
 
@@ -270,18 +274,24 @@ impl BreakoutRooms {
                 .get("role")
                 .get("avatar_url")
                 .get("kind")
+                .get("joined_at")
+                .get("left_at")
                 .query_async(ctx.redis_conn())
                 .await;
 
             match res {
-                Ok((display_name, role, avatar_url, kind)) => list.push(ParticipantInOtherRoom {
-                    breakout_room: room.1,
-                    id: participant,
-                    display_name,
-                    role,
-                    avatar_url,
-                    participation_kind: kind,
-                }),
+                Ok((display_name, role, avatar_url, kind, joined_at, left_at)) => {
+                    list.push(ParticipantInOtherRoom {
+                        breakout_room: room.1,
+                        id: participant,
+                        display_name,
+                        role,
+                        avatar_url,
+                        participation_kind: kind,
+                        joined_at,
+                        left_at,
+                    })
+                }
                 Err(e) => log::error!(
                     "Failed to fetch participant data from {} in {}, {:?}",
                     participant,
