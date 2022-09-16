@@ -2,16 +2,15 @@
 use crate::actix_web::User;
 use crate::{AccessMethod, PolicyUser, SyncedEnforcer, UserPolicy};
 use actix_web::dev::{Service, Transform};
-use actix_web::error::ErrorInternalServerError;
 use actix_web::{
     dev::ServiceRequest, dev::ServiceResponse, Error, HttpMessage, HttpResponse, Result,
 };
 use casbin::{CoreApi, Result as CasbinResult};
 use futures::future::{ok, Ready};
 use futures::Future;
+use itertools::Itertools;
 use std::cell::RefCell;
 use std::ops::{Deref, DerefMut};
-use std::path::Path;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::str::FromStr;
@@ -167,47 +166,28 @@ where
 ///
 /// Way to avoid a regex here
 fn get_unprefixed_path(input_path: &str) -> Result<String> {
-    let path = Path::new(input_path);
-    let mut path_iter = path.iter();
-    let slash = &std::path::MAIN_SEPARATOR.to_string();
+    let mut segments = input_path.split('/');
 
-    if path_iter.next() != Some(std::ffi::OsStr::new(slash)) {
-        return Ok(input_path.to_string());
+    // skip the first segment as its an empty string before the first '/'
+    if input_path.starts_with('/') {
+        segments.next();
     }
 
-    let first_segment = path_iter.next();
-    if let Some(segment) = first_segment.and_then(|s| s.to_str()) {
-        let mut iter = segment.chars();
+    if let Some(segment) = segments.next() {
+        let mut chars = segment.chars();
 
-        match iter.next() {
-            Some(el) => {
-                if el != 'v' {
-                    return Ok(input_path.to_string());
-                }
+        if let Some('v') = chars.next() {
+            if chars.all(char::is_numeric) {
+                // TODO(kbalt): use Split::as_str() when stabilized
+                // see https://github.com/rust-lang/rust/issues/77998
+                // return Ok(format!("/{}", segments.as_str()));
+
+                return Ok(format!("/{}", segments.join("/")));
             }
-            None => return Ok(input_path.to_string()),
-        }
-        if iter.all(|el| el.is_ascii_digit()) {
-            return path
-                // Strip the /v{number} prefix from the path
-                .strip_prefix([slash, segment].join(""))
-                .map_err(|_| {
-                    log::error!("Failed to strip version prefix from URL: {}", input_path);
-                })
-                // strip_prefix removes the leading slash in the return. We need to add that back.
-                .map(|s| Path::new(slash).join(s))
-                .and_then(|x| {
-                    x.into_os_string().into_string().map_err(|e| {
-                        log::error!(
-                            "URL seemed to contain invalid utf-8 chars: {}",
-                            e.to_string_lossy()
-                        );
-                    })
-                })
-                .map_err(|_| ErrorInternalServerError("Version API prefix error"));
         }
     }
-    Ok(input_path.to_string())
+
+    Ok(input_path.to_owned())
 }
 
 #[cfg(test)]
