@@ -714,6 +714,9 @@ where
                 todo!()
             }
             control::rabbitmq::Message::SetModeratorStatus(_) => unimplemented!(),
+            control::rabbitmq::Message::ResetRaisedHands { issued_by: _ } => unimplemented!(),
+            control::rabbitmq::Message::EnableRaiseHands { issued_by: _ } => unimplemented!(),
+            control::rabbitmq::Message::DisableRaiseHands { issued_by: _ } => unimplemented!(),
         }
     }
 
