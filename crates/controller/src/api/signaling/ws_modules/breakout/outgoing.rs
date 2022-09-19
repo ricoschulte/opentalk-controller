@@ -31,7 +31,7 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
-    use crate::api::signaling::{prelude::control::ParticipationKind, Role};
+    use crate::api::signaling::{prelude::control::ParticipationKind, Role, Timestamp};
 
     use super::*;
     use controller_shared::ParticipantId;
@@ -87,7 +87,9 @@ mod test {
             display_name: "test".into(),
             role: Role::Moderator,
             avatar_url: Some("example.org/avatar.png".into()),
-            participation_kind: ParticipationKind::User
+            participation_kind: ParticipationKind::User,
+            joined_at: Timestamp::unix_epoch(),
+            left_at: None,
         }), {
             "message": "joined",
             "breakout_room": "00000000-0000-0000-0000-000000000000",
@@ -96,6 +98,8 @@ mod test {
             "role": "moderator",
             "avatar_url": "example.org/avatar.png",
             "participation_kind": "user",
+            "joined_at": "1970-01-01T00:00:00Z",
+            "left_at": ()
         });
     }
 
