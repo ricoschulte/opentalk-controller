@@ -170,12 +170,14 @@ impl SignalingModule for Spacedeck {
     async fn on_destroy(self, mut ctx: DestroyContext<'_>) {
         // TODO: save space as PDF once we have a S3 storage solution
 
-        if let Err(err) = self.cleanup(ctx.redis_conn()).await {
-            log::error!(
-                "Failed to cleanup spacedeck for room `{}`: {}",
-                self.room_id,
-                err
-            );
+        if ctx.destroy_room() {
+            if let Err(err) = self.cleanup(ctx.redis_conn()).await {
+                log::error!(
+                    "Failed to cleanup spacedeck for room `{}`: {}",
+                    self.room_id,
+                    err
+                );
+            }
         }
     }
 }
