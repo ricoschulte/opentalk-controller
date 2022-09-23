@@ -1,11 +1,15 @@
 use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 
+use crate::incoming::ParticipantSelection;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Message {
     StartedTalking(ParticipantId),
     StoppedTalking(ParticipantId),
     RequestMute(RequestMute),
+    PresenterGranted(ParticipantSelection),
+    PresenterRevoked(ParticipantSelection),
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

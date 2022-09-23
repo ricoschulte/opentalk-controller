@@ -46,6 +46,12 @@ pub enum Message {
     #[serde(rename = "request_mute")]
     RequestMute(rabbitmq::RequestMute),
 
+    #[serde(rename = "presenter_granted")]
+    PresenterGranted,
+
+    #[serde(rename = "presenter_revoked")]
+    PresenterRevoked,
+
     /// Contains a error about what request failed. See [`Error`]
     #[serde(rename = "error")]
     Error(Error),
@@ -348,5 +354,29 @@ mod test {
             println!("{}", produced);
             assert_eq!(expected, produced);
         }
+    }
+
+    #[test]
+    fn presenter_granted() {
+        let presenter_granted = Message::PresenterGranted;
+
+        assert_eq_json!(
+            presenter_granted,
+            {
+                "message": "presenter_granted"
+            }
+        );
+    }
+
+    #[test]
+    fn presenter_revoked() {
+        let presenter_revoked = Message::PresenterRevoked;
+
+        assert_eq_json!(
+            presenter_revoked,
+            {
+                "message": "presenter_revoked"
+            }
+        );
     }
 }
