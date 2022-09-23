@@ -923,13 +923,14 @@ impl Runner {
 
                 let is_moderator = matches!(self.role, Role::Moderator);
 
-                if !is_moderator
-                    && moderation::storage::is_waiting_room_enabled(
-                        &mut self.redis_conn,
-                        self.room_id.room_id(),
-                    )
-                    .await?
-                {
+                let waiting_room_enabled = moderation::storage::init_waiting_room_key(
+                    &mut self.redis_conn,
+                    self.room_id.room_id(),
+                    self.room.waiting_room,
+                )
+                .await?;
+
+                if !is_moderator && waiting_room_enabled {
                     // Waiting room is enabled; join the waiting room
                     self.join_waiting_room(timestamp, control_data).await?;
                 } else {

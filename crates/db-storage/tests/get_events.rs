@@ -73,6 +73,7 @@ async fn test() {
     let room = NewRoom {
         created_by: user.id,
         password: None,
+        waiting_room: false,
     }
     .insert(&conn)
     .unwrap();
@@ -244,6 +245,7 @@ async fn get_events_invite_filter() {
     let room = NewRoom {
         created_by: inviter.id,
         password: None,
+        waiting_room: false,
     }
     .insert(&conn)
     .unwrap();
@@ -441,6 +443,7 @@ async fn get_event_invites() {
     let room = NewRoom {
         created_by: ferdinand.id,
         password: None,
+        waiting_room: false,
     }
     .insert(&conn)
     .unwrap();

@@ -441,6 +441,10 @@ pub struct PostEventsBody {
     #[validate(length(min = 1, max = 255))]
     pub password: Option<String>,
 
+    /// Should the created event have a waiting room?
+    #[serde(default)]
+    pub waiting_room: bool,
+
     /// Should the created event be time independent?
     ///
     /// If true, all following fields must be null
@@ -509,6 +513,7 @@ pub async fn new_event(
                 title,
                 description,
                 password,
+                waiting_room,
                 is_time_independent: true,
                 is_all_day: None,
                 starts_at: None,
@@ -522,12 +527,14 @@ pub async fn new_event(
                     title,
                     description,
                     password,
+                    waiting_room,
                 )
             }
             PostEventsBody {
                 title,
                 description,
                 password,
+                waiting_room,
                 is_time_independent: false,
                 is_all_day: Some(is_all_day),
                 starts_at: Some(starts_at),
@@ -541,6 +548,7 @@ pub async fn new_event(
                     title,
                     description,
                     password,
+                    waiting_room,
                     is_all_day,
                     starts_at,
                     ends_at,
@@ -581,10 +589,12 @@ fn create_time_independent_event(
     title: String,
     description: String,
     password: Option<String>,
+    waiting_room: bool,
 ) -> Result<EventResource, ApiError> {
     let room = NewRoom {
         created_by: current_user.id,
         password,
+        waiting_room,
     }
     .insert(conn)?;
 
@@ -641,6 +651,7 @@ fn create_time_dependent_event(
     title: String,
     description: String,
     password: Option<String>,
+    waiting_room: bool,
     is_all_day: bool,
     starts_at: DateTimeTz,
     ends_at: DateTimeTz,
@@ -654,6 +665,7 @@ fn create_time_dependent_event(
     let room = NewRoom {
         created_by: current_user.id,
         password,
+        waiting_room,
     }
     .insert(conn)?;
 
@@ -1004,6 +1016,9 @@ pub struct PatchEventBody {
     #[serde(default, deserialize_with = "deserialize_some")]
     password: Option<Option<String>>,
 
+    /// Patch the presence of a waiting room
+    waiting_room: Option<bool>,
+
     /// Patch the time independence of the event
     ///
     /// If it changes the independence from true false this body has to have
@@ -1037,6 +1052,7 @@ impl PatchEventBody {
             title,
             description,
             password,
+            waiting_room,
             is_time_independent,
             is_all_day,
             starts_at,
@@ -1047,6 +1063,7 @@ impl PatchEventBody {
         title.is_none()
             && description.is_none()
             && password.is_none()
+            && waiting_room.is_none()
             && is_time_independent.is_none()
             && is_all_day.is_none()
             && starts_at.is_none()
@@ -1055,11 +1072,12 @@ impl PatchEventBody {
     }
 
     // special case to only patch the events room
-    fn is_only_password(&self) -> bool {
+    fn only_modifies_room(&self) -> bool {
         let PatchEventBody {
             title,
             description,
             password,
+            waiting_room,
             is_time_independent,
             is_all_day,
             starts_at,
@@ -1069,12 +1087,12 @@ impl PatchEventBody {
 
         title.is_none()
             && description.is_none()
-            && password.is_some()
             && is_time_independent.is_none()
             && is_all_day.is_none()
             && starts_at.is_none()
             && ends_at.is_none()
             && recurrence_pattern.is_empty()
+            && (password.is_some() || waiting_room.is_some())
     }
 }
 
@@ -1113,10 +1131,11 @@ pub async fn patch_event(
         let (event, invite, room, sip_config, is_favorite) =
             Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
 
-        // Update the event's room if the password is set
-        let room = if let Some(password) = &patch.password {
+        let room = if patch.password.is_some() || patch.waiting_room.is_some() {
+            // Update the event's room if at least one of the fields is set
             UpdateRoom {
-                password: Some(password.clone()),
+                password: patch.password.clone(),
+                waiting_room: patch.waiting_room,
             }
             .apply(&conn, event.room)?
         } else {
@@ -1124,7 +1143,7 @@ pub async fn patch_event(
         };
 
         // Special case: if the patch only modifies the password do not update the event
-        let event = if patch.is_only_password() {
+        let event = if patch.only_modifies_room() {
             event
         } else {
             let update_event = match (event.is_time_independent, patch.is_time_independent) {

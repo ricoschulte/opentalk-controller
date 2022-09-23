@@ -81,6 +81,24 @@ pub async fn set_waiting_room_enabled(
         .context("Failed to SET waiting_room_enabled")
 }
 
+/// Return the `waiting_room` flag, and optionally set it to a defined value
+/// given by the `enabled` parameter beforehand if the flag is not present yet.
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn init_waiting_room_key(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+    enabled: bool,
+) -> Result<bool> {
+    let was_enabled: (bool, bool) = redis::pipe()
+        .atomic()
+        .set_nx(WaitingRoomEnabled { room }, enabled)
+        .get(WaitingRoomEnabled { room })
+        .query_async(redis_conn)
+        .await
+        .context("Failed to GET waiting_room_enabled")?;
+    Ok(was_enabled.1)
+}
+
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn is_waiting_room_enabled(
     redis_conn: &mut RedisConnection,
