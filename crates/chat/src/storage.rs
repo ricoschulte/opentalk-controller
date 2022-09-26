@@ -1,8 +1,28 @@
-use super::TimedMessage;
+use crate::{MessageId, Scope};
+
 use anyhow::{Context, Result};
 use controller::prelude::*;
+use controller_shared::ParticipantId;
+use db_storage::rooms::RoomId;
 use displaydoc::Display;
 use redis::AsyncCommands;
+use serde::{Deserialize, Serialize};
+
+/// Message type stores in redis
+///
+/// This needs to have a inner timestamp.
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TimedMessage {
+    pub id: MessageId,
+    pub source: ParticipantId,
+    pub timestamp: Timestamp,
+    pub content: String,
+    #[serde(flatten)]
+    pub scope: Scope,
+}
+
+impl_from_redis_value_de!(TimedMessage);
+impl_to_redis_args_se!(&TimedMessage);
 
 #[derive(Display)]
 /// k3k-signaling:room={room}:chat:history
@@ -52,4 +72,43 @@ pub async fn delete_room_chat_history(
         .with_context(|| format!("Failed to delete room chat history, room={}", room))?;
 
     Ok(())
+}
+
+#[derive(Display)]
+/// k3k-signaling:room={room}:chat_enabled
+#[ignore_extra_doc_attributes]
+/// If set to true the chat is enabled
+struct ChatEnabled {
+    room: RoomId,
+}
+
+impl_to_redis_args!(ChatEnabled);
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn set_chat_enabled(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+    enabled: bool,
+) -> Result<()> {
+    redis_conn
+        .set(ChatEnabled { room }, enabled)
+        .await
+        .context("Failed to SET chat_enabled")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn is_chat_enabled(redis_conn: &mut RedisConnection, room: RoomId) -> Result<bool> {
+    redis_conn
+        .get(ChatEnabled { room })
+        .await
+        .context("Failed to GET chat_enabled")
+        .map(|result: Option<bool>| result.unwrap_or(true))
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn delete_chat_enabled(redis_conn: &mut RedisConnection, room: RoomId) -> Result<()> {
+    redis_conn
+        .del(ChatEnabled { room })
+        .await
+        .context("Failed to DEL chat_enabled")
 }

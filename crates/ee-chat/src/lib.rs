@@ -258,6 +258,14 @@ impl SignalingModule for Chat {
                     return Ok(());
                 }
 
+                let chat_enabled =
+                    chat::is_chat_enabled(ctx.redis_conn(), self.room.room_id()).await?;
+
+                if !chat_enabled {
+                    // TODO: send error as done in the chat module
+                    return Ok(());
+                }
+
                 // Limit message size to 1024 bytes at most
                 if msg.content.len() > 1024 {
                     let mut last_idx = 0;

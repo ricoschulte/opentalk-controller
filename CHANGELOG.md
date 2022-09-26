@@ -6,6 +6,8 @@
 - controller: added the spacedeck module that allows participants to collaboratively edit a whiteboard
 - controller: Added a query parameter to the `GET /events` endpoint to allow filtering by `invite_status`
 - controller: toggle raise hands status (actions `enable_raise_hands`, `disable_raise_hands` and according messages)
+- chat: toggle chat status (actions `enable_chat`, `disable_chat`, `send_message` and according messages)
+- ee-chat: added check for chat status (enabled/disabled)
 
 ### Fixed
 
