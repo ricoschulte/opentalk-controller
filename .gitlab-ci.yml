@@ -8,7 +8,6 @@ stages:
   - package
 
 variables:
-  CARGO_HOME: ${CI_PROJECT_DIR}/.cargo
   # Enable one network per build for the test container and services
   FF_NETWORK_PER_BUILD: 'true'
 
