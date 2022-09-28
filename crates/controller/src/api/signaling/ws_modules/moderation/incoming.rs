@@ -9,7 +9,13 @@ pub enum Message {
 
     EnableWaitingRoom,
     DisableWaitingRoom,
+
+    EnableRaiseHands,
+    DisableRaiseHands,
+
     Accept(Target),
+
+    ResetRaisedHands,
 }
 
 #[derive(Debug, Deserialize)]

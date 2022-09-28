@@ -1,4 +1,5 @@
 use crate::api::signaling::prelude::*;
+use controller_shared::ParticipantId;
 use serde::Serialize;
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -15,9 +16,14 @@ pub enum Message {
     WaitingRoomEnabled,
     WaitingRoomDisabled,
 
+    RaiseHandsEnabled { issued_by: ParticipantId },
+    RaiseHandsDisabled { issued_by: ParticipantId },
+
     Accepted,
 
     Error(Error),
+
+    RaisedHandResetByModerator { issued_by: ParticipantId },
 }
 
 #[derive(Debug, Serialize, PartialEq)]

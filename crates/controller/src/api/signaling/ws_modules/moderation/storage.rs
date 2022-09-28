@@ -105,6 +105,51 @@ pub async fn delete_waiting_room_enabled(
 }
 
 #[derive(Display)]
+/// k3k-signaling:room={room}:raise_hands_enabled
+#[ignore_extra_doc_attributes]
+/// If set to true the raise hands is enabled
+struct RaiseHandsEnabled {
+    room: RoomId,
+}
+
+impl_to_redis_args!(RaiseHandsEnabled);
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn set_raise_hands_enabled(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+    enabled: bool,
+) -> Result<()> {
+    redis_conn
+        .set(RaiseHandsEnabled { room }, enabled)
+        .await
+        .context("Failed to SET raise_hands_enabled")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn is_raise_hands_enabled(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+) -> Result<bool> {
+    redis_conn
+        .get(RaiseHandsEnabled { room })
+        .await
+        .context("Failed to GET raise_hands_enabled")
+        .map(|result: Option<bool>| result.unwrap_or(true))
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn delete_raise_hands_enabled(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+) -> Result<()> {
+    redis_conn
+        .del(RaiseHandsEnabled { room })
+        .await
+        .context("Failed to DEL raise_hands_enabled")
+}
+
+#[derive(Display)]
 /// k3k-signaling:room={room}:waiting_room_list
 #[ignore_extra_doc_attributes]
 /// Set of participant ids inside the waiting room

@@ -22,6 +22,7 @@ pub struct ModerationModule {
 pub struct ModerationModuleFrontendData {
     waiting_room_enabled: bool,
     waiting_room: Vec<control::outgoing::Participant>,
+    raise_hands_enabled: bool,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -63,6 +64,10 @@ impl SignalingModule for ModerationModule {
                         storage::is_waiting_room_enabled(ctx.redis_conn(), self.room.room_id())
                             .await?;
 
+                    let raise_hands_enabled =
+                        storage::is_raise_hands_enabled(ctx.redis_conn(), self.room.room_id())
+                            .await?;
+
                     let list =
                         storage::waiting_room_all(ctx.redis_conn(), self.room.room_id()).await?;
 
@@ -86,6 +91,7 @@ impl SignalingModule for ModerationModule {
                     *frontend_data = Some(ModerationModuleFrontendData {
                         waiting_room_enabled,
                         waiting_room,
+                        raise_hands_enabled,
                     });
                 }
             }
@@ -174,6 +180,48 @@ impl SignalingModule for ModerationModule {
                     control::rabbitmq::Message::Accepted(target),
                 );
             }
+            Event::WsMessage(incoming::Message::ResetRaisedHands) => {
+                if ctx.role() != Role::Moderator {
+                    return Ok(());
+                }
+
+                ctx.rabbitmq_publish_control(
+                    control::rabbitmq::current_room_exchange_name(self.room),
+                    control::rabbitmq::room_all_routing_key().to_string(),
+                    control::rabbitmq::Message::ResetRaisedHands { issued_by: self.id },
+                );
+            }
+
+            Event::WsMessage(incoming::Message::EnableRaiseHands) => {
+                if ctx.role() != Role::Moderator {
+                    return Ok(());
+                }
+
+                storage::set_raise_hands_enabled(ctx.redis_conn(), self.room.room_id(), true)
+                    .await?;
+
+                ctx.rabbitmq_publish_control(
+                    control::rabbitmq::current_room_exchange_name(self.room),
+                    control::rabbitmq::room_all_routing_key().to_string(),
+                    control::rabbitmq::Message::EnableRaiseHands { issued_by: self.id },
+                );
+            }
+
+            Event::WsMessage(incoming::Message::DisableRaiseHands) => {
+                if ctx.role() != Role::Moderator {
+                    return Ok(());
+                }
+
+                storage::set_raise_hands_enabled(ctx.redis_conn(), self.room.room_id(), false)
+                    .await?;
+
+                ctx.rabbitmq_publish_control(
+                    control::rabbitmq::current_room_exchange_name(self.room),
+                    control::rabbitmq::room_all_routing_key().to_string(),
+                    control::rabbitmq::Message::DisableRaiseHands { issued_by: self.id },
+                );
+            }
+
             Event::RabbitMq(rabbitmq::Message::Banned(participant)) => {
                 if self.id == participant {
                     ctx.ws_send(outgoing::Message::Banned);
@@ -237,6 +285,12 @@ impl SignalingModule for ModerationModule {
                 storage::delete_waiting_room_enabled(ctx.redis_conn(), self.room.room_id()).await
             {
                 log::error!("Failed to clean up waiting room enabled flag {}", e);
+            }
+
+            if let Err(e) =
+                storage::delete_raise_hands_enabled(ctx.redis_conn(), self.room.room_id()).await
+            {
+                log::error!("Failed to clean up raise hands enabled flag {}", e);
             }
 
             if let Err(e) =

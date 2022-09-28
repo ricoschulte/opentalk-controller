@@ -975,32 +975,24 @@ impl Runner {
                 }
             }
             incoming::Message::RaiseHand => {
-                storage::AttrPipeline::new(self.room_id, self.id)
-                    .set("hand_is_up", true)
-                    .set("hand_updated_at", timestamp)
-                    .query_async(&mut self.redis_conn)
-                    .await?;
-
-                let actions = self
-                    .handle_module_broadcast_event(timestamp, DynBroadcastEvent::RaiseHand, true)
+                if !moderation::storage::is_raise_hands_enabled(&mut self.redis_conn, self.room.id)
+                    .await?
+                {
+                    self.ws_send_control(
+                        timestamp,
+                        outgoing::Message::Error {
+                            text: "raise_hands_disabled",
+                        },
+                    )
                     .await;
 
-                self.handle_module_requested_actions(timestamp, actions)
-                    .await;
+                    return Ok(());
+                }
+
+                self.handle_raise_hand_change(timestamp, true).await?;
             }
             incoming::Message::LowerHand => {
-                storage::AttrPipeline::new(self.room_id, self.id)
-                    .set("hand_is_up", false)
-                    .set("hand_updated_at", timestamp)
-                    .query_async(&mut self.redis_conn)
-                    .await?;
-
-                let actions = self
-                    .handle_module_broadcast_event(timestamp, DynBroadcastEvent::LowerHand, true)
-                    .await;
-
-                self.handle_module_requested_actions(timestamp, actions)
-                    .await;
+                self.handle_raise_hand_change(timestamp, false).await?;
             }
             incoming::Message::GrantModeratorRole(incoming::Target { target }) => {
                 self.handle_grant_moderator_msg(timestamp, target, true)
@@ -1068,6 +1060,32 @@ impl Runner {
             rabbitmq::Message::SetModeratorStatus(grant),
         )
         .await;
+
+        Ok(())
+    }
+
+    async fn handle_raise_hand_change(
+        &mut self,
+        timestamp: Timestamp,
+        hand_raised: bool,
+    ) -> Result<()> {
+        storage::AttrPipeline::new(self.room_id, self.id)
+            .set("hand_is_up", hand_raised)
+            .set("hand_updated_at", timestamp)
+            .query_async(&mut self.redis_conn)
+            .await?;
+
+        let broadcast_event = if hand_raised {
+            DynBroadcastEvent::RaiseHand
+        } else {
+            DynBroadcastEvent::LowerHand
+        };
+        let actions = self
+            .handle_module_broadcast_event(timestamp, broadcast_event, true)
+            .await;
+
+        self.handle_module_requested_actions(timestamp, actions)
+            .await;
 
         Ok(())
     }
@@ -1498,6 +1516,68 @@ impl Runner {
                     .await;
 
                 self.rabbitmq_publish_control(timestamp, None, rabbitmq::Message::Update(self.id))
+                    .await;
+            }
+            rabbitmq::Message::ResetRaisedHands { issued_by } => {
+                let raised: Option<bool> = storage::get_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.id,
+                    "hand_is_up",
+                )
+                .await?;
+                if matches!(raised, Some(true)) {
+                    self.handle_raise_hand_change(timestamp, false).await?;
+                }
+
+                self.ws
+                    .send(Message::Text(
+                        NamespacedOutgoing {
+                            namespace: moderation::NAMESPACE,
+                            timestamp,
+                            payload: moderation::outgoing::Message::RaisedHandResetByModerator {
+                                issued_by,
+                            },
+                        }
+                        .to_json(),
+                    ))
+                    .await;
+            }
+            rabbitmq::Message::EnableRaiseHands { issued_by } => {
+                self.ws
+                    .send(Message::Text(
+                        NamespacedOutgoing {
+                            namespace: moderation::NAMESPACE,
+                            timestamp,
+                            payload: moderation::outgoing::Message::RaiseHandsEnabled { issued_by },
+                        }
+                        .to_json(),
+                    ))
+                    .await;
+            }
+            rabbitmq::Message::DisableRaiseHands { issued_by } => {
+                let raised: Option<bool> = storage::get_attribute(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    self.id,
+                    "hand_is_up",
+                )
+                .await?;
+                if matches!(raised, Some(true)) {
+                    self.handle_raise_hand_change(timestamp, false).await?;
+                }
+
+                self.ws
+                    .send(Message::Text(
+                        NamespacedOutgoing {
+                            namespace: moderation::NAMESPACE,
+                            timestamp,
+                            payload: moderation::outgoing::Message::RaiseHandsDisabled {
+                                issued_by,
+                            },
+                        }
+                        .to_json(),
+                    ))
                     .await;
             }
         }

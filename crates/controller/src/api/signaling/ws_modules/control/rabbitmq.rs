@@ -23,6 +23,17 @@ pub enum Message {
     Accepted(ParticipantId),
 
     SetModeratorStatus(bool),
+
+    EnableRaiseHands {
+        issued_by: ParticipantId,
+    },
+    DisableRaiseHands {
+        issued_by: ParticipantId,
+    },
+
+    ResetRaisedHands {
+        issued_by: ParticipantId,
+    },
 }
 
 /// Returns the name of the RabbitMQ topic exchange used inside the current room.
