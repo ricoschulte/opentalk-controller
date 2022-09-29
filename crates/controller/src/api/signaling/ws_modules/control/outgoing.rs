@@ -3,7 +3,7 @@ use controller_shared::ParticipantId;
 use serde::Serialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
     JoinSuccess(JoinSuccess),
@@ -23,7 +23,7 @@ pub enum Message {
     },
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct JoinSuccess {
     pub id: ParticipantId,
 
@@ -40,12 +40,12 @@ pub struct JoinSuccess {
     pub participants: Vec<Participant>,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct AssociatedParticipant {
     pub id: ParticipantId,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Participant {
     pub id: ParticipantId,
 

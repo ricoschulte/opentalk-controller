@@ -13,7 +13,7 @@ mod util;
 pub mod signaling;
 pub mod v1;
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Participant<U> {
     User(U),
     Guest,

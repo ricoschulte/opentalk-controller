@@ -22,7 +22,7 @@ pub struct Start {
     pub frontend_config: FrontendConfig,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SpeakerUpdate {
     pub speaker: Option<ParticipantId>,
     pub history: Option<Vec<ParticipantId>>,
@@ -34,7 +34,7 @@ pub struct RemainingUpdate {
     pub remaining: Vec<ParticipantId>,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct StartAnimation {
     pub pool: Vec<ParticipantId>,
     pub result: ParticipantId,

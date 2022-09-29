@@ -19,7 +19,7 @@ pub(super) struct InitStateKey {
 
 impl_to_redis_args!(InitStateKey);
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 
 pub enum InitState {
     /// Spacedeck is initializing
@@ -31,7 +31,7 @@ pub enum InitState {
 impl_to_redis_args_se!(InitState);
 impl_from_redis_value_de!(InitState);
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpaceInfo {
     pub id: String,
     pub url: Url,

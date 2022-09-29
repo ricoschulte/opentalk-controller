@@ -29,7 +29,7 @@ pub enum Error {
     Fatal(#[from] anyhow::Error),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum StateMachineOutput {
     SpeakerUpdate(rabbitmq::SpeakerUpdate),
     StartAnimation(rabbitmq::StartAnimation),

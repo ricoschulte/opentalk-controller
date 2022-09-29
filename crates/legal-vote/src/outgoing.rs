@@ -6,7 +6,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 
 /// A message to the participant, send via a websocket connection
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "message")]
 pub enum Message {
     /// Vote has started
@@ -24,7 +24,7 @@ pub enum Message {
 }
 
 /// The direct response to an issued vote request
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct VoteResponse {
     /// The vote id of the requested vote
     pub legal_vote_id: LegalVoteId,
@@ -34,7 +34,7 @@ pub struct VoteResponse {
 }
 
 /// Vote request response
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "response")]
 pub enum Response {
     /// Response for a successful vote request
@@ -43,7 +43,7 @@ pub enum Response {
     Failed(VoteFailed),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct VoteSuccess {
     pub vote_option: VoteOption,
@@ -51,7 +51,7 @@ pub struct VoteSuccess {
 }
 
 /// Reasons for a failed vote request
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "reason")]
 pub enum VoteFailed {
     /// The given vote id is not active or does not exist
@@ -62,7 +62,7 @@ pub enum VoteFailed {
     InvalidOption,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct Results {
     /// The vote options with their respective vote count
     #[serde(flatten)]
@@ -72,7 +72,7 @@ pub struct Results {
 }
 
 /// The results for a vote
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct VoteResults {
     /// The vote id
     pub legal_vote_id: LegalVoteId,
@@ -82,7 +82,7 @@ pub struct VoteResults {
 }
 
 /// A stop message
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Stopped {
     /// The vote id
     pub legal_vote_id: LegalVoteId,
@@ -95,7 +95,7 @@ pub struct Stopped {
 }
 
 /// The final results for a vote
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "results")]
 pub enum FinalResults {
     /// Valid final results
@@ -105,7 +105,7 @@ pub enum FinalResults {
 }
 
 /// The error kind sent to the user
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "error")]
 pub enum ErrorKind {
     /// A vote is already active
@@ -133,12 +133,12 @@ pub enum ErrorKind {
 }
 
 /// The list of provided guest participants.
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct GuestParticipants {
     pub guests: Vec<ParticipantId>,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct InvalidFields {
     pub fields: Vec<String>,
 }

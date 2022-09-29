@@ -20,7 +20,7 @@ pub trait PluginRequest: Into<outgoing::PluginBody> {
 }
 
 /// Audio codecs supported by Janus
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum AudioCodec {
     #[serde(rename = "opus")]
     Opus,
@@ -69,7 +69,7 @@ impl FromStr for AudioCodec {
 }
 
 /// Video codecs supported by Janus
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum VideoCodec {
     #[serde(rename = "vp8")]
     Vp8,
@@ -114,7 +114,7 @@ fn is_default<T: Default + PartialEq>(t: &T) -> bool {
 }
 
 /// JanusPlugin
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum JanusPlugin {
     #[cfg(feature = "videoroom")]
     #[serde(rename = "janus.plugin.videoroom")]
@@ -252,7 +252,7 @@ impl From<u64> for StreamTypes {
 }
 
 /// A candidate for ICE/SDP trickle
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TrickleCandidate {
     #[serde(rename = "sdpMLineIndex")]
     pub sdp_m_line_index: u64,

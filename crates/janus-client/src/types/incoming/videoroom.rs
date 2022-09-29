@@ -493,7 +493,7 @@ mod test {
             }) => {
                 assert!(sender == HandleId::new(7519437590873898));
                 assert!(session_id == SessionId::new(1181318522471683));
-                assert!(transaction == None);
+                assert!(transaction.is_none());
             }
             _ => panic!(),
         }

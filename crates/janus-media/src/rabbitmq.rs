@@ -8,7 +8,7 @@ pub enum Message {
     RequestMute(RequestMute),
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct RequestMute {
     /// The issuer of the mute request
     pub issuer: ParticipantId,

@@ -16,7 +16,7 @@ pub struct Start {
     pub duration: Option<Duration>,
 }
 
-#[derive(Debug, Deserialize, PartialEq)]
+#[derive(Debug, Deserialize, PartialEq, Eq)]
 pub struct RoomParameter {
     pub name: String,
     pub assignments: Vec<ParticipantId>,

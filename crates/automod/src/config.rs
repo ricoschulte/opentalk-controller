@@ -4,7 +4,7 @@ use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum SelectionStrategy {
     /// No selection strategy, a moderator will assign privileges
@@ -21,7 +21,7 @@ pub enum SelectionStrategy {
 }
 
 /// Used to communicate to the frontend
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct FrontendConfig {
     #[serde(flatten)]
     pub parameter: Parameter,
@@ -52,10 +52,10 @@ impl FrontendConfig {
 
 /// Typed version of the frontend-config that will be sent to the frontend, may only be created
 /// using [`FrontendConfig::into_public`]
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct PublicConfig(FrontendConfig);
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Parameter {
     /// The strategy used to determine the next speaker
     pub selection_strategy: SelectionStrategy,
@@ -80,7 +80,7 @@ pub struct Parameter {
     pub animation_on_random: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct StorageConfig {
     pub started: DateTime<Utc>,
     pub parameter: Parameter,

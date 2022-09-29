@@ -29,7 +29,7 @@ struct SessionInfo {
 impl_to_redis_args_se!(SessionInfo);
 impl_from_redis_value_de!(SessionInfo);
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct Access {
     readonly: bool,

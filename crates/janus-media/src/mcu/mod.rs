@@ -160,7 +160,7 @@ impl McuPool {
     /// event and should reconnect in order to use a different janus.
     pub async fn reload_janus_config(&self) -> Result<()> {
         let settings = self.shared_settings.load_full();
-        let mcu_settings = settings::JanusMcuConfig::extract(&*settings)?;
+        let mcu_settings = settings::JanusMcuConfig::extract(&settings)?;
 
         let mut clients = self.clients.write().await;
 
@@ -798,7 +798,7 @@ impl JanusPublisher {
 
                     log::debug!("Publisher {} received JanusMessage: {:?}", media_session_key, &*message);
 
-                    if let Err(e) = forward_janus_message(&*message, media_session_key, &event_sink).await {
+                    if let Err(e) = forward_janus_message(&message, media_session_key, &event_sink).await {
                         log::error!("Publisher {} failed to forward JanusMessage to the Media module,- killing this publisher, {}",
                             media_session_key,
                             e);
@@ -960,7 +960,7 @@ impl JanusSubscriber {
 
                     log::debug!("Subscriber {} received JanusMessage: {:?}", media_session_key, &*message);
 
-                    if let Err(e) = forward_janus_message(&*message, media_session_key, &event_sink).await {
+                    if let Err(e) = forward_janus_message(&message, media_session_key, &event_sink).await {
                         log::error!("Subscriber {} failed to forward JanusMessage to the Media module, shutting down this subscriber, {}",
                             media_session_key,
                             e);

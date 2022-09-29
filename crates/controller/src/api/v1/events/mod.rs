@@ -96,7 +96,7 @@ impl<'de> Visitor<'de> for InstanceIdVisitor {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DateTimeTz {
     /// UTC datetime
     pub datetime: DateTime<Utc>,

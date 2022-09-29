@@ -2,7 +2,7 @@ use crate::config::PublicConfig;
 use controller_shared::ParticipantId;
 use serde::Serialize;
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "message")]
 pub enum Message {
     /// Signals the start of an automod session
@@ -38,7 +38,7 @@ pub enum Message {
 ///
 /// Both `history` and `remaining`: If the field is set it will contains the complete new list.
 /// If it doesnt exist it must be treated as unchanged.
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct SpeakerUpdated {
     /// Speaker field. If [`None`] no speaker is currently selected.
     pub speaker: Option<ParticipantId>,
@@ -67,20 +67,20 @@ pub struct SpeakerUpdated {
 
 /// A modification of the remaining list has taken place, because someone edited the list by hand or
 /// it got modified because a participant left/joined
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct RemainingUpdated {
     pub remaining: Vec<ParticipantId>,
 }
 
 /// Tells the frontend to start a 'random' draw animation (e.g. wheel of names)
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct StartAnimation {
     pub pool: Vec<ParticipantId>,
     pub result: ParticipantId,
 }
 
 /// A command from the frontend has triggered an error.
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "error")]
 pub enum Error {
     /// The selection made by the frontend was invalid.

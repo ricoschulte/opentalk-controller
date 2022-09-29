@@ -36,7 +36,7 @@ impl_to_redis_args_se!(&Entry);
 impl_from_redis_value_de!(Entry);
 
 /// The kind of history entry.  
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub enum EntryKind {
     /// Participant gained its speaker status.
     Start,

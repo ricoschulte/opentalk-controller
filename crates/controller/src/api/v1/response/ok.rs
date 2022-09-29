@@ -23,8 +23,8 @@ pub struct PagePaginationLinks {
 
 impl PagePaginationLinks {
     pub fn new(per_page: i64, page: i64, total: i64) -> Self {
-        let first = (page > 1).then(|| 1);
-        let prev = (page > 1).then(|| page - 1);
+        let first = (page > 1).then_some(1);
+        let prev = (page > 1).then_some(page - 1);
 
         let last_page = {
             let quotient = total / per_page;
@@ -36,8 +36,8 @@ impl PagePaginationLinks {
             }
         };
 
-        let next = (page < last_page).then(|| page + 1);
-        let last = (page < last_page).then(|| last_page);
+        let next = (page < last_page).then_some(page + 1);
+        let last = (page < last_page).then_some(last_page);
 
         Self {
             page,

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{MessageId, Scope};
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
     ChatEnabled(ChatEnabled),
@@ -13,17 +13,17 @@ pub enum Message {
     Error(Error),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ChatEnabled {
     pub issued_by: ParticipantId,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ChatDisabled {
     pub issued_by: ParticipantId,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct MessageSent {
     pub id: MessageId,
     pub source: ParticipantId,
@@ -34,7 +34,7 @@ pub struct MessageSent {
     pub timestamp: Timestamp,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "error", rename_all = "snake_case")]
 pub enum Error {
     ChatDisabled,

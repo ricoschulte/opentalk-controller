@@ -15,7 +15,7 @@ pub(super) struct InitKey {
 
 impl_to_redis_args!(InitKey);
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InitState {
     Initializing,
     Initialized,

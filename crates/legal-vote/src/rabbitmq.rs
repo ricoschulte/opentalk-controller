@@ -59,7 +59,7 @@ pub enum StopKind {
 }
 
 /// The specified vote has been canceled
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Canceled {
     /// The id of the canceled vote
     pub legal_vote_id: LegalVoteId,
