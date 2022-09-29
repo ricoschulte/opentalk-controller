@@ -9,7 +9,7 @@ use std::time::SystemTime;
 /// Token Verification errors
 ///
 /// The error messages will get displayed in a HTTP 401 response
-#[derive(Debug, thiserror::Error, PartialEq)]
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum VerifyError {
     #[error("Not a valid JWT ({0})")]
     InvalidJwt(String),
@@ -106,7 +106,7 @@ pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, 
     // Verify the signature using the openidconnect crate
     let signing_alg = map_algorithm(header.alg).ok_or(VerifyError::InvalidSignature)?;
 
-    let () = signing_key
+    signing_key
         .verify_signature(&signing_alg, message.as_ref(), signature.as_ref())
         .map_err(|_| VerifyError::InvalidSignature)?;
 

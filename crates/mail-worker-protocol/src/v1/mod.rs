@@ -7,7 +7,7 @@ mod invites;
 
 pub use invites::{ExternalEventInvite, RegisteredEventInvite, UnregisteredEventInvite};
 
-#[derive(Deserialize, Serialize, PartialEq, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct Email(String);
 
 impl Email {
@@ -34,7 +34,7 @@ impl AsRef<str> for Email {
     }
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct User {
     pub email: Email,
     pub title: String,
@@ -43,13 +43,13 @@ pub struct User {
     pub language: String,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct Time {
     pub time: chrono::DateTime<Utc>,
     pub timezone: String,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct Event {
     pub id: Uuid,
     pub name: String,
@@ -61,13 +61,13 @@ pub struct Event {
     pub call_in: Option<CallIn>,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct Room {
     pub id: Uuid,
     pub password: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug)]
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct CallIn {
     pub sip_tel: String,
     pub sip_id: String,
@@ -75,7 +75,7 @@ pub struct CallIn {
 }
 
 /// The different kinds of MailTasks that are currently supported
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Eq, Debug)]
 #[cfg_attr(any(test, feature = "client"), derive(Serialize))]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {

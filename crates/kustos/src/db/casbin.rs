@@ -1,3 +1,5 @@
+#![allow(clippy::extra_unused_lifetimes)]
+
 use super::schema::casbin_rule::{self, dsl::*};
 use crate::eq_empty;
 use database::{DatabaseError, DbConnection, Result};

@@ -1,7 +1,7 @@
 use serde::Serialize;
 use url::Url;
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "message")]
 pub enum Message {
     SpaceUrl(AccessUrl),
@@ -9,12 +9,12 @@ pub enum Message {
     Error(Error),
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct AccessUrl {
     pub url: Url,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
+#[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "error")]
 pub enum Error {
     /// The requesting user has insufficient permissions for the operation

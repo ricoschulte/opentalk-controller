@@ -140,7 +140,7 @@ pub async fn login(
                 };
 
                 if let Err(e) = message
-                    .send_via(&*rabbitmq_channel, updated_info.user.id)
+                    .send_via(&rabbitmq_channel, updated_info.user.id)
                     .await
                 {
                     log::error!("Failed to send user-update message {:?}", e);

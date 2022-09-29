@@ -38,7 +38,7 @@ pub enum ProtocolResult {
     Error(ProtocolError),
 }
 
-#[derive(thiserror::Error, Debug, PartialEq, Serialize)]
+#[derive(thiserror::Error, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "error")]
 pub enum ProtocolError {
     #[error("LegalVote protocol is invalid")]

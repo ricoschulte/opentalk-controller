@@ -16,7 +16,7 @@ struct ReadyStatusKey {
 
 impl_to_redis_args!(ReadyStatusKey);
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReadyStatus {
     pub ready_status: bool,
 }

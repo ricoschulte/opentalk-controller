@@ -139,12 +139,12 @@ where
                 match lock.enforce(UserPolicy::new(subject, path, action)) {
                     Ok(true) => {
                         drop(lock);
-                        span.record("enforcement", &true);
+                        span.record("enforcement", true);
                         srv.call(req).await
                     }
                     Ok(false) => {
                         drop(lock);
-                        span.record("enforcement", &false);
+                        span.record("enforcement", false);
                         Ok(req.into_response(HttpResponse::Forbidden().finish()))
                     }
                     Err(e) => {

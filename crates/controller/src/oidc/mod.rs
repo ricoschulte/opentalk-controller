@@ -74,7 +74,7 @@ impl OidcContext {
             .await
             .context("Failed to verify token using the introspect endpoint")?;
 
-        tracing::Span::current().record("active", &response.active());
+        tracing::Span::current().record("active", response.active());
 
         Ok(AccessTokenIntrospectInfo {
             active: response.active(),

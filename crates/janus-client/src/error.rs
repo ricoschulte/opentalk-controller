@@ -73,7 +73,7 @@ impl JanusPluginError {
     }
 }
 
-#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Clone, Copy)]
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Eq, Debug, Clone, Copy)]
 #[repr(u32)]
 pub enum JanusInternalError {
     // JanusOk = 0,

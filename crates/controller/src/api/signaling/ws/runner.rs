@@ -592,7 +592,8 @@ impl Runner {
                     // Breakout rooms are destroyed even with participants inside the waiting room
                     true
                 } else {
-                    let waiting_room_is_empty = match moderation::storage::waiting_room_len(
+                    // destroy room only if waiting room is empty
+                    match moderation::storage::waiting_room_len(
                         &mut self.redis_conn,
                         self.room_id.room_id(),
                     )
@@ -604,10 +605,7 @@ impl Runner {
                             encountered_error = true;
                             false
                         }
-                    };
-
-                    // destroy room only if waiting room is empty
-                    waiting_room_is_empty
+                    }
                 }
             } else {
                 false

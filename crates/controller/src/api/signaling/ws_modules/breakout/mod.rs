@@ -39,7 +39,7 @@ impl fmt::Display for BreakoutRoomId {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ParticipantInOtherRoom {
     pub breakout_room: Option<BreakoutRoomId>,
     pub id: ParticipantId,
@@ -51,7 +51,7 @@ pub struct ParticipantInOtherRoom {
     pub left_at: Option<Timestamp>,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct AssocParticipantInOtherRoom {
     pub breakout_room: Option<BreakoutRoomId>,
     pub id: ParticipantId,
@@ -64,7 +64,7 @@ pub struct BreakoutRooms {
     breakout_room: Option<BreakoutRoomId>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct BreakoutRoom {
     id: BreakoutRoomId,
     name: String,

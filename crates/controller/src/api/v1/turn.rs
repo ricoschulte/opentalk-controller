@@ -67,7 +67,7 @@ pub async fn get(
     oidc_ctx: Data<OidcContext>,
     req: HttpRequest,
 ) -> Result<AWEither<Json<Vec<IceServer>>, NoContent>, ApiError> {
-    let settings: &ArcSwap<Settings> = &**settings;
+    let settings: &ArcSwap<Settings> = &settings;
     let settings = settings.load();
 
     let turn_servers = settings.turn.clone();

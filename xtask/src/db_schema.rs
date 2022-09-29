@@ -124,7 +124,7 @@ fn change_database_of_url(database_url: &str, default_database: &str) -> (String
 fn run_diesel_cli(db_url: &str) -> Result<Vec<u8>> {
     let mut cmd = cmd!("diesel");
     cmd.arg("--database-url")
-        .arg(&db_url)
+        .arg(db_url)
         .arg("print-schema")
         .arg("--import-types")
         .arg("crate::sql_types::*")

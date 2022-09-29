@@ -45,7 +45,7 @@ impl JanusMcuConfig {
 }
 
 /// Take the settings from your janus rabbit mq transport configuration.
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct Connection {
     #[serde(default = "default_to_janus_routing_key")]
     pub to_routing_key: String,

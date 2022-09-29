@@ -4,7 +4,7 @@ use serde::Serialize;
 pub mod v1;
 
 /// Versioned Mail Task Protocol
-#[derive(Deserialize, PartialEq, Debug)]
+#[derive(Deserialize, PartialEq, Eq, Debug)]
 #[cfg_attr(any(test, feature = "client"), derive(Serialize))]
 #[serde(tag = "version")]
 pub enum MailTask {

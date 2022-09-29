@@ -35,7 +35,7 @@ diesel_newtype! {
 
 pub mod email_invites;
 
-#[derive(Debug, Copy, Clone, PartialEq, FromSqlRow, AsExpression, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, FromSqlRow, AsExpression, Serialize, Deserialize)]
 #[sql_type = "diesel::sql_types::Text"]
 pub struct TimeZone(pub chrono_tz::Tz);
 
@@ -56,7 +56,7 @@ impl FromSql<diesel::sql_types::Text, Pg> for TimeZone {
     }
 }
 
-#[derive(Debug, Clone, Queryable, Identifiable, Associations, PartialEq)]
+#[derive(Debug, Clone, Queryable, Identifiable, Associations, PartialEq, Eq)]
 #[table_name = "events"]
 #[belongs_to(User, foreign_key = "created_by")]
 pub struct Event {
@@ -596,7 +596,7 @@ impl UpdateEventException {
 }
 
 sql_enum!(
-    #[derive(Serialize, PartialEq)]
+    #[derive(Serialize, PartialEq, Eq)]
     #[serde(rename_all = "snake_case")]
     EventInviteStatus,
     "event_invite_status",

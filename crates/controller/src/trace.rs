@@ -75,8 +75,8 @@ impl RootSpanBuilder for ReducedSpanBuilder {
                 if let Some(error) = response.response().error() {
                     handle_error(span, error)
                 } else {
-                    span.record("http.status_code", &response.response().status().as_u16());
-                    span.record("otel.status_code", &"OK");
+                    span.record("http.status_code", response.response().status().as_u16());
+                    span.record("otel.status_code", "OK");
                 }
             }
             Err(error) => handle_error(span, error),
@@ -92,12 +92,12 @@ fn handle_error(span: Span, error: &Error) {
     );
     span.record("exception.details", &tracing::field::debug(response_error));
     let status_code = response_error.status_code();
-    span.record("http.status_code", &status_code.as_u16());
+    span.record("http.status_code", status_code.as_u16());
 
     if status_code.is_client_error() {
-        span.record("otel.status_code", &"OK");
+        span.record("otel.status_code", "OK");
     } else {
-        span.record("otel.status_code", &"ERROR");
+        span.record("otel.status_code", "ERROR");
     }
 }
 

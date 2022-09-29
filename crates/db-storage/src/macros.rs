@@ -149,7 +149,7 @@ macro_rules! diesel_newtype {
 ///
 /// # Example
 ///
-/// ```rust
+/// ```rust,ignore
 /// sql_enum!(
 ///     CustomSqlEnum,          // Name of the Rust enum name
 ///     "custom_sql_enum",      // Name of the type name in sql

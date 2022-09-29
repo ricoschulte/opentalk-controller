@@ -2,7 +2,7 @@ use crate::{Choice, ChoiceId, PollId};
 use serde::Serialize;
 use std::time::Duration;
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
     Started(Started),
@@ -11,7 +11,7 @@ pub enum Message {
     Error(Error),
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Started {
     pub id: PollId,
     pub topic: String,
@@ -21,19 +21,19 @@ pub struct Started {
     pub duration: Duration,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Results {
     pub id: PollId,
     pub results: Vec<Item>,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Item {
     pub id: ChoiceId,
     pub count: u32,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "error")]
 pub enum Error {
     InsufficientPermissions,

@@ -5,7 +5,7 @@ use controller_shared::ParticipantId;
 use janus_client::TrickleCandidate;
 use serde::Serialize;
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "message")]
 pub enum Message {
     /// SDP Offer, renegotiate publish
@@ -51,7 +51,7 @@ pub enum Message {
     Error(Error),
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Sdp {
     /// The payload of the sdp message
     pub sdp: String,
@@ -60,7 +60,7 @@ pub struct Sdp {
     pub source: Source,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct SdpCandidate {
     /// The payload of the sdp message
     pub candidate: TrickleCandidate,
@@ -69,7 +69,7 @@ pub struct SdpCandidate {
     pub source: Source,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Source {
     /// The source of this message
     pub source: ParticipantId,
@@ -96,7 +96,7 @@ impl From<Target> for Source {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Media {
     #[serde(flatten)]
     pub source: Source,
@@ -114,27 +114,27 @@ impl From<(MediaSessionKey, mcu::Media)> for Media {
     }
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum LinkDirection {
     Upstream,
     Downstream,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Link {
     pub direction: LinkDirection,
     #[serde(flatten)]
     pub source: Source,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct FocusUpdate {
     pub focus: Option<ParticipantId>,
 }
 
 /// Represents a error of the janus media module
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "error")]
 pub enum Error {
     InvalidSdpOffer,

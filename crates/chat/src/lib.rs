@@ -20,7 +20,7 @@ mod storage;
 
 pub use storage::is_chat_enabled;
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "scope", content = "target", rename_all = "snake_case")]
 pub enum Scope {
     Global,

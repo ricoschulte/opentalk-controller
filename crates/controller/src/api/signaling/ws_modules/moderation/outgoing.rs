@@ -2,7 +2,7 @@ use crate::api::signaling::prelude::*;
 use controller_shared::ParticipantId;
 use serde::Serialize;
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
     Kicked,
@@ -26,7 +26,7 @@ pub enum Message {
     RaisedHandResetByModerator { issued_by: ParticipantId },
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "error", rename_all = "snake_case")]
 pub enum Error {
     CannotBanGuest,

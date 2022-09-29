@@ -7,7 +7,7 @@ pub trait IsSubject {}
 /// A uuid backed user identifier.
 ///
 /// This crates requires your users to be identifiable by a uuid.
-#[derive(Debug, PartialEq, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
 pub struct PolicyUser(pub(crate) uuid::Uuid);
 
 impl IsSubject for PolicyUser {}
@@ -19,7 +19,7 @@ impl From<uuid::Uuid> for PolicyUser {
 }
 
 /// An internal group e.g. administrator, moderator, etc.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyRole(pub(crate) String);
 
 impl IsSubject for PolicyRole {}
@@ -37,7 +37,7 @@ impl From<&str> for PolicyRole {
 }
 
 /// A user defined group, such as information from keycloak or LDAP
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PolicyGroup(pub(crate) String);
 
 impl IsSubject for PolicyGroup {}

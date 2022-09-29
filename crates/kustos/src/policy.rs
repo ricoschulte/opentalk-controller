@@ -8,7 +8,7 @@ use crate::{
 ///
 /// Has a subject, an object, and an action.
 /// Can be read as subject can do action on object.
-#[derive(Debug, Hash, PartialEq)]
+#[derive(Debug, Hash, PartialEq, Eq)]
 pub struct Policy<S: IsSubject> {
     pub(crate) sub: S,
     pub(crate) obj: ResourceId,

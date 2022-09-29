@@ -4,7 +4,7 @@ use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 
 /// Outgoing websocket messages
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "message")]
 pub enum Message {
     /// A timer has been started
@@ -18,7 +18,7 @@ pub enum Message {
 }
 
 /// A timer has been started
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Started {
     /// The timer id
     pub timer_id: TimerId,
@@ -36,7 +36,7 @@ pub struct Started {
 }
 
 /// The current timer has been stopped
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Stopped {
     /// The timer id
     pub timer_id: TimerId,
@@ -49,7 +49,7 @@ pub struct Stopped {
 }
 
 /// The stop reason
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "kind", content = "participant_id")]
 pub enum StopKind {
     /// The timer has been stopped by a moderator
@@ -61,7 +61,7 @@ pub enum StopKind {
 }
 
 /// Update the ready status
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct UpdatedReadyStatus {
     /// The timer id that the update is for
     pub timer_id: TimerId,
@@ -71,7 +71,7 @@ pub struct UpdatedReadyStatus {
     pub status: bool,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "error")]
 pub enum Error {
     /// An invalid timer duration has been configured

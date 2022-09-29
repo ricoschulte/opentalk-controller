@@ -47,7 +47,7 @@ pub struct Media {
 
 type State = HashMap<MediaSessionType, MediaSessionState>;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub struct MediaSessionState {
     pub video: bool,
     pub audio: bool,

@@ -381,7 +381,7 @@ impl FromRedisValue for ChoiceId {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Choice {
     pub id: ChoiceId,
     pub content: String,
