@@ -338,13 +338,7 @@ impl Protocol {
             .create_group_pad(&group_id, PAD_NAME, None)
             .await?;
 
-        let pad_id = format!("{}${}", group_id, PAD_NAME);
-
-        let readonly_pad_id = self.etherpad.get_readonly_pad_id(&pad_id).await?;
-
         storage::group::set(redis_conn, self.room_id, &group_id).await?;
-
-        storage::pad::set_readonly(redis_conn, self.room_id, &readonly_pad_id).await?;
 
         // flag this room as initialized
         storage::init::set_initialized(redis_conn, self.room_id).await?;

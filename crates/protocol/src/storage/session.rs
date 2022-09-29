@@ -66,18 +66,3 @@ pub(crate) async fn get_del(
         .await
         .context("Failed to get_del protocol session info key")
 }
-
-#[tracing::instrument(name = "delete_protocol_session_info", skip(redis_conn))]
-pub(crate) async fn del(
-    redis_conn: &mut RedisConnection,
-    room_id: SignalingRoomId,
-    participant_id: ParticipantId,
-) -> Result<()> {
-    redis_conn
-        .del(SessionInfoKey {
-            room_id,
-            participant_id,
-        })
-        .await
-        .context("Failed to delete protocol session info key")
-}
