@@ -40,6 +40,7 @@ pub struct RoomResource {
     pub created_by: PublicUserProfile,
     pub created_at: DateTime<Utc>,
     pub password: Option<String>,
+    pub waiting_room: bool,
 }
 
 /// API Endpoint *GET /rooms*
@@ -82,6 +83,7 @@ pub async fn accessible(
             created_by: PublicUserProfile::from_db(&settings, user),
             created_at: room.created_at,
             password: room.password,
+            waiting_room: room.waiting_room,
         })
         .collect::<Vec<RoomResource>>();
 
@@ -96,6 +98,8 @@ pub struct PostRoomsBody {
     /// Enable/Disable sip for this room; defaults to false when not set
     #[serde(default)]
     pub enable_sip: bool,
+    #[serde(default)]
+    pub waiting_room: bool,
 }
 
 /// API Endpoint *POST /rooms*
@@ -124,6 +128,7 @@ pub async fn new(
         let new_room = db_rooms::NewRoom {
             created_by: current_user_id,
             password: room_parameters.password,
+            waiting_room: room_parameters.waiting_room,
         };
 
         let room = new_room.insert(&conn)?;
@@ -141,6 +146,7 @@ pub async fn new(
         created_by: PublicUserProfile::from_db(&settings, current_user),
         created_at: room.created_at,
         password: room.password,
+        waiting_room: room.waiting_room,
     };
 
     let policies = PoliciesBuilder::new()
@@ -160,6 +166,8 @@ pub struct PatchRoomsBody {
     #[validate(length(min = 1, max = 255))]
     #[serde(default, deserialize_with = "super::util::deserialize_some")]
     pub password: Option<Option<String>>,
+
+    pub waiting_room: Option<bool>,
 }
 
 /// API Endpoint *PATCH /rooms/{room_id}*
@@ -186,6 +194,7 @@ pub async fn patch(
 
         let changeset = db_rooms::UpdateRoom {
             password: modify_room.password,
+            waiting_room: modify_room.waiting_room,
         };
 
         changeset.apply(&conn, room_id)
@@ -197,6 +206,7 @@ pub async fn patch(
         created_by: PublicUserProfile::from_db(&settings, current_user),
         created_at: room.created_at,
         password: room.password,
+        waiting_room: room.waiting_room,
     };
 
     Ok(Json(room_resource))
@@ -251,6 +261,7 @@ pub async fn get(
         created_by: PublicUserProfile::from_db(&settings, created_by),
         created_at: room.created_at,
         password: room.password,
+        waiting_room: room.waiting_room,
     };
 
     Ok(Json(room_resource))

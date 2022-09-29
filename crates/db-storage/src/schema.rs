@@ -152,6 +152,7 @@ table! {
         created_by -> Uuid,
         created_at -> Timestamptz,
         password -> Nullable<Varchar>,
+        waiting_room -> Bool,
     }
 }
 

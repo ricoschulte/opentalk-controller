@@ -25,6 +25,7 @@ pub struct Room {
     pub created_by: UserId,
     pub created_at: DateTime<Utc>,
     pub password: Option<String>,
+    pub waiting_room: bool,
 }
 
 impl Room {
@@ -124,6 +125,7 @@ impl Room {
 pub struct NewRoom {
     pub created_by: UserId,
     pub password: Option<String>,
+    pub waiting_room: bool,
 }
 
 impl NewRoom {
@@ -142,6 +144,7 @@ impl NewRoom {
 #[table_name = "rooms"]
 pub struct UpdateRoom {
     pub password: Option<Option<String>>,
+    pub waiting_room: Option<bool>,
 }
 
 impl UpdateRoom {

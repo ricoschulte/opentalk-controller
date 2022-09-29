@@ -81,10 +81,16 @@ impl DatabaseContext {
         Ok(user.0)
     }
 
-    pub fn create_test_room(&self, _room_id: RoomId, created_by: UserId) -> Result<Room> {
+    pub fn create_test_room(
+        &self,
+        _room_id: RoomId,
+        created_by: UserId,
+        waiting_room: bool,
+    ) -> Result<Room> {
         let new_room = NewRoom {
             created_by,
             password: None,
+            waiting_room,
         };
 
         let conn = self.db.get_conn()?;

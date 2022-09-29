@@ -22,7 +22,11 @@ async fn common_groups_on_join() {
         )
         .unwrap();
 
-    let room = test_ctx.db_ctx.create_test_room(ROOM_ID, user1.id).unwrap();
+    let waiting_room = false;
+    let room = test_ctx
+        .db_ctx
+        .create_test_room(ROOM_ID, user1.id, waiting_room)
+        .unwrap();
 
     let mut module_tester = ModuleTester::<Chat>::new(
         test_ctx.db_ctx.db.clone(),
