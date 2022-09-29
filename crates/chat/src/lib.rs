@@ -7,19 +7,18 @@
 use anyhow::Result;
 use control::rabbitmq;
 use controller::prelude::*;
-use controller::{impl_from_redis_value_de, impl_to_redis_args_se};
 use controller_shared::ParticipantId;
+use outgoing::{ChatDisabled, ChatEnabled, MessageSent};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::{from_utf8, FromStr};
+use storage::TimedMessage;
 
+pub mod incoming;
+pub mod outgoing;
 mod storage;
 
-#[derive(Debug, Deserialize)]
-pub struct IncomingWsMessage {
-    pub target: Option<ParticipantId>,
-    pub content: String,
-}
+pub use storage::is_chat_enabled;
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "scope", content = "target", rename_all = "snake_case")]
@@ -27,6 +26,7 @@ pub enum Scope {
     Global,
     Private(ParticipantId),
 }
+
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
 pub struct MessageId(uuid::Uuid);
 
@@ -73,62 +73,29 @@ impl redis::FromRedisValue for MessageId {
 
 impl_to_redis_args!(MessageId);
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
-pub struct Message {
-    pub id: MessageId,
-    pub source: ParticipantId,
-    pub content: String,
-    #[serde(flatten)]
-    pub scope: Scope,
-    // todo The timestamp is now included in the Namespaced struct. Once the frontend adopted this change, remove the timestamp from Message
-    pub timestamp: Timestamp,
-}
-
-/// Message type stores in redis
-///
-/// This needs to have a inner timestamp.
-#[derive(Debug, Deserialize, Serialize)]
-pub struct TimedMessage {
-    pub id: MessageId,
-    pub source: ParticipantId,
-    pub timestamp: Timestamp,
-    pub content: String,
-    #[serde(flatten)]
-    pub scope: Scope,
-}
-
-impl Message {
-    fn with_timestamp(&self, timestamp: Timestamp) -> TimedMessage {
-        TimedMessage {
-            id: self.id,
-            source: self.source,
-            content: self.content.clone(),
-            scope: self.scope,
-            timestamp,
-        }
-    }
-}
-
-impl_from_redis_value_de!(TimedMessage);
-impl_to_redis_args_se!(&TimedMessage);
-
 pub struct Chat {
     id: ParticipantId,
     room: SignalingRoomId,
 }
 
 #[derive(Debug, Serialize)]
-pub struct ChatHistory {
+pub struct ChatState {
     room_history: Vec<TimedMessage>,
+    enabled: bool,
 }
 
-impl ChatHistory {
+impl ChatState {
     pub async fn for_current_room(
         redis_conn: &mut RedisConnection,
         room: SignalingRoomId,
     ) -> Result<Self> {
         let room_history = storage::get_room_chat_history(redis_conn, room).await?;
-        Ok(Self { room_history })
+        let chat_enabled = storage::is_chat_enabled(redis_conn, room.room_id()).await?;
+
+        Ok(Self {
+            room_history,
+            enabled: chat_enabled,
+        })
     }
 }
 
@@ -138,13 +105,13 @@ impl SignalingModule for Chat {
 
     type Params = ();
 
-    type Incoming = IncomingWsMessage;
-    type Outgoing = Message;
-    type RabbitMqMessage = Message;
+    type Incoming = incoming::Message;
+    type Outgoing = outgoing::Message;
+    type RabbitMqMessage = outgoing::Message;
 
     type ExtEvent = ();
 
-    type FrontendData = ChatHistory;
+    type FrontendData = ChatState;
     type PeerFrontendData = ();
 
     async fn init(
@@ -168,40 +135,85 @@ impl SignalingModule for Chat {
                 frontend_data,
                 participants: _,
             } => {
-                *frontend_data =
-                    Some(ChatHistory::for_current_room(ctx.redis_conn(), self.room).await?);
+                let module_frontend_data =
+                    ChatState::for_current_room(ctx.redis_conn(), self.room).await?;
+
+                *frontend_data = Some(module_frontend_data);
             }
-            Event::WsMessage(mut msg) => {
+            Event::WsMessage(incoming::Message::EnableChat) => {
+                if ctx.role() != Role::Moderator {
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InsufficientPermissions,
+                    ));
+                    return Ok(());
+                }
+
+                storage::set_chat_enabled(ctx.redis_conn(), self.room.room_id(), true).await?;
+
+                ctx.rabbitmq_publish(
+                    rabbitmq::current_room_exchange_name(self.room),
+                    rabbitmq::room_all_routing_key().into(),
+                    outgoing::Message::ChatEnabled(ChatEnabled { issued_by: self.id }),
+                );
+            }
+            Event::WsMessage(incoming::Message::DisableChat) => {
+                if ctx.role() != Role::Moderator {
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InsufficientPermissions,
+                    ));
+                    return Ok(());
+                }
+
+                storage::set_chat_enabled(ctx.redis_conn(), self.room.room_id(), false).await?;
+
+                ctx.rabbitmq_publish(
+                    rabbitmq::current_room_exchange_name(self.room),
+                    rabbitmq::room_all_routing_key().into(),
+                    outgoing::Message::ChatDisabled(ChatDisabled { issued_by: self.id }),
+                );
+            }
+            Event::WsMessage(incoming::Message::SendMessage {
+                target,
+                mut content,
+            }) => {
                 // Discard empty messages
-                if msg.content.is_empty() {
+                if content.is_empty() {
+                    return Ok(());
+                }
+
+                let chat_enabled =
+                    storage::is_chat_enabled(ctx.redis_conn(), self.room.room_id()).await?;
+
+                if !chat_enabled {
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::ChatDisabled));
                     return Ok(());
                 }
 
                 // Limit message size to 1024 bytes at most
-                if msg.content.len() > 1024 {
+                if content.len() > 1024 {
                     let mut last_idx = 0;
 
-                    for (i, _) in msg.content.char_indices() {
+                    for (i, _) in content.char_indices() {
                         if i > 1024 {
                             break;
                         }
                         last_idx = i;
                     }
 
-                    msg.content.truncate(last_idx);
+                    content.truncate(last_idx);
                 }
 
                 let source = self.id;
 
                 //TODO: moderation check - mute, bad words etc., rate limit
-                if let Some(target) = msg.target {
-                    let out_message = Message {
+                if let Some(target) = target {
+                    let out_message = outgoing::Message::MessageSent(MessageSent {
                         id: MessageId::new(),
                         source,
-                        content: msg.content,
+                        content,
                         timestamp: ctx.timestamp(),
                         scope: Scope::Private(target),
-                    };
+                    });
 
                     ctx.rabbitmq_publish(
                         rabbitmq::current_room_exchange_name(self.room),
@@ -210,22 +222,30 @@ impl SignalingModule for Chat {
                     );
                     ctx.ws_send(out_message);
                 } else {
-                    let timestamp = ctx.timestamp();
-                    let out_message = Message {
+                    let out_message_contents = MessageSent {
                         id: MessageId::new(),
                         source,
-                        content: msg.content,
-                        timestamp,
+                        content,
+                        timestamp: ctx.timestamp(),
                         scope: Scope::Global,
                     };
 
-                    // add message to room history
+                    let timed_message = TimedMessage {
+                        id: out_message_contents.id,
+                        source: out_message_contents.source,
+                        content: out_message_contents.content.clone(),
+                        scope: out_message_contents.scope,
+                        timestamp: out_message_contents.timestamp,
+                    };
+
                     storage::add_message_to_room_chat_history(
                         ctx.redis_conn(),
                         self.room,
-                        &out_message.with_timestamp(timestamp),
+                        &timed_message,
                     )
                     .await?;
+
+                    let out_message = outgoing::Message::MessageSent(out_message_contents);
 
                     ctx.rabbitmq_publish(
                         rabbitmq::current_room_exchange_name(self.room),
@@ -254,6 +274,11 @@ impl SignalingModule for Chat {
             if let Err(e) = storage::delete_room_chat_history(ctx.redis_conn(), self.room).await {
                 log::error!("Failed to remove room chat history on room destroy, {}", e);
             }
+            if let Err(e) =
+                storage::delete_chat_enabled(ctx.redis_conn(), self.room.room_id()).await
+            {
+                log::error!("Failed to clean up chat enabled flag {}", e);
+            }
         }
     }
 }
@@ -269,35 +294,6 @@ mod test {
     use std::str::FromStr;
 
     #[test]
-    fn user_private_message() {
-        let json = r#"
-        {
-            "target": "00000000-0000-0000-0000-000000000000",
-            "content": "Hello Bob!"
-        }
-        "#;
-
-        let msg: IncomingWsMessage = serde_json::from_str(json).unwrap();
-
-        assert_eq!(msg.target, Some(ParticipantId::nil()));
-        assert_eq!(msg.content, "Hello Bob!");
-    }
-
-    #[test]
-    fn user_room_message() {
-        let json = r#"
-        {
-            "content": "Hello all!"
-        }
-        "#;
-
-        let msg: IncomingWsMessage = serde_json::from_str(json).unwrap();
-
-        assert_eq!(msg.target, None);
-        assert_eq!(msg.content, "Hello all!");
-    }
-
-    #[test]
     fn server_message() {
         let expected = r#"{"id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","timestamp":"2021-06-24T14:00:11.873753715Z","content":"Hello All!","scope":"global"}"#;
         let produced = serde_json::to_string(&TimedMessage {
@@ -311,39 +307,6 @@ mod test {
         })
         .unwrap();
 
-        assert_eq!(expected, produced);
-    }
-
-    #[test]
-    fn global_serialize() {
-        let produced = serde_json::to_string(&Message {
-            id: MessageId::nil(),
-            source: ParticipantId::nil(),
-            timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z")
-                .unwrap()
-                .into(),
-            content: "Hello All!".to_string(),
-            scope: Scope::Global,
-        })
-        .unwrap();
-        let expected = r#"{"id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","content":"Hello All!","scope":"global","timestamp":"2021-06-24T14:00:11.873753715Z"}"#;
-
-        assert_eq!(expected, produced);
-    }
-
-    #[test]
-    fn private_serialize() {
-        let produced = serde_json::to_string(&Message {
-            id: MessageId::nil(),
-            source: ParticipantId::nil(),
-            timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z")
-                .unwrap()
-                .into(),
-            content: "Hello All!".to_string(),
-            scope: Scope::Private(ParticipantId::new_test(1)),
-        })
-        .unwrap();
-        let expected = r#"{"id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","content":"Hello All!","scope":"private","target":"00000000-0000-0000-0000-000000000001","timestamp":"2021-06-24T14:00:11.873753715Z"}"#;
         assert_eq!(expected, produced);
     }
 }

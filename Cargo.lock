@@ -1704,6 +1704,7 @@ version = "1.0.0-rc.4"
 dependencies = [
  "k3k-controller-core",
  "k3k-controller-shared",
+ "k3k-db-storage",
  "serde",
 ]
 
