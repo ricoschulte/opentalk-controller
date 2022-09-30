@@ -1,20 +1,23 @@
-# Unreleased
+# 1.0.0-rc.5 (30 September, 2022)
 
 ### Added
 
-- protocol: added the `deselect_writer` action to revoke write access
-- controller: added the spacedeck module that allows participants to collaboratively edit a whiteboard
-- controller: Added a query parameter to the `GET /events` endpoint to allow filtering by `invite_status`
-- controller: toggle raise hands status (actions `enable_raise_hands`, `disable_raise_hands` and according messages)
-- controller: now includes unregistered invitees in invitees lists, distinguishable by `kind` profile property
-- chat: toggle chat status (actions `enable_chat`, `disable_chat`, `send_message` and according messages)
+- protocol: added the `deselect_writer` action to revoke write access (#145)
+- controller: added the spacedeck module that allows participants to collaboratively edit a whiteboard (#209)
+- controller: added a query parameter to the `GET /events` endpoint to allow filtering by `invite_status` (#213)
+- breakout: added `joined_at` & `left_at` attributes to participants
+- controller: toggle raise hands status (actions `enable_raise_hands`, `disable_raise_hands` and according messages) (#228)
+- controller: added moderator feature to forcefully lower raised hands of all participants (#227)
+- chat: added feature to toggle chat status (actions `enable_chat`, `disable_chat` and according messages) (#229)
 - ee-chat: added check for chat status (enabled/disabled)
+- controller: added waiting room flag to stored events (#224)
+- controller: events now include unregistered invitees in invitees lists, distinguishable by `kind` profile property (#196)
 
 ### Fixed
 
-- controller: Fixed a bug where a wrong `ends_at` value for reoccurring events was sent to the mail worker
-- controller: Fix pagination serialization (#217)
-- janus-media: added target and type to some error responses (#219)
+- controller: fixed a bug where a wrong `ends_at` value for reoccurring events was sent to the mail worker (#218)
+- controller: fix pagination serialization (#217)
+- janus-media: added target and type information to some error responses (#219)
 
 # 1.0.0-rc.4 (29 August, 2022)
 
