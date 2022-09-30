@@ -195,8 +195,9 @@ async fn create_user_event_invite(
 
 /// Create an invite to an event via email address
 ///
-/// Checks first if a user exists with the email address in our database and creates a regular invite
-/// else checks if the email is registered with the keycloak and then creates an email invite
+/// Checks first if a user exists with the email address in our database and creates a regular invite,
+/// else checks if the email is registered with the keycloak (or external intvitee support is configured)
+/// and then creates an email invite
 #[allow(clippy::too_many_arguments)]
 async fn create_email_event_invite(
     settings: SharedSettingsActix,
@@ -320,7 +321,7 @@ async fn create_email_event_invite(
     }
 }
 
-/// Invite a given email to the event
+/// Invite a given email to the event.
 /// Will check if the email exists in keycloak and sends an "unregistered" email invite
 /// or (if configured) sends an "external" email invite to the given email address
 #[allow(clippy::too_many_arguments)]
@@ -335,19 +336,19 @@ async fn create_invite_to_non_matching_email(
     sip_config: Option<SipConfig>,
     email: EmailAddress,
 ) -> Result<Either<Created, NoContent>, ApiError> {
-    let email_exists = kc_admin_client
-        .verify_email(email.as_ref())
+    let invitee_user = kc_admin_client
+        .get_user_for_email(email.as_ref())
         .await
-        .context("Failed to verify email")?;
+        .context("Failed to query user for email")?;
 
-    if email_exists
+    if invitee_user.is_some()
         || settings
             .load()
             .endpoints
             .event_invite_external_email_address
     {
         let inviter = current_user.clone();
-        let invitee = email.clone();
+        let invitee_email = email.clone();
 
         let res = {
             let db = db.clone();
@@ -369,15 +370,9 @@ async fn create_invite_to_non_matching_email(
 
         match res {
             Ok(Some(_)) => {
-                if email_exists {
+                if let Some(invitee_user) = invitee_user {
                     mail_service
-                        .send_unregistered_invite(
-                            inviter,
-                            event,
-                            room,
-                            sip_config,
-                            invitee.as_ref(),
-                        )
+                        .send_unregistered_invite(inviter, event, room, sip_config, invitee_user)
                         .await
                         .context("Failed to send with MailService")?;
                 } else {
@@ -403,7 +398,7 @@ async fn create_invite_to_non_matching_email(
                             event,
                             room,
                             sip_config,
-                            invitee.as_ref(),
+                            invitee_email.as_ref(),
                             invite.id.to_string(),
                         )
                         .await

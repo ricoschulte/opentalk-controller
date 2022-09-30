@@ -5,7 +5,11 @@ use uuid::Uuid;
 
 mod invites;
 
-pub use invites::{ExternalEventInvite, RegisteredEventInvite, UnregisteredEventInvite};
+pub use invites::{
+    ExternalEventCancellation, ExternalEventInvite, ExternalEventUpdate,
+    RegisteredEventCancellation, RegisteredEventInvite, RegisteredEventUpdate,
+    UnregisteredEventCancellation, UnregisteredEventInvite, UnregisteredEventUpdate,
+};
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
 pub struct Email(String);
@@ -35,12 +39,31 @@ impl AsRef<str> for Email {
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
-pub struct User {
+pub struct RegisteredUser {
     pub email: Email,
     pub title: String,
     pub first_name: String,
     pub last_name: String,
     pub language: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
+pub struct UnregisteredUser {
+    pub email: Email,
+    pub first_name: String,
+    pub last_name: String,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
+pub struct ExternalUser {
+    pub email: Email,
+}
+
+#[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
+pub enum User {
+    Registered(RegisteredUser),
+    Unregistered(UnregisteredUser),
+    External(ExternalUser),
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug)]
@@ -79,12 +102,18 @@ pub struct CallIn {
 #[cfg_attr(any(test, feature = "client"), derive(Serialize))]
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
-    /// A mail sent to registered users on invite
+    // Invites
     RegisteredEventInvite(RegisteredEventInvite),
-    /// A mail sent to unregistered users on invite
     UnregisteredEventInvite(UnregisteredEventInvite),
-    /// A mail sent to external emails on invite
     ExternalEventInvite(ExternalEventInvite),
+    // Updates
+    RegisteredEventUpdate(RegisteredEventUpdate),
+    UnregisteredEventUpdate(UnregisteredEventUpdate),
+    ExternalEventUpdate(ExternalEventUpdate),
+    // Cancellations
+    RegisteredEventCancellation(RegisteredEventCancellation),
+    UnregisteredEventCancellation(UnregisteredEventCancellation),
+    ExternalEventCancellation(ExternalEventCancellation),
 }
 
 #[cfg(test)]
@@ -97,7 +126,7 @@ mod test {
     #[test]
     fn test_basic_format() {
         let basic_invite = MailTask::V1(Message::RegisteredEventInvite(RegisteredEventInvite {
-            inviter: User {
+            inviter: RegisteredUser {
                 email: "bob@example.org".into(),
                 title: "Prof. Dr.".into(),
                 first_name: "Bob".into(),
@@ -135,7 +164,7 @@ mod test {
                     sip_password: "987".into(),
                 }),
             },
-            invitee: User {
+            invitee: RegisteredUser {
                 email: "lastname@example.org".into(),
                 title: "Prof. Dr.".into(),
                 first_name: "FirstName".into(),
@@ -187,7 +216,7 @@ mod test {
     #[test]
     fn test_no_time() {
         let basic_invite = MailTask::V1(Message::RegisteredEventInvite(RegisteredEventInvite {
-            inviter: User {
+            inviter: RegisteredUser {
                 email: "bob@example.org".into(),
                 title: "Prof. Dr.".into(),
                 first_name: "Bob".into(),
@@ -211,7 +240,7 @@ mod test {
                     sip_password: "987".into(),
                 }),
             },
-            invitee: User {
+            invitee: RegisteredUser {
                 email: "lastname@example.org".into(),
                 title: "Prof. Dr.".into(),
                 first_name: "FirstName".into(),

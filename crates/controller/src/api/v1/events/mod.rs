@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use super::cursor::Cursor;
 use super::request::default_pagination_per_page;
 use super::response::error::ValidationErrorEntry;
@@ -8,6 +10,10 @@ use crate::api::v1::response::CODE_IGNORED_VALUE;
 use crate::api::v1::rooms::RoomsPoliciesBuilderExt;
 use crate::api::v1::util::comma_separated;
 use crate::api::v1::util::{deserialize_some, GetUserProfilesBatched};
+use crate::services::{
+    ExternalMailRecipient, MailRecipient, MailService, RegisteredMailRecipient,
+    UnregisteredMailRecipient,
+};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{delete, get, patch, post, Either};
@@ -19,6 +25,7 @@ use db_storage::events::{
     email_invites::EventEmailInvite, Event, EventException, EventExceptionKind, EventId,
     EventInvite, EventInviteStatus, NewEvent, TimeZone, UpdateEvent,
 };
+use db_storage::invites::Invite;
 use db_storage::rooms::{NewRoom, Room, RoomId, UpdateRoom};
 use db_storage::sip_configs::{NewSipConfig, SipConfig};
 use db_storage::users::User;
@@ -1242,6 +1249,15 @@ impl PatchEventBody {
     }
 }
 
+struct UpdateNotificationValues {
+    pub created_by: User,
+    pub event: Event,
+    pub room: Room,
+    pub sip_config: Option<SipConfig>,
+    pub invited_users: Vec<MailRecipient>,
+    pub invite_for_room: Invite,
+}
+
 /// API Endpoint `PATCH /events/{event_id}`
 ///
 /// See documentation of [`PatchEventBody`] for more infos
@@ -1249,6 +1265,7 @@ impl PatchEventBody {
 /// Patches which modify the event in a way that would invalidate existing
 /// exceptions (e.g. by changing the recurrence rule or time dependence)
 /// will have all exceptions deleted
+#[allow(clippy::too_many_arguments)]
 #[patch("/events/{event_id}")]
 pub async fn patch_event(
     settings: SharedSettingsActix,
@@ -1258,6 +1275,7 @@ pub async fn patch_event(
     event_id: Path<EventId>,
     query: Query<PatchEventQuery>,
     patch: Json<PatchEventBody>,
+    mail_service: Data<MailService>,
 ) -> Result<Either<ApiResponse<EventResource>, NoContent>, ApiError> {
     let patch = patch.into_inner();
 
@@ -1271,95 +1289,111 @@ pub async fn patch_event(
     let current_user = current_user.into_inner();
     let event_id = event_id.into_inner();
     let query = query.into_inner();
+    let mail_service = mail_service.into_inner();
 
-    let event_resource = crate::block(move || -> Result<EventResource, ApiError> {
-        let mut conn = db.get_conn()?;
+    let (event_resource, notification_values) = crate::block(
+        move || -> Result<(EventResource, UpdateNotificationValues), ApiError> {
+            let mut conn = db.get_conn()?;
 
-        let (event, invite, room, sip_config, is_favorite) =
-            Event::get_with_invite_and_room(&mut conn, current_user.id, event_id)?;
+            let (event, invite, room, sip_config, is_favorite) =
+                Event::get_with_invite_and_room(&mut conn, current_user.id, event_id)?;
 
-        let room = if patch.password.is_some() || patch.waiting_room.is_some() {
-            // Update the event's room if at least one of the fields is set
-            UpdateRoom {
-                password: patch.password.clone(),
-                waiting_room: patch.waiting_room,
-            }
-            .apply(&mut conn, event.room)?
-        } else {
-            room
-        };
-
-        // Special case: if the patch only modifies the password do not update the event
-        let event = if patch.only_modifies_room() {
-            event
-        } else {
-            let update_event = match (event.is_time_independent, patch.is_time_independent) {
-                (true, Some(false)) => {
-                    // The patch changes the event from an time-independent event
-                    // to a time dependent event
-                    patch_event_change_to_time_dependent(&current_user, patch)?
+            let room = if patch.password.is_some() || patch.waiting_room.is_some() {
+                // Update the event's room if at least one of the fields is set
+                UpdateRoom {
+                    password: patch.password.clone(),
+                    waiting_room: patch.waiting_room,
                 }
-                (true, _) | (false, Some(true)) => {
-                    // The patch will modify an time-independent event or
-                    // change an event to a time-independent event
-                    patch_time_independent_event(&mut conn, &current_user, &event, patch)?
-                }
-                _ => {
-                    // The patch modifies an time dependent event
-                    patch_time_dependent_event(&mut conn, &current_user, &event, patch)?
-                }
+                .apply(&mut conn, event.room)?
+            } else {
+                room
             };
 
-            update_event.apply(&mut conn, event_id)?
-        };
-
-        let created_by = if event.created_by == current_user.id {
-            current_user.clone()
-        } else {
-            User::get(&mut conn, event.created_by)?
-        };
-
-        let (invitees, invitees_truncated) =
-            get_invitees_for_event(&settings, &mut conn, event_id, query.invitees_max)?;
-
-        let starts_at = DateTimeTz::starts_at_of(&event);
-        let ends_at = DateTimeTz::ends_at_of(&event);
-
-        let can_edit = can_edit(&event, &current_user);
-
-        let event_resource = EventResource {
-            id: event.id,
-            created_by: PublicUserProfile::from_db(&settings, created_by),
-            created_at: event.created_at,
-            updated_by: PublicUserProfile::from_db(&settings, current_user),
-            updated_at: event.updated_at,
-            title: event.title,
-            description: event.description,
-            room: EventRoomInfo::from_room(&settings, room, sip_config),
-            invitees_truncated,
-            invitees,
-            is_time_independent: event.is_time_independent,
-            is_all_day: event.is_all_day,
-            starts_at,
-            ends_at,
-            recurrence_pattern: recurrence_string_to_array(event.recurrence_pattern),
-            type_: if event.is_recurring.unwrap_or_default() {
-                EventType::Recurring
+            let created_by = if event.created_by == current_user.id {
+                current_user.clone()
             } else {
-                EventType::Single
-            },
-            status: EventStatus::Ok,
-            invite_status: invite
-                .map(|inv| inv.status)
-                .unwrap_or(EventInviteStatus::Accepted),
-            is_favorite,
-            can_edit,
-            is_adhoc: event.is_adhoc,
-        };
+                User::get(&mut conn, event.created_by)?
+            };
 
-        Ok(event_resource)
-    })
+            // Special case: if the patch only modifies the password do not update the event
+            let event = if patch.only_modifies_room() {
+                event
+            } else {
+                let update_event = match (event.is_time_independent, patch.is_time_independent) {
+                    (true, Some(false)) => {
+                        // The patch changes the event from an time-independent event
+                        // to a time dependent event
+                        patch_event_change_to_time_dependent(&current_user, patch)?
+                    }
+                    (true, _) | (false, Some(true)) => {
+                        // The patch will modify an time-independent event or
+                        // change an event to a time-independent event
+                        patch_time_independent_event(&mut conn, &current_user, &event, patch)?
+                    }
+                    _ => {
+                        // The patch modifies an time dependent event
+                        patch_time_dependent_event(&mut conn, &current_user, &event, patch)?
+                    }
+                };
+
+                update_event.apply(&mut conn, event_id)?
+            };
+
+            let invited_users = get_invited_mail_recipients_for_event(&mut conn, event_id)?;
+            let invite_for_room = Invite::get_first_for_room(&mut conn, room.id, current_user.id)?;
+            let notification_values = UpdateNotificationValues {
+                created_by: created_by.clone(),
+                event: event.clone(),
+                room: room.clone(),
+                sip_config: sip_config.clone(),
+                invited_users,
+                invite_for_room,
+            };
+
+            let (invitees, invitees_truncated) =
+                get_invitees_for_event(&settings, &mut conn, event_id, query.invitees_max)?;
+
+            let starts_at = DateTimeTz::starts_at_of(&event);
+            let ends_at = DateTimeTz::ends_at_of(&event);
+
+            let can_edit = can_edit(&event, &current_user);
+
+            let event_resource = EventResource {
+                id: event.id,
+                created_by: PublicUserProfile::from_db(&settings, created_by),
+                created_at: event.created_at,
+                updated_by: PublicUserProfile::from_db(&settings, current_user),
+                updated_at: event.updated_at,
+                title: event.title,
+                description: event.description,
+                room: EventRoomInfo::from_room(&settings, room, sip_config),
+                invitees_truncated,
+                invitees,
+                is_time_independent: event.is_time_independent,
+                is_all_day: event.is_all_day,
+                starts_at,
+                ends_at,
+                recurrence_pattern: recurrence_string_to_array(event.recurrence_pattern),
+                type_: if event.is_recurring.unwrap_or_default() {
+                    EventType::Recurring
+                } else {
+                    EventType::Single
+                },
+                status: EventStatus::Ok,
+                invite_status: invite
+                    .map(|inv| inv.status)
+                    .unwrap_or(EventInviteStatus::Accepted),
+                is_favorite,
+                can_edit,
+                is_adhoc: event.is_adhoc,
+            };
+
+            Ok((event_resource, notification_values))
+        },
+    )
     .await??;
+
+    notify_invitees_about_update(notification_values, mail_service, &kc_admin_client).await;
 
     let event_resource = EventResource {
         invitees: enrich_invitees_from_keycloak(&kc_admin_client, event_resource.invitees).await,
@@ -1367,6 +1401,33 @@ pub async fn patch_event(
     };
 
     Ok(Either::Left(ApiResponse::new(event_resource)))
+}
+
+/// Part of `PATCH /events/{event_id}` (see [`patch_event`])
+///
+/// Notify invited users about the event update
+async fn notify_invitees_about_update(
+    notification_values: UpdateNotificationValues,
+    mail_service: Arc<MailService>,
+    kc_admin_client: &Data<KeycloakAdminClient>,
+) {
+    for invited_user in notification_values.invited_users {
+        let invited_user = enrich_from_keycloak(invited_user, kc_admin_client).await;
+
+        if let Err(e) = mail_service
+            .send_event_update(
+                notification_values.created_by.clone(),
+                notification_values.event.clone(),
+                notification_values.room.clone(),
+                notification_values.sip_config.clone(),
+                invited_user,
+                notification_values.invite_for_room.id.to_string(),
+            )
+            .await
+        {
+            log::error!("Failed to send event update with MailService, {}", e);
+        }
+    }
 }
 
 /// Part of `PATCH /events/{event_id}` (see [`patch_event`])
@@ -1543,27 +1604,91 @@ fn patch_time_dependent_event(
     })
 }
 
+struct CancellationNotificationValues {
+    pub created_by: User,
+    pub event: Event,
+    pub room: Room,
+    pub sip_config: Option<SipConfig>,
+    pub invited_users: Vec<MailRecipient>,
+}
+
 /// API Endpoint `POST /events/{event_id}`
 #[delete("/events/{event_id}")]
 pub async fn delete_event(
     db: Data<Db>,
+    kc_admin_client: Data<KeycloakAdminClient>,
+    current_user: ReqData<User>,
     authz: Data<Authz>,
     event_id: Path<EventId>,
+    mail_service: Data<MailService>,
 ) -> Result<NoContent, ApiError> {
+    let current_user = current_user.into_inner();
     let event_id = event_id.into_inner();
+    let mail_service = mail_service.into_inner();
 
-    crate::block(move || {
-        let mut conn = db.get_conn()?;
+    let notification_values = crate::block(
+        move || -> Result<CancellationNotificationValues, ApiError> {
+            let mut conn = db.get_conn()?;
 
-        Event::delete_by_id(&mut conn, event_id)
-    })
+            // TODO(w.rabl) Further DB access optimization (replacing call to get_with_invite_and_room)?
+            let (event, _invite, room, sip_config, _is_favorite) =
+                Event::get_with_invite_and_room(&mut conn, current_user.id, event_id)?;
+
+            let created_by = if event.created_by == current_user.id {
+                current_user
+            } else {
+                User::get(&mut conn, event.created_by)?
+            };
+
+            let invited_users = get_invited_mail_recipients_for_event(&mut conn, event_id)?;
+
+            Event::delete_by_id(&mut conn, event_id)?;
+
+            let notification_values = CancellationNotificationValues {
+                created_by,
+                event,
+                room,
+                sip_config,
+                invited_users,
+            };
+            Ok(notification_values)
+        },
+    )
     .await??;
+
+    notify_invitees_about_delete(notification_values, mail_service, &kc_admin_client).await;
 
     let resources = associated_resource_ids(event_id);
 
     authz.remove_explicit_resources(resources).await?;
 
     Ok(NoContent)
+}
+
+/// Part of `DELETE /events/{event_id}` (see [`patch_event`])
+///
+/// Notify invited users about the event update
+async fn notify_invitees_about_delete(
+    notification_values: CancellationNotificationValues,
+    mail_service: Arc<MailService>,
+    kc_admin_client: &Data<KeycloakAdminClient>,
+) {
+    for invited_user in notification_values.invited_users {
+        let invited_user = enrich_from_keycloak(invited_user, kc_admin_client).await;
+
+        if let Err(e) = mail_service
+            .send_event_cancellation(
+                notification_values.created_by.clone(),
+                notification_values.event.clone(),
+                notification_values.room.clone(),
+                notification_values.sip_config.clone(),
+                invited_user,
+            )
+            .await
+        {
+            log::error!("Failed to send event cancellation with MailService, {}", e);
+        }
+    }
 }
 
 pub(crate) fn associated_resource_ids(event_id: EventId) -> impl IntoIterator<Item = ResourceId> {
@@ -1646,6 +1771,35 @@ fn get_invitees_for_event(
     } else {
         Ok((vec![], true))
     }
+}
+
+fn get_invited_mail_recipients_for_event(
+    conn: &mut DbConnection,
+    event_id: EventId,
+) -> database::Result<Vec<MailRecipient>> {
+    // TODO(w.rabl) Further DB access optimization (replacing call to get_for_event_paginated)?
+    let (invites_with_user, _) = EventInvite::get_for_event_paginated(conn, event_id, i64::MAX, 1)?;
+    let user_invitees = invites_with_user.into_iter().map(|(_, user)| {
+        MailRecipient::Registered(RegisteredMailRecipient {
+            email: user.email,
+            title: user.title,
+            first_name: user.firstname,
+            last_name: user.lastname,
+            language: user.language,
+        })
+    });
+
+    let (email_invites, _) =
+        EventEmailInvite::get_for_event_paginated(conn, event_id, i64::MAX, 1)?;
+    let email_invitees = email_invites.into_iter().map(|invitee| {
+        MailRecipient::External(ExternalMailRecipient {
+            email: invitee.email,
+        })
+    });
+
+    let invitees = user_invitees.chain(email_invitees).collect();
+
+    Ok(invitees)
 }
 
 async fn enrich_invitees_from_keycloak(
@@ -1898,6 +2052,30 @@ where
             format!("/events/{event_id}/invite"),
             [AccessMethod::Patch, AccessMethod::Delete],
         )
+    }
+}
+
+async fn enrich_from_keycloak(
+    recipient: MailRecipient,
+    kc_admin_client: &Data<KeycloakAdminClient>,
+) -> MailRecipient {
+    if let MailRecipient::External(recipient) = recipient {
+        let keycloak_user = kc_admin_client
+            .get_user_for_email(recipient.email.as_ref())
+            .await
+            .unwrap_or_default();
+
+        if let Some(keycloak_user) = keycloak_user {
+            MailRecipient::Unregistered(UnregisteredMailRecipient {
+                email: recipient.email,
+                first_name: keycloak_user.first_name,
+                last_name: keycloak_user.last_name,
+            })
+        } else {
+            MailRecipient::External(recipient)
+        }
+    } else {
+        recipient
     }
 }
 
