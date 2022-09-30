@@ -680,7 +680,7 @@ impl EventInvite {
     pub fn get_for_event_paginated(
         conn: &DbConnection,
         event_id: EventId,
-        limit: i64,
+        per_page: i64,
         page: i64,
     ) -> Result<(Vec<(EventInvite, User)>, i64)> {
         let query = event_invites::table
@@ -689,7 +689,7 @@ impl EventInvite {
             .order(event_invites::created_at.desc())
             .then_order_by(event_invites::created_by.desc())
             .then_order_by(event_invites::invitee.desc())
-            .paginate_by(limit, page);
+            .paginate_by(per_page, page);
         let invites = query.load_and_count(conn)?;
 
         Ok(invites)
