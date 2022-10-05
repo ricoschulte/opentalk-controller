@@ -404,6 +404,7 @@ where
             participant: &builder.participant,
             role: builder.role,
             db: &builder.db,
+            storage: &builder.storage,
             authz: &builder.authz,
             rabbitmq_exchanges: &mut builder.rabbitmq_exchanges,
             rabbitmq_bindings: &mut builder.rabbitmq_bindings,

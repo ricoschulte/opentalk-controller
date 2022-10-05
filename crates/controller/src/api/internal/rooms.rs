@@ -1,9 +1,12 @@
 use crate::api::internal::NoContent;
 use crate::api::v1::events::associated_resource_ids;
 use crate::api::v1::response::ApiError;
+use crate::storage::assets::asset_key;
+use crate::storage::ObjectStorage;
 use actix_web::delete;
 use actix_web::web::{Data, Path, ReqData};
 use database::{DatabaseError, Db};
+use db_storage::assets::Asset;
 use db_storage::events::Event;
 use db_storage::legal_votes::LegalVote;
 use db_storage::rooms::{Room, RoomId};
@@ -26,6 +29,7 @@ use kustos::prelude::*;
 #[delete("/rooms/{room_id}")]
 pub async fn delete(
     db: Data<Db>,
+    storage: Data<ObjectStorage>,
     room_id: Path<RoomId>,
     current_user: ReqData<User>,
     authz: Data<Authz>,
@@ -57,6 +61,7 @@ pub async fn delete(
         .map(|e| e.resource_id())
         .chain(linked_legal_votes.iter().map(|e| e.resource_id()))
         .collect::<Vec<_>>();
+
     resources.push(room_path.clone().into());
 
     let checked = authz
@@ -74,7 +79,7 @@ pub async fn delete(
         .chain(associated_room_resource_ids(room_id))
         .collect();
 
-    crate::block(move || {
+    let assets = crate::block(move || {
         let mut conn = db.get_conn()?;
         conn.transaction(|conn| {
             // We check if in the meantime (during the permission check) another event got linked to
@@ -92,15 +97,23 @@ pub async fn delete(
                 return Err(DatabaseError::custom("Race-condition during access checks"));
             }
 
+            let mut current_assets = Asset::get_all_ids_for_room(conn, room_id)?;
+            current_assets.sort();
+
             LegalVote::delete_by_room(conn, room_id)?;
             Event::delete_all_for_room(conn, room_id)?;
             SipConfig::delete_by_room(conn, room_id)?;
+            Asset::delete_by_ids(conn, &current_assets)?;
             Room::delete_by_id(conn, room_id)?;
 
-            Ok(())
+            Ok(current_assets)
         })
     })
     .await??;
+
+    for asset_id in assets {
+        storage.delete(asset_key(&asset_id)).await?;
+    }
 
     authz.remove_explicit_resources(resources).await?;
 

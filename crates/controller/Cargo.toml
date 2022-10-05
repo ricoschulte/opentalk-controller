@@ -55,6 +55,10 @@ diesel = { version = "2", features = [
 ] }
 uuid = { package = "uuid", version = "1.0.0", features = ["serde", "v4"] }
 
+### S3 Storage
+aws-config = "0.51"
+aws-sdk-s3 = "0.21"
+
 ### Web Framework & Runtime
 tokio = { version = "1", features = ["signal"] }
 tokio-stream = { version = "0.1.5", features = ["sync"] }

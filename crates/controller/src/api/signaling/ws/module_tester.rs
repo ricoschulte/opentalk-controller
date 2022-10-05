@@ -16,6 +16,7 @@ use crate::api::signaling::ws_modules::control::ParticipationKind;
 use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
+use crate::storage::ObjectStorage;
 use actix_http::ws::CloseCode;
 use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
@@ -103,6 +104,7 @@ where
             participant.clone(),
             role,
             self.db.clone(),
+            Arc::new(ObjectStorage::broken()),
             self.authz.clone(),
             self.redis_conn.clone(),
             params,
@@ -348,6 +350,7 @@ where
         mut participant: Participant<User>,
         role: Role,
         db: Arc<Db>,
+        storage: Arc<ObjectStorage>,
         authz: Arc<Authz>,
         mut redis_conn: RedisConnection,
         params: M::Params,
@@ -363,6 +366,7 @@ where
             participant: &mut participant,
             role,
             db: &db,
+            storage: &storage,
             authz: &authz,
             rabbitmq_exchanges: &mut vec![],
             rabbitmq_bindings: &mut vec![],

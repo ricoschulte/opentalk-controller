@@ -9,6 +9,7 @@ use crate::api::v1::response::ApiError;
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
 use crate::settings::SharedSettingsActix;
+use crate::storage::ObjectStorage;
 use actix_web::http::header;
 use actix_web::web::Data;
 use actix_web::{get, HttpMessage};
@@ -53,6 +54,7 @@ impl SignalingProtocols {
 pub(crate) async fn ws_service(
     shutdown: Data<broadcast::Sender<()>>,
     db: Data<Db>,
+    storage: Data<ObjectStorage>,
     authz: Data<Authz>,
     redis_conn: Data<RedisConnection>,
     rabbitmq_pool: Data<RabbitMqPool>,
@@ -122,6 +124,7 @@ pub(crate) async fn ws_service(
         protocol,
         metrics.clone().into_inner(),
         db.into_inner(),
+        storage.into_inner(),
         authz.into_inner(),
         redis_conn,
         rabbitmq_channel,

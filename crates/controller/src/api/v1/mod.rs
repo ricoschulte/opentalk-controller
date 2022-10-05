@@ -21,6 +21,7 @@
 pub use request::{CursorPaginationQuery, PagePaginationQuery};
 pub use response::{ApiResponse, DefaultApiResult};
 
+pub mod assets;
 pub mod auth;
 mod cursor;
 pub mod events;

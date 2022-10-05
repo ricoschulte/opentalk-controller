@@ -20,6 +20,7 @@ use crate::api::signaling::ws_modules::control::{
 use crate::api::signaling::{Role, SignalingRoomId};
 use crate::ha_sync::user_update;
 use crate::redis_wrapper::RedisConnection;
+use crate::storage::ObjectStorage;
 use actix::Addr;
 use actix_http::ws::{CloseCode, CloseReason, Message};
 use actix_web_actors::ws;
@@ -67,6 +68,7 @@ pub struct Builder {
     pub(super) rabbitmq_bindings: Vec<RabbitMqBinding>,
     pub(super) events: SelectAll<AnyStream>,
     pub(super) db: Arc<Db>,
+    pub(super) storage: Arc<ObjectStorage>,
     pub(super) authz: Arc<Authz>,
     pub(super) redis_conn: RedisConnection,
     pub(super) rabbitmq_channel: RabbitMqChannel,
@@ -444,6 +446,7 @@ impl Runner {
         protocol: &'static str,
         metrics: Arc<SignalingMetrics>,
         db: Arc<Db>,
+        storage: Arc<ObjectStorage>,
         authz: Arc<Authz>,
         redis_conn: RedisConnection,
         rabbitmq_channel: RabbitMqChannel,
@@ -476,6 +479,7 @@ impl Runner {
             rabbitmq_bindings: vec![],
             events: SelectAll::new(),
             db,
+            storage,
             authz,
             redis_conn,
             rabbitmq_channel,

@@ -5,6 +5,7 @@ use crate::api::signaling::ws_modules::control::ControlData;
 use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
+use crate::storage::ObjectStorage;
 use actix_http::ws::CloseCode;
 use anyhow::Result;
 use bytestring::ByteString;
@@ -104,6 +105,7 @@ where
     participant: &'ctx Participant<User>,
     role: Role,
     db: &'ctx Arc<Db>,
+    storage: &'ctx Arc<ObjectStorage>,
     authz: &'ctx Arc<Authz>,
     rabbitmq_exchanges: &'ctx mut Vec<RabbitMqExchange>,
     rabbitmq_bindings: &'ctx mut Vec<RabbitMqBinding>,
@@ -165,6 +167,11 @@ where
     /// Returns a reference to the controllers database interface
     pub fn db(&self) -> &Arc<Db> {
         self.db
+    }
+
+    /// Returns a reference to the controllers S3 storage interface
+    pub fn storage(&self) -> &Arc<ObjectStorage> {
+        self.storage
     }
 
     pub fn authz(&self) -> &Arc<Authz> {
