@@ -682,6 +682,7 @@ mod tests {
             room: EventRoomInfo {
                 id: RoomId::from(Uuid::nil()),
                 password: None,
+                waiting_room: false,
                 sip_tel: None,
                 sip_uri: None,
                 sip_id: None,
@@ -737,7 +738,8 @@ mod tests {
                 "title": "Instance title",
                 "description": "Instance description",
                 "room": {
-                    "id": "00000000-0000-0000-0000-000000000000"
+                    "id": "00000000-0000-0000-0000-000000000000",
+                    "waiting_room": false
                 },
                 "invitees_truncated": false,
                 "invitees": [

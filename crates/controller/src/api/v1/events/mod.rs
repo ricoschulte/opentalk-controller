@@ -416,6 +416,9 @@ pub struct EventRoomInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password: Option<String>,
 
+    /// Flag to check if the room has a waiting room enabled
+    pub waiting_room: bool,
+
     /// SIP Call-In phone number which must be used to reach the room
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sip_tel: Option<String>,
@@ -453,6 +456,7 @@ impl EventRoomInfo {
         Self {
             id: room.id,
             password: room.password,
+            waiting_room: room.waiting_room,
             sip_tel,
             sip_uri: None, // TODO SIP URI support
             sip_id,
@@ -1888,6 +1892,7 @@ mod tests {
             room: EventRoomInfo {
                 id: RoomId::from(Uuid::nil()),
                 password: None,
+                waiting_room: false,
                 sip_tel: None,
                 sip_uri: None,
                 sip_id: None,
@@ -1943,7 +1948,8 @@ mod tests {
                 "title": "Event title",
                 "description": "Event description",
                 "room": {
-                    "id": "00000000-0000-0000-0000-000000000000"
+                    "id": "00000000-0000-0000-0000-000000000000",
+                    "waiting_room": false
                 },
                 "invitees_truncated": false,
                 "invitees": [
@@ -2005,6 +2011,7 @@ mod tests {
             room: EventRoomInfo {
                 id: RoomId::from(Uuid::nil()),
                 password: None,
+                waiting_room: false,
                 sip_tel: None,
                 sip_uri: None,
                 sip_id: None,
@@ -2054,7 +2061,8 @@ mod tests {
                 "title": "Event title",
                 "description": "Event description",
                 "room": {
-                    "id": "00000000-0000-0000-0000-000000000000"
+                    "id": "00000000-0000-0000-0000-000000000000",
+                    "waiting_room": false
                 },
                 "invitees_truncated": false,
                 "invitees": [
