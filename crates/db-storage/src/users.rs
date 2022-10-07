@@ -13,8 +13,8 @@ use kustos::subject::PolicyUser;
 use std::fmt;
 
 diesel_newtype! {
-    #[derive(Copy)] SerialUserId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt",
-    #[derive(Copy)] UserId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/users/"
+    #[derive(Copy)] SerialUserId(i64) => diesel::sql_types::BigInt,
+    #[derive(Copy)] UserId(uuid::Uuid) => diesel::sql_types::Uuid, "/users/"
 }
 
 impl_to_redis_args!(UserId);
@@ -62,7 +62,7 @@ impl User {
     ///
     /// If no user exists with `user_id` this returns an Error
     #[tracing::instrument(err, skip_all)]
-    pub fn get(conn: &DbConnection, user_id: UserId) -> Result<User> {
+    pub fn get(conn: &mut DbConnection, user_id: UserId) -> Result<User> {
         let user = users::table
             .filter(users::id.eq(user_id))
             .get_result(conn)?;
@@ -75,7 +75,7 @@ impl User {
     /// Returns None if no user matches `oidc_issuer` and `email`
     #[tracing::instrument(err, skip_all)]
     pub fn get_by_email(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         oidc_issuer: &str,
         email: &str,
     ) -> Result<Option<User>> {
@@ -93,7 +93,11 @@ impl User {
 
     /// Get one or more users with the given phone number
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_phone(conn: &DbConnection, oidc_issuer: &str, phone: &str) -> Result<Vec<User>> {
+    pub fn get_by_phone(
+        conn: &mut DbConnection,
+        oidc_issuer: &str,
+        phone: &str,
+    ) -> Result<Vec<User>> {
         let users = users::table
             .filter(
                 users::oidc_issuer
@@ -107,7 +111,7 @@ impl User {
 
     /// Get all users alongside their current groups
     #[tracing::instrument(err, skip_all)]
-    pub fn get_all_with_groups(conn: &DbConnection) -> Result<Vec<(User, Vec<Group>)>> {
+    pub fn get_all_with_groups(conn: &mut DbConnection) -> Result<Vec<(User, Vec<Group>)>> {
         let users_query = users::table.order_by(users::id.desc());
         let users = users_query.load(conn)?;
 
@@ -128,7 +132,7 @@ impl User {
     /// Get all users paginated
     #[tracing::instrument(err, skip_all, fields(%limit, %page))]
     pub fn get_all_paginated(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         limit: i64,
         page: i64,
     ) -> Result<(Vec<User>, i64)> {
@@ -144,7 +148,7 @@ impl User {
     /// Get Users paginated and filtered by ids
     #[tracing::instrument(err, skip_all, fields(%limit, %page))]
     pub fn get_by_ids_paginated(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         ids: &[UserId],
         limit: i64,
         page: i64,
@@ -161,7 +165,7 @@ impl User {
 
     /// Returns all `User`s filtered by id
     #[tracing::instrument(err, skip_all)]
-    pub fn get_all_by_ids(conn: &DbConnection, ids: &[UserId]) -> Result<Vec<User>> {
+    pub fn get_all_by_ids(conn: &mut DbConnection, ids: &[UserId]) -> Result<Vec<User>> {
         let query = users::table.filter(users::id.eq_any(ids));
         let users = query.load(conn)?;
 
@@ -172,7 +176,11 @@ impl User {
     ///
     /// Returns None if not user matched `issue` and `sub`
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_oidc_sub(conn: &DbConnection, issuer: &str, sub: &str) -> Result<Option<User>> {
+    pub fn get_by_oidc_sub(
+        conn: &mut DbConnection,
+        issuer: &str,
+        sub: &str,
+    ) -> Result<Option<User>> {
         let user = users::table
             .filter(users::oidc_issuer.eq(issuer).and(users::oidc_sub.eq(sub)))
             .get_result(conn)
@@ -184,7 +192,7 @@ impl User {
     /// Get all users filtered by the issuer and subs
     #[tracing::instrument(err, skip_all)]
     pub fn get_all_by_oidc_subs(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         issuer: &str,
         subs: &[&str],
     ) -> Result<Vec<User>> {
@@ -203,7 +211,7 @@ impl User {
     ///
     /// This looks for similarities of the search_str in the display_name, first+lastname and email
     #[tracing::instrument(err, skip_all)]
-    pub fn find(conn: &DbConnection, search_str: &str) -> Result<Vec<User>> {
+    pub fn find(conn: &mut DbConnection, search_str: &str) -> Result<Vec<User>> {
         // IMPORTANT: lowercase it to match the index of the db and
         // remove all existing % in name and to avoid manipulation of the LIKE query.
         let search_str = search_str.replace('%', "").trim().to_lowercase();
@@ -254,7 +262,7 @@ impl User {
 ///
 /// Represents fields that have to be provided on user insertion.
 #[derive(Insertable)]
-#[table_name = "users"]
+#[diesel(table_name = users)]
 pub struct NewUser {
     pub oidc_sub: String,
     pub oidc_issuer: String,
@@ -278,8 +286,8 @@ impl NewUserWithGroups {
     ///
     /// Returns the inserted users with the respective GroupIds
     #[tracing::instrument(err, skip_all)]
-    pub fn insert(self, conn: &DbConnection) -> Result<(User, Vec<GroupId>)> {
-        conn.transaction::<_, DatabaseError, _>(|| {
+    pub fn insert(self, conn: &mut DbConnection) -> Result<(User, Vec<GroupId>)> {
+        conn.transaction::<_, DatabaseError, _>(|conn| {
             let user: User = diesel::insert_into(users::table)
                 .values(self.new_user)
                 .get_result(conn)?;
@@ -297,7 +305,7 @@ impl NewUserWithGroups {
 ///
 /// Is used in update queries. None fields will be ignored on update queries
 #[derive(Default, AsChangeset)]
-#[table_name = "users"]
+#[diesel(table_name = users)]
 pub struct UpdateUser<'a> {
     pub title: Option<&'a str>,
     pub email: Option<&'a str>,
@@ -328,11 +336,11 @@ impl UpdateUser<'_> {
     #[tracing::instrument(err, skip_all)]
     pub fn apply(
         self,
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         user_id: UserId,
         groups: Option<&[String]>,
     ) -> Result<UserUpdatedInfo> {
-        conn.transaction::<UserUpdatedInfo, DatabaseError, _>(move || {
+        conn.transaction::<UserUpdatedInfo, DatabaseError, _>(move |conn| {
             let query = diesel::update(users::table.filter(users::id.eq(user_id))).set(self);
             let user: User = query.get_result(conn)?;
 
@@ -389,7 +397,7 @@ impl UpdateUser<'_> {
 // If the group is currently not stored, create a new group and returns the ID along the already present ones.
 // Does not preserve the order of groups passed to the function
 fn get_ids_for_group_names(
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     user: &User,
     groups: &[String],
 ) -> Result<Vec<(GroupId, String)>> {
@@ -424,7 +432,7 @@ fn get_ids_for_group_names(
 
 #[tracing::instrument(err, skip_all)]
 fn insert_user_into_user_groups(
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     user: &User,
     groups: Vec<(GroupId, String)>,
 ) -> Result<()> {

@@ -88,9 +88,9 @@ impl SignalingModule for Chat {
             let db = ctx.db().clone();
 
             let groups = controller::block(move || {
-                let conn = db.get_conn()?;
+                let mut conn = db.get_conn()?;
 
-                Group::get_all_for_user(&conn, user_id)
+                Group::get_all_for_user(&mut conn, user_id)
             })
             .await?
             .context("Failed to retrieve groups for user")?;
@@ -176,13 +176,13 @@ impl SignalingModule for Chat {
                 // Inquire the database about each user's groups
                 let participant_to_common_groups_mappings =
                     controller::block(move || -> Result<Vec<(ParticipantId, Vec<String>)>> {
-                        let conn = db.get_conn()?;
+                        let mut conn = db.get_conn()?;
 
                         let mut participant_to_common_groups_mappings = vec![];
 
                         for (user_id, participant_id) in participant_user_mappings {
                             // Get the users groups
-                            let groups = Group::get_all_for_user(&conn, user_id)?;
+                            let groups = Group::get_all_for_user(&mut conn, user_id)?;
 
                             // Intersect our groups and the groups of the user and collect their id/name
                             // as strings into a set
@@ -229,9 +229,9 @@ impl SignalingModule for Chat {
 
                     let common_groups = controller::block(move || -> Result<Vec<String>> {
                         // Get the user's groups
-                        let conn = db.get_conn()?;
+                        let mut conn = db.get_conn()?;
 
-                        let groups = Group::get_all_for_user(&conn, user_id)?;
+                        let groups = Group::get_all_for_user(&mut conn, user_id)?;
 
                         // Intersect our groups and the groups of the user and collect their id/name
                         // as strings into a set

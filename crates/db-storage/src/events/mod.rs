@@ -8,14 +8,13 @@ use crate::utils::HasUsers;
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use database::{DatabaseError, DbConnection, Paginate, Result};
-use diesel::associations::BelongsTo;
-use diesel::backend::Backend;
+use diesel::backend::RawValue;
+use diesel::deserialize::FromSql;
 use diesel::expression::AsExpression;
 use diesel::pg::Pg;
 use diesel::prelude::*;
-use diesel::serialize::{self, Output};
-use diesel::sql_types::{Nullable, Timestamptz, Uuid};
-use diesel::types::{FromSql, IsNull, Record, ToSql};
+use diesel::serialize::{self, IsNull, Output, ToSql};
+use diesel::sql_types::{Nullable, Record, Timestamptz, Uuid};
 use diesel::{
     deserialize, BoolExpressionMethods, ExpressionMethods, JoinOnDsl, NullableExpressionMethods,
     OptionalExtension, PgSortExpressionMethods, QueryDsl, Queryable, RunQueryDsl,
@@ -25,31 +24,30 @@ use std::io::Write;
 use std::str::{from_utf8, FromStr};
 
 diesel_newtype! {
-    #[derive(Copy)] EventId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid", "/events/",
-    #[derive(Copy)] EventSerialId(i64) => diesel::sql_types::BigInt, "diesel::sql_types::BigInt",
+    #[derive(Copy)] EventId(uuid::Uuid) => diesel::sql_types::Uuid, "/events/",
+    #[derive(Copy)] EventSerialId(i64) => diesel::sql_types::BigInt,
 
-    #[derive(Copy)] EventExceptionId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid",
+    #[derive(Copy)] EventExceptionId(uuid::Uuid) => diesel::sql_types::Uuid,
 
-    #[derive(Copy)] EventInviteId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid"
+    #[derive(Copy)] EventInviteId(uuid::Uuid) => diesel::sql_types::Uuid
 }
 
 pub mod email_invites;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, FromSqlRow, AsExpression, Serialize, Deserialize)]
-#[sql_type = "diesel::sql_types::Text"]
+#[diesel(sql_type = diesel::sql_types::Text)]
 pub struct TimeZone(pub chrono_tz::Tz);
 
 impl ToSql<diesel::sql_types::Text, Pg> for TimeZone {
-    fn to_sql<W: Write>(&self, out: &mut Output<W, Pg>) -> serialize::Result {
+    fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
         write!(out, "{}", self.0)?;
         Ok(IsNull::No)
     }
 }
 
 impl FromSql<diesel::sql_types::Text, Pg> for TimeZone {
-    fn from_sql(bytes: Option<&<Pg as Backend>::RawValue>) -> deserialize::Result<Self> {
-        let bytes = bytes.ok_or("tried to deserialize Tz from None")?;
-        let s = from_utf8(bytes)?;
+    fn from_sql(bytes: RawValue<Pg>) -> deserialize::Result<Self> {
+        let s = from_utf8(bytes.as_bytes())?;
         let tz = Tz::from_str(s)?;
 
         Ok(Self(tz))
@@ -57,8 +55,8 @@ impl FromSql<diesel::sql_types::Text, Pg> for TimeZone {
 }
 
 #[derive(Debug, Clone, Queryable, Identifiable, Associations, PartialEq, Eq)]
-#[table_name = "events"]
-#[belongs_to(User, foreign_key = "created_by")]
+#[diesel(table_name = events)]
+#[diesel(belongs_to(User, foreign_key = created_by))]
 pub struct Event {
     pub id: EventId,
     pub id_serial: EventSerialId,
@@ -142,7 +140,7 @@ impl GetEventsCursor {
 
 impl Event {
     #[tracing::instrument(err, skip_all)]
-    pub fn get(conn: &DbConnection, event_id: EventId) -> Result<Event> {
+    pub fn get(conn: &mut DbConnection, event_id: EventId) -> Result<Event> {
         let query = events::table.filter(events::id.eq(event_id));
 
         let event = query.first(conn)?;
@@ -153,7 +151,7 @@ impl Event {
     #[tracing::instrument(err, skip_all)]
     #[allow(clippy::type_complexity)]
     pub fn get_with_invite_and_room(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         user_id: UserId,
         event_id: EventId,
     ) -> Result<(Event, Option<EventInvite>, Room, Option<SipConfig>, bool)> {
@@ -175,7 +173,7 @@ impl Event {
                 event_invites::all_columns.nullable(),
                 rooms::all_columns,
                 sip_configs::all_columns.nullable(),
-                event_favorites::user_id.is_not_null(),
+                event_favorites::user_id.nullable().is_not_null(),
             ))
             .filter(events::id.eq(event_id));
 
@@ -187,7 +185,7 @@ impl Event {
     #[tracing::instrument(err, skip_all)]
     #[allow(clippy::type_complexity)]
     pub fn get_with_room(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         event_id: EventId,
     ) -> Result<(Event, Room, Option<SipConfig>)> {
         let query = events::table
@@ -208,7 +206,7 @@ impl Event {
     #[tracing::instrument(err, skip_all)]
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn get_all_for_user_paginated(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         user_id: UserId,
         only_favorites: bool,
         invite_status_filter: Vec<EventInviteStatus>,
@@ -251,10 +249,10 @@ impl Event {
                 event_invites::all_columns.nullable(),
                 rooms::all_columns,
                 sip_configs::all_columns.nullable(),
-                event_favorites::user_id.is_not_null(),
+                event_favorites::user_id.nullable().is_not_null(),
             ))
             .filter(event_related_to_user_id)
-            .order_by(events::starts_at.asc().nulls_first())
+            .order_by(events::starts_at.nullable().asc().nulls_first())
             .then_order_by(events::created_at.asc())
             .then_order_by(events::id)
             .limit(limit)
@@ -355,7 +353,7 @@ impl Event {
     }
 
     #[tracing::instrument(err, skip_all)]
-    pub fn delete_by_id(conn: &DbConnection, event_id: EventId) -> Result<()> {
+    pub fn delete_by_id(conn: &mut DbConnection, event_id: EventId) -> Result<()> {
         diesel::delete(events::table)
             .filter(events::id.eq(event_id))
             .execute(conn)?;
@@ -367,7 +365,7 @@ impl Event {
     ///
     /// This is needed because when rescheduling an Event from time x onwards, we create a new Event and both reference the room.
     #[tracing::instrument(err, skip_all)]
-    pub fn get_all_ids_for_room(conn: &DbConnection, room_id: RoomId) -> Result<Vec<EventId>> {
+    pub fn get_all_ids_for_room(conn: &mut DbConnection, room_id: RoomId) -> Result<Vec<EventId>> {
         let query = events::table
             .select(events::id)
             .filter(events::room.eq(room_id));
@@ -381,7 +379,7 @@ impl Event {
     ///
     /// Fastpath for deleting multiple events in room
     #[tracing::instrument(err, skip_all)]
-    pub fn delete_all_for_room(conn: &DbConnection, room_id: RoomId) -> Result<()> {
+    pub fn delete_all_for_room(conn: &mut DbConnection, room_id: RoomId) -> Result<()> {
         diesel::delete(events::table)
             .filter(events::room.eq(room_id))
             .execute(conn)?;
@@ -391,7 +389,7 @@ impl Event {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "events"]
+#[diesel(table_name = events)]
 pub struct NewEvent {
     pub title: String,
     pub description: String,
@@ -411,7 +409,7 @@ pub struct NewEvent {
 
 impl NewEvent {
     #[tracing::instrument(err, skip_all)]
-    pub fn insert(self, conn: &DbConnection) -> Result<Event> {
+    pub fn insert(self, conn: &mut DbConnection) -> Result<Event> {
         let query = self.insert_into(events::table);
 
         let event = query.get_result(conn)?;
@@ -421,7 +419,7 @@ impl NewEvent {
 }
 
 #[derive(Debug, AsChangeset)]
-#[table_name = "events"]
+#[diesel(table_name = events)]
 pub struct UpdateEvent {
     pub title: Option<String>,
     pub description: Option<String>,
@@ -440,7 +438,7 @@ pub struct UpdateEvent {
 
 impl UpdateEvent {
     #[tracing::instrument(err, skip_all)]
-    pub fn apply(self, conn: &DbConnection, event_id: EventId) -> Result<Event> {
+    pub fn apply(self, conn: &mut DbConnection, event_id: EventId) -> Result<Event> {
         let query = diesel::update(events::table)
             .filter(events::id.eq(event_id))
             .set(self)
@@ -456,7 +454,6 @@ sql_enum!(
     EventExceptionKind,
     "event_exception_kind",
     EventExceptionKindType,
-    "EventExceptionKindType",
     {
         Modified = b"modified",
         Cancelled = b"cancelled",
@@ -464,9 +461,9 @@ sql_enum!(
 );
 
 #[derive(Debug, Queryable, Identifiable, Associations)]
-#[table_name = "event_exceptions"]
-#[belongs_to(Event, foreign_key = "event_id")]
-#[belongs_to(User, foreign_key = "created_by")]
+#[diesel(table_name = event_exceptions)]
+#[diesel(belongs_to(Event, foreign_key = event_id))]
+#[diesel(belongs_to(User, foreign_key = created_by))]
 pub struct EventException {
     pub id: EventExceptionId,
     pub event_id: EventId,
@@ -493,7 +490,7 @@ impl HasUsers for &EventException {
 impl EventException {
     #[tracing::instrument(err, skip_all)]
     pub fn get_for_event(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         event_id: EventId,
         datetime: DateTime<Utc>,
     ) -> Result<Option<EventException>> {
@@ -510,7 +507,7 @@ impl EventException {
 
     #[tracing::instrument(err, skip_all)]
     pub fn get_all_for_event(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         event_id: EventId,
         datetimes: &[DateTime<Utc>],
     ) -> Result<Vec<EventException>> {
@@ -526,7 +523,7 @@ impl EventException {
     }
 
     #[tracing::instrument(err, skip_all)]
-    pub fn delete_all_for_event(conn: &DbConnection, event_id: EventId) -> Result<()> {
+    pub fn delete_all_for_event(conn: &mut DbConnection, event_id: EventId) -> Result<()> {
         let query =
             diesel::delete(event_exceptions::table).filter(event_exceptions::event_id.eq(event_id));
 
@@ -537,7 +534,7 @@ impl EventException {
 }
 
 #[derive(Debug, Insertable)]
-#[table_name = "event_exceptions"]
+#[diesel(table_name = event_exceptions)]
 pub struct NewEventException {
     pub event_id: EventId,
     pub exception_date: DateTime<Utc>,
@@ -555,7 +552,7 @@ pub struct NewEventException {
 
 impl NewEventException {
     #[tracing::instrument(err, skip_all)]
-    pub fn insert(self, conn: &DbConnection) -> Result<EventException> {
+    pub fn insert(self, conn: &mut DbConnection) -> Result<EventException> {
         let query = self.insert_into(event_exceptions::table);
 
         let event_exception = query.get_result(conn)?;
@@ -565,7 +562,7 @@ impl NewEventException {
 }
 
 #[derive(Debug, AsChangeset)]
-#[table_name = "event_exceptions"]
+#[diesel(table_name = event_exceptions)]
 pub struct UpdateEventException {
     pub kind: Option<EventExceptionKind>,
     pub title: Option<Option<String>>,
@@ -581,7 +578,7 @@ impl UpdateEventException {
     #[tracing::instrument(err, skip_all)]
     pub fn apply(
         self,
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         event_exception_id: EventExceptionId,
     ) -> Result<EventException> {
         let query = diesel::update(event_exceptions::table)
@@ -601,7 +598,6 @@ sql_enum!(
     EventInviteStatus,
     "event_invite_status",
     EventInviteStatusType,
-    "EventInviteStatusType",
     {
         Pending = b"pending",
         Accepted = b"accepted",
@@ -625,9 +621,9 @@ impl FromStr for EventInviteStatus {
 }
 
 #[derive(Debug, Queryable, Identifiable, Associations)]
-#[table_name = "event_invites"]
-#[belongs_to(Event, foreign_key = "event_id")]
-#[belongs_to(User, foreign_key = "invitee")]
+#[diesel(table_name = event_invites)]
+#[diesel(belongs_to(Event, foreign_key = event_id))]
+#[diesel(belongs_to(User, foreign_key = invitee))]
 pub struct EventInvite {
     pub id: EventInviteId,
     pub event_id: EventId,
@@ -640,10 +636,10 @@ pub struct EventInvite {
 impl EventInvite {
     #[tracing::instrument(err, skip_all)]
     pub fn get_for_events(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         events: &[&Event],
     ) -> Result<Vec<Vec<(EventInvite, User)>>> {
-        conn.transaction(|| {
+        conn.transaction(|conn| {
             let invites: Vec<EventInvite> = EventInvite::belonging_to(events).load(conn)?;
             let mut user_ids: Vec<UserId> = invites.iter().map(|x| x.invitee).collect();
             // Small optimization to filter out duplicates
@@ -678,7 +674,7 @@ impl EventInvite {
 
     #[tracing::instrument(err, skip_all)]
     pub fn get_for_event_paginated(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         event_id: EventId,
         per_page: i64,
         page: i64,
@@ -696,7 +692,10 @@ impl EventInvite {
     }
 
     #[tracing::instrument(err, skip_all)]
-    pub fn get_pending_for_user(conn: &DbConnection, user_id: UserId) -> Result<Vec<EventInvite>> {
+    pub fn get_pending_for_user(
+        conn: &mut DbConnection,
+        user_id: UserId,
+    ) -> Result<Vec<EventInvite>> {
         let query = event_invites::table.filter(
             event_invites::invitee
                 .eq(user_id)
@@ -710,7 +709,7 @@ impl EventInvite {
 
     #[tracing::instrument(err, skip_all)]
     pub fn delete_by_invitee(
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         event_id: EventId,
         invitee: UserId,
     ) -> Result<EventInvite> {
@@ -729,7 +728,7 @@ impl EventInvite {
 }
 
 #[derive(Insertable)]
-#[table_name = "event_invites"]
+#[diesel(table_name = event_invites)]
 pub struct NewEventInvite {
     pub event_id: EventId,
     pub invitee: UserId,
@@ -742,7 +741,7 @@ impl NewEventInvite {
     ///
     /// When yielding a unique key violation, None is returned.
     #[tracing::instrument(err, skip_all)]
-    pub fn try_insert(self, conn: &DbConnection) -> Result<Option<EventInvite>> {
+    pub fn try_insert(self, conn: &mut DbConnection) -> Result<Option<EventInvite>> {
         let query = self.insert_into(event_invites::table);
 
         let result = query.get_result(conn);
@@ -759,7 +758,7 @@ impl NewEventInvite {
 }
 
 #[derive(AsChangeset)]
-#[table_name = "event_invites"]
+#[diesel(table_name = event_invites)]
 pub struct UpdateEventInvite {
     pub status: EventInviteStatus,
 }
@@ -769,7 +768,7 @@ impl UpdateEventInvite {
     #[tracing::instrument(err, skip_all)]
     pub fn apply(
         self,
-        conn: &DbConnection,
+        conn: &mut DbConnection,
         user_id: UserId,
         event_id: EventId,
     ) -> Result<EventInvite> {
@@ -796,10 +795,10 @@ impl UpdateEventInvite {
 }
 
 #[derive(Associations, Identifiable, Queryable)]
-#[table_name = "event_favorites"]
-#[primary_key(user_id, event_id)]
-#[belongs_to(User)]
-#[belongs_to(Event)]
+#[diesel(table_name = event_favorites)]
+#[diesel(primary_key(user_id, event_id))]
+#[diesel(belongs_to(User))]
+#[diesel(belongs_to(Event))]
 pub struct EventFavorite {
     pub user_id: UserId,
     pub event_id: EventId,
@@ -810,7 +809,11 @@ impl EventFavorite {
     ///
     /// Returns true if something was deleted
     #[tracing::instrument(err, skip_all)]
-    pub fn delete_by_id(conn: &DbConnection, user_id: UserId, event_id: EventId) -> Result<bool> {
+    pub fn delete_by_id(
+        conn: &mut DbConnection,
+        user_id: UserId,
+        event_id: EventId,
+    ) -> Result<bool> {
         let lines_changes = diesel::delete(event_favorites::table)
             .filter(
                 event_favorites::user_id
@@ -824,7 +827,7 @@ impl EventFavorite {
 }
 
 #[derive(Insertable)]
-#[table_name = "event_favorites"]
+#[diesel(table_name = event_favorites)]
 pub struct NewEventFavorite {
     pub user_id: UserId,
     pub event_id: EventId,
@@ -835,7 +838,7 @@ impl NewEventFavorite {
     ///
     /// When yielding a unique key violation, None is returned.
     #[tracing::instrument(err, skip_all)]
-    pub fn try_insert(self, conn: &DbConnection) -> Result<Option<EventFavorite>> {
+    pub fn try_insert(self, conn: &mut DbConnection) -> Result<Option<EventFavorite>> {
         let query = self.insert_into(event_favorites::table);
 
         let result = query.get_result(conn);
@@ -848,29 +851,5 @@ impl NewEventFavorite {
             )) => Ok(None),
             Err(e) => Err(e.into()),
         }
-    }
-}
-
-// Below impls allow for usage of diesel's BelongsTo traits on &[&Event] to avoid
-// cloning the events into a array just for the EventInvites::get_for_events
-impl BelongsTo<&Event> for EventInvite {
-    type ForeignKey = EventId;
-
-    type ForeignKeyColumn = event_invites::event_id;
-
-    fn foreign_key(&self) -> Option<&Self::ForeignKey> {
-        Some(&self.event_id)
-    }
-
-    fn foreign_key_column() -> Self::ForeignKeyColumn {
-        event_invites::event_id
-    }
-}
-
-impl Identifiable for &&Event {
-    type Id = EventId;
-
-    fn id(self) -> Self::Id {
-        self.id
     }
 }

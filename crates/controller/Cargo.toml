@@ -32,7 +32,7 @@ opentelemetry-jaeger = { version = "0.16", features = [
 ] }
 opentelemetry-prometheus = "0.10"
 prometheus = "0.13"
-tracing-actix-web = { version = "0.5" }
+tracing-actix-web = { version = "0.6" }
 
 ### Config
 config = { version = "0.13.1", default-features = false, features = ["toml"] }
@@ -46,16 +46,14 @@ thiserror = "1.0"
 validator = { version = "0.15", features = ["derive"] }
 
 ### Database ORM
-diesel = { version = "1.4.6", features = [
+diesel = { version = "2", features = [
     "postgres",
     "uuid",
-    "uuidv07",
     "r2d2",
     "serde_json",
     "chrono",
 ] }
-uuid = { version = "0.8.2", features = ["serde", "v4"] }
-uuid_v1 = { package = "uuid", version = "1.0.0", features = ["serde", "v4"] }
+uuid = { package = "uuid", version = "1.0.0", features = ["serde", "v4"] }
 
 ### Web Framework & Runtime
 tokio = { version = "1", features = ["signal"] }

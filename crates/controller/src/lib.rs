@@ -353,12 +353,12 @@ impl Controller {
             // kustos to assign this group to the administrator role.
             // TODO(r.floren): When we support multiple issuers, this logic needs some rework,
             // either by creating one admin Group per issuer or making the role assignment a manual task for more security.
-            let conn = self.db.get_conn()?;
+            let mut conn = self.db.get_conn()?;
             let admin_group = NewGroup {
                 oidc_issuer: self.oidc.provider.metadata.issuer().to_string(),
                 name: "/OpenTalk_Administrator",
             }
-            .insert_or_get(&conn)?;
+            .insert_or_get(&mut conn)?;
             // Drop early to avoid holding a single connection from the pool for the whole runtime
             drop(conn);
 

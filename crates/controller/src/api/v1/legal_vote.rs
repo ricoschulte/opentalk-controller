@@ -174,21 +174,21 @@ pub async fn get_all_for_room(
         .await?;
 
     let (legal_votes, count) = crate::block(move || -> database::Result<_> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let (legal_votes, count) = match accessible_legal_votes {
-            AccessibleResources::List(vote_ids) => {
-                LegalVote::get_for_room_by_ids_paginated(&conn, room_id, &vote_ids, per_page, page)?
-            }
+            AccessibleResources::List(vote_ids) => LegalVote::get_for_room_by_ids_paginated(
+                &mut conn, room_id, &vote_ids, per_page, page,
+            )?,
             AccessibleResources::All => {
-                LegalVote::get_for_room_paginated(&conn, room_id, per_page, page)?
+                LegalVote::get_for_room_paginated(&mut conn, room_id, per_page, page)?
             }
         };
 
         let mut detailed_votes = Vec::new();
 
         for legal_vote in legal_votes {
-            match parse_protocol(&conn, legal_vote.protocol) {
+            match parse_protocol(&mut conn, legal_vote.protocol) {
                 Ok(legal_vote_detailed) => detailed_votes.push(LegalVoteEntry {
                     legal_vote_id: legal_vote.id,
                     protocol_result: ProtocolResult::Ok(legal_vote_detailed),
@@ -226,19 +226,19 @@ pub async fn get_all(
         .await?;
 
     let (legal_votes, count) = crate::block(move || -> database::Result<_> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let (legal_votes, count) = match accessible_legal_votes {
             AccessibleResources::List(vote_ids) => {
-                LegalVote::get_by_ids_paginated(&conn, &vote_ids, per_page, page)?
+                LegalVote::get_by_ids_paginated(&mut conn, &vote_ids, per_page, page)?
             }
-            AccessibleResources::All => LegalVote::get_all_paginated(&conn, per_page, page)?,
+            AccessibleResources::All => LegalVote::get_all_paginated(&mut conn, per_page, page)?,
         };
 
         let mut detailed_votes = Vec::new();
 
         for legal_vote in legal_votes {
-            match parse_protocol(&conn, legal_vote.protocol) {
+            match parse_protocol(&mut conn, legal_vote.protocol) {
                 Ok(legal_vote_detailed) => detailed_votes.push(LegalVoteEntry {
                     legal_vote_id: legal_vote.id,
                     protocol_result: ProtocolResult::Ok(legal_vote_detailed),
@@ -285,11 +285,11 @@ pub async fn get_specific(
     }
 
     let legal_vote_detailed = crate::block(move || -> database::Result<_> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        let legal_vote = LegalVote::get(&conn, legal_vote_id)?;
+        let legal_vote = LegalVote::get(&mut conn, legal_vote_id)?;
 
-        let legal_vote_entry = match parse_protocol(&conn, legal_vote.protocol) {
+        let legal_vote_entry = match parse_protocol(&mut conn, legal_vote.protocol) {
             Ok(legal_vote_detailed) => LegalVoteEntry {
                 legal_vote_id: legal_vote.id,
                 protocol_result: ProtocolResult::Ok(legal_vote_detailed),
@@ -308,7 +308,7 @@ pub async fn get_specific(
 }
 
 fn parse_protocol(
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     protocol: Protocol,
 ) -> Result<LegalVoteDetails, ProtocolError> {
     match protocol.version {
@@ -330,7 +330,7 @@ fn parse_protocol(
 
 /// Converts a list of v1 protocol entries to [`LegalVoteDetails`]
 fn parse_v1_entries(
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     entries: Vec<v1::ProtocolEntry>,
 ) -> Result<LegalVoteDetails, ProtocolError> {
     if entries.is_empty() {

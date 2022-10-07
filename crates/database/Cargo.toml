@@ -9,13 +9,13 @@ authors = ["OpenTalk Team <we@opentalk.eu>"]
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
 
 ### ORM and Database connector
-diesel = { version = "1.4.6", features = [
+diesel = { version = "^2.0.0", features = [
     "postgres",
     "uuid",
-    "uuidv07",
     "r2d2",
     "serde_json",
     "chrono",
+    "i-implement-a-third-party-backend-and-opt-into-breaking-changes",
 ] }
 
 ### Error handling

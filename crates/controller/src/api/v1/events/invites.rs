@@ -42,14 +42,14 @@ pub async fn get_invites_for_event(
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let (invitees, invitees_total) = crate::block(move || -> database::Result<_> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         // FIXME: Preliminary solution, consider using UNION when Diesel supports it.
         // As in #[get("/events")], we simply get all invitees and truncate them afterwards.
         // Note that get_for_event_paginated returns a total record count of 0 when paging beyond the end.
 
         let (event_invites_with_user, event_invites_total) =
-            EventInvite::get_for_event_paginated(&conn, event_id, i64::max_value(), 1)?;
+            EventInvite::get_for_event_paginated(&mut conn, event_id, i64::max_value(), 1)?;
 
         let event_invitees_iter =
             event_invites_with_user
@@ -59,7 +59,7 @@ pub async fn get_invites_for_event(
                 });
 
         let (event_email_invites, event_email_invites_total) =
-            EventEmailInvite::get_for_event_paginated(&conn, event_id, i64::max_value(), 1)?;
+            EventEmailInvite::get_for_event_paginated(&mut conn, event_id, i64::max_value(), 1)?;
 
         let event_email_invitees_iter = event_email_invites.into_iter().map(|event_email_invite| {
             EventInvitee::from_email_invite(event_email_invite, &settings)
@@ -145,10 +145,10 @@ async fn create_user_event_invite(
     let inviter = current_user.clone();
 
     let res = crate::block(move || -> database::Result<Either<_, NoContent>> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        let (event, room, sip_config) = Event::get_with_room(&conn, event_id)?;
-        let invitee = User::get(&conn, invitee_id)?;
+        let (event, room, sip_config) = Event::get_with_room(&mut conn, event_id)?;
+        let invitee = User::get(&mut conn, invitee_id)?;
 
         if event.created_by == invitee_id {
             return Ok(Either::Right(NoContent));
@@ -160,7 +160,7 @@ async fn create_user_event_invite(
             created_by: current_user.id,
             created_at: None,
         }
-        .try_insert(&conn);
+        .try_insert(&mut conn);
 
         match res {
             Ok(Some(_invite)) => Ok(Either::Left((event, room, sip_config, invitee))),
@@ -231,12 +231,12 @@ async fn create_email_event_invite(
         let db = db.clone();
 
         crate::block(move || -> Result<_, ApiError> {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
-            let (event, room, sip_config) = Event::get_with_room(&conn, event_id)?;
+            let (event, room, sip_config) = Event::get_with_room(&mut conn, event_id)?;
 
             let invitee_user =
-                User::get_by_email(&conn, &current_user.oidc_issuer, email.as_ref())?;
+                User::get_by_email(&mut conn, &current_user.oidc_issuer, email.as_ref())?;
 
             if let Some(invitee_user) = invitee_user {
                 if event.created_by == invitee_user.id {
@@ -249,7 +249,7 @@ async fn create_email_event_invite(
                     created_by: current_user.id,
                     created_at: None,
                 }
-                .try_insert(&conn);
+                .try_insert(&mut conn);
 
                 match res {
                     Ok(Some(invite)) => Ok(UserState::ExistsAndWasInvited {
@@ -355,14 +355,14 @@ async fn create_invite_to_non_matching_email(
             let current_user_id = current_user.id;
 
             crate::block(move || {
-                let conn = db.get_conn()?;
+                let mut conn = db.get_conn()?;
 
                 NewEventEmailInvite {
                     event_id,
                     email: email.into(),
                     created_by: current_user_id,
                 }
-                .try_insert(&conn)
+                .try_insert(&mut conn)
             })
             .await?
         };
@@ -384,7 +384,7 @@ async fn create_invite_to_non_matching_email(
                     let room_id = room.id;
 
                     let invite = crate::block(move || {
-                        let conn = db.get_conn()?;
+                        let mut conn = db.get_conn()?;
 
                         NewInvite {
                             active: true,
@@ -393,7 +393,7 @@ async fn create_invite_to_non_matching_email(
                             room: room_id,
                             expiration: None,
                         }
-                        .insert(&conn)
+                        .insert(&mut conn)
                     })
                     .await??;
 
@@ -444,16 +444,16 @@ pub async fn delete_invite_to_event(
     let DeleteEventInvitePath { event_id, user_id } = path_params.into_inner();
 
     let (room_id, invite) = crate::block(move || -> database::Result<_> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        conn.transaction(|| {
+        conn.transaction(|conn| {
             // delete invite to the event
-            let invite = EventInvite::delete_by_invitee(&conn, event_id, user_id)?;
+            let invite = EventInvite::delete_by_invitee(conn, event_id, user_id)?;
 
             // user access is going to be removed for the event, remove favorite entry if it exists
-            EventFavorite::delete_by_id(&conn, current_user.id, event_id)?;
+            EventFavorite::delete_by_id(conn, current_user.id, event_id)?;
 
-            let event = Event::get(&conn, invite.event_id)?;
+            let event = Event::get(conn, invite.event_id)?;
 
             Ok((event.room, invite))
         })
@@ -492,9 +492,9 @@ pub async fn get_event_invites_pending(
     current_user: ReqData<User>,
 ) -> DefaultApiResult<GetEventInvitesPendingResponse> {
     let event_invites = crate::block(move || -> database::Result<_> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        EventInvite::get_pending_for_user(&conn, current_user.id)
+        EventInvite::get_pending_for_user(&mut conn, current_user.id)
     })
     .await??;
 
@@ -515,13 +515,13 @@ pub async fn accept_event_invite(
     let event_id = event_id.into_inner();
 
     crate::block(move || -> database::Result<_> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let changeset = UpdateEventInvite {
             status: EventInviteStatus::Accepted,
         };
 
-        changeset.apply(&conn, current_user.id, event_id)
+        changeset.apply(&mut conn, current_user.id, event_id)
     })
     .await??;
 
@@ -540,13 +540,13 @@ pub async fn decline_event_invite(
     let event_id = event_id.into_inner();
 
     crate::block(move || -> database::Result<_> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let changeset = UpdateEventInvite {
             status: EventInviteStatus::Declined,
         };
 
-        changeset.apply(&conn, current_user.id, event_id)
+        changeset.apply(&mut conn, current_user.id, event_id)
     })
     .await??;
 

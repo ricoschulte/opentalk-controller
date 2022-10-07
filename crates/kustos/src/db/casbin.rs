@@ -7,7 +7,7 @@ use diesel::result::Error as DieselError;
 use diesel::{BoolExpressionMethods, Connection, ExpressionMethods, QueryDsl, RunQueryDsl};
 
 #[derive(Queryable, Identifiable, Debug)]
-#[table_name = "casbin_rule"]
+#[diesel(table_name = casbin_rule)]
 pub struct CasbinRule {
     pub id: i32,
     pub ptype: String,
@@ -20,7 +20,7 @@ pub struct CasbinRule {
 }
 
 #[derive(Insertable, Clone, Debug)]
-#[table_name = "casbin_rule"]
+#[diesel(table_name = casbin_rule)]
 pub struct NewCasbinRule {
     pub ptype: String,
     pub v0: String,
@@ -32,7 +32,7 @@ pub struct NewCasbinRule {
 }
 
 #[tracing::instrument(err, skip_all)]
-pub fn remove_policy(conn: &DbConnection, pt: &str, rule: Vec<String>) -> Result<bool> {
+pub fn remove_policy(conn: &mut DbConnection, pt: &str, rule: Vec<String>) -> Result<bool> {
     let rule = normalize_casbin_rule(rule, 0);
 
     let filter = ptype
@@ -51,8 +51,8 @@ pub fn remove_policy(conn: &DbConnection, pt: &str, rule: Vec<String>) -> Result
 }
 
 #[tracing::instrument(err, skip_all)]
-pub fn remove_policies(conn: &DbConnection, pt: &str, rules: Vec<Vec<String>>) -> Result<bool> {
-    conn.transaction(|| {
+pub fn remove_policies(conn: &mut DbConnection, pt: &str, rules: Vec<Vec<String>>) -> Result<bool> {
+    conn.transaction(|conn| {
         for rule in rules {
             let rule = normalize_casbin_rule(rule, 0);
 
@@ -77,7 +77,7 @@ pub fn remove_policies(conn: &DbConnection, pt: &str, rules: Vec<Vec<String>>) -
 
 #[tracing::instrument(err, skip_all)]
 pub fn remove_filtered_policy(
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     pt: &str,
     field_index: usize,
     field_values: Vec<String>,
@@ -156,7 +156,7 @@ pub fn remove_filtered_policy(
 }
 
 #[tracing::instrument(err, skip_all)]
-pub fn clear_policy(conn: &DbConnection) -> Result<()> {
+pub fn clear_policy(conn: &mut DbConnection) -> Result<()> {
     diesel::delete(casbin_rule)
         .execute(conn)
         .map(|_| ())
@@ -164,8 +164,8 @@ pub fn clear_policy(conn: &DbConnection) -> Result<()> {
 }
 
 #[tracing::instrument(err, skip_all)]
-pub fn save_policy(conn: &DbConnection, rules: Vec<NewCasbinRule>) -> Result<()> {
-    conn.transaction::<_, DatabaseError, _>(|| {
+pub fn save_policy(conn: &mut DbConnection, rules: Vec<NewCasbinRule>) -> Result<()> {
+    conn.transaction::<_, DatabaseError, _>(|conn| {
         diesel::delete(casbin_rule).execute(conn)?;
 
         diesel::insert_into(casbin_rule)
@@ -176,14 +176,14 @@ pub fn save_policy(conn: &DbConnection, rules: Vec<NewCasbinRule>) -> Result<()>
 }
 
 #[tracing::instrument(err, skip_all)]
-pub fn load_policy(conn: &DbConnection) -> Result<Vec<CasbinRule>> {
+pub fn load_policy(conn: &mut DbConnection) -> Result<Vec<CasbinRule>> {
     casbin_rule
         .load::<CasbinRule>(conn)
         .map_err(DatabaseError::from)
 }
 
 #[tracing::instrument(err, skip_all)]
-pub fn add_policy(conn: &DbConnection, new_rule: NewCasbinRule) -> Result<()> {
+pub fn add_policy(conn: &mut DbConnection, new_rule: NewCasbinRule) -> Result<()> {
     diesel::insert_into(casbin_rule)
         .values(&new_rule)
         .execute(conn)?;
@@ -191,7 +191,7 @@ pub fn add_policy(conn: &DbConnection, new_rule: NewCasbinRule) -> Result<()> {
 }
 
 #[tracing::instrument(err, skip_all)]
-pub fn add_policies(conn: &DbConnection, new_rules: Vec<NewCasbinRule>) -> Result<()> {
+pub fn add_policies(conn: &mut DbConnection, new_rules: Vec<NewCasbinRule>) -> Result<()> {
     diesel::insert_into(casbin_rule)
         .values(&new_rules)
         .execute(conn)?;

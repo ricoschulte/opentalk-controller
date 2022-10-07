@@ -18,16 +18,16 @@ pub async fn add_event_to_favorites(
     let event_id = id.into_inner();
 
     crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        let result = conn.transaction(|| {
-            let _event = Event::get(&conn, event_id)?;
+        let result = conn.transaction(|conn| {
+            let _event = Event::get(conn, event_id)?;
 
             NewEventFavorite {
                 user_id: current_user.id,
                 event_id,
             }
-            .try_insert(&conn)
+            .try_insert(conn)
         });
 
         match result {
@@ -51,9 +51,9 @@ pub async fn remove_event_from_favorites(
     let event_id = id.into_inner();
 
     crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        let existed = EventFavorite::delete_by_id(&conn, current_user.id, event_id)?;
+        let existed = EventFavorite::delete_by_id(&mut conn, current_user.id, event_id)?;
 
         if existed {
             Ok(NoContent)

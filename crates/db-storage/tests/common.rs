@@ -1,7 +1,12 @@
 use database::DbConnection;
 use k3k_db_storage::users::{NewUser, NewUserWithGroups, User};
 
-pub fn make_user(conn: &DbConnection, firstname: &str, lastname: &str, display_name: &str) -> User {
+pub fn make_user(
+    conn: &mut DbConnection,
+    firstname: &str,
+    lastname: &str,
+    display_name: &str,
+) -> User {
     NewUserWithGroups {
         new_user: NewUser {
             email: format!(

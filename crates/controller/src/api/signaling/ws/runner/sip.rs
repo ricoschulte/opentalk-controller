@@ -51,11 +51,11 @@ async fn try_map_to_user_display_name(
 
     let db = db.clone();
     let result = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        let creator = User::get(&conn, created_by)?;
+        let creator = User::get(&mut conn, created_by)?;
 
-        User::get_by_phone(&conn, &creator.oidc_issuer, &phone_e164)
+        User::get_by_phone(&mut conn, &creator.oidc_issuer, &phone_e164)
     })
     .await;
 

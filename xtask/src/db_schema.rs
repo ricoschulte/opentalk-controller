@@ -35,8 +35,8 @@ pub async fn generate_db_schema(
         log::info!("Dropping temporary database");
 
         let (database, postgres_url) = change_database_of_url(&postgres_url, "postgres");
-        let conn = PgConnection::establish(&postgres_url)?;
-        query_helper::drop_database(&database).execute(&conn)?;
+        let mut conn = PgConnection::establish(&postgres_url)?;
+        query_helper::drop_database(&database).execute(&mut conn)?;
     } else {
         log::warn!("Did not drop database, as it was specified in an env var");
     }
@@ -75,8 +75,8 @@ pub async fn verify_db_schema(
         log::info!("Dropping temporary database");
 
         let (database, postgres_url) = change_database_of_url(&postgres_url, "postgres");
-        let conn = PgConnection::establish(&postgres_url)?;
-        query_helper::drop_database(&database).execute(&conn)?;
+        let mut conn = PgConnection::establish(&postgres_url)?;
+        query_helper::drop_database(&database).execute(&mut conn)?;
     } else {
         log::warn!("Did not drop database, as it was specified in an env var");
     }
@@ -102,8 +102,8 @@ async fn connect_and_migrate(
     if PgConnection::establish(&postgres_url).is_err() {
         let (database, postgres_url) = change_database_of_url(&postgres_url, "postgres");
         log::info!("Creating database: {}", database);
-        let conn = PgConnection::establish(&postgres_url)?;
-        query_helper::create_database(&database).execute(&conn)?;
+        let mut conn = PgConnection::establish(&postgres_url)?;
+        query_helper::create_database(&database).execute(&mut conn)?;
     }
 
     log::info!("Applying migrations to database:");

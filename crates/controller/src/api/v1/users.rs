@@ -143,7 +143,7 @@ pub async fn patch_me(
     let settings = settings.load_full();
 
     let db_user = crate::block(move || -> Result<User, ApiError> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let changeset = UpdateUser {
             title: patch.title.as_deref(),
@@ -158,7 +158,7 @@ pub async fn patch_me(
             id_token_exp: None,
         };
 
-        let updated_info = changeset.apply(&conn, current_user.id, None)?;
+        let updated_info = changeset.apply(&mut conn, current_user.id, None)?;
 
         Ok(updated_info.user)
     })
@@ -197,9 +197,9 @@ pub async fn get_user(
     let settings = settings.load_full();
 
     let user = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        User::get(&conn, user_id.into_inner())
+        User::get(&mut conn, user_id.into_inner())
     })
     .await??;
 
@@ -252,14 +252,14 @@ pub async fn find(
             .context("Failed to search for user in keycloak")?;
 
         let (db_users, kc_users) = crate::block(move || -> Result<_, ApiError> {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
             let kc_subs: Vec<&str> = found_kc_users
                 .iter()
                 .map(|kc_user| kc_user.id.as_str())
                 .collect();
 
-            let users = User::get_all_by_oidc_subs(&conn, &current_user.oidc_issuer, &kc_subs)?;
+            let users = User::get_all_by_oidc_subs(&mut conn, &current_user.oidc_issuer, &kc_subs)?;
 
             found_kc_users.retain(|kc_user| !users.iter().any(|user| user.oidc_sub == kc_user.id));
 
@@ -286,9 +286,9 @@ pub async fn find(
             .collect()
     } else {
         let found_users = crate::block(move || {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
-            User::find(&conn, &query.q)
+            User::find(&mut conn, &query.q)
         })
         .await??;
 

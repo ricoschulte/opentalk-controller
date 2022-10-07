@@ -543,7 +543,7 @@ pub async fn new_event(
     new_event.validate()?;
 
     let event_resource = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         // simplify logic by splitting the event creation
         // into two paths: time independent and time dependent
@@ -561,7 +561,7 @@ pub async fn new_event(
             } if recurrence_pattern.is_empty() => {
                 create_time_independent_event(
                     &settings,
-                    &conn,
+                    &mut conn,
                     current_user,
                     title,
                     description,
@@ -582,7 +582,7 @@ pub async fn new_event(
             } => {
                 create_time_dependent_event(
                     &settings,
-                    &conn,
+                    &mut conn,
                     current_user,
                     title,
                     description,
@@ -623,7 +623,7 @@ pub async fn new_event(
 /// Part of `POST /events` endpoint
 fn create_time_independent_event(
     settings: &Settings,
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     current_user: User,
     title: String,
     description: String,
@@ -685,7 +685,7 @@ fn create_time_independent_event(
 #[allow(clippy::too_many_arguments)]
 fn create_time_dependent_event(
     settings: &Settings,
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     current_user: User,
     title: String,
     description: String,
@@ -854,10 +854,10 @@ pub async fn get_events(
                 from_starts_at: cursor.event_starts_at,
             });
 
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let events = Event::get_all_for_user_paginated(
-            &conn,
+            &mut conn,
             current_user.id,
             query.favorites,
             query.invite_status,
@@ -872,7 +872,7 @@ pub async fn get_events(
             users.add(exceptions);
         }
 
-        let users = users.fetch(&settings, &conn)?;
+        let users = users.fetch(&settings, &mut conn)?;
 
         let event_refs: Vec<&Event> = events.iter().map(|(event, ..)| event).collect();
 
@@ -881,7 +881,7 @@ pub async fn get_events(
             // Do not query event invites if invitees_max is zero, instead create dummy value
             (0..events.len()).map(|_| Vec::new()).collect()
         } else {
-            EventInvite::get_for_events(&conn, &event_refs)?
+            EventInvite::get_for_events(&mut conn, &event_refs)?
         };
 
         // Build list of additional email event invites, grouped by events
@@ -889,7 +889,7 @@ pub async fn get_events(
             // Do not query email event invites if invitees_max is zero, instead create dummy value
             (0..events.len()).map(|_| Vec::new()).collect()
         } else {
-            EventEmailInvite::get_for_events(&conn, &event_refs)?
+            EventEmailInvite::get_for_events(&mut conn, &event_refs)?
         };
 
         type InvitesByEvent = Vec<(Vec<(EventInvite, User)>, Vec<EventEmailInvite>)>;
@@ -1038,16 +1038,16 @@ pub async fn get_event(
     let query = query.into_inner();
 
     let event_resource = crate::block(move || -> Result<EventResource, ApiError> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let (event, invite, room, sip_config, is_favorite) =
-            Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
+            Event::get_with_invite_and_room(&mut conn, current_user.id, event_id)?;
         let (invitees, invitees_truncated) =
-            get_invitees_for_event(&settings, &conn, event_id, query.invitees_max)?;
+            get_invitees_for_event(&settings, &mut conn, event_id, query.invitees_max)?;
 
         let users = GetUserProfilesBatched::new()
             .add(&event)
-            .fetch(&settings, &conn)?;
+            .fetch(&settings, &mut conn)?;
 
         let starts_at = DateTimeTz::starts_at_of(&event);
         let ends_at = DateTimeTz::ends_at_of(&event);
@@ -1230,10 +1230,10 @@ pub async fn patch_event(
     let query = query.into_inner();
 
     let event_resource = crate::block(move || -> Result<EventResource, ApiError> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let (event, invite, room, sip_config, is_favorite) =
-            Event::get_with_invite_and_room(&conn, current_user.id, event_id)?;
+            Event::get_with_invite_and_room(&mut conn, current_user.id, event_id)?;
 
         let room = if patch.password.is_some() || patch.waiting_room.is_some() {
             // Update the event's room if at least one of the fields is set
@@ -1241,7 +1241,7 @@ pub async fn patch_event(
                 password: patch.password.clone(),
                 waiting_room: patch.waiting_room,
             }
-            .apply(&conn, event.room)?
+            .apply(&mut conn, event.room)?
         } else {
             room
         };
@@ -1259,25 +1259,25 @@ pub async fn patch_event(
                 (true, _) | (false, Some(true)) => {
                     // The patch will modify an time-independent event or
                     // change an event to a time-independent event
-                    patch_time_independent_event(&conn, &current_user, &event, patch)?
+                    patch_time_independent_event(&mut conn, &current_user, &event, patch)?
                 }
                 _ => {
                     // The patch modifies an time dependent event
-                    patch_time_dependent_event(&conn, &current_user, &event, patch)?
+                    patch_time_dependent_event(&mut conn, &current_user, &event, patch)?
                 }
             };
 
-            update_event.apply(&conn, event_id)?
+            update_event.apply(&mut conn, event_id)?
         };
 
         let created_by = if event.created_by == current_user.id {
             current_user.clone()
         } else {
-            User::get(&conn, event.created_by)?
+            User::get(&mut conn, event.created_by)?
         };
 
         let (invitees, invitees_truncated) =
-            get_invitees_for_event(&settings, &conn, event_id, query.invitees_max)?;
+            get_invitees_for_event(&settings, &mut conn, event_id, query.invitees_max)?;
 
         let starts_at = DateTimeTz::starts_at_of(&event);
         let ends_at = DateTimeTz::ends_at_of(&event);
@@ -1392,7 +1392,7 @@ fn patch_event_change_to_time_dependent(
 ///
 /// Patch event which is time dependent into a time independent event
 fn patch_time_independent_event(
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     current_user: &User,
     event: &Event,
     patch: PatchEventBody,
@@ -1455,7 +1455,7 @@ fn patch_time_independent_event(
 ///
 /// Patch fields on an time dependent event (without changing the time dependence field)
 fn patch_time_dependent_event(
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     current_user: &User,
     event: &Event,
     patch: PatchEventBody,
@@ -1509,9 +1509,9 @@ pub async fn delete_event(
     let event_id = event_id.into_inner();
 
     crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        Event::delete_by_id(&conn, event_id)
+        Event::delete_by_id(&mut conn, event_id)
     })
     .await??;
 
@@ -1561,7 +1561,7 @@ pub async fn event_reschedule(
 
 fn get_invitees_for_event(
     settings: &Settings,
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     event_id: EventId,
     invitees_max: i64,
 ) -> database::Result<(Vec<EventInvitee>, bool)> {

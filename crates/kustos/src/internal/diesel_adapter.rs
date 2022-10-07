@@ -36,9 +36,9 @@ impl Adapter for CasbinAdapter {
         let db = self.db.clone();
 
         let rules = block(move || {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
-            db::load_policy(&conn)
+            db::load_policy(&mut conn)
         })
         .await
         .map_err(|e| AdapterError(Box::new(e)))?
@@ -65,9 +65,9 @@ impl Adapter for CasbinAdapter {
         let db = self.db.clone();
 
         block(move || {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
-            db::clear_policy(&conn)
+            db::clear_policy(&mut conn)
         })
         .await
         .map_err(|e| AdapterError(Box::new(e)))?
@@ -80,9 +80,9 @@ impl Adapter for CasbinAdapter {
         let db = self.db.clone();
 
         let rules = block(move || {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
-            db::load_policy(&conn)
+            db::load_policy(&mut conn)
         })
         .await
         .map_err(|e| AdapterError(Box::new(e)))?
@@ -138,9 +138,9 @@ impl Adapter for CasbinAdapter {
         }
 
         block(move || {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
-            db::save_policy(&conn, rules)
+            db::save_policy(&mut conn, rules)
         })
         .await
         .map_err(|e| AdapterError(Box::new(e)))?
@@ -159,11 +159,11 @@ impl Adapter for CasbinAdapter {
         let ptype_c = ptype.to_string();
 
         block(move || -> Result<bool> {
-            let conn = db.get_conn().map_err(|e| AdapterError(Box::new(e)))?;
+            let mut conn = db.get_conn().map_err(|e| AdapterError(Box::new(e)))?;
 
             match save_policy_line(&ptype_c, &rule) {
                 Some(new_rule) => {
-                    db::add_policy(&conn, new_rule).map_err(|e| AdapterError(Box::new(e)))?;
+                    db::add_policy(&mut conn, new_rule).map_err(|e| AdapterError(Box::new(e)))?;
                     Ok(true)
                 }
                 None => Err(crate::Error::Custom("Invalid policy".to_string()).into()),
@@ -190,14 +190,14 @@ impl Adapter for CasbinAdapter {
         let ptype_c = ptype.to_string();
 
         block(move || -> Result<bool> {
-            let conn = db.get_conn().map_err(|e| AdapterError(Box::new(e)))?;
+            let mut conn = db.get_conn().map_err(|e| AdapterError(Box::new(e)))?;
 
             let new_rules = rules
                 .iter()
                 .filter_map(|x: &Vec<String>| save_policy_line(&ptype_c, x))
                 .collect::<Vec<NewCasbinRule>>();
 
-            db::add_policies(&conn, new_rules).map_err(|e| AdapterError(Box::new(e)))?;
+            db::add_policies(&mut conn, new_rules).map_err(|e| AdapterError(Box::new(e)))?;
 
             Ok(true)
         })
@@ -212,9 +212,9 @@ impl Adapter for CasbinAdapter {
         let ptype_c = pt.to_string();
 
         block(move || {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
-            db::remove_policy(&conn, &ptype_c, rule)
+            db::remove_policy(&mut conn, &ptype_c, rule)
         })
         .await
         .map_err(|e| AdapterError(Box::new(e)))?
@@ -233,9 +233,9 @@ impl Adapter for CasbinAdapter {
         let ptype_c = pt.to_string();
 
         block(move || {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
-            db::remove_policies(&conn, &ptype_c, rules)
+            db::remove_policies(&mut conn, &ptype_c, rules)
         })
         .await
         .map_err(|e| AdapterError(Box::new(e)))?
@@ -256,9 +256,9 @@ impl Adapter for CasbinAdapter {
             let ptype_c = pt.to_string();
 
             block(move || {
-                let conn = db.get_conn()?;
+                let mut conn = db.get_conn()?;
 
-                db::remove_filtered_policy(&conn, &ptype_c, field_index, field_values)
+                db::remove_filtered_policy(&mut conn, &ptype_c, field_index, field_values)
             })
             .await
             .map_err(|e| AdapterError(Box::new(e)))?
@@ -432,8 +432,8 @@ mod tests {
         if PgConnection::establish(&url).is_err() {
             let (database, postgres_url) = change_database_of_url(&url, "postgres");
             log::info!("Creating database: {}", database);
-            let conn = PgConnection::establish(&postgres_url)?;
-            query_helper::create_database(&database).execute(&conn)?;
+            let mut conn = PgConnection::establish(&postgres_url)?;
+            query_helper::create_database(&database).execute(&mut conn)?;
         }
 
         db_storage::migrations::migrate_from_url(&url)
@@ -443,9 +443,9 @@ mod tests {
             Arc::new(Db::connect_url(&url, 10, Some(2)).context("Failed to connect to database")?);
         let db_clone = db.clone();
         block(move || {
-            let conn = db_clone.get_conn()?;
+            let mut conn = db_clone.get_conn()?;
 
-            db::clear_policy(&conn)
+            db::clear_policy(&mut conn)
         })
         .await
         .unwrap()

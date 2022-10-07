@@ -1,5 +1,4 @@
 use diesel::backend::Backend;
-use diesel::pg::Pg;
 use diesel::query_builder::*;
 use diesel::result::QueryResult;
 use diesel::RunQueryDsl;
@@ -29,8 +28,8 @@ impl DropDatabaseStatement {
     }
 }
 
-impl QueryFragment<Pg> for DropDatabaseStatement {
-    fn walk_ast(&self, mut out: AstPass<Pg>) -> QueryResult<()> {
+impl<DB: Backend> QueryFragment<DB> for DropDatabaseStatement {
+    fn walk_ast<'b>(&'b self, mut out: AstPass<'_, 'b, DB>) -> QueryResult<()> {
         out.push_sql("DROP DATABASE ");
         if self.if_exists {
             out.push_sql("IF EXISTS ");
@@ -65,7 +64,7 @@ impl CreateDatabaseStatement {
 }
 
 impl<DB: Backend> QueryFragment<DB> for CreateDatabaseStatement {
-    fn walk_ast(&self, mut out: AstPass<DB>) -> QueryResult<()> {
+    fn walk_ast<'b>(&'b self, mut out: AstPass<'_, 'b, DB>) -> QueryResult<()> {
         out.push_sql("CREATE DATABASE ");
         out.push_identifier(&self.db_name)?;
         Ok(())

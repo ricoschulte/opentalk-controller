@@ -63,14 +63,14 @@ pub async fn accessible(
         .await?;
 
     let (rooms, room_count) = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         match accessible_rooms {
             kustos::AccessibleResources::All => {
-                Room::get_all_with_creator_paginated(&conn, per_page, page)
+                Room::get_all_with_creator_paginated(&mut conn, per_page, page)
             }
             kustos::AccessibleResources::List(list) => {
-                Room::get_by_ids_with_creator_paginated(&conn, &list, per_page, page)
+                Room::get_by_ids_with_creator_paginated(&mut conn, &list, per_page, page)
             }
         }
     })
@@ -123,7 +123,7 @@ pub async fn new(
     let current_user_id = current_user.id;
 
     let room = crate::block(move || -> database::Result<_> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let new_room = db_rooms::NewRoom {
             created_by: current_user_id,
@@ -131,10 +131,10 @@ pub async fn new(
             waiting_room: room_parameters.waiting_room,
         };
 
-        let room = new_room.insert(&conn)?;
+        let room = new_room.insert(&mut conn)?;
 
         if room_parameters.enable_sip {
-            NewSipConfig::new(room.id, false).insert(&conn)?;
+            NewSipConfig::new(room.id, false).insert(&mut conn)?;
         }
 
         Ok(room)
@@ -190,14 +190,14 @@ pub async fn patch(
     modify_room.validate()?;
 
     let room = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let changeset = db_rooms::UpdateRoom {
             password: modify_room.password,
             waiting_room: modify_room.waiting_room,
         };
 
-        changeset.apply(&conn, room_id)
+        changeset.apply(&mut conn, room_id)
     })
     .await??;
 
@@ -224,9 +224,9 @@ pub async fn delete(
     let room_id = room_id.into_inner();
 
     crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        Room::delete_by_id(&conn, room_id)
+        Room::delete_by_id(&mut conn, room_id)
     })
     .await??;
 
@@ -250,9 +250,9 @@ pub async fn get(
     let room_id = room_id.into_inner();
 
     let (room, created_by) = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        Room::get_with_user(&conn, room_id)
+        Room::get_with_user(&mut conn, room_id)
     })
     .await??;
 
@@ -346,9 +346,9 @@ pub async fn start(
     let room_id = room_id.into_inner();
 
     let room = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        Room::get(&conn, room_id)
+        Room::get(&mut conn, room_id)
     })
     .await??;
 
@@ -424,9 +424,9 @@ pub async fn start_invited(
     })?;
 
     let room = crate::block(move || -> Result<db_rooms::Room, ApiError> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        let invite = Invite::get(&conn, InviteCodeId::from(invite_code_as_uuid))?;
+        let invite = Invite::get(&mut conn, InviteCodeId::from(invite_code_as_uuid))?;
 
         if !invite.active {
             return Err(ApiError::not_found());
@@ -436,7 +436,7 @@ pub async fn start_invited(
             return Err(ApiError::bad_request().with_message("Room id mismatch"));
         }
 
-        let room = Room::get(&conn, invite.room)?;
+        let room = Room::get(&mut conn, invite.room)?;
 
         Ok(room)
     })
@@ -506,9 +506,9 @@ pub async fn sip_start(
     request.password.validate()?;
 
     let room_id = crate::block(move || -> Result<RoomId, ApiError> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        if let Some(sip_config) = SipConfig::get(&conn, request.sip_id)? {
+        if let Some(sip_config) = SipConfig::get(&mut conn, request.sip_id)? {
             if sip_config.password == request.password {
                 Ok(sip_config.room)
             } else {

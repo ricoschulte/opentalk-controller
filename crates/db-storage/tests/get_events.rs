@@ -13,7 +13,7 @@ use crate::common::make_user;
 
 mod common;
 
-fn make_event(conn: &DbConnection, user_id: UserId, room_id: RoomId, hour: u32) -> Event {
+fn make_event(conn: &mut DbConnection, user_id: UserId, room_id: RoomId, hour: u32) -> Event {
     NewEvent {
         title: "Test Event".into(),
         description: "Test Event".into(),
@@ -35,7 +35,7 @@ fn make_event(conn: &DbConnection, user_id: UserId, room_id: RoomId, hour: u32) 
 }
 
 fn update_invite_status(
-    conn: &DbConnection,
+    conn: &mut DbConnection,
     user_id: UserId,
     event_id: EventId,
     new_status: EventInviteStatus,
@@ -50,7 +50,7 @@ fn update_invite_status(
 async fn test() {
     let db_ctx = test_util::database::DatabaseContext::new(true).await;
 
-    let conn = db_ctx.db.get_conn().unwrap();
+    let mut conn = db_ctx.db.get_conn().unwrap();
 
     let (user, _) = NewUserWithGroups {
         new_user: NewUser {
@@ -67,7 +67,7 @@ async fn test() {
         },
         groups: vec![],
     }
-    .insert(&conn)
+    .insert(&mut conn)
     .unwrap();
 
     let room = NewRoom {
@@ -75,33 +75,41 @@ async fn test() {
         password: None,
         waiting_room: false,
     }
-    .insert(&conn)
+    .insert(&mut conn)
     .unwrap();
 
     // create events. The variable number indicates its expected ordering
 
     // first two events, first on on hour 2 then 1.
     // This tests the ordering of comparison of times (e.g. starts_at, then created_at)
-    let event2 = make_event(&conn, user.id, room.id, 2);
-    let event1 = make_event(&conn, user.id, room.id, 1);
+    let event2 = make_event(&mut conn, user.id, room.id, 2);
+    let event1 = make_event(&mut conn, user.id, room.id, 1);
 
     // this event should come last because starts_at is largest
-    let event8 = make_event(&conn, user.id, room.id, 10);
+    let event8 = make_event(&mut conn, user.id, room.id, 10);
 
     // Test that created_at is being honored if starts_at is equal
-    let event3 = make_event(&conn, user.id, room.id, 3);
-    let event4 = make_event(&conn, user.id, room.id, 3);
-    let event5 = make_event(&conn, user.id, room.id, 3);
-    let event6 = make_event(&conn, user.id, room.id, 3);
-    let event7 = make_event(&conn, user.id, room.id, 3);
+    let event3 = make_event(&mut conn, user.id, room.id, 3);
+    let event4 = make_event(&mut conn, user.id, room.id, 3);
+    let event5 = make_event(&mut conn, user.id, room.id, 3);
+    let event6 = make_event(&mut conn, user.id, room.id, 3);
+    let event7 = make_event(&mut conn, user.id, room.id, 3);
 
     {
         // Test cursor
 
         // Get first two events 1, 2
-        let first_two =
-            Event::get_all_for_user_paginated(&conn, user.id, false, vec![], None, None, None, 2)
-                .unwrap();
+        let first_two = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            None,
+            None,
+            None,
+            2,
+        )
+        .unwrap();
         assert_eq!(first_two.len(), 2);
         let query_event1 = &first_two[0].0;
         let query_event2 = &first_two[1].0;
@@ -113,7 +121,7 @@ async fn test() {
 
         // Use that to get 3,4
         let next_two = Event::get_all_for_user_paginated(
-            &conn,
+            &mut conn,
             user.id,
             false,
             vec![],
@@ -133,7 +141,7 @@ async fn test() {
         let cursor = GetEventsCursor::from_last_event_in_query(query_event4);
 
         let next_two = Event::get_all_for_user_paginated(
-            &conn,
+            &mut conn,
             user.id,
             false,
             vec![],
@@ -153,7 +161,7 @@ async fn test() {
         let cursor = GetEventsCursor::from_last_event_in_query(query_event6);
 
         let next_two = Event::get_all_for_user_paginated(
-            &conn,
+            &mut conn,
             user.id,
             false,
             vec![],
@@ -173,7 +181,7 @@ async fn test() {
     {
         // Test time_min
         let only_event8 = Event::get_all_for_user_paginated(
-            &conn,
+            &mut conn,
             user.id,
             false,
             vec![],
@@ -190,7 +198,7 @@ async fn test() {
     {
         // Test time_max
         let every_event_except_event8 = Event::get_all_for_user_paginated(
-            &conn,
+            &mut conn,
             user.id,
             false,
             vec![],
@@ -213,7 +221,7 @@ async fn test() {
     {
         // Test both time_min + time_max
         let only_event_at_3h = Event::get_all_for_user_paginated(
-            &conn,
+            &mut conn,
             user.id,
             false,
             vec![],
@@ -237,27 +245,27 @@ async fn test() {
 async fn get_events_invite_filter() {
     let db_ctx = test_util::database::DatabaseContext::new(true).await;
 
-    let conn = db_ctx.db.get_conn().unwrap();
+    let mut conn = db_ctx.db.get_conn().unwrap();
 
-    let inviter = make_user(&conn, "Ingo", "Inviter", "inviter");
-    let invitee = make_user(&conn, "Ingrid", "Invitee", "invitee");
+    let inviter = make_user(&mut conn, "Ingo", "Inviter", "inviter");
+    let invitee = make_user(&mut conn, "Ingrid", "Invitee", "invitee");
 
     let room = NewRoom {
         created_by: inviter.id,
         password: None,
         waiting_room: false,
     }
-    .insert(&conn)
+    .insert(&mut conn)
     .unwrap();
 
-    let accept_event = make_event(&conn, inviter.id, room.id, 1);
-    let decline_event = make_event(&conn, inviter.id, room.id, 1);
-    let tentative_event = make_event(&conn, inviter.id, room.id, 1);
-    let pending_event = make_event(&conn, inviter.id, room.id, 1);
+    let accept_event = make_event(&mut conn, inviter.id, room.id, 1);
+    let decline_event = make_event(&mut conn, inviter.id, room.id, 1);
+    let tentative_event = make_event(&mut conn, inviter.id, room.id, 1);
+    let pending_event = make_event(&mut conn, inviter.id, room.id, 1);
 
     // Check that the creator of the events gets created events when filtering by `Accepted` invite status
     let all_events = Event::get_all_for_user_paginated(
-        &conn,
+        &mut conn,
         inviter.id,
         false,
         vec![EventInviteStatus::Accepted],
@@ -284,7 +292,7 @@ async fn get_events_invite_filter() {
 
     // Check that no events are returned when filtering for `Declined`
     let no_events = Event::get_all_for_user_paginated(
-        &conn,
+        &mut conn,
         inviter.id,
         false,
         vec![EventInviteStatus::Declined],
@@ -312,26 +320,26 @@ async fn get_events_invite_filter() {
             created_by: inviter.id,
             created_at: None,
         }
-        .try_insert(&conn)
+        .try_insert(&mut conn)
         .unwrap();
     }
 
     update_invite_status(
-        &conn,
+        &mut conn,
         invitee.id,
         accept_event.id,
         EventInviteStatus::Accepted,
     );
 
     update_invite_status(
-        &conn,
+        &mut conn,
         invitee.id,
         decline_event.id,
         EventInviteStatus::Declined,
     );
 
     update_invite_status(
-        &conn,
+        &mut conn,
         invitee.id,
         tentative_event.id,
         EventInviteStatus::Tentative,
@@ -339,7 +347,7 @@ async fn get_events_invite_filter() {
 
     // check `accepted` invites
     let accepted_events = Event::get_all_for_user_paginated(
-        &conn,
+        &mut conn,
         invitee.id,
         false,
         vec![EventInviteStatus::Accepted],
@@ -357,7 +365,7 @@ async fn get_events_invite_filter() {
 
     // check `declined` invites
     let declined_events = Event::get_all_for_user_paginated(
-        &conn,
+        &mut conn,
         invitee.id,
         false,
         vec![EventInviteStatus::Declined],
@@ -375,7 +383,7 @@ async fn get_events_invite_filter() {
 
     // check `tentative` invites
     let tentative_events = Event::get_all_for_user_paginated(
-        &conn,
+        &mut conn,
         invitee.id,
         false,
         vec![EventInviteStatus::Tentative],
@@ -393,7 +401,7 @@ async fn get_events_invite_filter() {
 
     // check `pending` invites
     let pending_events = Event::get_all_for_user_paginated(
-        &conn,
+        &mut conn,
         invitee.id,
         false,
         vec![EventInviteStatus::Pending],
@@ -410,9 +418,17 @@ async fn get_events_invite_filter() {
         .any(|(event, ..)| event.id == pending_event.id));
 
     // expect all events when no invite_status_filter is set
-    let all_events =
-        Event::get_all_for_user_paginated(&conn, invitee.id, false, vec![], None, None, None, 100)
-            .unwrap();
+    let all_events = Event::get_all_for_user_paginated(
+        &mut conn,
+        invitee.id,
+        false,
+        vec![],
+        None,
+        None,
+        None,
+        100,
+    )
+    .unwrap();
 
     assert_eq!(all_events.len(), 4);
     assert!(all_events
@@ -434,22 +450,22 @@ async fn get_events_invite_filter() {
 async fn get_event_invites() {
     let db_ctx = test_util::database::DatabaseContext::new(true).await;
 
-    let conn = db_ctx.db.get_conn().unwrap();
+    let mut conn = db_ctx.db.get_conn().unwrap();
 
-    let ferdinand = make_user(&conn, "Ferdinand", "Jaegermeister", "ferdemeister");
-    let louise = make_user(&conn, "Jeez", "Louise", "Jesus");
-    let gerhard = make_user(&conn, "Gerhard", "Bauer", "Hardi");
+    let ferdinand = make_user(&mut conn, "Ferdinand", "Jaegermeister", "ferdemeister");
+    let louise = make_user(&mut conn, "Jeez", "Louise", "Jesus");
+    let gerhard = make_user(&mut conn, "Gerhard", "Bauer", "Hardi");
 
     let room = NewRoom {
         created_by: ferdinand.id,
         password: None,
         waiting_room: false,
     }
-    .insert(&conn)
+    .insert(&mut conn)
     .unwrap();
 
     // EVENT 1 MIT JEEZ LOUISE AND GERHARD
-    let event1 = make_event(&conn, ferdinand.id, room.id, 1);
+    let event1 = make_event(&mut conn, ferdinand.id, room.id, 1);
 
     NewEventInvite {
         event_id: event1.id,
@@ -457,7 +473,7 @@ async fn get_event_invites() {
         created_by: ferdinand.id,
         created_at: None,
     }
-    .try_insert(&conn)
+    .try_insert(&mut conn)
     .unwrap();
 
     NewEventInvite {
@@ -466,11 +482,11 @@ async fn get_event_invites() {
         created_by: ferdinand.id,
         created_at: None,
     }
-    .try_insert(&conn)
+    .try_insert(&mut conn)
     .unwrap();
 
     // EVENT 2 MIT JEEZ LOUSE UND FERDINAND
-    let event2 = make_event(&conn, gerhard.id, room.id, 1);
+    let event2 = make_event(&mut conn, gerhard.id, room.id, 1);
 
     NewEventInvite {
         event_id: event2.id,
@@ -478,7 +494,7 @@ async fn get_event_invites() {
         created_by: gerhard.id,
         created_at: None,
     }
-    .try_insert(&conn)
+    .try_insert(&mut conn)
     .unwrap();
 
     NewEventInvite {
@@ -487,11 +503,11 @@ async fn get_event_invites() {
         created_by: gerhard.id,
         created_at: None,
     }
-    .try_insert(&conn)
+    .try_insert(&mut conn)
     .unwrap();
 
     let events = &[&event1, &event2][..];
-    let invites_with_invitees = EventInvite::get_for_events(&conn, events).unwrap();
+    let invites_with_invitees = EventInvite::get_for_events(&mut conn, events).unwrap();
 
     for (event, invites_with_users) in events.iter().zip(invites_with_invitees) {
         println!("Event: {:#?}", event);

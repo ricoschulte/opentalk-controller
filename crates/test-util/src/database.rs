@@ -32,16 +32,16 @@ impl DatabaseContext {
         let db_name = std::env::var("DATABASE_NAME").unwrap_or_else(|_| "k3k_test".to_owned());
 
         let postgres_url = format!("{}/postgres", base_url);
-        let conn =
+        let mut conn =
             PgConnection::establish(&postgres_url).expect("Cannot connect to postgres database.");
 
         // Drop the target database in case it already exists to guarantee a clean state
-        drop_database(&conn, &db_name).expect("Database initialization cleanup failed");
+        drop_database(&mut conn, &db_name).expect("Database initialization cleanup failed");
 
         // Create a new database for the test
         let query = diesel::sql_query(format!("CREATE DATABASE {}", db_name));
         query
-            .execute(&conn)
+            .execute(&mut conn)
             .unwrap_or_else(|_| panic!("Could not create database {}", db_name));
 
         let db_url = format!("{}/{}", base_url, db_name);
@@ -75,8 +75,8 @@ impl DatabaseContext {
         };
 
         let new_user_with_groups = NewUserWithGroups { new_user, groups };
-        let conn = self.db.get_conn()?;
-        let user = new_user_with_groups.insert(&conn)?;
+        let mut conn = self.db.get_conn()?;
+        let user = new_user_with_groups.insert(&mut conn)?;
 
         Ok(user.0)
     }
@@ -93,9 +93,9 @@ impl DatabaseContext {
             waiting_room,
         };
 
-        let conn = self.db.get_conn()?;
+        let mut conn = self.db.get_conn()?;
 
-        let room = new_room.insert(&conn)?;
+        let room = new_room.insert(&mut conn)?;
 
         Ok(room)
     }
@@ -105,16 +105,16 @@ impl Drop for DatabaseContext {
     fn drop(&mut self) {
         if self.drop_db_on_drop {
             let postgres_url = format!("{}/postgres", self.base_url);
-            let conn = PgConnection::establish(&postgres_url)
+            let mut conn = PgConnection::establish(&postgres_url)
                 .expect("Cannot connect to postgres database.");
 
-            drop_database(&conn, &self.db_name).unwrap();
+            drop_database(&mut conn, &self.db_name).unwrap();
         }
     }
 }
 
 /// Disconnect all users from the database with `db_name` and drop it.
-fn drop_database(conn: &PgConnection, db_name: &str) -> Result<()> {
+fn drop_database(conn: &mut PgConnection, db_name: &str) -> Result<()> {
     let query = diesel::sql_query(format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", db_name));
     query
         .execute(conn)

@@ -71,9 +71,9 @@ pub async fn login(
             // TODO(r.floren): Find a neater way for relaying the information here.
 
             let db_result = crate::block(move || -> database::Result<_> {
-                let conn = db.get_conn()?;
+                let mut conn = db.get_conn()?;
 
-                let user = User::get_by_oidc_sub(&conn, &info.issuer, &info.sub)?;
+                let user = User::get_by_oidc_sub(&mut conn, &info.issuer, &info.sub)?;
 
                 let settings = settings.load_full();
 
@@ -81,7 +81,8 @@ pub async fn login(
                     Some(user) => {
                         let changeset = create_changeset(&settings, &user, &info);
 
-                        let updated_info = changeset.apply(&conn, user.id, Some(&info.x_grp))?;
+                        let updated_info =
+                            changeset.apply(&mut conn, user.id, Some(&info.x_grp))?;
 
                         Ok(LoginResult::UserUpdated(updated_info))
                     }
@@ -118,10 +119,13 @@ pub async fn login(
                             groups: info.x_grp,
                         };
 
-                        let (user, group_ids) = new_user.insert(&conn)?;
+                        let (user, group_ids) = new_user.insert(&mut conn)?;
 
-                        let event_and_room_ids =
-                            EventEmailInvite::migrate_to_user_invites(&conn, user.id, &user.email)?;
+                        let event_and_room_ids = EventEmailInvite::migrate_to_user_invites(
+                            &mut conn,
+                            user.id,
+                            &user.email,
+                        )?;
 
                         Ok(LoginResult::UserCreated {
                             user,

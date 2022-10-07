@@ -72,7 +72,7 @@ pub async fn add_invite(
     let new_invite = data.into_inner();
     let current_user_clone = current_user.clone();
     let db_invite = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let new_invite = NewInvite {
             active: true,
@@ -82,7 +82,7 @@ pub async fn add_invite(
             expiration: new_invite.expiration,
         };
 
-        new_invite.insert(&conn)
+        new_invite.insert(&mut conn)
     })
     .await??;
 
@@ -109,11 +109,11 @@ pub async fn get_invites(
     let PagePaginationQuery { per_page, page } = pagination.into_inner();
 
     let (invites_with_users, total_invites) = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        let room = Room::get(&conn, room_id)?;
+        let room = Room::get(&mut conn, room_id)?;
 
-        Invite::get_all_for_room_with_users_paginated(&conn, room.id, per_page, page)
+        Invite::get_all_for_room_with_users_paginated(&mut conn, room.id, per_page, page)
     })
     .await??;
 
@@ -154,9 +154,9 @@ pub async fn get_invite(
     } = path_params.into_inner();
 
     let (db_invite, created_by, updated_by) = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        let invite_with_users = Invite::get_with_users(&conn, invite_code)?;
+        let invite_with_users = Invite::get_with_users(&mut conn, invite_code)?;
 
         if invite_with_users.0.room != room_id {
             return Err(DatabaseError::NotFound);
@@ -202,15 +202,15 @@ pub async fn update_invite(
 
     let current_user_id = current_user.id;
     let (invite, created_by) = crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        let invite = Invite::get(&conn, invite_code)?;
+        let invite = Invite::get(&mut conn, invite_code)?;
 
         if invite.room != room_id {
             return Err(DatabaseError::NotFound);
         }
 
-        let created_by = User::get(&conn, invite.created_by)?;
+        let created_by = User::get(&mut conn, invite.created_by)?;
 
         let now = chrono::Utc::now();
         let changeset = UpdateInvite {
@@ -221,7 +221,7 @@ pub async fn update_invite(
             room: None,
         };
 
-        let invite = changeset.apply(&conn, room_id, invite_code)?;
+        let invite = changeset.apply(&mut conn, room_id, invite_code)?;
 
         Ok((invite, created_by))
     })
@@ -251,7 +251,7 @@ pub async fn delete_invite(
     } = path_params.into_inner();
 
     crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let changeset = UpdateInvite {
             updated_by: Some(current_user.id),
@@ -261,7 +261,7 @@ pub async fn delete_invite(
             room: None,
         };
 
-        changeset.apply(&conn, room_id, invite_code)
+        changeset.apply(&mut conn, room_id, invite_code)
     })
     .await??;
 
@@ -292,9 +292,9 @@ pub async fn verify_invite_code(
     data.validate()?;
 
     let invite = crate::block(move || -> database::Result<_> {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
-        Invite::get(&conn, data.invite_code)
+        Invite::get(&mut conn, data.invite_code)
     })
     .await??;
 

@@ -23,7 +23,7 @@
 extern crate diesel;
 
 // postgres functions
-use diesel::sql_types::{Integer, Text};
+use diesel::sql_types::Text;
 
 #[macro_use]
 mod macros;

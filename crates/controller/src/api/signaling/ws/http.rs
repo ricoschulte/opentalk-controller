@@ -270,11 +270,11 @@ async fn get_user_and_room_from_ticket_data(
     let room_id = ticket_data.room;
 
     crate::block(move || {
-        let conn = db.get_conn()?;
+        let mut conn = db.get_conn()?;
 
         let participant = match participant {
             Participant::User(user_id) => {
-                let user = User::get(&conn, user_id)?;
+                let user = User::get(&mut conn, user_id)?;
 
                 Participant::User(user)
             }
@@ -282,7 +282,7 @@ async fn get_user_and_room_from_ticket_data(
             Participant::Sip => Participant::Sip,
         };
 
-        let room = Room::get(&conn, room_id)?;
+        let room = Room::get(&mut conn, room_id)?;
 
         Ok((participant, room))
     })

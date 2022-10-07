@@ -31,7 +31,11 @@ impl GetUserProfilesBatched {
         self
     }
 
-    pub fn fetch(&mut self, settings: &Settings, conn: &DbConnection) -> Result<UserProfilesBatch> {
+    pub fn fetch(
+        &mut self,
+        settings: &Settings,
+        conn: &mut DbConnection,
+    ) -> Result<UserProfilesBatch> {
         if self.users.is_empty() {
             return Ok(UserProfilesBatch {
                 users: HashMap::new(),

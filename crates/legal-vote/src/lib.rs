@@ -937,9 +937,9 @@ impl LegalVote {
         let room_id = self.room_id.room_id();
 
         let legal_vote = controller::block(move || {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
-            NewLegalVote::new(user_id, room_id).insert(&conn)
+            NewLegalVote::new(user_id, room_id).insert(&mut conn)
         })
         .await??;
 
@@ -959,9 +959,9 @@ impl LegalVote {
         let db = self.db.clone();
 
         controller::block(move || {
-            let conn = db.get_conn()?;
+            let mut conn = db.get_conn()?;
 
-            set_protocol(&conn, legal_vote_id, protocol)
+            set_protocol(&mut conn, legal_vote_id, protocol)
         })
         .await??;
 
