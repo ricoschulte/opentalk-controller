@@ -328,6 +328,16 @@ impl SignalingModule for Media {
                 {
                     self.media.remove_dangling_subscriber(id, &state).await;
 
+                    if let Some(video_state) = state.get(&MediaSessionType::Video) {
+                        if !video_state.audio {
+                            if let Some(focus) = self.focus_detection.on_stopped_talking(id) {
+                                ctx.ws_send(outgoing::Message::FocusUpdate(
+                                    outgoing::FocusUpdate { focus },
+                                ));
+                            }
+                        }
+                    }
+
                     *evt_state = Some(state);
                 }
             }

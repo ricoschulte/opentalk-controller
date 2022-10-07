@@ -1,3 +1,9 @@
+# Unreleased
+
+### Fixed
+
+janus-media: update focus detection on mute
+
 # 1.0.0-rc.5 (30 September, 2022)
 
 ### Added
