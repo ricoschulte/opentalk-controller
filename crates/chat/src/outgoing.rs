@@ -10,6 +10,7 @@ pub enum Message {
     ChatEnabled(ChatEnabled),
     ChatDisabled(ChatDisabled),
     MessageSent(MessageSent),
+    HistoryCleared(HistoryCleared),
     Error(Error),
 }
 
@@ -32,6 +33,11 @@ pub struct MessageSent {
     pub scope: Scope,
     // todo The timestamp is now included in the Namespaced struct. Once the frontend adopted this change, remove the timestamp from MessageSent
     pub timestamp: Timestamp,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct HistoryCleared {
+    pub issued_by: ParticipantId,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]

@@ -8,7 +8,7 @@ use anyhow::Result;
 use control::rabbitmq;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use outgoing::{ChatDisabled, ChatEnabled, MessageSent};
+use outgoing::{ChatDisabled, ChatEnabled, HistoryCleared, MessageSent};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::{from_utf8, FromStr};
@@ -253,6 +253,25 @@ impl SignalingModule for Chat {
                         out_message,
                     );
                 }
+            }
+            Event::WsMessage(incoming::Message::ClearHistory) => {
+                if ctx.role() != Role::Moderator {
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InsufficientPermissions,
+                    ));
+                    return Ok(());
+                }
+
+                if let Err(e) = storage::delete_room_chat_history(ctx.redis_conn(), self.room).await
+                {
+                    log::error!("Failed to clear room chat history, {}", e);
+                }
+
+                ctx.rabbitmq_publish(
+                    rabbitmq::current_room_exchange_name(self.room),
+                    rabbitmq::room_all_routing_key().into(),
+                    outgoing::Message::HistoryCleared(HistoryCleared { issued_by: self.id }),
+                );
             }
             Event::RabbitMq(msg) => {
                 ctx.ws_send(msg);
