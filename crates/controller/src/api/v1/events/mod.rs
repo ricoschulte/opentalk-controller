@@ -1144,6 +1144,10 @@ pub struct PatchEventQuery {
     /// Maximum number of invitees to include inside the event
     #[serde(default)]
     invitees_max: i64,
+
+    /// Flag to disable email notification
+    #[serde(default)]
+    suppress_email_notification: bool,
 }
 
 /// Body for the `PATCH /events/{event_id}` endpoint
@@ -1291,6 +1295,8 @@ pub async fn patch_event(
     let query = query.into_inner();
     let mail_service = mail_service.into_inner();
 
+    let send_email_notification = !query.suppress_email_notification;
+
     let (event_resource, notification_values) = crate::block(
         move || -> Result<(EventResource, UpdateNotificationValues), ApiError> {
             let mut conn = db.get_conn()?;
@@ -1393,7 +1399,9 @@ pub async fn patch_event(
     )
     .await??;
 
-    notify_invitees_about_update(notification_values, mail_service, &kc_admin_client).await;
+    if send_email_notification {
+        notify_invitees_about_update(notification_values, mail_service, &kc_admin_client).await;
+    }
 
     let event_resource = EventResource {
         invitees: enrich_invitees_from_keycloak(&kc_admin_client, event_resource.invitees).await,
@@ -1612,6 +1620,14 @@ struct CancellationNotificationValues {
     pub invited_users: Vec<MailRecipient>,
 }
 
+/// Query parameters for the `DELETE /events/{event_id}` endpoint
+#[derive(Debug, Deserialize)]
+pub struct DeleteEventQuery {
+    /// Flag to disable email notification
+    #[serde(default)]
+    suppress_email_notification: bool,
+}
+
 /// API Endpoint `POST /events/{event_id}`
 #[delete("/events/{event_id}")]
 pub async fn delete_event(
@@ -1619,12 +1635,15 @@ pub async fn delete_event(
     kc_admin_client: Data<KeycloakAdminClient>,
     current_user: ReqData<User>,
     authz: Data<Authz>,
+    query: Query<DeleteEventQuery>,
     event_id: Path<EventId>,
     mail_service: Data<MailService>,
 ) -> Result<NoContent, ApiError> {
     let current_user = current_user.into_inner();
     let event_id = event_id.into_inner();
     let mail_service = mail_service.into_inner();
+
+    let send_email_notification = !query.suppress_email_notification;
 
     let notification_values = crate::block(
         move || -> Result<CancellationNotificationValues, ApiError> {
@@ -1656,7 +1675,9 @@ pub async fn delete_event(
     )
     .await??;
 
-    notify_invitees_about_delete(notification_values, mail_service, &kc_admin_client).await;
+    if send_email_notification {
+        notify_invitees_about_delete(notification_values, mail_service, &kc_admin_client).await;
+    }
 
     let resources = associated_resource_ids(event_id);
 

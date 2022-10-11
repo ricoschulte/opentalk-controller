@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller: `time_independent` filter to events GET request
 - mail-worker-protocol: add types to support event-update emails ([#221](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/221))
 - controller: send email notification to invitees on event update ([#221](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/221))
+- controller: add `suppress_email_notification` flag ([#267](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/267))
 
 ### Changed
 
