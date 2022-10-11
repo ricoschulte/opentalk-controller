@@ -10,8 +10,8 @@
 #   "lapin=WARN",
 #]
 
-# Enable opentelemtry-jaeger support, an jaeger-agent must be running
-#enable_opentelemetry = false
+# Specify an optional jaeger agent endpoint to export traces to
+#jaeger_agent_endpoint = "localhost:6831"
 
 # Service name when using opentelemetry
 #service_name = "k3k-controller"
