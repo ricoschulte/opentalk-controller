@@ -80,6 +80,15 @@ pub enum MediaSessionType {
     Screen,
 }
 
+impl MediaSessionType {
+    pub fn as_type_str(&self) -> &'static str {
+        match self {
+            MediaSessionType::Video => "video",
+            MediaSessionType::Screen => "screen",
+        }
+    }
+}
+
 impl TryFrom<u64> for MediaSessionType {
     type Error = anyhow::Error;
 

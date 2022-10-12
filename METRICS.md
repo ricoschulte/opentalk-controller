@@ -13,6 +13,8 @@
 | signaling.created_rooms_count             | counter   |                         | Number of created rooms                                         |
 | signaling.destroyed_rooms_count           | counter   |                         | Number of destroyed rooms                                       |
 | signaling.participants_count              | gauge     | participation_kind      | Number of participants                                          |
+| signaling.participants_with_audio_count   | gauge     | media_session_type      | Number of participants with audio unmuted                       |
+| signaling.participants_with_video_count   | gauge     | media_session_type      | Number of participants with video unmuted                       |
 | sql.dbpool_connections                    | gauge     |                         | Number of currently non-idling db connections                   |
 | sql.dbpool_connections_idle               | gauge     |                         | Number of currently idling db connections                       |
 | sql.execution_time_seconds                | histogram |                         | SQL query execution time for whole queries during web operation |

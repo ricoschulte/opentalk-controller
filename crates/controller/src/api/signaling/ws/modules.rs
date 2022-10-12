@@ -1,5 +1,6 @@
 use super::{Event, ModuleContext};
 use super::{SignalingModule, Timestamp};
+use crate::api::signaling::metrics::SignalingMetrics;
 use crate::api::signaling::ws::runner::Builder;
 use crate::api::signaling::ws::{DestroyContext, InitContext, RabbitMqPublish};
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
@@ -15,6 +16,7 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::pin::Pin;
+use std::sync::Arc;
 use tokio_stream::{Stream, StreamExt};
 
 pub type AnyStream = Pin<Box<dyn Stream<Item = (&'static str, Box<dyn Any + 'static>)>>>;
@@ -77,6 +79,7 @@ impl Modules {
                 invalidate_data: ctx.invalidate_data,
                 timestamp: ctx.timestamp,
                 exit: ctx.exit,
+                metrics: ctx.metrics.clone(),
             };
 
             if let Err(e) = module.on_event_broadcast(ctx, &mut dyn_event).await {
@@ -134,6 +137,7 @@ pub(super) struct DynEventCtx<'ctx> {
     pub events: &'ctx mut SelectAll<AnyStream>,
     pub invalidate_data: &'ctx mut bool,
     pub exit: &'ctx mut Option<CloseCode>,
+    pub metrics: Arc<SignalingMetrics>,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -173,6 +177,7 @@ where
             invalidate_data: ctx.invalidate_data,
             exit: ctx.exit,
             timestamp: ctx.timestamp,
+            metrics: ctx.metrics,
             m: PhantomData::<fn() -> M>,
         };
 
@@ -210,6 +215,7 @@ where
             invalidate_data: ctx.invalidate_data,
             exit: ctx.exit,
             timestamp: ctx.timestamp,
+            metrics: ctx.metrics,
             m: PhantomData::<fn() -> M>,
         };
 
@@ -315,6 +321,7 @@ where
             events: dyn_ctx.events,
             invalidate_data: dyn_ctx.invalidate_data,
             exit: dyn_ctx.exit,
+            metrics: Some(dyn_ctx.metrics.clone()),
             m: PhantomData::<fn() -> M>,
         };
 
@@ -347,6 +354,7 @@ where
             events: dyn_ctx.events,
             invalidate_data: dyn_ctx.invalidate_data,
             exit: dyn_ctx.exit,
+            metrics: Some(dyn_ctx.metrics.clone()),
             m: PhantomData::<fn() -> M>,
         };
 

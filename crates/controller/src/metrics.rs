@@ -151,6 +151,14 @@ impl CombinedMetrics {
                 .i64_up_down_counter("signaling.participants_count")
                 .with_description("Number of participants")
                 .init(),
+            participants_with_audio_count: meter
+                .i64_up_down_counter("signaling.participants_with_audio_count")
+                .with_description("Number of participants with audio unmuted")
+                .init(),
+            participants_with_video_count: meter
+                .i64_up_down_counter("signaling.participants_with_video_count")
+                .with_description("Number of participants with video unmuted")
+                .init(),
         });
 
         let database = Arc::new(DatabaseMetrics {

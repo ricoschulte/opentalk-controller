@@ -5,6 +5,7 @@ use opentelemetry::Key;
 const STARTUP_SUCCESSFUL: Key = Key::from_static_str("successful");
 const DESTROY_SUCCESSFUL: Key = Key::from_static_str("successful");
 const PARTICIPATION_KIND: Key = Key::from_static_str("participation_kind");
+const MEDIA_SESSION_TYPE: Key = Key::from_static_str("media_session_type");
 
 pub struct SignalingMetrics {
     pub(crate) runner_startup_time: ValueRecorder<f64>,
@@ -12,6 +13,8 @@ pub struct SignalingMetrics {
     pub(crate) created_rooms_count: Counter<u64>,
     pub(crate) destroyed_rooms_count: Counter<u64>,
     pub(crate) participants_count: UpDownCounter<i64>,
+    pub(crate) participants_with_audio_count: UpDownCounter<i64>,
+    pub(crate) participants_with_video_count: UpDownCounter<i64>,
 }
 
 impl SignalingMetrics {
@@ -41,5 +44,25 @@ impl SignalingMetrics {
     pub fn decrement_participants_count<U>(&self, participant: &api::Participant<U>) {
         self.participants_count
             .add(-1, &[PARTICIPATION_KIND.string(participant.as_kind_str())]);
+    }
+
+    pub fn increment_participants_with_audio_count(&self, session_type: &str) {
+        self.participants_with_audio_count
+            .add(1, &[MEDIA_SESSION_TYPE.string(session_type.to_owned())]);
+    }
+
+    pub fn decrement_participants_with_audio_count(&self, session_type: &str) {
+        self.participants_with_audio_count
+            .add(-1, &[MEDIA_SESSION_TYPE.string(session_type.to_owned())]);
+    }
+
+    pub fn increment_participants_with_video_count(&self, session_type: &str) {
+        self.participants_with_video_count
+            .add(1, &[MEDIA_SESSION_TYPE.string(session_type.to_owned())]);
+    }
+
+    pub fn decrement_participants_with_video_count(&self, session_type: &str) {
+        self.participants_with_video_count
+            .add(-1, &[MEDIA_SESSION_TYPE.string(session_type.to_owned())]);
     }
 }
