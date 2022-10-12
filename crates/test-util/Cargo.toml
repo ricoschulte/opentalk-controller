@@ -1,6 +1,6 @@
 [package]
 name = "k3k-test-util"
-version = "1.0.0-rc.5"
+version = "1.0.0-rc.6"
 edition = "2018"
 publish = false
 

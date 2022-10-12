@@ -1,8 +1,17 @@
-# Unreleased
+# 1.0.0-rc.6 (12 October, 2022)
+
+### Added
+
+- controller: add `waiting_room` flag to event responses
 
 ### Fixed
 
-janus-media: update focus detection on mute
+- janus-media: update focus detection on mute
+
+### Changed
+
+- trace: replace the setting `enable_opentelemetry` with `jaeger_agent_endpoint`
+- chat/ee-chat: increase maximum chat message size to 4096 bytes
 
 # 1.0.0-rc.5 (30 September, 2022)
 
