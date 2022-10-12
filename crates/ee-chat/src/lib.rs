@@ -266,12 +266,13 @@ impl SignalingModule for Chat {
                     return Ok(());
                 }
 
-                // Limit message size to 1024 bytes at most
-                if msg.content.len() > 1024 {
+                // Limit message size
+                let max_message_size = 4096;
+                if msg.content.len() > max_message_size {
                     let mut last_idx = 0;
 
                     for (i, _) in msg.content.char_indices() {
-                        if i > 1024 {
+                        if i > max_message_size {
                             break;
                         }
                         last_idx = i;
