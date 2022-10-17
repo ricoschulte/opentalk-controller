@@ -226,6 +226,9 @@ pub struct EventResource {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub recurrence_pattern: Vec<String>,
 
+    /// Flag indicating whether the event is ad-hoc created.
+    pub is_adhoc: bool,
+
     /// Type of event
     ///
     /// Time independent events or events without recurrence are `single` while recurring events are `recurring`
@@ -513,6 +516,10 @@ pub struct PostEventsBody {
     #[validate(custom = "validate_recurrence_pattern")]
     #[serde(default)]
     pub recurrence_pattern: Vec<String>,
+
+    /// Is this an ad-hoc chatroom?
+    #[serde(default)]
+    pub is_adhoc: bool,
 }
 
 fn validate_recurrence_pattern(pattern: &[String]) -> Result<(), ValidationError> {
@@ -558,6 +565,7 @@ pub async fn new_event(
                 starts_at: None,
                 ends_at: None,
                 recurrence_pattern,
+                is_adhoc,
             } if recurrence_pattern.is_empty() => {
                 create_time_independent_event(
                     &settings,
@@ -567,6 +575,7 @@ pub async fn new_event(
                     description,
                     password,
                     waiting_room,
+                    is_adhoc
                 )
             }
             PostEventsBody {
@@ -579,6 +588,7 @@ pub async fn new_event(
                 starts_at: Some(starts_at),
                 ends_at: Some(ends_at),
                 recurrence_pattern,
+                is_adhoc,
             } => {
                 create_time_dependent_event(
                     &settings,
@@ -592,6 +602,7 @@ pub async fn new_event(
                     starts_at,
                     ends_at,
                     recurrence_pattern,
+                    is_adhoc,
                 )
             }
             new_event => {
@@ -621,6 +632,7 @@ pub async fn new_event(
 }
 
 /// Part of `POST /events` endpoint
+#[allow(clippy::too_many_arguments)]
 fn create_time_independent_event(
     settings: &Settings,
     conn: &mut DbConnection,
@@ -629,6 +641,7 @@ fn create_time_independent_event(
     description: String,
     password: Option<String>,
     waiting_room: bool,
+    is_adhoc: bool,
 ) -> Result<EventResource, ApiError> {
     let room = NewRoom {
         created_by: current_user.id,
@@ -654,6 +667,7 @@ fn create_time_independent_event(
         duration_secs: None,
         is_recurring: None,
         recurrence_pattern: None,
+        is_adhoc,
     }
     .insert(conn)?;
 
@@ -678,6 +692,7 @@ fn create_time_independent_event(
         invite_status: EventInviteStatus::Accepted,
         is_favorite: false,
         can_edit: true, // just created by the current user
+        is_adhoc,
     })
 }
 
@@ -695,6 +710,7 @@ fn create_time_dependent_event(
     starts_at: DateTimeTz,
     ends_at: DateTimeTz,
     recurrence_pattern: Vec<String>,
+    is_adhoc: bool,
 ) -> Result<EventResource, ApiError> {
     let recurrence_pattern = recurrence_array_to_string(recurrence_pattern);
 
@@ -725,6 +741,7 @@ fn create_time_dependent_event(
         duration_secs,
         is_recurring: Some(recurrence_pattern.is_some()),
         recurrence_pattern,
+        is_adhoc,
     }
     .insert(conn)?;
 
@@ -753,6 +770,7 @@ fn create_time_dependent_event(
         invite_status: EventInviteStatus::Accepted,
         is_favorite: false,
         can_edit: true, // just created by the current user
+        is_adhoc,
     })
 }
 
@@ -789,6 +807,13 @@ pub struct GetEventsQuery {
     ///
     /// Returned by the endpoint if the maximum number of events per page has been hit
     after: Option<Cursor<GetEventsCursorData>>,
+
+    /// Only get events that are either marked as adhoc or non-adhoc
+    ///
+    /// If present, all adhoc events will be returned when `true`, all non-adhoc
+    /// events will be returned when `false`. If not present, all events will
+    /// be returned regardless of their `adhoc` flag value.
+    adhoc: Option<bool>,
 }
 
 /// Data stored inside the `GET /events` query cursor
@@ -863,6 +888,7 @@ pub async fn get_events(
             query.invite_status,
             query.time_min,
             query.time_max,
+            query.adhoc,
             get_events_cursor,
             per_page,
         )?;
@@ -969,6 +995,7 @@ pub async fn get_events(
                 invite_status,
                 is_favorite,
                 can_edit,
+                is_adhoc: event.is_adhoc,
             }));
 
             for exception in exceptions {
@@ -1081,6 +1108,7 @@ pub async fn get_event(
                 .unwrap_or(EventInviteStatus::Accepted),
             is_favorite,
             can_edit,
+            is_adhoc: event.is_adhoc,
         };
 
         Ok(event_resource)
@@ -1122,6 +1150,9 @@ pub struct PatchEventBody {
     /// Patch the presence of a waiting room
     waiting_room: Option<bool>,
 
+    /// Patch the adhoc flag.
+    is_adhoc: Option<bool>,
+
     /// Patch the time independence of the event
     ///
     /// If it changes the independence from true false this body has to have
@@ -1156,6 +1187,7 @@ impl PatchEventBody {
             description,
             password,
             waiting_room,
+            is_adhoc,
             is_time_independent,
             is_all_day,
             starts_at,
@@ -1167,6 +1199,7 @@ impl PatchEventBody {
             && description.is_none()
             && password.is_none()
             && waiting_room.is_none()
+            && is_adhoc.is_none()
             && is_time_independent.is_none()
             && is_all_day.is_none()
             && starts_at.is_none()
@@ -1186,6 +1219,7 @@ impl PatchEventBody {
             starts_at,
             ends_at,
             recurrence_pattern,
+            is_adhoc,
         } = self;
 
         title.is_none()
@@ -1195,6 +1229,7 @@ impl PatchEventBody {
             && starts_at.is_none()
             && ends_at.is_none()
             && recurrence_pattern.is_empty()
+            && is_adhoc.is_none()
             && (password.is_some() || waiting_room.is_some())
     }
 }
@@ -1311,6 +1346,7 @@ pub async fn patch_event(
                 .unwrap_or(EventInviteStatus::Accepted),
             is_favorite,
             can_edit,
+            is_adhoc: event.is_adhoc,
         };
 
         Ok(event_resource)
@@ -1919,6 +1955,7 @@ mod tests {
             invite_status: EventInviteStatus::Accepted,
             is_favorite: false,
             can_edit: true,
+            is_adhoc: false,
         };
 
         assert_eq_json!(
@@ -1982,6 +2019,7 @@ mod tests {
                 "invite_status": "accepted",
                 "is_favorite": false,
                 "can_edit": true,
+                "is_adhoc": false,
             }
         );
     }
@@ -2032,6 +2070,7 @@ mod tests {
             invite_status: EventInviteStatus::Accepted,
             is_favorite: true,
             can_edit: false,
+            is_adhoc: false,
         };
 
         assert_eq_json!(
@@ -2086,6 +2125,7 @@ mod tests {
                 "invite_status": "accepted",
                 "is_favorite": true,
                 "can_edit": false,
+                "is_adhoc": false,
             }
         );
     }

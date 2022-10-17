@@ -91,6 +91,8 @@ pub struct Event {
 
     pub is_recurring: Option<bool>,
     pub recurrence_pattern: Option<String>,
+
+    pub is_adhoc: bool,
 }
 
 impl Event {
@@ -212,6 +214,7 @@ impl Event {
         invite_status_filter: Vec<EventInviteStatus>,
         time_min: Option<DateTime<Utc>>,
         time_max: Option<DateTime<Utc>>,
+        adhoc: Option<bool>,
         cursor: Option<GetEventsCursor>,
         limit: i64,
     ) -> Result<
@@ -304,6 +307,10 @@ impl Event {
 
         if only_favorites {
             query = query.filter(event_favorites::user_id.is_not_null());
+        }
+
+        if let Some(is_adhoc) = adhoc {
+            query = query.filter(events::is_adhoc.eq(is_adhoc));
         }
 
         if !invite_status_filter.is_empty() {
@@ -405,6 +412,7 @@ pub struct NewEvent {
     pub duration_secs: Option<i32>,
     pub is_recurring: Option<bool>,
     pub recurrence_pattern: Option<String>,
+    pub is_adhoc: bool,
 }
 
 impl NewEvent {

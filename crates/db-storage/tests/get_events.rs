@@ -13,7 +13,13 @@ use crate::common::make_user;
 
 mod common;
 
-fn make_event(conn: &mut DbConnection, user_id: UserId, room_id: RoomId, hour: u32) -> Event {
+fn make_event(
+    conn: &mut DbConnection,
+    user_id: UserId,
+    room_id: RoomId,
+    hour: u32,
+    is_adhoc: bool,
+) -> Event {
     NewEvent {
         title: "Test Event".into(),
         description: "Test Event".into(),
@@ -29,6 +35,7 @@ fn make_event(conn: &mut DbConnection, user_id: UserId, room_id: RoomId, hour: u
         duration_secs: Some(0),
         is_recurring: Some(false),
         recurrence_pattern: None,
+        is_adhoc,
     }
     .insert(conn)
     .unwrap()
@@ -82,18 +89,18 @@ async fn test() {
 
     // first two events, first on on hour 2 then 1.
     // This tests the ordering of comparison of times (e.g. starts_at, then created_at)
-    let event2 = make_event(&mut conn, user.id, room.id, 2);
-    let event1 = make_event(&mut conn, user.id, room.id, 1);
+    let event2 = make_event(&mut conn, user.id, room.id, 2, true);
+    let event1 = make_event(&mut conn, user.id, room.id, 1, true);
 
     // this event should come last because starts_at is largest
-    let event8 = make_event(&mut conn, user.id, room.id, 10);
+    let event8 = make_event(&mut conn, user.id, room.id, 10, true);
 
     // Test that created_at is being honored if starts_at is equal
-    let event3 = make_event(&mut conn, user.id, room.id, 3);
-    let event4 = make_event(&mut conn, user.id, room.id, 3);
-    let event5 = make_event(&mut conn, user.id, room.id, 3);
-    let event6 = make_event(&mut conn, user.id, room.id, 3);
-    let event7 = make_event(&mut conn, user.id, room.id, 3);
+    let event3 = make_event(&mut conn, user.id, room.id, 3, true);
+    let event4 = make_event(&mut conn, user.id, room.id, 3, true);
+    let event5 = make_event(&mut conn, user.id, room.id, 3, true);
+    let event6 = make_event(&mut conn, user.id, room.id, 3, true);
+    let event7 = make_event(&mut conn, user.id, room.id, 3, true);
 
     {
         // Test cursor
@@ -104,6 +111,7 @@ async fn test() {
             user.id,
             false,
             vec![],
+            None,
             None,
             None,
             None,
@@ -127,6 +135,7 @@ async fn test() {
             vec![],
             None,
             None,
+            None,
             Some(cursor),
             2,
         )
@@ -147,6 +156,7 @@ async fn test() {
             vec![],
             None,
             None,
+            None,
             Some(cursor),
             2,
         )
@@ -165,6 +175,7 @@ async fn test() {
             user.id,
             false,
             vec![],
+            None,
             None,
             None,
             Some(cursor),
@@ -188,6 +199,7 @@ async fn test() {
             Some(Utc.ymd(2020, 1, 1).and_hms(5, 0, 0)),
             None,
             None,
+            None,
             100,
         )
         .unwrap();
@@ -204,6 +216,7 @@ async fn test() {
             vec![],
             None,
             Some(Utc.ymd(2020, 1, 1).and_hms(5, 0, 0)),
+            None,
             None,
             100,
         )
@@ -227,6 +240,7 @@ async fn test() {
             vec![],
             Some(Utc.ymd(2020, 1, 1).and_hms(3, 0, 0)),
             Some(Utc.ymd(2020, 1, 1).and_hms(3, 0, 0)),
+            None,
             None,
             100,
         )
@@ -258,10 +272,10 @@ async fn get_events_invite_filter() {
     .insert(&mut conn)
     .unwrap();
 
-    let accept_event = make_event(&mut conn, inviter.id, room.id, 1);
-    let decline_event = make_event(&mut conn, inviter.id, room.id, 1);
-    let tentative_event = make_event(&mut conn, inviter.id, room.id, 1);
-    let pending_event = make_event(&mut conn, inviter.id, room.id, 1);
+    let accept_event = make_event(&mut conn, inviter.id, room.id, 1, true);
+    let decline_event = make_event(&mut conn, inviter.id, room.id, 1, true);
+    let tentative_event = make_event(&mut conn, inviter.id, room.id, 1, true);
+    let pending_event = make_event(&mut conn, inviter.id, room.id, 1, true);
 
     // Check that the creator of the events gets created events when filtering by `Accepted` invite status
     let all_events = Event::get_all_for_user_paginated(
@@ -269,6 +283,7 @@ async fn get_events_invite_filter() {
         inviter.id,
         false,
         vec![EventInviteStatus::Accepted],
+        None,
         None,
         None,
         None,
@@ -296,6 +311,7 @@ async fn get_events_invite_filter() {
         inviter.id,
         false,
         vec![EventInviteStatus::Declined],
+        None,
         None,
         None,
         None,
@@ -354,6 +370,7 @@ async fn get_events_invite_filter() {
         None,
         None,
         None,
+        None,
         100,
     )
     .unwrap();
@@ -369,6 +386,7 @@ async fn get_events_invite_filter() {
         invitee.id,
         false,
         vec![EventInviteStatus::Declined],
+        None,
         None,
         None,
         None,
@@ -390,6 +408,7 @@ async fn get_events_invite_filter() {
         None,
         None,
         None,
+        None,
         100,
     )
     .unwrap();
@@ -408,6 +427,7 @@ async fn get_events_invite_filter() {
         None,
         None,
         None,
+        None,
         100,
     )
     .unwrap();
@@ -423,6 +443,7 @@ async fn get_events_invite_filter() {
         invitee.id,
         false,
         vec![],
+        None,
         None,
         None,
         None,
@@ -465,7 +486,7 @@ async fn get_event_invites() {
     .unwrap();
 
     // EVENT 1 MIT JEEZ LOUISE AND GERHARD
-    let event1 = make_event(&mut conn, ferdinand.id, room.id, 1);
+    let event1 = make_event(&mut conn, ferdinand.id, room.id, 1, true);
 
     NewEventInvite {
         event_id: event1.id,
@@ -486,7 +507,7 @@ async fn get_event_invites() {
     .unwrap();
 
     // EVENT 2 MIT JEEZ LOUSE UND FERDINAND
-    let event2 = make_event(&mut conn, gerhard.id, room.id, 1);
+    let event2 = make_event(&mut conn, gerhard.id, room.id, 1, true);
 
     NewEventInvite {
         event_id: event2.id,
@@ -520,4 +541,97 @@ async fn get_event_invites() {
         );
         println!("#################################################")
     }
+}
+
+#[tokio::test]
+#[serial]
+async fn get_event_adhoc() {
+    let db_ctx = test_util::database::DatabaseContext::new(true).await;
+
+    let mut conn = db_ctx.db.get_conn().unwrap();
+
+    let (user, _) = NewUserWithGroups {
+        new_user: NewUser {
+            email: "test@example.org".into(),
+            title: "".into(),
+            firstname: "Test".into(),
+            lastname: "Tester".into(),
+            id_token_exp: 0,
+            language: "".into(),
+            display_name: "Test Tester".into(),
+            oidc_sub: "testtestersoidcsub".into(),
+            oidc_issuer: "".into(),
+            phone: None,
+        },
+        groups: vec![],
+    }
+    .insert(&mut conn)
+    .unwrap();
+
+    let room = NewRoom {
+        created_by: user.id,
+        password: None,
+        waiting_room: false,
+    }
+    .insert(&mut conn)
+    .unwrap();
+
+    let event1 = make_event(&mut conn, user.id, room.id, 1, true);
+    let event2 = make_event(&mut conn, user.id, room.id, 1, false);
+    let event3 = make_event(&mut conn, user.id, room.id, 1, false);
+    let event4 = make_event(&mut conn, user.id, room.id, 1, true);
+    let event5 = make_event(&mut conn, user.id, room.id, 1, true);
+
+    let all = Event::get_all_for_user_paginated(
+        &mut conn,
+        user.id,
+        false,
+        vec![],
+        None,
+        None,
+        None,
+        None,
+        10,
+    )
+    .unwrap();
+
+    assert_eq!(all.len(), 5);
+    assert_eq!(all[0].0, event1);
+    assert_eq!(all[1].0, event2);
+    assert_eq!(all[2].0, event3);
+    assert_eq!(all[3].0, event4);
+    assert_eq!(all[4].0, event5);
+
+    let adhoc = Event::get_all_for_user_paginated(
+        &mut conn,
+        user.id,
+        false,
+        vec![],
+        None,
+        None,
+        Some(true),
+        None,
+        10,
+    )
+    .unwrap();
+    assert_eq!(adhoc.len(), 3);
+    assert_eq!(adhoc[0].0, event1);
+    assert_eq!(adhoc[1].0, event4);
+    assert_eq!(adhoc[2].0, event5);
+
+    let non_adhoc = Event::get_all_for_user_paginated(
+        &mut conn,
+        user.id,
+        false,
+        vec![],
+        None,
+        None,
+        Some(false),
+        None,
+        10,
+    )
+    .unwrap();
+    assert_eq!(non_adhoc.len(), 2);
+    assert_eq!(non_adhoc[0].0, event2);
+    assert_eq!(non_adhoc[1].0, event3);
 }
