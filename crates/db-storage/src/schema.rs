@@ -89,6 +89,7 @@ table! {
         duration_secs -> Nullable<Int4>,
         is_recurring -> Nullable<Bool>,
         recurrence_pattern -> Nullable<Varchar>,
+        is_adhoc -> Bool,
     }
 }
 
