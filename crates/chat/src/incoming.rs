@@ -10,6 +10,7 @@ pub enum Message {
         target: Option<ParticipantId>,
         content: String,
     },
+    ClearHistory,
 }
 
 #[cfg(test)]
