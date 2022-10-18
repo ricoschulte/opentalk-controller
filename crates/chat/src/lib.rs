@@ -34,7 +34,14 @@ impl MessageId {
     pub fn new() -> Self {
         MessageId(uuid::Uuid::new_v4())
     }
-    #[cfg(test)]
+
+    /// Create a nil message id (all bytes are zero).
+    ///
+    /// This method should not be used in production code, but is only
+    /// available to allow tests the creation of nil message ids.
+    /// It is public because other crates might want to use it, but
+    /// it is explicitly hidden from the documentation.
+    #[doc(hidden)]
     pub fn nil() -> Self {
         MessageId(uuid::Uuid::nil())
     }
