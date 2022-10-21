@@ -47,6 +47,18 @@ pub struct Media {
 
 type State = HashMap<MediaSessionType, MediaSessionState>;
 
+#[derive(Serialize)]
+pub struct PeerFrontendData {
+    #[serde(flatten)]
+    state: Option<State>,
+    is_presenter: bool,
+}
+
+#[derive(Serialize)]
+pub struct FrontendData {
+    is_presenter: bool,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
 pub struct MediaSessionState {
     pub video: bool,
@@ -65,8 +77,8 @@ impl SignalingModule for Media {
 
     type ExtEvent = (MediaSessionKey, WebRtcEvent);
 
-    type FrontendData = ();
-    type PeerFrontendData = State;
+    type FrontendData = FrontendData;
+    type PeerFrontendData = PeerFrontendData;
 
     async fn init(
         mut ctx: InitContext<'_, Self>,
@@ -81,7 +93,6 @@ impl SignalingModule for Media {
         let room = ctx.room_id();
 
         storage::set_state(ctx.redis_conn(), room, id, &state).await?;
-
         ctx.add_event_stream(ReceiverStream::new(janus_events));
 
         Ok(Some(Self {
@@ -117,6 +128,13 @@ impl SignalingModule for Media {
                 }
             }
             Event::WsMessage(incoming::Message::UpdateMediaSession(info)) => {
+                if info.media_session_type == MediaSessionType::Screen
+                    && !storage::is_presenter(ctx.redis_conn(), self.room, self.id).await?
+                {
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::PermissionDenied));
+                    return Ok(());
+                }
+
                 if let Some(state) = self.state.get_mut(&info.media_session_type) {
                     let old_state = *state;
                     *state = info.media_session_state;
@@ -150,6 +168,15 @@ impl SignalingModule for Media {
                 ctx.invalidate_data();
             }
             Event::WsMessage(incoming::Message::Publish(targeted)) => {
+                if targeted.target.media_session_type == MediaSessionType::Screen
+                    && ctx.role() != Role::Moderator
+                    && !storage::is_presenter(ctx.redis_conn(), self.room, self.id).await?
+                {
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::PermissionDenied));
+
+                    return Ok(());
+                }
+
                 if let Err(e) = self
                     .handle_sdp_offer(
                         &mut ctx,
@@ -245,6 +272,34 @@ impl SignalingModule for Media {
                     ));
                 }
             }
+
+            Event::WsMessage(incoming::Message::GrantPresenterRole(selection)) => {
+                if ctx.role() != Role::Moderator {
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::PermissionDenied));
+
+                    return Ok(());
+                }
+
+                ctx.rabbitmq_publish(
+                    control::rabbitmq::current_room_exchange_name(self.room),
+                    control::rabbitmq::room_all_routing_key().into(),
+                    rabbitmq::Message::PresenterGranted(selection),
+                )
+            }
+            Event::WsMessage(incoming::Message::RevokePresenterRole(selection)) => {
+                if ctx.role() != Role::Moderator {
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::PermissionDenied));
+
+                    return Ok(());
+                }
+
+                ctx.rabbitmq_publish(
+                    control::rabbitmq::current_room_exchange_name(self.room),
+                    control::rabbitmq::room_all_routing_key().into(),
+                    rabbitmq::Message::PresenterRevoked(selection),
+                )
+            }
+
             Event::Ext((media_session_key, message)) => match message {
                 WebRtcEvent::AssociatedMcuDied => {
                     self.remove_broken_media_session(&mut ctx, media_session_key)
@@ -316,13 +371,65 @@ impl SignalingModule for Media {
             Event::RabbitMq(rabbitmq::Message::RequestMute(request_mute)) => {
                 ctx.ws_send(outgoing::Message::RequestMute(request_mute));
             }
+            Event::RabbitMq(rabbitmq::Message::PresenterGranted(selection)) => {
+                if !selection.participant_ids.contains(&self.id) {
+                    return Ok(());
+                }
+
+                if storage::is_presenter(ctx.redis_conn(), self.room, self.id).await? {
+                    // already presenter
+                    return Ok(());
+                }
+
+                storage::set_presenter(ctx.redis_conn(), self.room, self.id).await?;
+
+                ctx.ws_send(outgoing::Message::PresenterGranted);
+
+                ctx.invalidate_data();
+            }
+            Event::RabbitMq(rabbitmq::Message::PresenterRevoked(selection)) => {
+                if !selection.participant_ids.contains(&self.id) {
+                    return Ok(());
+                }
+
+                if !storage::is_presenter(ctx.redis_conn(), self.room, self.id).await? {
+                    // already not a presenter
+                    return Ok(());
+                }
+
+                storage::delete_presenter(ctx.redis_conn(), self.room, self.id).await?;
+
+                // terminate screen share
+                if self.state.contains_key(&MediaSessionType::Screen)
+                    && ctx.role() != Role::Moderator
+                {
+                    self.media.remove_publisher(MediaSessionType::Screen).await;
+                    self.state.remove(&MediaSessionType::Screen);
+
+                    storage::set_state(ctx.redis_conn(), self.room, self.id, &self.state)
+                        .await
+                        .context("Failed to set state attribute in storage")?;
+                }
+
+                ctx.ws_send(outgoing::Message::PresenterRevoked);
+
+                ctx.invalidate_data();
+            }
+
             Event::ParticipantJoined(id, evt_state) => {
-                *evt_state = storage::get_state(ctx.redis_conn(), self.room, id)
+                let state = storage::get_state(ctx.redis_conn(), self.room, id)
                     .await
                     .context("Failed to get peer participants state")?;
+
+                let is_presenter = storage::is_presenter(ctx.redis_conn(), self.room, id).await?;
+
+                *evt_state = Some(PeerFrontendData {
+                    state,
+                    is_presenter,
+                })
             }
             Event::ParticipantUpdated(id, evt_state) => {
-                if let Some(state) = storage::get_state(ctx.redis_conn(), self.room, id)
+                let state = if let Some(state) = storage::get_state(ctx.redis_conn(), self.room, id)
                     .await
                     .context("Failed to get peer participants state")?
                 {
@@ -338,8 +445,17 @@ impl SignalingModule for Media {
                         }
                     }
 
-                    *evt_state = Some(state);
-                }
+                    Some(state)
+                } else {
+                    None
+                };
+
+                let is_presenter = storage::is_presenter(ctx.redis_conn(), self.room, id).await?;
+
+                *evt_state = Some(PeerFrontendData {
+                    state,
+                    is_presenter,
+                });
             }
             Event::ParticipantLeft(id) => {
                 self.media.remove_subscribers(id).await;
@@ -353,20 +469,32 @@ impl SignalingModule for Media {
             }
             Event::Joined {
                 control_data: _,
-
-                frontend_data: _,
+                frontend_data,
                 participants,
             } => {
-                for (id, evt_state) in participants {
-                    *evt_state = storage::get_state(ctx.redis_conn(), self.room, *id)
+                for (&id, evt_state) in participants {
+                    let state = storage::get_state(ctx.redis_conn(), self.room, id)
                         .await
                         .context("Failed to get peer participants state")?;
+
+                    let is_presenter =
+                        storage::is_presenter(ctx.redis_conn(), self.room, id).await?;
+
+                    *evt_state = Some(PeerFrontendData {
+                        state,
+                        is_presenter,
+                    })
                 }
+
+                let is_presenter =
+                    storage::is_presenter(ctx.redis_conn(), self.room, self.id).await?;
+
+                *frontend_data = Some(FrontendData { is_presenter })
             }
             Event::Leaving => {
                 if let Err(e) = storage::del_state(ctx.redis_conn(), self.room, self.id).await {
                     log::error!(
-                        "Media module for {} failed to remove its data from redis, {}",
+                        "Media module for {} failed to remove its state data from redis, {}",
                         self.id,
                         e
                     );
@@ -382,7 +510,16 @@ impl SignalingModule for Media {
         Ok(())
     }
 
-    async fn on_destroy(self, _: DestroyContext<'_>) {}
+    async fn on_destroy(self, mut ctx: DestroyContext<'_>) {
+        if ctx.destroy_room() {
+            if let Err(e) = storage::delete_presenter_key(ctx.redis_conn(), self.room).await {
+                log::error!(
+                    "Media module for failed to remove presenter key on room destoy, {}",
+                    e
+                );
+            }
+        }
+    }
 }
 
 impl Media {

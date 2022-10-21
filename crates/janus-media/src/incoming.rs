@@ -2,7 +2,7 @@ use crate::mcu::MediaSessionType;
 use crate::MediaSessionState;
 use controller_shared::ParticipantId;
 use janus_client::TrickleCandidate;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "action")]
@@ -44,6 +44,14 @@ pub enum Message {
     /// SDP request offer
     #[serde(rename = "subscribe")]
     Subscribe(TargetSubscribe),
+
+    /// Grant the presenter role for a set of participants
+    #[serde(rename = "grant_presenter_role")]
+    GrantPresenterRole(ParticipantSelection),
+
+    /// Revoke the presenter role for a set of participants
+    #[serde(rename = "revoke_presenter_role")]
+    RevokePresenterRole(ParticipantSelection),
 
     /// SDP request to configure subscription
     #[serde(rename = "configure")]
@@ -117,6 +125,13 @@ pub struct TargetSubscribe {
     /// Primarily used for SIP.
     #[serde(default)]
     pub without_video: bool,
+}
+
+/// Give a list of participants write access to the protocol
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParticipantSelection {
+    /// The targeted participants
+    pub participant_ids: Vec<ParticipantId>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -419,6 +434,48 @@ mod test {
             assert_eq!(target, ParticipantId::nil());
             assert_eq!(media_session_type, MediaSessionType::Video);
             assert!(!without_video);
+        } else {
+            panic!()
+        }
+    }
+
+    #[test]
+    fn grant_presenter_role() {
+        let json = r#"
+        {
+            "action": "grant_presenter_role",
+            "participant_ids": ["00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000000"]
+        }
+        "#;
+
+        let msg: Message = serde_json::from_str(json).unwrap();
+
+        if let Message::GrantPresenterRole(ParticipantSelection { participant_ids }) = msg {
+            assert_eq!(
+                participant_ids,
+                vec![ParticipantId::nil(), ParticipantId::nil()]
+            );
+        } else {
+            panic!()
+        }
+    }
+
+    #[test]
+    fn revoke_presenter_role() {
+        let json = r#"
+        {
+            "action": "revoke_presenter_role",
+            "participant_ids": ["00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000000"]
+        }
+        "#;
+
+        let msg: Message = serde_json::from_str(json).unwrap();
+
+        if let Message::RevokePresenterRole(ParticipantSelection { participant_ids }) = msg {
+            assert_eq!(
+                participant_ids,
+                vec![ParticipantId::nil(), ParticipantId::nil()]
+            );
         } else {
             panic!()
         }

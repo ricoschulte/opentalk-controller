@@ -63,3 +63,57 @@ pub async fn del_state(
         .await
         .context("Failed to delete media state")
 }
+
+#[derive(Display)]
+/// k3k-signaling:room={room}:namespace=media:presenters
+#[ignore_extra_doc_attributes]
+struct Presenters {
+    room: SignalingRoomId,
+}
+
+impl_to_redis_args!(Presenters);
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn set_presenter(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+    participant: ParticipantId,
+) -> Result<()> {
+    redis_conn.sadd(Presenters { room }, participant).await?;
+
+    Ok(())
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn is_presenter(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+    participant: ParticipantId,
+) -> Result<bool> {
+    let value: bool = redis_conn
+        .sismember(Presenters { room }, participant)
+        .await?;
+
+    Ok(value)
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn delete_presenter(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+    participant: ParticipantId,
+) -> Result<()> {
+    redis_conn.srem(Presenters { room }, participant).await?;
+
+    Ok(())
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn delete_presenter_key(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+) -> Result<()> {
+    redis_conn.del(Presenters { room }).await?;
+
+    Ok(())
+}
