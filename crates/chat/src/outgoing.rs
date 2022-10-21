@@ -32,6 +32,7 @@ pub struct MessageSent {
     #[serde(flatten)]
     pub scope: Scope,
     // todo The timestamp is now included in the Namespaced struct. Once the frontend adopted this change, remove the timestamp from MessageSent
+    // See: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/247
     pub timestamp: Timestamp,
 }
 

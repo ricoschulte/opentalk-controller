@@ -6,36 +6,21 @@
 //! For this the rabbitmq target group exchange is used.
 use anyhow::{Context, Result};
 use chat::MessageId;
-use chrono::{DateTime, Utc};
 use control::rabbitmq;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::groups::{Group, GroupId};
 use db_storage::users::UserId;
+use outgoing::MessageSent;
 use r3dlock::Mutex;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::sync::Arc;
 use storage::StoredMessage;
+
+pub mod incoming;
+pub mod outgoing;
 mod storage;
-
-/// Message received from websocket
-#[derive(Debug, Deserialize)]
-pub struct IncomingWsMessage {
-    group: String,
-    content: String,
-}
-
-/// Message sent via websocket and rabbitmq
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct Message {
-    id: MessageId,
-    source: ParticipantId,
-    group: String,
-    // todo The timestamp is now included in the Namespaced struct. Once the frontends adopted this change, remove the timestamp from Message
-    timestamp: DateTime<Utc>,
-    content: String,
-}
 
 fn group_routing_key(group_id: GroupId) -> String {
     format!("group.{}", group_id)
@@ -54,6 +39,14 @@ impl Chat {
     fn get_group(&self, name: &str) -> Option<&Group> {
         self.groups.iter().find(|group| group.name == name)
     }
+
+    fn outgoing_message_is_for_my_participant(&self, msg: &outgoing::Message) -> bool {
+        use outgoing::Message;
+        match msg {
+            Message::MessageSent(MessageSent { group, .. }) => self.get_group(group).is_some(),
+            Message::Error(_) => true,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -71,9 +64,9 @@ pub struct PeerFrontendData {
 impl SignalingModule for Chat {
     const NAMESPACE: &'static str = "ee_chat";
     type Params = ();
-    type Incoming = IncomingWsMessage;
-    type Outgoing = Message;
-    type RabbitMqMessage = Message;
+    type Incoming = incoming::Message;
+    type Outgoing = outgoing::Message;
+    type RabbitMqMessage = outgoing::Message;
     type ExtEvent = ();
     type FrontendData = Vec<FrontendDataEntry>;
     type PeerFrontendData = PeerFrontendData;
@@ -252,9 +245,12 @@ impl SignalingModule for Chat {
             }
             Event::ParticipantLeft(_) => {}
             Event::ParticipantUpdated(_, _) => {}
-            Event::WsMessage(mut msg) => {
+            Event::WsMessage(incoming::Message::SendMessage {
+                group: group_name,
+                mut content,
+            }) => {
                 // Discard empty messages
-                if msg.content.is_empty() {
+                if content.is_empty() {
                     return Ok(());
                 }
 
@@ -262,33 +258,33 @@ impl SignalingModule for Chat {
                     chat::is_chat_enabled(ctx.redis_conn(), self.room.room_id()).await?;
 
                 if !chat_enabled {
-                    // TODO: send error as done in the chat module
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::ChatDisabled));
                     return Ok(());
                 }
 
                 // Limit message size
                 let max_message_size = 4096;
-                if msg.content.len() > max_message_size {
+                if content.len() > max_message_size {
                     let mut last_idx = 0;
 
-                    for (i, _) in msg.content.char_indices() {
+                    for (i, _) in content.char_indices() {
                         if i > max_message_size {
                             break;
                         }
                         last_idx = i;
                     }
 
-                    msg.content.truncate(last_idx);
+                    content.truncate(last_idx);
                 }
 
-                if let Some(group) = self.get_group(&msg.group) {
+                if let Some(group) = self.get_group(&group_name) {
                     let id = MessageId::new();
 
                     let stored_msg = StoredMessage {
                         id,
                         source: self.id,
                         timestamp: *timestamp,
-                        content: msg.content,
+                        content,
                     };
 
                     storage::add_message_to_group_chat_history(
@@ -302,18 +298,18 @@ impl SignalingModule for Chat {
                     ctx.rabbitmq_publish(
                         rabbitmq::current_room_exchange_name(self.room),
                         group_routing_key(group.id),
-                        Message {
+                        outgoing::Message::MessageSent(MessageSent {
                             id,
                             source: self.id,
-                            group: msg.group,
+                            group: group_name,
                             timestamp: *timestamp,
                             content: stored_msg.content,
-                        },
+                        }),
                     )
                 }
             }
             Event::RabbitMq(msg) => {
-                if self.get_group(&msg.group).is_some() {
+                if self.outgoing_message_is_for_my_participant(&msg) {
                     ctx.ws_send(msg);
                 }
             }
