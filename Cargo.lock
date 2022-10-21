@@ -2037,11 +2037,14 @@ dependencies = [
 name = "k3k-chat"
 version = "1.0.0-rc.10"
 dependencies = [
+ "actix-rt",
  "k3k-controller-core",
  "k3k-controller-shared",
  "k3k-db-storage",
+ "k3k-test-util",
  "pretty_assertions",
  "serde",
+ "serial_test",
 ]
 
 [[package]]

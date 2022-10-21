@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- controller: allow overriding some build-time environment variables ([#137](https://git.opentalk.dev/opental/k3k-controller/-/issues/137))
+- controller: allow overriding some build-time environment variables ([#137](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/137))
+- chat: add `last_seen_timestamp` fields [#242](https://git.opentalk.de/opentalk/k3k-controller/-/issues/242)
 
 ### Fixed
 

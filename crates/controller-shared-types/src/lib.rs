@@ -18,7 +18,7 @@ pub struct ParticipantId(Uuid);
 
 impl ParticipantId {
     /// Create a ZERO participant id for testing purposes
-    pub fn nil() -> Self {
+    pub const fn nil() -> Self {
         Self(Uuid::nil())
     }
 

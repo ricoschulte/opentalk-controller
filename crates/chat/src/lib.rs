@@ -10,6 +10,7 @@ use controller::prelude::*;
 use controller_shared::ParticipantId;
 use outgoing::{ChatDisabled, ChatEnabled, HistoryCleared, MessageSent};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fmt;
 use std::str::{from_utf8, FromStr};
 use storage::TimedMessage;
@@ -83,25 +84,36 @@ impl_to_redis_args!(MessageId);
 pub struct Chat {
     id: ParticipantId,
     room: SignalingRoomId,
+    last_seen_timestamp_global: Option<Timestamp>,
+    last_seen_timestamps_private: HashMap<ParticipantId, Timestamp>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct ChatState {
     room_history: Vec<TimedMessage>,
     enabled: bool,
+    last_seen_timestamp_global: Option<Timestamp>,
+    last_seen_timestamps_private: HashMap<ParticipantId, Timestamp>,
 }
 
 impl ChatState {
-    pub async fn for_current_room(
+    pub async fn for_current_room_and_participant(
         redis_conn: &mut RedisConnection,
         room: SignalingRoomId,
+        participant: ParticipantId,
     ) -> Result<Self> {
         let room_history = storage::get_room_chat_history(redis_conn, room).await?;
         let chat_enabled = storage::is_chat_enabled(redis_conn, room.room_id()).await?;
+        let last_seen_timestamp_global =
+            storage::get_last_seen_timestamp_global(redis_conn, room, participant).await?;
+        let last_seen_timestamps_private =
+            storage::get_last_seen_timestamps_private(redis_conn, room, participant).await?;
 
         Ok(Self {
             room_history,
             enabled: chat_enabled,
+            last_seen_timestamp_global,
+            last_seen_timestamps_private,
         })
     }
 }
@@ -128,7 +140,12 @@ impl SignalingModule for Chat {
     ) -> Result<Option<Self>> {
         let id = ctx.participant_id();
         let room = ctx.room_id();
-        Ok(Some(Self { id, room }))
+        Ok(Some(Self {
+            id,
+            room,
+            last_seen_timestamp_global: None,
+            last_seen_timestamps_private: HashMap::new(),
+        }))
     }
 
     async fn on_event(
@@ -142,8 +159,15 @@ impl SignalingModule for Chat {
                 frontend_data,
                 participants: _,
             } => {
-                let module_frontend_data =
-                    ChatState::for_current_room(ctx.redis_conn(), self.room).await?;
+                let module_frontend_data = ChatState::for_current_room_and_participant(
+                    ctx.redis_conn(),
+                    self.room,
+                    self.id,
+                )
+                .await?;
+                self.last_seen_timestamp_global = module_frontend_data.last_seen_timestamp_global;
+                self.last_seen_timestamps_private =
+                    module_frontend_data.last_seen_timestamps_private.clone();
 
                 *frontend_data = Some(module_frontend_data);
             }
@@ -279,6 +303,17 @@ impl SignalingModule for Chat {
                     outgoing::Message::HistoryCleared(HistoryCleared { issued_by: self.id }),
                 );
             }
+            Event::WsMessage(incoming::Message::SetLastSeenTimestamp { scope, timestamp }) => {
+                match scope {
+                    Scope::Private(other_participant) => {
+                        self.last_seen_timestamps_private
+                            .insert(other_participant, timestamp);
+                    }
+                    Scope::Global => {
+                        self.last_seen_timestamp_global = Some(timestamp);
+                    }
+                };
+            }
             Event::RabbitMq(msg) => {
                 ctx.ws_send(msg);
             }
@@ -303,6 +338,72 @@ impl SignalingModule for Chat {
                 storage::delete_chat_enabled(ctx.redis_conn(), self.room.room_id()).await
             {
                 log::error!("Failed to clean up chat enabled flag {}", e);
+            }
+
+            let participants = control::storage::get_all_participants(ctx.redis_conn(), self.room)
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to load room participants, {}", e);
+                    Vec::new()
+                });
+            for participant in participants {
+                if let Err(e) = storage::delete_last_seen_timestamp_global(
+                    ctx.redis_conn(),
+                    self.room,
+                    participant,
+                )
+                .await
+                {
+                    log::error!(
+                        "Failed to clean up last seen timestamp for global chat, {}",
+                        e
+                    );
+                }
+                if let Err(e) = storage::delete_last_seen_timestamps_private(
+                    ctx.redis_conn(),
+                    self.room,
+                    participant,
+                )
+                .await
+                {
+                    log::error!(
+                        "Failed to clean up last seen timestamps for private chats, {}",
+                        e
+                    );
+                }
+            }
+        } else {
+            if !self.last_seen_timestamps_private.is_empty() {
+                // ToRedisArgs not implemented for HashMap, so we copy the entries
+                // for now.
+                // See: https://github.com/redis-rs/redis-rs/issues/444
+                let timestamps: Vec<(ParticipantId, Timestamp)> = self
+                    .last_seen_timestamps_private
+                    .iter()
+                    .map(|(k, v)| (*k, *v))
+                    .collect();
+                if let Err(e) = storage::set_last_seen_timestamps_private(
+                    ctx.redis_conn(),
+                    self.room,
+                    self.id,
+                    &timestamps,
+                )
+                .await
+                {
+                    log::error!("Failed to set last seen timestamps for private chat, {}", e);
+                }
+            }
+            if let Some(timestamp) = self.last_seen_timestamp_global {
+                if let Err(e) = storage::set_last_seen_timestamp_global(
+                    ctx.redis_conn(),
+                    self.room,
+                    self.id,
+                    timestamp,
+                )
+                .await
+                {
+                    log::error!("Failed to set last seen timestamp for global chat, {}", e);
+                }
             }
         }
     }
