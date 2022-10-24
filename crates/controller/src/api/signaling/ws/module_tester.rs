@@ -417,6 +417,7 @@ where
                 invalidate_data: &mut invalidate_data,
                 events: &mut events,
                 exit: &mut exit,
+                metrics: None,
                 m: PhantomData::<fn() -> M>,
             };
 
@@ -849,6 +850,7 @@ where
             invalidate_data: &mut invalidate_data,
             events: &mut events,
             exit: &mut exit,
+            metrics: None,
             m: PhantomData::<fn() -> M>,
         };
 

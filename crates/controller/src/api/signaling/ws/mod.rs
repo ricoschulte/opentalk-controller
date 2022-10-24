@@ -1,3 +1,4 @@
+use super::metrics::SignalingMetrics;
 use super::prelude::*;
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::ControlData;
@@ -227,6 +228,7 @@ where
     events: &'ctx mut SelectAll<AnyStream>,
     invalidate_data: &'ctx mut bool,
     exit: &'ctx mut Option<CloseCode>,
+    metrics: Option<Arc<SignalingMetrics>>,
     m: PhantomData<fn() -> M>,
 }
 
@@ -318,6 +320,10 @@ where
 
     pub fn exit(&mut self, code: Option<CloseCode>) {
         *self.exit = Some(code.unwrap_or(CloseCode::Normal));
+    }
+
+    pub fn metrics(&self) -> Option<&Arc<SignalingMetrics>> {
+        self.metrics.as_ref()
     }
 
     /// Returns the Timestamp of the event which triggered the `on_event` handler.

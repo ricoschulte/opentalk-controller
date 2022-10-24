@@ -1,3 +1,9 @@
+# Unreleased
+
+### Added
+
+- controller: added metrics for number of participants with audio or video
+
 # 1.0.0-rc.6 (12 October, 2022)
 
 ### Added

@@ -1662,6 +1662,7 @@ impl Runner {
             events: &mut self.events,
             invalidate_data: &mut invalidate_data,
             exit: &mut exit,
+            metrics: self.metrics.clone(),
         };
 
         self.modules
@@ -1697,6 +1698,7 @@ impl Runner {
             events: &mut self.events,
             invalidate_data: &mut invalidate_data,
             exit: &mut exit,
+            metrics: self.metrics.clone(),
         };
 
         self.modules.on_event_broadcast(ctx, dyn_event).await;

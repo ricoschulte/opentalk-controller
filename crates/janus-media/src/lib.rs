@@ -65,6 +65,32 @@ pub struct MediaSessionState {
     pub audio: bool,
 }
 
+fn process_metrics_for_media_session_state(
+    ctx: &ModuleContext<'_, Media>,
+    session_type: &MediaSessionType,
+    previous: &Option<MediaSessionState>,
+    new: &MediaSessionState,
+) {
+    if let Some(metrics) = ctx.metrics() {
+        let previous = previous.unwrap_or(MediaSessionState {
+            video: false,
+            audio: false,
+        });
+
+        if !previous.audio && new.audio {
+            metrics.increment_participants_with_audio_count(session_type.as_type_str());
+        } else if previous.audio && !new.audio {
+            metrics.decrement_participants_with_audio_count(session_type.as_type_str());
+        }
+
+        if !previous.video && new.video {
+            metrics.increment_participants_with_video_count(session_type.as_type_str());
+        } else if previous.video && !new.video {
+            metrics.decrement_participants_with_video_count(session_type.as_type_str());
+        }
+    }
+}
+
 #[async_trait::async_trait(?Send)]
 impl SignalingModule for Media {
     const NAMESPACE: &'static str = "media";
@@ -112,6 +138,15 @@ impl SignalingModule for Media {
     ) -> Result<()> {
         match event {
             Event::WsMessage(incoming::Message::PublishComplete(info)) => {
+                let previous_session_state = self.state.get(&info.media_session_type);
+
+                process_metrics_for_media_session_state(
+                    &ctx,
+                    &info.media_session_type,
+                    &previous_session_state.copied(),
+                    &info.media_session_state,
+                );
+
                 let old_state = self
                     .state
                     .insert(info.media_session_type, info.media_session_state);
@@ -134,6 +169,15 @@ impl SignalingModule for Media {
                     ctx.ws_send(outgoing::Message::Error(outgoing::Error::PermissionDenied));
                     return Ok(());
                 }
+
+                let previous_session_state = self.state.get(&info.media_session_type);
+
+                process_metrics_for_media_session_state(
+                    &ctx,
+                    &info.media_session_type,
+                    &previous_session_state.copied(),
+                    &info.media_session_state,
+                );
 
                 if let Some(state) = self.state.get_mut(&info.media_session_type) {
                     let old_state = *state;
@@ -159,7 +203,17 @@ impl SignalingModule for Media {
             }
             Event::WsMessage(incoming::Message::Unpublish(assoc)) => {
                 self.media.remove_publisher(assoc.media_session_type).await;
-                self.state.remove(&assoc.media_session_type);
+                let previous_session_state = self.state.remove(&assoc.media_session_type);
+
+                process_metrics_for_media_session_state(
+                    &ctx,
+                    &assoc.media_session_type,
+                    &previous_session_state,
+                    &MediaSessionState {
+                        audio: false,
+                        video: false,
+                    },
+                );
 
                 storage::set_state(ctx.redis_conn(), self.room, self.id, &self.state)
                     .await
