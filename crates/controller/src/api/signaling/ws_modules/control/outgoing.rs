@@ -18,9 +18,7 @@ pub enum Message {
         new_role: Role,
     },
 
-    Error {
-        text: &'static str,
-    },
+    Error(Error),
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -43,6 +41,17 @@ pub struct JoinSuccess {
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct AssociatedParticipant {
     pub id: ParticipantId,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(tag = "error", rename_all = "snake_case")]
+pub enum Error {
+    InvalidUsername,
+    NotAcceptedOrNotInWaitingRoom,
+    RaiseHandsDisabled,
+    InsufficientPermissions,
+    TargetIsRoomOwner,
+    NothingToDo,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -131,9 +140,9 @@ mod test {
 
     #[test]
     fn error() {
-        let expected = r#"{"message":"error","text":"Error!"}"#;
+        let expected = r#"{"message":"error","error":"raise_hands_disabled"}"#;
 
-        let produced = serde_json::to_string(&Message::Error { text: "Error!" }).unwrap();
+        let produced = serde_json::to_string(&Message::Error(Error::RaiseHandsDisabled)).unwrap();
 
         assert_eq!(expected, produced);
     }

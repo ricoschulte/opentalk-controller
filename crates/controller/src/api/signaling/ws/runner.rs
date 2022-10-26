@@ -862,9 +862,7 @@ impl Runner {
                 if join.display_name.is_empty() {
                     self.ws_send_control(
                         timestamp,
-                        outgoing::Message::Error {
-                            text: "invalid username",
-                        },
+                        outgoing::Message::Error(outgoing::Error::InvalidUsername),
                     )
                     .await;
 
@@ -965,9 +963,9 @@ impl Runner {
 
                         self.ws_send_control(
                             timestamp,
-                            outgoing::Message::Error {
-                                text: "not accepted or not in waiting room",
-                            },
+                            outgoing::Message::Error(
+                                outgoing::Error::NotAcceptedOrNotInWaitingRoom,
+                            ),
                         )
                         .await;
                     }
@@ -979,9 +977,7 @@ impl Runner {
                 {
                     self.ws_send_control(
                         timestamp,
-                        outgoing::Message::Error {
-                            text: "raise_hands_disabled",
-                        },
+                        outgoing::Message::Error(outgoing::Error::RaiseHandsDisabled),
                     )
                     .await;
 
@@ -1015,9 +1011,7 @@ impl Runner {
         if self.role != Role::Moderator {
             self.ws_send_control(
                 timestamp,
-                outgoing::Message::Error {
-                    text: "not a moderator",
-                },
+                outgoing::Message::Error(outgoing::Error::InsufficientPermissions),
             )
             .await;
 
@@ -1030,8 +1024,11 @@ impl Runner {
         let is_moderator = matches!(role, Some(Role::Moderator));
 
         if is_moderator == grant {
-            self.ws_send_control(timestamp, outgoing::Message::Error { text: "noop" })
-                .await;
+            self.ws_send_control(
+                timestamp,
+                outgoing::Message::Error(outgoing::Error::NothingToDo),
+            )
+            .await;
 
             return Ok(());
         }
@@ -1043,9 +1040,7 @@ impl Runner {
             if user_id == self.room.created_by {
                 self.ws_send_control(
                     timestamp,
-                    outgoing::Message::Error {
-                        text: "target is room owner",
-                    },
+                    outgoing::Message::Error(outgoing::Error::TargetIsRoomOwner),
                 )
                 .await;
 

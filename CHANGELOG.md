@@ -4,6 +4,10 @@
 
 - controller: added metrics for number of participants with audio or video
 
+### Changed
+
+- controller: runner's websocket error messages straightened (`text` field renamed to `error`, values changed to slug style)
+
 # 1.0.0-rc.6 (12 October, 2022)
 
 ### Added
