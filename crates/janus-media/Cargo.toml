@@ -10,6 +10,7 @@ controller = { path = "../controller", package = "k3k-controller-core" }
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
 serde = { version = "1", features = ["derive"] }
 janus-client = { path = "../janus-client" }
+pin-project-lite = "0.2"
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util" }

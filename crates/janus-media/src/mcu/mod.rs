@@ -1,8 +1,10 @@
 use crate::incoming::SubscriberConfiguration;
-use crate::settings;
+use crate::settings::{self, Connection};
 use anyhow::{bail, Context, Result};
+use controller::prelude::futures::stream::FuturesUnordered;
 use controller::prelude::*;
 use controller::settings::SharedSettings;
+use futures::ready;
 use janus_client::outgoing::{
     VideoRoomPluginConfigurePublisher, VideoRoomPluginConfigureSubscriber,
 };
@@ -11,13 +13,16 @@ use janus_client::{ClientId, JanusMessage, JsepType, RoomId as JanusRoomId, Tric
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::borrow::{Borrow, Cow};
+use std::cmp::min;
 use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
+use std::future::Future;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+use std::task::Poll;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, oneshot, RwLock, RwLockReadGuard};
-use tokio::time::{interval, sleep};
+use tokio::time::{interval_at, sleep, Instant, MissedTickBehavior};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
@@ -35,7 +40,7 @@ const PUBLISHER_INFO: &str = "k3k-signaling:mcu:publishers";
 ///
 /// The score represents the amounts of subscribers on that mcu and is used to choose the least
 /// busy mcu for a new publisher.
-const MCU_STATE: &str = "k3k-signaling:mcu:load";
+const MCU_LOAD: &str = "k3k-signaling:mcu:load";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct PublisherInfo<'i> {
@@ -77,6 +82,8 @@ pub struct McuPool {
     clients: RwLock<HashSet<McuClient>>,
 
     shared_settings: SharedSettings,
+
+    mcu_config: RwLock<settings::JanusMcuConfig>,
 
     // Sender passed to created janus clients. Needed here to pass them to janus-clients
     // which are being reconnected
@@ -121,21 +128,29 @@ impl McuPool {
 
         let clients = RwLock::new(clients);
 
+        let mcu_config = RwLock::new(mcu_config);
+
         let mcu_pool = Arc::new(Self {
             clients,
             shared_settings,
+            mcu_config,
             events_sender,
             rabbitmq,
             redis,
             shutdown,
         });
 
+        let (reconnect_send, reconnect_recv) = mpsc::channel(1);
+
         tokio::spawn(global_receive_task(
             mcu_pool.clone(),
             controller_shutdown_sig,
             controller_reload_sig,
             events,
+            reconnect_send,
         ));
+
+        tokio::spawn(global_reconnect_task(mcu_pool.clone(), reconnect_recv));
 
         Ok(mcu_pool)
     }
@@ -159,8 +174,12 @@ impl McuPool {
     /// in the new config. The Publishers & Subscribers on the removed janus will get a WebRtcDown
     /// event and should reconnect in order to use a different janus.
     pub async fn reload_janus_config(&self) -> Result<()> {
+        let mut mcu_settings = self.mcu_config.write().await;
+
         let settings = self.shared_settings.load_full();
-        let mcu_settings = settings::JanusMcuConfig::extract(&settings)?;
+        *mcu_settings = settings::JanusMcuConfig::extract(&settings)?;
+
+        let mcu_settings = mcu_settings.downgrade();
 
         let mut clients = self.clients.write().await;
 
@@ -225,7 +244,7 @@ impl McuPool {
         clients: &'guard RwLockReadGuard<'guard, HashSet<McuClient>>,
     ) -> Result<&'guard McuClient> {
         // Get all mcu's in order lowest to highest
-        let ids: Vec<String> = redis.zrangebyscore(MCU_STATE, "-inf", "+inf").await?;
+        let ids: Vec<String> = redis.zrangebyscore(MCU_LOAD, "-inf", "+inf").await?;
 
         // choose the first available mcu
         for id in ids {
@@ -394,7 +413,7 @@ impl McuPool {
             .context("Failed to attach to videoroom plugin")?;
 
         redis
-            .zincr(MCU_STATE, info.mcu_id.as_ref(), 1)
+            .zincr(MCU_LOAD, info.mcu_id.as_ref(), 1)
             .await
             .context("Failed to increment subscriber count")?;
 
@@ -421,18 +440,43 @@ impl McuPool {
     }
 }
 
+async fn global_reconnect_task(mcu_pool: Arc<McuPool>, mut receiver: mpsc::Receiver<Connection>) {
+    let mut disconnected_clients = FuturesUnordered::<ReconnectBackoff>::new();
+
+    loop {
+        tokio::select! {
+            Some(config) = receiver.recv() => {
+                disconnected_clients.push(ReconnectBackoff::initial(config));
+            }
+            Some((duration, config)) = disconnected_clients.next() => {
+                attempt_reconnect(&mcu_pool, &mut disconnected_clients, duration, config).await;
+            }
+            else => {
+                // sender got dropped because global_receive_task exited, exit this task as well
+                return;
+            }
+        }
+    }
+}
+
 async fn global_receive_task(
     mcu_pool: Arc<McuPool>,
     mut controller_shutdown_sig: broadcast::Receiver<()>,
     mut controller_reload_sig: broadcast::Receiver<()>,
     mut events: mpsc::Receiver<(ClientId, Arc<JanusMessage>)>,
+    reconnect_sender: mpsc::Sender<Connection>,
 ) {
-    let mut keep_alive_interval = interval(Duration::from_secs(10));
+    let mut keep_alive_interval = interval_at(
+        Instant::now() + Duration::from_secs(10),
+        Duration::from_secs(10),
+    );
+
+    keep_alive_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
     loop {
         tokio::select! {
             _ = keep_alive_interval.tick() => {
-                keep_alive(&mcu_pool.clients).await
+                keep_alive(&mcu_pool.clients, &reconnect_sender).await
             }
             _ = controller_shutdown_sig.recv() => {
                 log::debug!("mcu pool receive/keepalive task got controller shutdown signal, destroying pool");
@@ -446,7 +490,7 @@ async fn global_receive_task(
                 }
             }
             Some((id, msg)) = events.recv() => {
-                log::warn!("Unhandled janus message mcu={:?} msg={:?}",id, msg);
+                log::debug!("Unhandled janus message mcu={:?} msg={:?}",id, msg);
                 // TODO Find out what we want to with these messages
                 // most of them are events which are not interesting to us
                 // and others expose where we ignore responses from janus
@@ -455,10 +499,13 @@ async fn global_receive_task(
     }
 }
 
-async fn keep_alive(mcu_clients: &RwLock<HashSet<McuClient>>) {
+async fn keep_alive(
+    mcu_clients: &RwLock<HashSet<McuClient>>,
+    reconnect_sender: &mpsc::Sender<Connection>,
+) {
     let clients = mcu_clients.read().await;
 
-    let mut dead = vec![];
+    let mut timed_out_clients = vec![];
 
     for client in clients.iter() {
         if let Err(e) = client.session.keep_alive().await {
@@ -468,11 +515,11 @@ async fn keep_alive(mcu_clients: &RwLock<HashSet<McuClient>>) {
                 e
             );
 
-            dead.push(client.id.clone());
+            timed_out_clients.push(client.id.clone());
         }
     }
 
-    if dead.is_empty() {
+    if timed_out_clients.is_empty() {
         return;
     }
 
@@ -480,11 +527,101 @@ async fn keep_alive(mcu_clients: &RwLock<HashSet<McuClient>>) {
 
     let mut clients = mcu_clients.write().await;
 
-    // Destroy all dead McuClients
-    for dead_client_id in dead {
+    // Destroy all dead McuClients and send their configs to the reconnect task
+    for dead_client_id in timed_out_clients {
         if let Some(client) = clients.take(&dead_client_id) {
+            // send the config to the reconnect task
+            if let Err(e) = reconnect_sender.send(client.config.clone()).await {
+                log::error!(
+                    "Failed to send config of disconnected Mcu to the reconnect task: {}",
+                    e
+                );
+            }
+
             client.destroy(true).await;
         }
+    }
+}
+
+async fn attempt_reconnect(
+    mcu_pool: &McuPool,
+    disco_clients: &mut FuturesUnordered<ReconnectBackoff>,
+    duration: Duration,
+    config_to_reconnect: Connection,
+) {
+    // check if the mcu got removed from the settings
+    if !mcu_pool
+        .mcu_config
+        .read()
+        .await
+        .connections
+        .contains(&config_to_reconnect)
+    {
+        return;
+    }
+
+    let channel = mcu_pool.rabbitmq.create_channel().await.unwrap();
+
+    match McuClient::connect(
+        channel,
+        &mut mcu_pool.redis.clone(),
+        config_to_reconnect.clone(),
+        mcu_pool.events_sender.clone(),
+    )
+    .await
+    {
+        Ok(client) => {
+            log::info!("Reconnected Mcu client {}", client.id_str());
+
+            let mut clients = mcu_pool.clients.write().await;
+
+            clients.insert(client);
+        }
+        Err(_) => {
+            log::warn!(
+                "Failed to reconnect {:?}",
+                McuId::from(&config_to_reconnect)
+            );
+
+            disco_clients.push(ReconnectBackoff::new(duration, config_to_reconnect))
+        }
+    }
+}
+
+pin_project_lite::pin_project! {
+    pub struct ReconnectBackoff {
+        #[pin]
+        sleep: tokio::time::Sleep,
+        next_duration: Duration,
+        config: Option<Connection>,
+    }
+}
+
+impl ReconnectBackoff {
+    pub fn new(duration: Duration, config: Connection) -> Self {
+        Self {
+            sleep: sleep(duration),
+            next_duration: min(duration * 2, Duration::from_secs(8)),
+            config: Some(config),
+        }
+    }
+
+    pub fn initial(config: Connection) -> Self {
+        Self::new(Duration::from_secs(1), config)
+    }
+}
+
+impl Future for ReconnectBackoff {
+    type Output = (Duration, Connection);
+
+    fn poll(self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        ready!(this.sleep.poll(cx));
+
+        Poll::Ready((
+            *this.next_duration,
+            this.config.take().expect("future already returned Ready"),
+        ))
     }
 }
 
@@ -498,6 +635,8 @@ pub enum ShutdownSignal {
 
 struct McuClient {
     pub id: McuId,
+
+    pub config: Connection,
 
     session: janus_client::Session,
     client: janus_client::Client,
@@ -555,14 +694,14 @@ impl McuClient {
 
         let rabbit_mq_config = janus_client::RabbitMqConfig::new_from_channel(
             rabbitmq_channel.clone(),
-            config.to_routing_key,
-            config.exchange,
-            config.from_routing_key,
+            config.to_routing_key.clone(),
+            config.exchange.clone(),
+            config.from_routing_key.clone(),
             format!("k3k-sig-janus-{}", id.0),
         );
 
         redis
-            .zincr(MCU_STATE, id.0.as_ref(), 0)
+            .zincr(MCU_LOAD, id.0.as_ref(), 0)
             .await
             .context("Failed to initialize subscriber count")?;
 
@@ -585,6 +724,7 @@ impl McuClient {
 
         Ok(Self {
             id,
+            config,
             session,
             client,
             pubsub_shutdown,
@@ -868,7 +1008,7 @@ impl JanusSubscriber {
         let _ = self.destroy.send(());
 
         self.redis
-            .zincr(MCU_STATE, self.mcu_id.0.as_ref(), -1)
+            .zincr(MCU_LOAD, self.mcu_id.0.as_ref(), -1)
             .await
             .context("Failed to decrease subscriber count")?;
 
