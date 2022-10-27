@@ -1,9 +1,8 @@
 use chrono::{DateTime, Utc};
-use email_address::EmailAddress;
 use jsonwebtoken::{self, decode, Algorithm, DecodingKey, Validation};
 use openidconnect::core::{CoreJsonWebKeySet, CoreJwsSigningAlgorithm};
 use openidconnect::JsonWebKey;
-use serde::Deserialize;
+use serde::de::DeserializeOwned;
 use std::time::SystemTime;
 
 /// Token Verification errors
@@ -26,37 +25,14 @@ pub enum VerifyError {
 }
 
 /// Contains all claims that are needed to verify any JWT Token
-#[derive(Deserialize)]
-pub struct VerifyClaims {
-    /// Expires at
-    #[serde(with = "time")]
-    pub exp: DateTime<Utc>,
-    /// Issued at
-    #[serde(with = "time")]
-    pub iat: DateTime<Utc>,
-    /// Issuer (URL to the OIDC Provider)
-    pub iss: String,
-    /// Subject (User ID)
-    pub sub: String,
-    /// The users email
-    pub email: EmailAddress,
-    /// The users firstname
-    pub given_name: String,
-    /// The users lastname
-    pub family_name: String,
-    /// Groups the user belongs to.
-    /// This is a custom field not specified by the OIDC Standard
-    pub x_grp: Vec<String>,
-    /// The users phone number, if configured
-    pub phone_number: Option<String>,
-    /// The users optional nickname
-    pub nickname: Option<String>,
+pub trait VerifyClaims: DeserializeOwned {
+    fn exp(&self) -> DateTime<Utc>;
 }
 
 /// Verify a raw JWT.
 ///
 /// Returns `Err(_)` if the JWT is invalid or expired.
-pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, VerifyError> {
+pub fn verify<C: VerifyClaims>(key_set: &CoreJsonWebKeySet, token: &str) -> Result<C, VerifyError> {
     let header = jsonwebtoken::decode_header(token).map_err(|e| {
         log::warn!("Unable to parse token header, {}", e);
         VerifyError::InvalidJwt("Unable to parse token header".to_string())
@@ -118,24 +94,18 @@ pub fn verify(key_set: &CoreJsonWebKeySet, token: &str) -> Result<VerifyClaims, 
     validation.validate_exp = false;
 
     // Just parse the token out, no verification
-    let token = decode::<VerifyClaims>(token, &DecodingKey::from_secret(&[]), &validation)
-        .map_err(|e| {
-            log::warn!("Unable to decode claims from provided id token, {}", e);
-            VerifyError::InvalidClaims
-        })?;
+    let token = decode::<C>(token, &DecodingKey::from_secret(&[]), &validation).map_err(|e| {
+        log::warn!("Unable to decode claims from provided id token, {}", e);
+        VerifyError::InvalidClaims
+    })?;
 
     let now = DateTime::<Utc>::from(SystemTime::now());
 
     // Verify expiration
-    if now > token.claims.exp {
-        let msg = format!("The provided token expired at {}", token.claims.exp);
+    if now > token.claims.exp() {
+        let msg = format!("The provided token expired at {}", token.claims.exp());
         log::warn!("{}", msg);
         return Err(VerifyError::Expired(msg));
-    }
-
-    // FIXME: remove me when the Deserialize implementation of EmailAddress actually parses/validates the email
-    if !EmailAddress::is_valid(token.claims.email.as_ref()) {
-        return Err(VerifyError::InvalidClaims);
     }
 
     Ok(token.claims)
@@ -159,27 +129,10 @@ fn map_algorithm(alg: Algorithm) -> Option<CoreJwsSigningAlgorithm> {
     }
 }
 
-mod time {
-    use chrono::{DateTime, TimeZone, Utc};
-    use serde::{Deserialize, Deserializer};
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let seconds: i64 = Deserialize::deserialize(deserializer)?;
-
-        Utc.timestamp_opt(seconds, 0).single().ok_or_else(|| {
-            serde::de::Error::custom(format!(
-                "Failed to convert {} seconds to DateTime<Utc>",
-                seconds
-            ))
-        })
-    }
-}
-
 #[cfg(test)]
 mod test {
+    use crate::oidc::UserClaims;
+
     use super::VerifyError;
     use openidconnect::core::{CoreJsonWebKey, CoreJsonWebKeySet, CoreJwsSigningAlgorithm};
     use openidconnect::{JsonWebKey, JsonWebKeyId};
@@ -285,7 +238,8 @@ mod test {
         let jwt_enc = format!("{}.{}", message, signature);
 
         // Verify should success
-        let claims = super::verify(&jwks, &jwt_enc).expect("Valid JWT failed to verify");
+        let claims =
+            super::verify::<UserClaims>(&jwks, &jwt_enc).expect("Valid JWT failed to verify");
 
         assert_eq!(claims.sub, "admin");
         assert_eq!(claims.x_grp[0], "/admin");
@@ -314,7 +268,7 @@ mod test {
         let jwt_enc = format!("{}.{}", message, signature);
 
         // Verify should success
-        match super::verify(&jwks, &jwt_enc) {
+        match super::verify::<UserClaims>(&jwks, &jwt_enc) {
             Ok(_) => panic!("Test must fail, exp is set in the past"),
             Err(e) => {
                 if let VerifyError::Expired(_) = e {
@@ -345,7 +299,7 @@ mod test {
         let jwt_enc = format!("{}.{}", message, signature);
 
         // Verify should success
-        match super::verify(&jwks, &jwt_enc) {
+        match super::verify::<UserClaims>(&jwks, &jwt_enc) {
             Ok(_) => panic!("Test must fail, provided bad signature"),
             Err(e) => {
                 assert_eq!(

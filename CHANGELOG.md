@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - controller: `status` field from event resource ([#221](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/221))
 
+### Changed
+
+- controller: introduce `v1/services/..` path for service related endpoints.
+- controller: move call-in's start endpoint from `v1/rooms/sip/start` to `v1/services/call_in/start` to make use of the new service authentication.
+
 ## [1.0.0-rc.8] - 2022-11-10
 
 ### Added

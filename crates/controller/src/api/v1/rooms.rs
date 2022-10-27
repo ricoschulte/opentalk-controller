@@ -7,25 +7,22 @@ use super::response::error::{ApiError, ValidationErrorEntry};
 use super::response::{NoContent, CODE_INVALID_VALUE};
 use super::users::PublicUserProfile;
 use crate::api::signaling::prelude::*;
-use crate::api::signaling::resumption::{ResumptionData, ResumptionToken};
-use crate::api::signaling::ticket::{TicketData, TicketToken};
+use crate::api::signaling::resumption::ResumptionToken;
+use crate::api::signaling::ticket::{start_or_continue_signaling_session, TicketToken};
 use crate::api::v1::{ApiResponse, PagePaginationQuery};
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, patch, post};
-use anyhow::Context;
 use chrono::{DateTime, Utc};
-use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::invites::{Invite, InviteCodeId};
 use db_storage::rooms::{self as db_rooms, Room, RoomId};
-use db_storage::sip_configs::{NewSipConfig, SipConfig, SipId, SipPassword};
-use db_storage::users::{User, UserId};
+use db_storage::sip_configs::NewSipConfig;
+use db_storage::users::User;
 use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
 use kustos::prelude::*;
-use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use validator::Validate;
@@ -285,7 +282,6 @@ pub struct StartResponse {
 #[derive(Debug)]
 pub enum StartRoomError {
     WrongRoomPassword,
-    InvalidCredentials,
     NoBreakoutRooms,
     InvalidBreakoutRoomId,
     BannedFromRoom,
@@ -297,10 +293,6 @@ impl From<StartRoomError> for ApiError {
             StartRoomError::WrongRoomPassword => ApiError::unauthorized()
                 .with_code("wrong_room_password")
                 .with_message("The provided password does not match the rooms password"),
-
-            StartRoomError::InvalidCredentials => {
-                ApiError::unauthorized().with_code("invalid_credentials")
-            }
 
             StartRoomError::NoBreakoutRooms => ApiError::bad_request()
                 .with_code("no_breakout_rooms")
@@ -381,7 +373,7 @@ pub async fn start(
         }
     }
 
-    let response = generate_response(
+    let (ticket, resumption) = start_or_continue_signaling_session(
         &mut redis_conn,
         current_user.id.into(),
         room_id,
@@ -390,7 +382,7 @@ pub async fn start(
     )
     .await?;
 
-    Ok(Json(response))
+    Ok(Json(StartResponse { ticket, resumption }))
 }
 
 /// The JSON body expected when making a *POST /rooms/{room_id}/start_invited*
@@ -466,7 +458,7 @@ pub async fn start_invited(
         }
     }
 
-    let ticket = generate_response(
+    let (ticket, resumption) = start_or_continue_signaling_session(
         &mut redis_conn,
         Participant::Guest,
         room_id,
@@ -475,143 +467,7 @@ pub async fn start_invited(
     )
     .await?;
 
-    Ok(ApiResponse::new(ticket))
-}
-
-#[derive(Debug, Deserialize)]
-pub struct SipStartRequest {
-    sip_id: SipId,
-    password: SipPassword,
-}
-
-/// API Endpoint *POST /rooms/sip/start*
-///
-/// Get a [`StartResponse`] for a new sip connection to a room. The requester has to provide
-/// a valid [`SipId`] & [`SipPassword`] via the [`SipStartRequest`]
-///
-/// # Errors
-///
-/// Returns [`StartRoomError::InvalidCredentials`] when the provided [`SipId`] or [`SipPassword`] is wrong
-#[post("/rooms/sip/start")]
-pub async fn sip_start(
-    db: Data<Db>,
-    redis_ctx: Data<RedisConnection>,
-    request: Json<SipStartRequest>,
-) -> Result<ApiResponse<StartResponse>, ApiError> {
-    let mut redis_conn = (**redis_ctx).clone();
-    let request = request.into_inner();
-
-    request.sip_id.validate()?;
-
-    request.password.validate()?;
-
-    let room_id = crate::block(move || -> Result<RoomId, ApiError> {
-        let mut conn = db.get_conn()?;
-
-        if let Some(sip_config) = SipConfig::get(&mut conn, request.sip_id)? {
-            if sip_config.password == request.password {
-                Ok(sip_config.room)
-            } else {
-                Err(StartRoomError::InvalidCredentials.into())
-            }
-        } else {
-            Err(StartRoomError::InvalidCredentials.into())
-        }
-    })
-    .await??;
-
-    let response =
-        generate_response(&mut redis_conn, Participant::Sip, room_id, None, None).await?;
-
-    Ok(ApiResponse::new(response))
-}
-
-/// Generates a [`StartResponse`] from a given participant, room id, optional breakout room id and optional resumption token
-///
-/// Stores the generated ticket in redis together with its ticket data. The redis
-/// key expires after 30 seconds.
-///
-/// If the given resumption token is correct, a exit-msg is sent via rabbitmq to the runner of the to-resume session.
-async fn generate_response(
-    redis_conn: &mut RedisConnection,
-    participant: Participant<UserId>,
-    room: RoomId,
-    breakout_room: Option<BreakoutRoomId>,
-    resumption: Option<ResumptionToken>,
-) -> Result<StartResponse, ApiError> {
-    let mut resuming = false;
-
-    // Get participant id, check resumption token if it exists, if not generate random one
-    let participant_id = if let Some(resumption) = resumption {
-        let resumption_redis_key = resumption.into_redis_key();
-
-        // Check for resumption data behind resumption token
-        let resumption_data: Option<ResumptionData> =
-            redis_conn.get(&resumption_redis_key).await.map_err(|e| {
-                log::error!("Failed to fetch resumption token from redis, {}", e);
-                ApiError::internal()
-            })?;
-
-        // If redis returned None generate random id, else check if request matches resumption data
-        if let Some(data) = resumption_data {
-            if data.room == room && data.participant == participant {
-                let in_use =
-                    control::storage::participant_id_in_use(redis_conn, data.participant_id)
-                        .await?;
-
-                if in_use {
-                    return Err(ApiError::bad_request().with_message(
-                        "the session of the given resumption token is still running",
-                    ));
-                } else if redis_conn
-                    .del(&resumption_redis_key)
-                    .await
-                    .context("failed to remove resumption token")?
-                {
-                    resuming = true;
-                    data.participant_id
-                } else {
-                    // edge case: we successfully GET the resumption token but failed to delete it from redis
-                    // This can only be caused by the same endpoint being called at the same time (race condition)
-                    // or the resumption data expiring at the same time as this endpoint was called
-                    ParticipantId::new()
-                }
-            } else {
-                log::debug!("given resumption was valid but was used in an invalid context (wrong user/room)");
-                ParticipantId::new()
-            }
-        } else {
-            log::debug!("given resumption was invalid, ignoring it");
-            ParticipantId::new()
-        }
-    } else {
-        // No resumption token given
-        ParticipantId::new()
-    };
-
-    let ticket = TicketToken::generate();
-    let resumption = ResumptionToken::generate();
-
-    let ticket_data = TicketData {
-        participant_id,
-        resuming,
-        participant,
-        room,
-        breakout_room,
-        resumption: resumption.clone(),
-    };
-
-    // TODO: make the expiration configurable through settings
-    // let the ticket expire in 30 seconds
-    redis_conn
-        .set_ex(ticket.redis_key(), &ticket_data, 30)
-        .await
-        .map_err(|e| {
-            log::error!("Unable to store ticket in redis, {}", e);
-            ApiError::internal()
-        })?;
-
-    Ok(StartResponse { ticket, resumption })
+    Ok(ApiResponse::new(StartResponse { ticket, resumption }))
 }
 
 pub trait RoomsPoliciesBuilderExt {
