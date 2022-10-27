@@ -1,9 +1,12 @@
-# Unreleased
+# 1.0.0-rc.7 (27 October, 2022)
 
 ### Added
 
-- controller: added metrics for number of participants with audio or video
+- controller: added metrics for the number of participants with audio or video unmuted
 - controller: add `is_adhoc` flag to events
+- chat: allow moderators to clear the global chat history
+- janus-media: add the `presenter` role to restrict screenshare access
+- janus-media: add reconnect capabilities for mcu clients
 
 ### Changed
 
