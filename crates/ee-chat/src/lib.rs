@@ -302,7 +302,6 @@ impl SignalingModule for Chat {
                             id,
                             source: self.id,
                             group: group_name,
-                            timestamp: *timestamp,
                             content: stored_msg.content,
                         }),
                     )

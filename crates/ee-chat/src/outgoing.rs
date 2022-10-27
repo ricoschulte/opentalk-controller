@@ -1,4 +1,3 @@
-use crate::chrono::{DateTime, Utc};
 use chat::MessageId;
 use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
@@ -16,9 +15,6 @@ pub struct MessageSent {
     pub id: MessageId,
     pub source: ParticipantId,
     pub group: String,
-    // todo The timestamp is now included in the Namespaced struct. Once the frontends adopted this change, remove the timestamp from Message
-    // See: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/247
-    pub timestamp: DateTime<Utc>,
     pub content: String,
 }
 
@@ -31,9 +27,8 @@ pub enum Error {
 #[cfg(test)]
 mod test {
     use super::*;
-    use controller::prelude::{chrono::DateTime, serde_json};
+    use controller::prelude::serde_json;
     use serde_json::json;
-    use std::str::FromStr;
 
     #[test]
     fn message_sent_serialize() {
@@ -41,7 +36,6 @@ mod test {
             id: MessageId::nil(),
             source: ParticipantId::nil(),
             group: "management".to_string(),
-            timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z").unwrap(),
             content: "Hello managers!".to_string(),
         }))
         .unwrap();
@@ -51,7 +45,6 @@ mod test {
             "source": "00000000-0000-0000-0000-000000000000",
             "group": "management",
             "content": "Hello managers!",
-            "timestamp":"2021-06-24T14:00:11.873753715Z",
         });
 
         assert_eq!(expected, produced);
