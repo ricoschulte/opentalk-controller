@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use controller::prelude::chrono::Duration;
 use controller::prelude::chrono::Utc;
 use controller::prelude::ModuleTester;

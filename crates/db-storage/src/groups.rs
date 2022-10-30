@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::schema::{groups, user_groups};
 use super::users::{User, UserId};
 use database::{DbConnection, Result};

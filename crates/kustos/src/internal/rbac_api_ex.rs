@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Expands the RbacApi of casbin of some missing functions that are present in casbin go implementation
 use casbin::RbacApi;
 use std::collections::HashSet;

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Abstract resource authz types.
 //!
 //! Kustos limits supported resources to be identified by a valid URL path.

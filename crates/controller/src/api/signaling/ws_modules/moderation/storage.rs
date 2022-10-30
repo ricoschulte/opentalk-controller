@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
 use controller_shared::ParticipantId;

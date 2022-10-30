@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::metrics::SignalingMetrics;
 use super::prelude::*;
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;

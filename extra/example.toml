@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
 [logging]
 # Default tracing directives that will always be applied after RUST_LOG's directives.
 # Each array entry may contain a single directive.

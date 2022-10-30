@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Contains the user specific database structs amd queries
 use super::groups::{Group, UserGroupRelation};
 use super::schema::{groups, user_groups, users};

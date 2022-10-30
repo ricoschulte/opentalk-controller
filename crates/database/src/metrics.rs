@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use diesel::connection::{
     AnsiTransactionManager, Connection, ConnectionGatWorkaround, DefaultLoadingMode,
     LoadConnection, LoadRowIter, SimpleConnection, TransactionManager,

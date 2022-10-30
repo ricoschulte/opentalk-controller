@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use anyhow::{Context, Result};
 use clap::{ArgAction, Parser, Subcommand};
 use controller_shared::settings::Settings;

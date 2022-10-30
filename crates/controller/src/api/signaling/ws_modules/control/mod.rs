@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Control Module Stub
 //!
 //! Actual control 'module' code can be found inside `crate::api::signaling::ws::runner`

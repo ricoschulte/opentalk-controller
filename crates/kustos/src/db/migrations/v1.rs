@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Initial addition of the underlying casbin database schema.
 //! This follows the casbin guidelines naming the table `casbin_rule`
 use barrel::backend::Pg;

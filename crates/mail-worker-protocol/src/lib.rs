@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use serde::Deserialize;
 #[cfg(any(test, feature = "client"))]
 use serde::Serialize;

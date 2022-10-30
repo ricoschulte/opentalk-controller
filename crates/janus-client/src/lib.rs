@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! This crate wraps the Janus WebSocket asynchronous API to provide a more or less idiomatic Rust API.
 //!
 //! For this the client internally resolves futures based on the incoming responses and their respective transaction identifier.

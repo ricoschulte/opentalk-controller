@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use k3k_redis_args::ToRedisArgs;
 use redis::ToRedisArgs;
 use serde::Serialize;

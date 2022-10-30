@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::{ApiResponse, DefaultApiResult, PagePaginationQuery};
 use crate::api::v1::events::{
     enrich_invitees_from_keycloak, EventInvitee, EventPoliciesBuilderExt,

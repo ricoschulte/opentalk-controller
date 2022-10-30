@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::LegalVoteId;
 use chrono::{DateTime, Utc};
 use controller_shared::ParticipantId;

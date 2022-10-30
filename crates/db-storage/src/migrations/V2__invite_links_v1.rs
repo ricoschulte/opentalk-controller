@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use crate::migrations::type_polyfills::datetime;
 use barrel::backend::Pg;
 use barrel::{types, Migration};

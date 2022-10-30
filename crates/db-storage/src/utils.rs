@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use crate::users::UserId;
 
 /// Trait for models that have user-ids attached to them like created_by/updated_by fields

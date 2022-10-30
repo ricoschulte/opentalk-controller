@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::http::async_http_client;
 use anyhow::{anyhow, Context, Result};
 use controller_shared::settings;

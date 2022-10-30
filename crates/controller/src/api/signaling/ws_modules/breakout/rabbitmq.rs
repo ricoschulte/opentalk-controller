@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::storage::BreakoutConfig;
 use super::{AssocParticipantInOtherRoom, ParticipantInOtherRoom};
 use crate::api::signaling::BreakoutRoomId;

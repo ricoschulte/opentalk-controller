@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Kustos (from latin `custos`, means guard)
 //!
 //! An authorization provider for use in k3k/opentalk.

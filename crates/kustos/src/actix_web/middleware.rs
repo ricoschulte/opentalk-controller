@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Actix-web middleware based on <https://github.com/casbin-rs/actix-casbin-auth>
 use crate::actix_web::User;
 use crate::{AccessMethod, PolicyUser, SyncedEnforcer, UserPolicy};

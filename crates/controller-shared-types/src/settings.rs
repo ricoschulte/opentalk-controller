@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 /// Contains the application settings.
 ///
 /// The application settings are set with a TOML config file. Settings specified in the config file

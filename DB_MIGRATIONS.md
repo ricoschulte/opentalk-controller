@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
 # Requirements
 
 * install the diesel cli tool with `cargo install diesel_cli --version 1.4.1 --no-default-features --features="barrel-migrations,barrel/pg,postgres"`

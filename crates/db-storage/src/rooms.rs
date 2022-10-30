@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Contains the room specific database structs and queries
 use crate::diesel::RunQueryDsl;
 use crate::schema::rooms;

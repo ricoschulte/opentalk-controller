@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Provides various internal implementations
 use super::{ToCasbin, ToCasbinMultiple, ToCasbinString};
 use crate::{

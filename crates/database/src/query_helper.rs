@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use diesel::backend::Backend;
 use diesel::query_builder::*;
 use diesel::result::QueryResult;

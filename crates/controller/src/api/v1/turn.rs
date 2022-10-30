@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! TURN related API structs and Endpoints
 use super::response::ApiError;
 use crate::api::v1::middleware::user_auth::check_access_token;

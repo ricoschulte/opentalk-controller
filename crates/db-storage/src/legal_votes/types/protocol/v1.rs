@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::super::{CancelReason, FinalResults, Parameters, VoteOption};
 use crate::{legal_votes::types::Token, users::UserId};
 use chrono::{DateTime, Utc};

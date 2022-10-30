@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use chrono::{TimeZone as _, Utc};
 use chrono_tz::Tz;
 use database::DbConnection;
