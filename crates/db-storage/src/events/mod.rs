@@ -215,6 +215,7 @@ impl Event {
         time_min: Option<DateTime<Utc>>,
         time_max: Option<DateTime<Utc>>,
         adhoc: Option<bool>,
+        time_independent: Option<bool>,
         cursor: Option<GetEventsCursor>,
         limit: i64,
     ) -> Result<
@@ -311,6 +312,10 @@ impl Event {
 
         if let Some(is_adhoc) = adhoc {
             query = query.filter(events::is_adhoc.eq(is_adhoc));
+        }
+
+        if let Some(is_time_independent) = time_independent {
+            query = query.filter(events::is_time_independent.eq(is_time_independent));
         }
 
         if !invite_status_filter.is_empty() {

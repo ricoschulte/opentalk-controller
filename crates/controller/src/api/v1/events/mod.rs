@@ -814,6 +814,13 @@ pub struct GetEventsQuery {
     /// events will be returned when `false`. If not present, all events will
     /// be returned regardless of their `adhoc` flag value.
     adhoc: Option<bool>,
+
+    /// Only get events that are either time-independent or time-dependent
+    ///
+    /// If present, all time-independent events will be returned when `true`,
+    /// all time-dependent events will be returned when `false`. If absent,
+    /// all events will be returned regardless of their time dependency.
+    time_independent: Option<bool>,
 }
 
 /// Data stored inside the `GET /events` query cursor
@@ -889,6 +896,7 @@ pub async fn get_events(
             query.time_min,
             query.time_max,
             query.adhoc,
+            query.time_independent,
             get_events_cursor,
             per_page,
         )?;

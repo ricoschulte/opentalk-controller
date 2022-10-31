@@ -1,3 +1,9 @@
+# Unreleased
+
+### Added
+
+- controller: `time_independent` filter to events GET request
+
 # 1.0.0-rc.7 (27 October, 2022)
 
 ### Added
