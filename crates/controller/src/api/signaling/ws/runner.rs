@@ -575,7 +575,20 @@ impl Runner {
                 .await
                 {
                     log::error!(
-                        "failed to remove participant from waiting_room_list, {:?}",
+                        "failed to remove participant from waiting_room list, {:?}",
+                        e
+                    );
+                    encountered_error = true;
+                }
+                if let Err(e) = moderation::storage::waiting_room_accepted_remove(
+                    &mut self.redis_conn,
+                    self.room_id.room_id(),
+                    self.id,
+                )
+                .await
+                {
+                    log::error!(
+                        "failed to remove participant from waiting_room_accepted list, {:?}",
                         e
                     );
                     encountered_error = true;
@@ -599,7 +612,7 @@ impl Runner {
                     true
                 } else {
                     // destroy room only if waiting room is empty
-                    match moderation::storage::waiting_room_len(
+                    let waiting_room_is_empty = match moderation::storage::waiting_room_len(
                         &mut self.redis_conn,
                         self.room_id.room_id(),
                     )
@@ -611,7 +624,22 @@ impl Runner {
                             encountered_error = true;
                             false
                         }
-                    }
+                    };
+                    let waiting_room_accepted_is_empty =
+                        match moderation::storage::waiting_room_accepted_len(
+                            &mut self.redis_conn,
+                            self.room_id.room_id(),
+                        )
+                        .await
+                        {
+                            Ok(waiting_room_len) => waiting_room_len == 0,
+                            Err(e) => {
+                                log::error!("failed to get accepted waiting room len, {:?}", e);
+                                encountered_error = true;
+                                false
+                            }
+                        };
+                    waiting_room_is_empty && waiting_room_accepted_is_empty
                 }
             } else {
                 false
