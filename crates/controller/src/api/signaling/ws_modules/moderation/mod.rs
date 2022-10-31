@@ -174,6 +174,8 @@ impl SignalingModule for ModerationModule {
                     return Ok(());
                 }
 
+                storage::waiting_room_remove(ctx.redis_conn(), self.room.room_id(), target).await?;
+
                 ctx.rabbitmq_publish_control(
                     control::rabbitmq::current_room_exchange_name(self.room),
                     control::rabbitmq::room_participant_routing_key(target),

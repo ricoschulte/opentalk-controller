@@ -208,9 +208,9 @@ pub async fn waiting_room_contains(
     participant_id: ParticipantId,
 ) -> Result<bool> {
     redis_conn
-        .srem(WaitingRoomList { room }, participant_id)
+        .sismember(WaitingRoomList { room }, participant_id)
         .await
-        .context("Failed to SREM waiting_room_list")
+        .context("Failed to SISMEMBER waiting_room_list")
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
