@@ -15,7 +15,7 @@ mod outgoing;
 mod rabbitmq;
 mod state;
 
-struct Spacedeck {
+struct Whiteboard {
     room_id: SignalingRoomId,
     client: SpacedeckClient,
 }
@@ -38,8 +38,8 @@ impl From<InitState> for FrontendData {
 }
 
 #[async_trait::async_trait(?Send)]
-impl SignalingModule for Spacedeck {
-    const NAMESPACE: &'static str = "spacedeck";
+impl SignalingModule for Whiteboard {
+    const NAMESPACE: &'static str = "whiteboard";
 
     type Params = controller_shared::settings::Spacedeck;
 
@@ -98,7 +98,7 @@ impl SignalingModule for Spacedeck {
                                 url: space_info.url,
                             }));
                         } else {
-                            log::error!("Spacedeck module received `Initialized` but spacedeck was not initialized");
+                            log::error!("Whiteboard module received `Initialized` but spacedeck was not initialized");
                         }
                     }
                     rabbitmq::Event::PdfUrl(url) => {
@@ -120,7 +120,7 @@ impl SignalingModule for Spacedeck {
 
                         if let Err(err) = self.create_space(&mut ctx).await {
                             log::error!(
-                                "Failed to initialize spacedeck for room '{}': {}",
+                                "Failed to initialize whiteboard for room '{}': {}",
                                 self.room_id,
                                 err
                             );
@@ -182,7 +182,7 @@ impl SignalingModule for Spacedeck {
     }
 }
 
-impl Spacedeck {
+impl Whiteboard {
     /// Creates a new spacedeck space
     ///
     /// When spacedeck gets initialized here, this function will send the [`rabbitmq::Event::Initialized`] to all
@@ -247,10 +247,10 @@ pub fn register(controller: &mut controller::Controller) {
 
     match spacedeck {
         Some(spacedeck) => {
-            controller.signaling.add_module::<Spacedeck>(spacedeck);
+            controller.signaling.add_module::<Whiteboard>(spacedeck);
         }
         None => {
-            log::warn!("Skipping the Spacedeck module as no spacedeck is specified in the config")
+            log::warn!("Skipping the Whiteboard module as no spacedeck is specified in the config")
         }
     }
 }

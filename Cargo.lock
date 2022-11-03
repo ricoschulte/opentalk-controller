@@ -1717,8 +1717,8 @@ dependencies = [
  "k3k-legal-vote",
  "k3k-polls",
  "k3k-protocol",
- "k3k-spacedeck",
  "k3k-timer",
+ "k3k-whiteboard",
  "kustos",
 ]
 
@@ -1935,26 +1935,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "k3k-spacedeck"
-version = "1.0.0-rc.7"
-dependencies = [
- "actix-rt",
- "anyhow",
- "bytes",
- "chrono",
- "k3k-controller-core",
- "k3k-controller-shared",
- "percent-encoding",
- "rand",
- "reqwest",
- "serde",
- "serde_json",
- "serde_repr",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "k3k-test-util"
 version = "1.0.0-rc.7"
 dependencies = [
@@ -1980,6 +1960,26 @@ dependencies = [
  "k3k-test-util",
  "serde",
  "serial_test",
+]
+
+[[package]]
+name = "k3k-whiteboard"
+version = "1.0.0-rc.7"
+dependencies = [
+ "actix-rt",
+ "anyhow",
+ "bytes",
+ "chrono",
+ "k3k-controller-core",
+ "k3k-controller-shared",
+ "percent-encoding",
+ "rand",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "tokio",
+ "url",
 ]
 
 [[package]]

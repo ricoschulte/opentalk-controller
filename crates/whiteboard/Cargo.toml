@@ -1,5 +1,5 @@
 [package]
-name = "k3k-spacedeck"
+name = "k3k-whiteboard"
 version = "1.0.0-rc.7"
 edition = "2021"
 
