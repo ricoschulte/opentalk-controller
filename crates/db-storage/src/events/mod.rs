@@ -289,17 +289,28 @@ impl Event {
         // Add filters to query depending on the time_(min/max) parameters
         match (time_min, time_max) {
             (Some(time_min), Some(time_max)) => {
+                // we have an overlap if any of these conditions matches:
+                // - starts_at is between time_min and time_max
+                // - ends_at is between time_min and time_max
+                // - time_min is between starts_at and ends_at
+                // - time_max is between starts_at and ends_at
                 query = query.filter(
                     events::starts_at
-                        .ge(time_min)
-                        .and(events::ends_at.le(time_max)),
+                        .between(time_min, time_max)
+                        .or(events::ends_at.between(time_min, time_max))
+                        .or(time_min
+                            .into_sql::<Nullable<Timestamptz>>()
+                            .between(events::starts_at, events::ends_at))
+                        .or(time_max
+                            .into_sql::<Nullable<Timestamptz>>()
+                            .between(events::starts_at, events::ends_at)),
                 );
             }
             (Some(time_min), None) => {
-                query = query.filter(events::starts_at.ge(time_min));
+                query = query.filter(events::ends_at.ge(time_min));
             }
             (None, Some(time_max)) => {
-                query = query.filter(events::ends_at.le(time_max));
+                query = query.filter(events::starts_at.le(time_max));
             }
             (None, None) => {
                 // no filters to apply
