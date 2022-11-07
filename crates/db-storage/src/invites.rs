@@ -140,6 +140,30 @@ impl Invite {
         ))
     }
 
+    pub fn get_first_for_room(
+        conn: &mut DbConnection,
+        room_id: RoomId,
+        user_id: UserId,
+    ) -> Result<Invite> {
+        let (invites_for_room, _) = Invite::get_all_for_room_paginated(conn, room_id, 1, 1)?;
+        let invite_for_room = invites_for_room.into_iter().next();
+
+        let invite_for_room = if let Some(invite) = invite_for_room {
+            invite
+        } else {
+            NewInvite {
+                active: true,
+                created_by: user_id,
+                updated_by: user_id,
+                room: room_id,
+                expiration: None,
+            }
+            .insert(conn)?
+        };
+
+        Ok(invite_for_room)
+    }
+
     /// Returns a paginated view on invites for the given room
     ///
     /// Filters based on the passed user. Only invites are returned that where created or updated by the passed in user.

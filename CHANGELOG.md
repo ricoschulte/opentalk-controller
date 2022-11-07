@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - controller: `time_independent` filter to events GET request
+- mail-worker-protocol: add types to support event-update emails ([#221](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/221))
+- controller: send email notification to invitees on event update ([#221](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/221))
 
 ### Changed
 
@@ -57,7 +59,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller: toggle raise hands status (actions `enable_raise_hands`, `disable_raise_hands` and according messages) ([#228](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/228))
 - controller: added moderator feature to forcefully lower raised hands of all participants ([#227](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/227))
 - chat: added feature to toggle chat status (actions `enable_chat`, `disable_chat` and according messages) ([#229](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/229))
-- ee-chat: added check for chat status (enabled/disabled)
+- ee-chat: added check for chat status (enabled/disabled) ([#229](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/229))
 - controller: added waiting room flag to stored events ([#224](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/224))
 - controller: events now include unregistered invitees in invitees lists, distinguishable by `kind` profile property ([#196](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/196))
 

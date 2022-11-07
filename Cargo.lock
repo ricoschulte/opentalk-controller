@@ -1905,6 +1905,7 @@ version = "1.0.0-rc.7"
 dependencies = [
  "chrono",
  "k3k-db-storage",
+ "keycloak-admin",
  "pretty_assertions",
  "serde",
  "serde_json",

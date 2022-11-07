@@ -12,6 +12,30 @@ use lapin_pool::RabbitMqChannel;
 use mail_worker_proto::*;
 use std::sync::Arc;
 
+pub struct RegisteredMailRecipient {
+    pub email: String,
+    pub title: String,
+    pub first_name: String,
+    pub last_name: String,
+    pub language: String,
+}
+
+pub struct UnregisteredMailRecipient {
+    pub email: String,
+    pub first_name: String,
+    pub last_name: String,
+}
+
+pub struct ExternalMailRecipient {
+    pub email: String,
+}
+
+pub enum MailRecipient {
+    Registered(RegisteredMailRecipient),
+    Unregistered(UnregisteredMailRecipient),
+    External(ExternalMailRecipient),
+}
+
 fn to_event(
     event: Event,
     room: Room,
@@ -98,7 +122,7 @@ impl MailService {
         let settings = &*self.settings.load();
 
         // Create MailTask
-        let mail_task = MailTask::registered_invite(
+        let mail_task = MailTask::registered_event_invite(
             inviter,
             to_event(event, room, sip_config, settings),
             invitee,
@@ -115,12 +139,12 @@ impl MailService {
         event: Event,
         room: Room,
         sip_config: Option<SipConfig>,
-        invitee: &str,
+        invitee: keycloak_admin::users::User,
     ) -> Result<()> {
         let settings = &*self.settings.load();
 
         // Create MailTask
-        let mail_task = MailTask::unregistered_invite(
+        let mail_task = MailTask::unregistered_event_invite(
             inviter,
             to_event(event, room, sip_config, settings),
             invitee,
@@ -143,14 +167,108 @@ impl MailService {
         let settings = &*self.settings.load();
 
         // Create MailTask
-        let mail_task = MailTask::external_invite(
+        let mail_task = MailTask::external_event_invite(
             inviter,
             to_event(event, room, sip_config, settings),
-            invitee,
+            invitee.to_string(),
             invite_code,
         );
 
         self.send_to_rabbitmq(mail_task).await?;
+        Ok(())
+    }
+
+    /// Sends an Event Update mail task to the rabbit mq queue, if configured.
+    pub async fn send_event_update(
+        &self,
+        inviter: User,
+        event: Event,
+        room: Room,
+        sip_config: Option<SipConfig>,
+        invitee: MailRecipient,
+        invite_code: String,
+    ) -> Result<()> {
+        let settings = &*self.settings.load();
+
+        let mail_task = match invitee {
+            MailRecipient::Registered(invitee) => MailTask::registered_event_update(
+                inviter,
+                to_event(event, room, sip_config, settings),
+                v1::RegisteredUser {
+                    email: v1::Email::new(invitee.email),
+                    title: invitee.title,
+                    first_name: invitee.first_name,
+                    last_name: invitee.last_name,
+                    language: invitee.language,
+                },
+            ),
+            MailRecipient::Unregistered(invitee) => MailTask::unregistered_event_update(
+                inviter,
+                to_event(event, room, sip_config, settings),
+                v1::UnregisteredUser {
+                    email: v1::Email::new(invitee.email),
+                    first_name: invitee.first_name,
+                    last_name: invitee.last_name,
+                },
+            ),
+            MailRecipient::External(invitee) => MailTask::external_event_update(
+                inviter,
+                to_event(event, room, sip_config, settings),
+                v1::ExternalUser {
+                    email: v1::Email::new(invitee.email),
+                },
+                invite_code,
+            ),
+        };
+
+        self.send_to_rabbitmq(mail_task).await?;
+
+        Ok(())
+    }
+
+    /// Sends an Event Cancellation mail task to the rabbit mq queue, if configured.
+    pub async fn send_event_cancellation(
+        &self,
+        inviter: User,
+        event: Event,
+        room: Room,
+        sip_config: Option<SipConfig>,
+        invitee: MailRecipient,
+    ) -> Result<()> {
+        let settings = &*self.settings.load();
+
+        let mail_task = match invitee {
+            MailRecipient::Registered(invitee) => MailTask::registered_event_cancellation(
+                inviter,
+                to_event(event, room, sip_config, settings),
+                v1::RegisteredUser {
+                    email: v1::Email::new(invitee.email),
+                    title: invitee.title,
+                    first_name: invitee.first_name,
+                    last_name: invitee.last_name,
+                    language: invitee.language,
+                },
+            ),
+            MailRecipient::Unregistered(invitee) => MailTask::unregistered_event_cancellation(
+                inviter,
+                to_event(event, room, sip_config, settings),
+                v1::UnregisteredUser {
+                    email: v1::Email::new(invitee.email),
+                    first_name: invitee.first_name,
+                    last_name: invitee.last_name,
+                },
+            ),
+            MailRecipient::External(invitee) => MailTask::external_event_cancellation(
+                inviter,
+                to_event(event, room, sip_config, settings),
+                v1::ExternalUser {
+                    email: v1::Email::new(invitee.email),
+                },
+            ),
+        };
+
+        self.send_to_rabbitmq(mail_task).await?;
+
         Ok(())
     }
 }
