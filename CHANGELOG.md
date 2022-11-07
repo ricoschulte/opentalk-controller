@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - strictly follow keep-a-changelog format in `CHANGELOG.md` ([#254](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/254))
 - controller: rename `spacedeck` module to `whiteboard` ([#240](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/240))
+- controller: return any entry for `GET /events` overlapping `time_min..time_max` range, not just those fully enclosed by it.
 
 ## [1.0.0-rc.7] - 2022-10-27
 

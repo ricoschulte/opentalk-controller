@@ -750,3 +750,322 @@ async fn get_event_time_independent() {
     assert_eq!(time_dependent[0].0, event3);
     assert_eq!(time_dependent[1].0, event5);
 }
+
+#[tokio::test]
+#[serial]
+async fn get_event_min_max_time() {
+    let db_ctx = test_util::database::DatabaseContext::new(true).await;
+
+    let mut conn = db_ctx.db.get_conn().unwrap();
+
+    let (user, _) = NewUserWithGroups {
+        new_user: NewUser {
+            email: "test@example.org".into(),
+            title: "".into(),
+            firstname: "Test".into(),
+            lastname: "Tester".into(),
+            id_token_exp: 0,
+            language: "".into(),
+            display_name: "Test Tester".into(),
+            oidc_sub: "testtestersoidcsub".into(),
+            oidc_issuer: "".into(),
+            phone: None,
+        },
+        groups: vec![],
+    }
+    .insert(&mut conn)
+    .unwrap();
+
+    let room = NewRoom {
+        created_by: user.id,
+        password: None,
+        waiting_room: false,
+    }
+    .insert(&mut conn)
+    .unwrap();
+
+    let event1 = NewEvent {
+        title: "Test Event".into(),
+        description: "Test Event".into(),
+        room: room.id,
+        created_by: user.id,
+        updated_by: user.id,
+        is_time_independent: false,
+        is_all_day: Some(false),
+        starts_at: None,
+        starts_at_tz: None,
+        ends_at: None,
+        ends_at_tz: None,
+        duration_secs: None,
+        is_recurring: Some(false),
+        recurrence_pattern: None,
+        is_adhoc: false,
+    }
+    .insert(&mut conn)
+    .unwrap();
+
+    let event2 = NewEvent {
+        title: "Test Event".into(),
+        description: "Test Event".into(),
+        room: room.id,
+        created_by: user.id,
+        updated_by: user.id,
+        is_time_independent: false,
+        is_all_day: Some(false),
+        starts_at: Some(Tz::UTC.ymd(2020, 1, 1).and_hms(10, 0, 0)),
+        starts_at_tz: Some(TimeZone(Tz::UTC)),
+        ends_at: Some(Tz::UTC.ymd(2020, 1, 1).and_hms(11, 0, 0)),
+        ends_at_tz: Some(TimeZone(Tz::UTC)),
+        duration_secs: Some(3600),
+        is_recurring: Some(false),
+        recurrence_pattern: None,
+        is_adhoc: false,
+    }
+    .insert(&mut conn)
+    .unwrap();
+
+    {
+        // Query without any time restrictions
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            None,
+            None,
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+
+        assert_eq!(events.len(), 2);
+        assert_eq!(events[0].0, event1);
+        assert_eq!(events[1].0, event2);
+    }
+
+    {
+        // Query an open timeframe before the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            None,
+            Some(Utc.ymd(2020, 1, 1).and_hms(9, 0, 0)),
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert!(events.is_empty());
+    }
+
+    {
+        // Query a closed timeframe before the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            Some(Utc.ymd(2020, 1, 1).and_hms(8, 0, 0)),
+            Some(Utc.ymd(2020, 1, 1).and_hms(9, 0, 0)),
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert!(events.is_empty());
+    }
+
+    {
+        // Query an open timeframe after the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            Some(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0)),
+            None,
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert!(events.is_empty());
+    }
+
+    {
+        // Query an closed timeframe after the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            Some(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0)),
+            Some(Utc.ymd(2020, 1, 1).and_hms(13, 0, 0)),
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert!(events.is_empty());
+    }
+
+    {
+        // Query a timeframe ending at the start of the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            None,
+            Some(Utc.ymd(2020, 1, 1).and_hms(10, 0, 0)),
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, event2);
+    }
+
+    {
+        // Query a timeframe starting at the end of the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            Some(Utc.ymd(2020, 1, 1).and_hms(11, 0, 0)),
+            None,
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, event2);
+    }
+
+    {
+        // Query an open timeframe overlapping the first half of the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            None,
+            Some(Utc.ymd(2020, 1, 1).and_hms(10, 30, 0)),
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, event2);
+    }
+
+    {
+        // Query a timeframe overlapping the first half of the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            Some(Utc.ymd(2020, 1, 1).and_hms(9, 30, 0)),
+            Some(Utc.ymd(2020, 1, 1).and_hms(10, 30, 0)),
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, event2);
+    }
+
+    {
+        // Query an open timeframe overlapping the second half of the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            Some(Utc.ymd(2020, 1, 1).and_hms(10, 30, 0)),
+            None,
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, event2);
+    }
+
+    {
+        // Query a timeframe overlapping the second half of the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            Some(Utc.ymd(2020, 1, 1).and_hms(10, 30, 0)),
+            Some(Utc.ymd(2020, 1, 1).and_hms(11, 30, 0)),
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, event2);
+    }
+
+    {
+        // Query a timeframe fully inside the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            Some(Utc.ymd(2020, 1, 1).and_hms(10, 20, 0)),
+            Some(Utc.ymd(2020, 1, 1).and_hms(10, 40, 0)),
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, event2);
+    }
+
+    {
+        // Query a timeframe surrounding the event
+        let events = Event::get_all_for_user_paginated(
+            &mut conn,
+            user.id,
+            false,
+            vec![],
+            Some(Utc.ymd(2020, 1, 1).and_hms(9, 0, 0)),
+            Some(Utc.ymd(2020, 1, 1).and_hms(12, 0, 0)),
+            None,
+            None,
+            None,
+            10,
+        )
+        .unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, event2);
+    }
+}
