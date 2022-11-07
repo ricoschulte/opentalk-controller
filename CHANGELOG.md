@@ -1,10 +1,21 @@
-# Unreleased
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
 
 ### Added
 
 - controller: `time_independent` filter to events GET request
 
-# 1.0.0-rc.7 (27 October, 2022)
+### Changed
+
+- strictly follow keep-a-changelog format in `CHANGELOG.md` ([#254](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/254))
+
+## [1.0.0-rc.7] - 2022-10-27
 
 ### Added
 
@@ -18,7 +29,7 @@
 
 - controller: runner's websocket error messages straightened (`text` field renamed to `error`, values changed to slug style)
 
-# 1.0.0-rc.6 (12 October, 2022)
+## [1.0.0-rc.6] - 2022-10-12
 
 ### Added
 
@@ -33,28 +44,28 @@
 - trace: replace the setting `enable_opentelemetry` with `jaeger_agent_endpoint`
 - chat/ee-chat: increase maximum chat message size to 4096 bytes
 
-# 1.0.0-rc.5 (30 September, 2022)
+## [1.0.0-rc.5] - 2022-09-30
 
 ### Added
 
-- protocol: added the `deselect_writer` action to revoke write access (#145)
-- controller: added the spacedeck module that allows participants to collaboratively edit a whiteboard (#209)
-- controller: added a query parameter to the `GET /events` endpoint to allow filtering by `invite_status` (#213)
+- protocol: added the `deselect_writer` action to revoke write access ([#145](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/145))
+- controller: added the spacedeck module that allows participants to collaboratively edit a whiteboard ([#209](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/209))
+- controller: added a query parameter to the `GET /events` endpoint to allow filtering by `invite_status` ([#213](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/213))
 - breakout: added `joined_at` & `left_at` attributes to participants
-- controller: toggle raise hands status (actions `enable_raise_hands`, `disable_raise_hands` and according messages) (#228)
-- controller: added moderator feature to forcefully lower raised hands of all participants (#227)
-- chat: added feature to toggle chat status (actions `enable_chat`, `disable_chat` and according messages) (#229)
+- controller: toggle raise hands status (actions `enable_raise_hands`, `disable_raise_hands` and according messages) ([#228](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/228))
+- controller: added moderator feature to forcefully lower raised hands of all participants ([#227](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/227))
+- chat: added feature to toggle chat status (actions `enable_chat`, `disable_chat` and according messages) ([#229](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/229))
 - ee-chat: added check for chat status (enabled/disabled)
-- controller: added waiting room flag to stored events (#224)
-- controller: events now include unregistered invitees in invitees lists, distinguishable by `kind` profile property (#196)
+- controller: added waiting room flag to stored events ([#224](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/224))
+- controller: events now include unregistered invitees in invitees lists, distinguishable by `kind` profile property ([#196](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/196))
 
 ### Fixed
 
-- controller: fixed a bug where a wrong `ends_at` value for reoccurring events was sent to the mail worker (#218)
-- controller: fix pagination serialization (#217)
-- janus-media: added target and type information to some error responses (#219)
+- controller: fixed a bug where a wrong `ends_at` value for reoccurring events was sent to the mail worker ([#218](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/218))
+- controller: fix pagination serialization ([#217](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/217))
+- janus-media: added target and type information to some error responses ([#219](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/219))
 
-# 1.0.0-rc.4 (29 August, 2022)
+## [1.0.0-rc.4] - 2022-08-29
 
 ### Added
 
@@ -71,7 +82,7 @@
 - controller: added the optional claim `nickname` to the login endpoint that will be used as the users `display_name` when set
 - janus-media: stopped forwarding RTP media packets while a client is muted
 
-# 1.0.0-rc.3 (20 July, 2022)
+## [1.0.0-rc.3] - 2022-07-20
 
 ### Added
 
@@ -89,7 +100,7 @@
 - updated dependency version of pin-project
 - changed the login endpoint to return a bad-request with `invalid_claims` when invalid user claims were provided
 
-# 1.0.0-rc.2 (22 June, 2022)
+## [1.0.0-rc.2] - 2022-06-22
 
 ### Added
 
@@ -108,6 +119,17 @@
 
 - update dependency versions of various controller crates
 
-# 1.0.0-rc.1 (14 June, 2022)
+## [1.0.0-rc.1] - 2022-06-14
+
+### Added
 
 - initial release candidate
+
+[Unreleased]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.7...main
+[1.0.0-rc.7]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.6...v1.0.0-rc.7
+[1.0.0-rc.6]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.5...v1.0.0-rc.6
+[1.0.0-rc.5]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.4...v1.0.0-rc.5
+[1.0.0-rc.4]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.3...v1.0.0-rc.4
+[1.0.0-rc.3]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.2...v1.0.0-rc.3
+[1.0.0-rc.2]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.1...v1.0.0-rc.2
+[1.0.0-rc.1]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/commits/v1.0.0-rc.1
