@@ -245,6 +245,12 @@ pub async fn find(
         return Err(ApiError::not_found());
     }
 
+    if query.q.len() < 3 {
+        return Err(ApiError::bad_request()
+            .with_code("query_too_short")
+            .with_message("query must be at least 3 characters long"));
+    }
+
     let found_users = if settings.endpoints.users_find_use_kc {
         let mut found_kc_users = kc_admin_client
             .search_user(&query.q)
