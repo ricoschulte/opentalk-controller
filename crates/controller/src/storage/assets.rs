@@ -21,7 +21,6 @@ pub async fn save_asset(
     kind: impl Into<String>,
     data: impl Stream<Item = Result<Bytes>> + Unpin,
 ) -> Result<AssetId> {
-    let temp_db = db.clone();
     let namespace = namespace.map(Into::into);
     let filename = filename.into();
     let kind = kind.into();
@@ -33,7 +32,7 @@ pub async fn save_asset(
 
     // create db entry
     let block_result = crate::block(move || {
-        let mut db_conn = temp_db.get_conn()?;
+        let mut db_conn = db.get_conn()?;
 
         NewAsset {
             id: asset_id,
