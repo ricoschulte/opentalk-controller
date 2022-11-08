@@ -29,6 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - chat/ee-chat: redundant timestamp removed from outgoing chat messages
 
+### Fixed
+
+- Respect custom `--version` implementation ([#255](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/255))
+
 ## [1.0.0-rc.7] - 2022-10-27
 
 ### Added

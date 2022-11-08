@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 use controller_shared::settings::Settings;
 
 mod acl;
@@ -24,7 +24,7 @@ pub struct Args {
     #[clap(subcommand)]
     cmd: Option<SubCommand>,
 
-    #[clap(long)]
+    #[clap(long, action=ArgAction::SetTrue)]
     version: bool,
 }
 
