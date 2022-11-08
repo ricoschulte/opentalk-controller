@@ -81,6 +81,14 @@ pub async fn get_invites_for_event(
     Ok(ApiResponse::new(invitees).with_page_pagination(per_page, page, invitees_total))
 }
 
+/// Query parameters for the `PATCH /events/{event_id}/invites` endpoint
+#[derive(Deserialize, Debug, PartialEq, Eq)]
+pub struct PostEventInviteQuery {
+    /// Flag to suppress email notification
+    #[serde(default)]
+    suppress_email_notification: bool,
+}
+
 /// Request body for the `POST /events/{event_id}/invites` endpoint
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -101,10 +109,13 @@ pub async fn create_invite_to_event(
     kc_admin_client: Data<KeycloakAdminClient>,
     current_user: ReqData<User>,
     event_id: Path<EventId>,
+    query: Query<PostEventInviteQuery>,
     create_invite: Json<PostEventInviteBody>,
     mail_service: Data<MailService>,
 ) -> Result<Either<Created, NoContent>, ApiError> {
     let event_id = event_id.into_inner();
+
+    let send_email_notification = !query.suppress_email_notification;
 
     match create_invite.into_inner() {
         PostEventInviteBody::User { invitee } => {
@@ -115,6 +126,7 @@ pub async fn create_invite_to_event(
                 event_id,
                 invitee,
                 &mail_service.into_inner(),
+                send_email_notification,
             )
             .await
         }
@@ -128,6 +140,7 @@ pub async fn create_invite_to_event(
                 event_id,
                 email,
                 &mail_service.into_inner(),
+                send_email_notification,
             )
             .await
         }
@@ -141,6 +154,7 @@ async fn create_user_event_invite(
     event_id: EventId,
     invitee_id: UserId,
     mail_service: &MailService,
+    send_email_notification: bool,
 ) -> Result<Either<Created, NoContent>, ApiError> {
     let inviter = current_user.clone();
 
@@ -182,10 +196,12 @@ async fn create_user_event_invite(
 
             authz.add_policies(policies).await?;
 
-            mail_service
-                .send_registered_invite(inviter, event, room, sip_config, invitee)
-                .await
-                .context("Failed to send with MailService")?;
+            if send_email_notification {
+                mail_service
+                    .send_registered_invite(inviter, event, room, sip_config, invitee)
+                    .await
+                    .context("Failed to send with MailService")?;
+            }
 
             Ok(Either::Left(Created))
         }
@@ -208,6 +224,7 @@ async fn create_email_event_invite(
     event_id: EventId,
     email: EmailAddress,
     mail_service: &MailService,
+    send_email_notification: bool,
 ) -> Result<Either<Created, NoContent>, ApiError> {
     #[allow(clippy::large_enum_variant)]
     enum UserState {
@@ -293,10 +310,12 @@ async fn create_email_event_invite(
 
             authz.add_policies(policies).await?;
 
-            mail_service
-                .send_registered_invite(current_user, event, room, sip_config, invitee)
-                .await
-                .context("Failed to send with MailService")?;
+            if send_email_notification {
+                mail_service
+                    .send_registered_invite(current_user, event, room, sip_config, invitee)
+                    .await
+                    .context("Failed to send with MailService")?;
+            }
 
             Ok(Either::Left(Created))
         }
@@ -310,6 +329,7 @@ async fn create_email_event_invite(
                 db,
                 kc_admin_client,
                 mail_service,
+                send_email_notification,
                 current_user,
                 event,
                 room,
@@ -330,6 +350,7 @@ async fn create_invite_to_non_matching_email(
     db: Data<Db>,
     kc_admin_client: Data<KeycloakAdminClient>,
     mail_service: &MailService,
+    send_email_notification: bool,
     current_user: User,
     event: Event,
     room: Room,
@@ -370,7 +391,7 @@ async fn create_invite_to_non_matching_email(
 
         match res {
             Ok(Some(_)) => {
-                if let Some(invitee_user) = invitee_user {
+                if let (Some(invitee_user), true) = (invitee_user, send_email_notification) {
                     mail_service
                         .send_unregistered_invite(inviter, event, room, sip_config, invitee_user)
                         .await
@@ -392,17 +413,19 @@ async fn create_invite_to_non_matching_email(
                     })
                     .await??;
 
-                    mail_service
-                        .send_external_invite(
-                            inviter,
-                            event,
-                            room,
-                            sip_config,
-                            invitee_email.as_ref(),
-                            invite.id.to_string(),
-                        )
-                        .await
-                        .context("Failed to send with MailService")?;
+                    if send_email_notification {
+                        mail_service
+                            .send_external_invite(
+                                inviter,
+                                event,
+                                room,
+                                sip_config,
+                                invitee_email.as_ref(),
+                                invite.id.to_string(),
+                            )
+                            .await
+                            .context("Failed to send with MailService")?;
+                    }
                 }
 
                 Ok(Either::Left(Created))
