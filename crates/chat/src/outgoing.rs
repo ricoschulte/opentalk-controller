@@ -1,4 +1,3 @@
-use controller::prelude::*;
 use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 
@@ -31,9 +30,6 @@ pub struct MessageSent {
     pub content: String,
     #[serde(flatten)]
     pub scope: Scope,
-    // todo The timestamp is now included in the Namespaced struct. Once the frontend adopted this change, remove the timestamp from MessageSent
-    // See: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/247
-    pub timestamp: Timestamp,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
@@ -51,22 +47,18 @@ pub enum Error {
 #[cfg(test)]
 mod test {
     use super::*;
-    use controller::prelude::chrono::DateTime;
-    use std::str::FromStr;
+    use controller::prelude::serde_json;
 
     #[test]
     fn global_serialize() {
         let produced = serde_json::to_string(&Message::MessageSent(MessageSent {
             id: MessageId::nil(),
             source: ParticipantId::nil(),
-            timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z")
-                .unwrap()
-                .into(),
             content: "Hello All!".to_string(),
             scope: Scope::Global,
         }))
         .unwrap();
-        let expected = r#"{"message":"message_sent","id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","content":"Hello All!","scope":"global","timestamp":"2021-06-24T14:00:11.873753715Z"}"#;
+        let expected = r#"{"message":"message_sent","id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","content":"Hello All!","scope":"global"}"#;
 
         assert_eq!(expected, produced);
     }
@@ -76,14 +68,11 @@ mod test {
         let produced = serde_json::to_string(&Message::MessageSent(MessageSent {
             id: MessageId::nil(),
             source: ParticipantId::nil(),
-            timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z")
-                .unwrap()
-                .into(),
             content: "Hello All!".to_string(),
             scope: Scope::Private(ParticipantId::new_test(1)),
         }))
         .unwrap();
-        let expected = r#"{"message":"message_sent","id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","content":"Hello All!","scope":"private","target":"00000000-0000-0000-0000-000000000001","timestamp":"2021-06-24T14:00:11.873753715Z"}"#;
+        let expected = r#"{"message":"message_sent","id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","content":"Hello All!","scope":"private","target":"00000000-0000-0000-0000-000000000001"}"#;
         assert_eq!(expected, produced);
     }
 }

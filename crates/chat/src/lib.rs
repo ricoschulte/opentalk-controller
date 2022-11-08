@@ -219,7 +219,6 @@ impl SignalingModule for Chat {
                         id: MessageId::new(),
                         source,
                         content,
-                        timestamp: ctx.timestamp(),
                         scope: Scope::Private(target),
                     });
 
@@ -234,7 +233,6 @@ impl SignalingModule for Chat {
                         id: MessageId::new(),
                         source,
                         content,
-                        timestamp: ctx.timestamp(),
                         scope: Scope::Global,
                     };
 
@@ -243,7 +241,7 @@ impl SignalingModule for Chat {
                         source: out_message_contents.source,
                         content: out_message_contents.content.clone(),
                         scope: out_message_contents.scope,
-                        timestamp: out_message_contents.timestamp,
+                        timestamp: ctx.timestamp(),
                     };
 
                     storage::add_message_to_room_chat_history(
