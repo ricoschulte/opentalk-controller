@@ -5,24 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0-rc.8] - 2022-11-10
 
 ### Added
 
-- controller: `time_independent` filter to events GET request
+- controller: add `time_independent` filter to events GET request ([#155](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/155))
 - mail-worker-protocol: add types to support event-update emails ([#221](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/221))
 - controller: send email notification to invitees on event update ([#221](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/221))
-- controller: add `suppress_email_notification` flag ([#267](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/267))
+- controller: add `suppress_email_notification` flag to event and invite endpoints ([#267](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/267))
 
 ### Changed
 
 - strictly follow keep-a-changelog format in `CHANGELOG.md` ([#254](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/254))
 - controller: rename `spacedeck` module to `whiteboard` ([#240](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/240))
-- controller: return any entry for `GET /events` overlapping `time_min..time_max` range, not just those fully enclosed by it.
+- controller: return any entry for `GET /events` overlapping `time_min..time_max` range, not just those fully enclosed by it. ([#154](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/154))
+- controller: disallow `users/find` queries under 3 characters
+
+### Fixed
+
+- controller/signaling: add missing state checks for control-messages
 
 ### Removed
 
-- chat, e-chat: redundant timestamp removed from outgoing chat messages
+- chat/ee-chat: redundant timestamp removed from outgoing chat messages
 
 ## [1.0.0-rc.7] - 2022-10-27
 
@@ -134,7 +139,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - initial release candidate
 
-[Unreleased]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.7...main
+[1.0.0-rc.8]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.7...v1.0.0-rc.8
 [1.0.0-rc.7]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.6...v1.0.0-rc.7
 [1.0.0-rc.6]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.5...v1.0.0-rc.6
 [1.0.0-rc.5]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.4...v1.0.0-rc.5
