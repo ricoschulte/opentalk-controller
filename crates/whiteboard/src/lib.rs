@@ -1,12 +1,15 @@
 use anyhow::Result;
 use client::SpacedeckClient;
-use controller::prelude::{
-    async_trait, control, log, DestroyContext, Event, InitContext, ModuleContext, RedisConnection,
-    Role, SignalingModule, SignalingRoomId,
-};
-use outgoing::AccessUrl;
+use controller::prelude::*;
+use controller::storage::assets::save_asset;
+use controller::storage::ObjectStorage;
+use database::Db;
+use futures::stream::once;
+use futures::TryStreamExt;
+use outgoing::{AccessUrl, PdfAsset};
 use serde::Serialize;
 use state::{InitState, SpaceInfo};
+use std::sync::Arc;
 use url::Url;
 
 mod client;
@@ -18,6 +21,8 @@ mod state;
 struct Whiteboard {
     room_id: SignalingRoomId,
     client: SpacedeckClient,
+    db: Arc<Db>,
+    storage: Arc<ObjectStorage>,
 }
 
 #[derive(Debug, Serialize)]
@@ -37,6 +42,11 @@ impl From<InitState> for FrontendData {
     }
 }
 
+struct GetPdfEvent {
+    url_result: Result<Url>,
+    ts: Timestamp,
+}
+
 #[async_trait::async_trait(?Send)]
 impl SignalingModule for Whiteboard {
     const NAMESPACE: &'static str = "whiteboard";
@@ -49,7 +59,7 @@ impl SignalingModule for Whiteboard {
 
     type RabbitMqMessage = rabbitmq::Event;
 
-    type ExtEvent = ();
+    type ExtEvent = GetPdfEvent;
 
     type FrontendData = FrontendData;
 
@@ -65,6 +75,8 @@ impl SignalingModule for Whiteboard {
         Ok(Some(Self {
             room_id: ctx.room_id(),
             client,
+            db: ctx.db().clone(),
+            storage: ctx.storage().clone(),
         }))
     }
 
@@ -101,8 +113,8 @@ impl SignalingModule for Whiteboard {
                             log::error!("Whiteboard module received `Initialized` but spacedeck was not initialized");
                         }
                     }
-                    rabbitmq::Event::PdfUrl(url) => {
-                        ctx.ws_send(outgoing::Message::PdfUrl(AccessUrl { url }));
+                    rabbitmq::Event::PdfAsset(pdf_asset) => {
+                        ctx.ws_send(outgoing::Message::PdfAsset(pdf_asset));
                     }
                 }
                 Ok(())
@@ -144,16 +156,48 @@ impl SignalingModule for Whiteboard {
                         if let Some(state::InitState::Initialized(info)) =
                             state::get(ctx.redis_conn(), self.room_id).await?
                         {
-                            let url = self.client.get_pdf(&info.id).await?;
+                            let client = self.client.clone();
+                            let ts = ctx.timestamp();
 
-                            ctx.rabbitmq_publish(
-                                control::rabbitmq::current_room_exchange_name(self.room_id),
-                                control::rabbitmq::room_all_routing_key().into(),
-                                rabbitmq::Event::PdfUrl(url),
-                            );
+                            ctx.add_event_stream(once(async move {
+                                GetPdfEvent {
+                                    url_result: client.get_pdf(&info.id).await,
+                                    ts,
+                                }
+                            }));
                         }
                     }
                 }
+                Ok(())
+            }
+            Event::Ext(GetPdfEvent { url_result, ts }) => {
+                let url = url_result?;
+
+                let data = self
+                    .client
+                    .download_pdf(url.clone())
+                    .await?
+                    .map_err(Into::into);
+
+                let filename = format!("whiteboard_{}.pdf", ts.to_rfc3339());
+
+                let asset_id = save_asset(
+                    &self.storage,
+                    self.db.clone(),
+                    self.room_id.room_id(),
+                    Some(Self::NAMESPACE),
+                    &filename,
+                    "whiteboard_pdf",
+                    data,
+                )
+                .await?;
+
+                ctx.rabbitmq_publish(
+                    control::rabbitmq::current_room_exchange_name(self.room_id),
+                    control::rabbitmq::room_all_routing_key().into(),
+                    rabbitmq::Event::PdfAsset(PdfAsset { filename, asset_id }),
+                );
+
                 Ok(())
             }
             // ignored events
@@ -162,13 +206,13 @@ impl SignalingModule for Whiteboard {
             | Event::LowerHand
             | Event::ParticipantJoined(_, _)
             | Event::ParticipantLeft(_)
-            | Event::ParticipantUpdated(_, _)
-            | Event::Ext(_) => Ok(()),
+            | Event::ParticipantUpdated(_, _) => Ok(()),
         }
     }
 
     async fn on_destroy(self, mut ctx: DestroyContext<'_>) {
-        // TODO: save space as PDF once we have a S3 storage solution
+        // FIXME: We can not save the PDF here as it potentially takes more than a few seconds to generate the PDF
+        // and we hold the r3dlock in the destroy context.
 
         if ctx.destroy_room() {
             if let Err(err) = self.cleanup(ctx.redis_conn()).await {

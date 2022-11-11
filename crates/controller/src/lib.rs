@@ -45,6 +45,7 @@ use std::io::BufReader;
 use std::net::Ipv6Addr;
 use std::sync::Arc;
 use std::time::Duration;
+use storage::ObjectStorage;
 use tokio::signal::ctrl_c;
 use tokio::signal::unix::{signal, SignalKind};
 use tokio::sync::broadcast;
@@ -64,6 +65,7 @@ mod ha_sync;
 mod metrics;
 mod oidc;
 mod redis_wrapper;
+pub mod storage;
 mod trace;
 
 mod services;
@@ -79,6 +81,7 @@ pub mod prelude {
     pub use actix_web;
     pub use anyhow;
     pub use async_trait;
+    pub use aws_sdk_s3;
     pub use chrono;
     pub use displaydoc;
     pub use futures;
@@ -149,6 +152,8 @@ pub struct Controller {
     args: cli::Args,
 
     db: Arc<Db>,
+
+    storage: Arc<ObjectStorage>,
 
     oidc: Arc<OidcContext>,
 
@@ -245,6 +250,9 @@ impl Controller {
         db.set_metrics(metrics.database.clone());
         let db = Arc::new(db);
 
+        // Connect to MinIO
+        let storage = Arc::new(ObjectStorage::new(&settings.minio).await?);
+
         // Discover OIDC Provider
         let oidc = Arc::new(
             OidcContext::from_config(settings.keycloak.clone())
@@ -280,6 +288,7 @@ impl Controller {
             shared_settings,
             args,
             db,
+            storage,
             oidc,
             kc_admin_client,
             rabbitmq_pool,
@@ -297,17 +306,20 @@ impl Controller {
         // Start internal HTTP Server
         let int_http_server = {
             let db = Arc::downgrade(&self.db);
+            let storage = Arc::downgrade(&self.storage);
             let oidc_ctx = Arc::downgrade(&self.oidc);
             let shutdown = self.shutdown.clone();
 
             HttpServer::new(move || {
                 // Unwraps cannot panic. Server gets stopped before dropping the Arc.
                 let db = Data::from(db.upgrade().unwrap());
+                let storage = Data::from(storage.upgrade().unwrap());
                 let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
 
                 App::new()
                     .wrap(TracingLogger::<ReducedSpanBuilder>::new())
                     .app_data(db)
+                    .app_data(storage)
                     .app_data(oidc_ctx)
                     .app_data(Data::new(shutdown.clone()))
                     .service(internal_api::introspect::post)
@@ -325,6 +337,7 @@ impl Controller {
             let signaling_modules = Arc::downgrade(&signaling_modules);
             let signaling_metrics = Data::from(self.metrics.signaling.clone());
             let db = Arc::downgrade(&self.db);
+            let storage = Arc::downgrade(&self.storage);
 
             let oidc_ctx = Arc::downgrade(&self.oidc);
             let shutdown = self.shutdown.clone();
@@ -373,6 +386,7 @@ impl Controller {
 
                 // Unwraps cannot panic. Server gets stopped before dropping the Arc.
                 let db = Data::from(db.upgrade().unwrap());
+                let storage = Data::from(storage.upgrade().unwrap());
 
                 let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
                 let redis = Data::new(redis.clone());
@@ -392,6 +406,7 @@ impl Controller {
                     .app_data(web::JsonConfig::default().error_handler(json_error_handler))
                     .app_data(Data::from(shared_settings.clone()))
                     .app_data(db.clone())
+                    .app_data(storage)
                     .app_data(oidc_ctx.clone())
                     .app_data(kc_admin_client.clone())
                     .app_data(authz)
@@ -573,7 +588,10 @@ fn v1_scope(
                 .service(api::v1::invites::add_invite)
                 .service(api::v1::invites::get_invite)
                 .service(api::v1::invites::update_invite)
-                .service(api::v1::invites::delete_invite),
+                .service(api::v1::invites::delete_invite)
+                .service(api::v1::assets::room_assets)
+                .service(api::v1::assets::room_asset)
+                .service(api::v1::assets::delete),
         )
 }
 

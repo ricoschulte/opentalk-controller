@@ -76,6 +76,8 @@ pub struct Settings {
     #[serde(default)]
     pub endpoints: Endpoints,
 
+    pub minio: MinIO,
+
     #[serde(flatten)]
     pub extensions: HashMap<String, config::Value>,
 }
@@ -377,6 +379,14 @@ pub struct Endpoints {
     pub users_find_use_kc: bool,
     #[serde(default)]
     pub event_invite_external_email_address: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct MinIO {
+    pub uri: String,
+    pub bucket: String,
+    pub access_key: String,
+    pub secret_key: String,
 }
 
 #[derive(Debug, Default, Clone, Deserialize)]

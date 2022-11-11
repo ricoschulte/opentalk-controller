@@ -1,4 +1,6 @@
 use anyhow::{bail, Context, Result};
+use bytes::Bytes;
+use futures::Stream;
 use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 
@@ -109,6 +111,22 @@ impl SpacedeckClient {
         self.base_url
             .join(response.url.as_str())
             .context("Failed to join PDF url with spacedeck base url")
+    }
+
+    pub(crate) async fn download_pdf(
+        &self,
+        pdf_url: Url,
+    ) -> Result<impl Stream<Item = reqwest::Result<Bytes>> + std::marker::Unpin> {
+        let response = self.client.get(pdf_url).send().await?;
+
+        if !response.status().is_success() {
+            bail!(
+                "Failed to get binary pdf data, status code: {}",
+                response.status()
+            )
+        }
+
+        Ok(response.bytes_stream())
     }
 
     /// Delete the space with the provided `id`

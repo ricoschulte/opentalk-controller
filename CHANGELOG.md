@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- controller: add an S3 storage interface for saving assets in a long-term storage ([#214](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/214))
+- whiteboard: save generated PDF files in S3 storage ([#225](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/225))
+
 ## [1.0.0-rc.8] - 2022-11-10
 
 ### Added
@@ -139,6 +146,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - initial release candidate
 
+[Unreleased]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.8...main
 [1.0.0-rc.8]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.7...v1.0.0-rc.8
 [1.0.0-rc.7]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.6...v1.0.0-rc.7
 [1.0.0-rc.6]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.5...v1.0.0-rc.6

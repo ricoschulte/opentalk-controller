@@ -1,17 +1,24 @@
-use serde::Serialize;
+use db_storage::assets::AssetId;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "message")]
 pub enum Message {
     SpaceUrl(AccessUrl),
-    PdfUrl(AccessUrl),
+    PdfAsset(PdfAsset),
     Error(Error),
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 pub struct AccessUrl {
     pub url: Url,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PdfAsset {
+    pub filename: String,
+    pub asset_id: AssetId,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]

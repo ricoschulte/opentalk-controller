@@ -1,6 +1,19 @@
 table! {
     use crate::sql_types::*;
 
+    assets (id) {
+        id -> Uuid,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        namespace -> Nullable<Varchar>,
+        kind -> Varchar,
+        filename -> Varchar,
+    }
+}
+
+table! {
+    use crate::sql_types::*;
+
     casbin_rule (id) {
         id -> Int4,
         ptype -> Varchar,
@@ -147,6 +160,15 @@ table! {
 table! {
     use crate::sql_types::*;
 
+    room_assets (room_id, asset_id) {
+        room_id -> Uuid,
+        asset_id -> Uuid,
+    }
+}
+
+table! {
+    use crate::sql_types::*;
+
     rooms (id) {
         id -> Uuid,
         id_serial -> Int8,
@@ -210,12 +232,15 @@ joinable!(events -> rooms (room));
 joinable!(invites -> rooms (room));
 joinable!(legal_votes -> rooms (room));
 joinable!(legal_votes -> users (created_by));
+joinable!(room_assets -> assets (asset_id));
+joinable!(room_assets -> rooms (room_id));
 joinable!(rooms -> users (created_by));
 joinable!(sip_configs -> rooms (room));
 joinable!(user_groups -> groups (group_id));
 joinable!(user_groups -> users (user_id));
 
 allow_tables_to_appear_in_same_query!(
+    assets,
     casbin_rule,
     event_email_invites,
     event_exceptions,
@@ -226,6 +251,7 @@ allow_tables_to_appear_in_same_query!(
     invites,
     legal_votes,
     refinery_schema_history,
+    room_assets,
     rooms,
     sip_configs,
     user_groups,

@@ -633,6 +633,10 @@ where
                 room_id.resource_id().with_suffix("/start"),
                 [AccessMethod::Post],
             )
+            .add_resource(
+                room_id.resource_id().with_suffix("/assets/*"),
+                [AccessMethod::Get],
+            )
     }
 
     fn room_write_access(self, room_id: RoomId) -> Self {
@@ -647,6 +651,10 @@ where
         .add_resource(
             room_id.resource_id().with_suffix("/invites/*"),
             [AccessMethod::GET, AccessMethod::PUT, AccessMethod::DELETE],
+        )
+        .add_resource(
+            room_id.resource_id().with_suffix("/assets/*"),
+            [AccessMethod::Delete],
         )
     }
 }

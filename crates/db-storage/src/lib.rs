@@ -29,6 +29,7 @@ use diesel::sql_types::Text;
 mod macros;
 mod schema;
 
+pub mod assets;
 pub mod events;
 pub mod groups;
 pub mod invites;

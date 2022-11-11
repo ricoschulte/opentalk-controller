@@ -130,6 +130,17 @@ from_routing_key = "from-janus"
 # in the international format.
 #default_country_code="DE"
 
+# MinIO configuration
+[minio]
+# The URI to the MinIO instance
+uri = "http://localhost:9555"
+# Name of the bucket
+# The bucket has to be created manually before starting the controller
+bucket = "opentalk"
+# Access key for the MinIO bucket
+access_key = "access_key"
+# Secret key for the MinIO bucket
+secret_key = "secret_key"
 
 # The etherpad configuration for the protocol module
 #[etherpad]
