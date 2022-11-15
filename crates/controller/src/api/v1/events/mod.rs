@@ -242,9 +242,6 @@ pub struct EventResource {
     #[serde(rename = "type")]
     pub type_: EventType,
 
-    /// Status of the event. `ok` by default but may be `cancelled`
-    pub status: EventStatus,
-
     /// The invite status of the current user for this event
     pub invite_status: EventInviteStatus,
 
@@ -695,7 +692,6 @@ fn create_time_independent_event(
         ends_at: None,
         recurrence_pattern: vec![],
         type_: EventType::Single,
-        status: EventStatus::Ok,
         invite_status: EventInviteStatus::Accepted,
         is_favorite: false,
         can_edit: true, // just created by the current user
@@ -773,7 +769,6 @@ fn create_time_dependent_event(
         } else {
             EventType::Single
         },
-        status: EventStatus::Ok,
         invite_status: EventInviteStatus::Accepted,
         is_favorite: false,
         can_edit: true, // just created by the current user
@@ -1006,7 +1001,6 @@ pub async fn get_events(
                 } else {
                     EventType::Single
                 },
-                status: EventStatus::Ok,
                 invite_status,
                 is_favorite,
                 can_edit,
@@ -1117,7 +1111,6 @@ pub async fn get_event(
             } else {
                 EventType::Single
             },
-            status: EventStatus::Ok,
             invite_status: invite
                 .map(|inv| inv.status)
                 .unwrap_or(EventInviteStatus::Accepted),
@@ -1385,7 +1378,6 @@ pub async fn patch_event(
                 } else {
                     EventType::Single
                 },
-                status: EventStatus::Ok,
                 invite_status: invite
                     .map(|inv| inv.status)
                     .unwrap_or(EventInviteStatus::Accepted),
@@ -2158,7 +2150,6 @@ mod tests {
             }),
             recurrence_pattern: vec![],
             type_: EventType::Single,
-            status: EventStatus::Ok,
             invite_status: EventInviteStatus::Accepted,
             is_favorite: false,
             can_edit: true,
@@ -2222,7 +2213,6 @@ mod tests {
                     "timezone": "Europe/Berlin"
                 },
                 "type": "single",
-                "status": "ok",
                 "invite_status": "accepted",
                 "is_favorite": false,
                 "can_edit": true,
@@ -2273,7 +2263,6 @@ mod tests {
             ends_at: None,
             recurrence_pattern: vec![],
             type_: EventType::Single,
-            status: EventStatus::Ok,
             invite_status: EventInviteStatus::Accepted,
             is_favorite: true,
             can_edit: false,
@@ -2328,7 +2317,6 @@ mod tests {
                 ],
                 "is_time_independent": true,
                 "type": "single",
-                "status": "ok",
                 "invite_status": "accepted",
                 "is_favorite": true,
                 "can_edit": false,
