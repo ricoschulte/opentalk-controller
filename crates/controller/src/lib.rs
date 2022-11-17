@@ -547,12 +547,18 @@ fn v1_scope(
         .service(api::v1::rooms::start_invited)
         .service(api::v1::invites::verify_invite_code)
         .service(api::v1::turn::get)
-        .service(api::v1::rooms::sip_start)
+        .service(
+            web::scope("/services")
+                .wrap(api::v1::middleware::service_auth::ServiceAuth::new(
+                    oidc_ctx.clone(),
+                ))
+                .service(api::v1::services::call_in::services()),
+        )
         .service(
             // empty scope to differentiate between auth endpoints
             web::scope("")
                 .wrap(acl)
-                .wrap(api::v1::middleware::oidc_auth::OidcAuth { db, oidc_ctx })
+                .wrap(api::v1::middleware::user_auth::OidcAuth { db, oidc_ctx })
                 .service(api::v1::users::find)
                 .service(api::v1::users::patch_me)
                 .service(api::v1::users::get_me)
@@ -599,7 +605,7 @@ fn internal_scope(db: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
     // internal apis
     web::scope("/internal").service(
         web::scope("")
-            .wrap(api::v1::middleware::oidc_auth::OidcAuth { db, oidc_ctx })
+            .wrap(api::v1::middleware::user_auth::OidcAuth { db, oidc_ctx })
             .service(api::internal::rooms::delete),
     )
 }

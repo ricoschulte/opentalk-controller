@@ -1,4 +1,4 @@
-use crate::api::v1::middleware::oidc_auth::check_access_token;
+use crate::api::v1::middleware::user_auth::check_access_token;
 use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json};
 use actix_web::{post, HttpResponse};

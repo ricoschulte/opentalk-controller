@@ -1,64 +1,74 @@
-//! Handles user Authentication in API requests
 use crate::api::v1::response::error::AuthenticationError;
 use crate::api::v1::response::ApiError;
-use crate::oidc::OidcContext;
+use crate::oidc::{OidcContext, ServiceClaims};
+use actix_http::header::Header;
+use actix_http::HttpMessage;
 use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::error::Error;
-use actix_web::http::header::Header;
 use actix_web::web::Data;
-use actix_web::{HttpMessage, ResponseError};
+use actix_web::ResponseError;
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
-use core::future::ready;
-use database::Db;
-use db_storage::users::User;
+use core::future::{ready, Future, Ready};
+use core::pin::Pin;
+use core::task::{Context, Poll};
 use openidconnect::AccessToken;
-use std::future::{Future, Ready};
-use std::pin::Pin;
 use std::rc::Rc;
-use std::task::{Context, Poll};
-use tracing_futures::Instrument;
+use tracing::Instrument;
 
-/// Middleware factory
+/// Contains a list of string representing the service-account's roles in a realm
 ///
-/// Transforms into [`OidcAuthMiddleware`]
-pub struct OidcAuth {
-    pub db: Data<Db>,
-    pub oidc_ctx: Data<OidcContext>,
+/// Roles can be used to represent certain permissions a service-account has
+#[derive(Clone)]
+pub struct RealmRoles(Rc<[String]>);
+
+impl RealmRoles {
+    pub fn contains(&self, role: &str) -> bool {
+        self.0.iter().any(|r| r == role)
+    }
 }
 
-impl<S> Transform<S, ServiceRequest> for OidcAuth
+/// Middleware factory for [`ServiceAuthMiddleware`]
+pub struct ServiceAuth {
+    oidc_ctx: Data<OidcContext>,
+}
+
+impl ServiceAuth {
+    pub fn new(oidc_ctx: Data<OidcContext>) -> Self {
+        Self { oidc_ctx }
+    }
+}
+
+impl<S> Transform<S, ServiceRequest> for ServiceAuth
 where
     S: Service<ServiceRequest, Response = ServiceResponse, Error = Error> + 'static,
     S::Future: 'static,
 {
     type Response = ServiceResponse;
     type Error = Error;
-    type Transform = OidcAuthMiddleware<S>;
+    type Transform = ServiceAuthMiddleware<S>;
     type InitError = ();
     type Future = Ready<Result<Self::Transform, Self::InitError>>;
 
     fn new_transform(&self, service: S) -> Self::Future {
-        ready(Ok(OidcAuthMiddleware {
+        ready(Ok(ServiceAuthMiddleware {
             service: Rc::new(service),
-            db: self.db.clone(),
             oidc_ctx: self.oidc_ctx.clone(),
         }))
     }
 }
 
-/// Authentication middleware
+/// Middleware which extracts and verifies an access-token from the request
 ///
-/// Whenever an API request is received, the OidcAuthMiddleware will validate the access
-/// token and provide the associated user as [`ReqData`](actix_web::web::ReqData) for the subsequent services.
-pub struct OidcAuthMiddleware<S> {
+/// Inserts a `RealmRoles` struct into the request for other services to inspect.
+pub struct ServiceAuthMiddleware<S> {
     service: Rc<S>,
-    db: Data<Db>,
+
     oidc_ctx: Data<OidcContext>,
 }
 
 type ResultFuture<O, E> = Pin<Box<dyn Future<Output = Result<O, E>>>>;
 
-impl<S> Service<ServiceRequest> for OidcAuthMiddleware<S>
+impl<S> Service<ServiceRequest> for ServiceAuthMiddleware<S>
 where
     S: Service<ServiceRequest, Response = ServiceResponse, Error = Error> + 'static,
     S::Future: 'static,
@@ -73,11 +83,9 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
-        let db = self.db.clone();
         let oidc_ctx = self.oidc_ctx.clone();
 
-        let parse_match_span =
-            tracing::span!(tracing::Level::TRACE, "Authorization::<Bearer>::parse");
+        let parse_match_span = tracing::trace_span!("Authorization::<Bearer>::parse");
 
         let _enter = parse_match_span.enter();
         let auth = match Authorization::<Bearer>::parse(&req) {
@@ -97,50 +105,28 @@ where
 
         Box::pin(
             async move {
-                let current_user = check_access_token(db, oidc_ctx, access_token).await?;
-                req.extensions_mut()
-                    .insert(kustos::actix_web::User::from(current_user.id.into_inner()));
-                req.extensions_mut().insert(current_user);
+                let realm_roles = check_access_token(oidc_ctx, access_token).await?;
+                req.extensions_mut().insert(realm_roles);
                 service.call(req).await
             }
-            .instrument(tracing::trace_span!("OidcAuthMiddleware::async::call")),
+            .instrument(tracing::trace_span!("ServiceAuthMiddleware::async::call")),
         )
     }
 }
 
 #[tracing::instrument(skip_all)]
-pub async fn check_access_token(
-    db: Data<Db>,
+async fn check_access_token(
     oidc_ctx: Data<OidcContext>,
     access_token: AccessToken,
-) -> Result<User, ApiError> {
-    let (issuer, sub) = match oidc_ctx.verify_access_token(&access_token) {
-        Ok(sub) => sub,
+) -> Result<RealmRoles, ApiError> {
+    let claims = match oidc_ctx.verify_access_token::<ServiceClaims>(&access_token) {
+        Ok(claims) => claims,
         Err(e) => {
             log::error!("Invalid access token, {}", e);
             return Err(ApiError::unauthorized()
                 .with_www_authenticate(AuthenticationError::InvalidAccessToken));
         }
     };
-
-    let current_user = crate::block(move || {
-        let mut conn = db.get_conn()?;
-
-        match User::get_by_oidc_sub(&mut conn, &issuer, &sub)? {
-            Some(user) => Ok(user),
-            None => Err(ApiError::unauthorized()
-                .with_code("unknown_sub")
-                .with_message("Unknown subject in access token. Please login first!")),
-        }
-    })
-    .await??;
-
-    // check if the id token is expired
-    if chrono::Utc::now().timestamp() > current_user.id_token_exp {
-        return Err(ApiError::unauthorized()
-            .with_message("The session for this user has expired")
-            .with_www_authenticate(AuthenticationError::SessionExpired));
-    }
 
     let info = match oidc_ctx.introspect_access_token(&access_token).await {
         Ok(info) => info,
@@ -151,7 +137,12 @@ pub async fn check_access_token(
     };
 
     if info.active {
-        Ok(current_user)
+        let mut realm_roles = claims.realm_access.roles;
+        realm_roles
+            .iter_mut()
+            .for_each(|role| role.make_ascii_lowercase());
+
+        Ok(RealmRoles(realm_roles.into()))
     } else {
         Err(ApiError::unauthorized()
             .with_www_authenticate(AuthenticationError::AccessTokenInactive))

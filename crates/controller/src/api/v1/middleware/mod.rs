@@ -1,4 +1,5 @@
 //! Actix middleware implementations
 pub mod headers;
 pub mod metrics;
-pub mod oidc_auth;
+pub mod service_auth;
+pub mod user_auth;

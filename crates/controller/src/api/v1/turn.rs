@@ -1,6 +1,6 @@
 //! TURN related API structs and Endpoints
 use super::response::ApiError;
-use crate::api::v1::middleware::oidc_auth::check_access_token;
+use crate::api::v1::middleware::user_auth::check_access_token;
 use crate::api::v1::response::error::AuthenticationError;
 use crate::api::v1::response::NoContent;
 use crate::oidc::OidcContext;

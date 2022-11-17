@@ -5,10 +5,12 @@ use http::async_http_client;
 use openidconnect::{AccessToken, TokenIntrospectionResponse};
 use provider::ProviderClient;
 
+mod claims;
 mod http;
 mod jwt;
 mod provider;
 
+pub use claims::{ServiceClaims, UserClaims};
 pub use jwt::VerifyError;
 
 /// The `OidcContext` contains all information about the Oidc provider and permissions matrix.
@@ -43,16 +45,14 @@ impl OidcContext {
     /// Note: This does __not__ check if the token is active or has been revoked.
     /// See `verify_access_token_active`.
     #[tracing::instrument(name = "oidc_verify_access_token", skip(self, access_token))]
-    pub fn verify_access_token(
+    pub fn verify_access_token<C: jwt::VerifyClaims>(
         &self,
         access_token: &AccessToken,
-    ) -> Result<(String, String), VerifyError> {
-        let claims = jwt::verify(
+    ) -> Result<C, VerifyError> {
+        jwt::verify::<C>(
             self.provider.metadata.jwks(),
             access_token.secret().as_str(),
-        )?;
-
-        Ok((claims.iss, claims.sub))
+        )
     }
 
     /// Verify that an AccessToken is active using the providers `token_introspect` endpoint.
@@ -86,7 +86,7 @@ impl OidcContext {
     /// Returns an error if `id_token` is invalid or expired
     #[tracing::instrument(name = "oidc_verify_id_token", skip(self, id_token))]
     pub fn verify_id_token(&self, id_token: &str) -> Result<IdTokenInfo, VerifyError> {
-        let claims = jwt::verify(self.provider.metadata.jwks(), id_token)?;
+        let claims = jwt::verify::<UserClaims>(self.provider.metadata.jwks(), id_token)?;
 
         Ok(IdTokenInfo {
             sub: claims.sub,
