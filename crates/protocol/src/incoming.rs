@@ -6,6 +6,8 @@ use serde::Deserialize;
 pub enum Message {
     SelectWriter(ParticipantSelection),
     DeselectWriter(ParticipantSelection),
+    /// Generates a pdf of the current protocol contents.
+    GeneratePdf,
 }
 
 /// Give a list of participants write access to the protocol
@@ -56,6 +58,18 @@ mod test {
             assert_eq!(participant_ids[1], ParticipantId::new_test(1));
         } else {
             panic!("expected SelectWriter variant");
+        }
+    }
+
+    #[test]
+    fn generate_pdf() {
+        let json = serde_json::json!({
+            "action": "generate_pdf"
+        });
+
+        if let Message::GeneratePdf = serde_json::from_value(json).unwrap() {
+        } else {
+            panic!("expected GeneratePdf variant");
         }
     }
 }

@@ -1,6 +1,7 @@
 use bytes::Bytes;
 
 use anyhow::{bail, Context, Result};
+use futures::Stream;
 use reqwest::header::COOKIE;
 use reqwest::{Client, Response, StatusCode, Url};
 use serde::Deserialize;
@@ -261,12 +262,16 @@ impl EtherpadClient {
         Ok(())
     }
 
-    /// Export the current content of the pad as PDF document
+    /// Download the current content of the pad as PDF document
     ///
     /// Because this is not an API endpoint, a session id has to be provided.
     ///
     /// Returns the PDF document as bytes
-    pub async fn export_pdf(&self, session_id: &str, readonly_pad_id: &str) -> Result<Bytes> {
+    pub async fn download_pdf(
+        &self,
+        session_id: &str,
+        readonly_pad_id: &str,
+    ) -> Result<impl Stream<Item = reqwest::Result<Bytes>> + std::marker::Unpin> {
         let url = self
             .base_url
             .join(&format!("p/{}/export/pdf", readonly_pad_id))?;
@@ -288,7 +293,7 @@ impl EtherpadClient {
             ),
         }
 
-        Ok(response.bytes().await?)
+        Ok(response.bytes_stream())
     }
 
     /// The auth_session endpoint sets the session cookie on the client browser and forwards

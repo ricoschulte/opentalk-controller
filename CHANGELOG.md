@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - controller: add an S3 storage interface for saving assets in a long-term storage ([#214](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/214))
 - whiteboard: save generated PDF files in S3 storage ([#225](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/225))
+- protocol: save generated PDF files in S3 storage ([#258](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/258))
 
 ### Removed
 
