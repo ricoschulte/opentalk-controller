@@ -72,6 +72,7 @@ mod test {
             "allowed_participants": ["00000000-0000-0000-0000-000000000000"],
             "enable_abstain": false,
             "auto_stop": false,
+            "hidden": false,
             "duration": 60 
         }
         "#;
@@ -84,6 +85,7 @@ mod test {
             topic,
             allowed_participants,
             enable_abstain,
+            hidden,
             auto_stop,
             duration: time_in_sec,
         }) = start
@@ -93,6 +95,7 @@ mod test {
             assert_eq!("Yes or No?", topic);
             assert_eq!(allowed_participants, vec![ParticipantId::nil()]);
             assert!(!enable_abstain);
+            assert!(!hidden);
             assert!(!auto_stop);
             assert_eq!(time_in_sec, Some(60));
         } else {
@@ -229,6 +232,7 @@ mod test {
             "topic": "{}",
             "allowed_participants": [],
             "enable_abstain": false,
+            "hidden": false,
             "auto_stop": false,
             "duration": 4 
         }}

@@ -1,3 +1,4 @@
+use crate::outgoing;
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::{CancelReason, FinalResults, Parameters, VoteOption};
 use db_storage::legal_votes::LegalVoteId;
@@ -12,7 +13,7 @@ pub enum Event {
     /// A participant has successfully voted, the message gets dispatched to the underlying user id
     Voted(VoteSuccess),
     /// A vote has been stopped
-    Stop(Stop),
+    Stop(outgoing::Stopped),
     /// A vote has been canceled
     Cancel(Canceled),
     /// The results for a vote have changed

@@ -56,13 +56,23 @@ pub struct Start {
     pub parameters: Parameters,
 }
 
-/// A vote entry mapped to a specific user
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Vote {
+pub struct UserInfo {
     /// The user id of the voting user
     pub issuer: UserId,
     /// The users participant id, used when reducing the protocol for the frontend
     pub participant_id: ParticipantId,
+}
+
+/// A vote entry mapped to a specific user
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Vote {
+    /// User info of the voting participant
+    ///
+    /// Is `None` if the vote is hidden
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(flatten)]
+    pub user_info: Option<UserInfo>,
     /// The chosen vote option
     pub option: VoteOption,
 }

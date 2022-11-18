@@ -5,7 +5,7 @@
 //! Offers full legal vote features including live voting with high safety guards (atomic changes, audit log).
 //! Stores the result for further archival storage in postgres.
 use anyhow::Context;
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
@@ -14,6 +14,7 @@ use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::legal_votes::set_protocol;
 use db_storage::legal_votes::types::protocol as db_protocol;
+use db_storage::legal_votes::types::protocol::v1::UserInfo;
 use db_storage::legal_votes::types::protocol::v1::{Cancel, ProtocolEntry, Start, Vote, VoteEvent};
 use db_storage::legal_votes::types::protocol::NewProtocol;
 use db_storage::legal_votes::types::{
@@ -23,6 +24,7 @@ use db_storage::legal_votes::NewLegalVote;
 
 use db_storage::legal_votes::LegalVoteId;
 use db_storage::users::UserId;
+use either::Either;
 use error::{Error, ErrorKind};
 use incoming::VoteMessage;
 use kustos::prelude::AccessMethod;
@@ -377,31 +379,8 @@ impl LegalVote {
             rabbitmq::Event::Start(parameters) => {
                 ctx.ws_send(outgoing::Message::Started(parameters));
             }
-            rabbitmq::Event::Stop(stop) => {
-                let final_results = match stop.results {
-                    FinalResults::Valid(votes) => {
-                        let protocol = storage::protocol::get(
-                            ctx.redis_conn(),
-                            self.room_id,
-                            stop.legal_vote_id,
-                        )
-                        .await?;
-
-                        outgoing::FinalResults::Valid(outgoing::Results {
-                            votes,
-                            voters: reduce_protocol(protocol),
-                        })
-                    }
-                    FinalResults::Invalid(invalid) => outgoing::FinalResults::Invalid(invalid),
-                };
-
-                let stop = outgoing::Stopped {
-                    legal_vote_id: stop.legal_vote_id,
-                    kind: stop.kind,
-                    results: final_results,
-                };
-
-                ctx.ws_send(outgoing::Message::Stopped(stop));
+            rabbitmq::Event::Stop(stopped) => {
+                ctx.ws_send(outgoing::Message::Stopped(stopped));
             }
             rabbitmq::Event::Voted(vote_success) => {
                 ctx.ws_send(outgoing::Message::Voted(VoteResponse {
@@ -513,7 +492,7 @@ impl LegalVote {
         let mut invalid_participants = Vec::new();
         let mut users = Vec::new();
 
-        for (index, maybe_user_id) in allowed_users.into_iter().enumerate() {
+        for (participant_id, maybe_user_id) in allowed_participants.iter().zip(allowed_users) {
             match maybe_user_id {
                 Some(user_id) => {
                     if !users.contains(&user_id) {
@@ -521,15 +500,7 @@ impl LegalVote {
                     }
                 }
                 None => {
-                    if let Some(participant) = allowed_participants.get(index).copied() {
-                        invalid_participants.push(participant);
-                    } else {
-                        // this should never occur
-                        log::error!(
-                            "Inconsistency in legal vote when checking allowed participants"
-                        );
-                        return Err(Error::Vote(ErrorKind::Inconsistency));
-                    }
+                    invalid_participants.push(*participant_id);
                 }
             }
         }
@@ -650,9 +621,17 @@ impl LegalVote {
             ));
         }
 
+        let user_info = if parameters.inner.hidden {
+            None
+        } else {
+            Some(UserInfo {
+                issuer: self.user_id,
+                participant_id: self.participant_id,
+            })
+        };
+
         let vote_event = Vote {
-            issuer: self.user_id,
-            participant_id: self.participant_id,
+            user_info,
             option: vote_message.option,
         };
 
@@ -764,12 +743,21 @@ impl LegalVote {
         )
         .await?;
 
-        let protocol = storage::protocol::get(redis_conn, self.room_id, legal_vote_id).await?;
+        let voters = if parameters.inner.hidden {
+            None
+        } else {
+            let protocol = storage::protocol::get(redis_conn, self.room_id, legal_vote_id).await?;
 
-        Ok(outgoing::Results {
-            votes,
-            voters: reduce_protocol(protocol),
-        })
+            let vote_list = reduce_protocol(protocol)?;
+
+            if let Some(list) = vote_list.left() {
+                Some(list)
+            } else {
+                return Err(anyhow!("Failed to get voters from vote protocol").into());
+            }
+        };
+
+        Ok(outgoing::Results { votes, voters })
     }
 
     /// Cancel a vote
@@ -828,9 +816,22 @@ impl LegalVote {
 
         let final_results = self.validate_vote_results(ctx, legal_vote_id).await?;
 
-        let result_entry = ProtocolEntry::new(VoteEvent::FinalResults(final_results));
+        let final_results_entry = match &final_results {
+            outgoing::FinalResults::Valid(results) => {
+                ProtocolEntry::new(VoteEvent::FinalResults(FinalResults::Valid(results.votes)))
+            }
+            outgoing::FinalResults::Invalid(invalid) => {
+                ProtocolEntry::new(VoteEvent::FinalResults(FinalResults::Invalid(*invalid)))
+            }
+        };
 
-        protocol::add_entry(ctx.redis_conn(), self.room_id, legal_vote_id, result_entry).await?;
+        protocol::add_entry(
+            ctx.redis_conn(),
+            self.room_id,
+            legal_vote_id,
+            final_results_entry,
+        )
+        .await?;
 
         self.save_protocol_in_database(ctx.redis_conn(), legal_vote_id)
             .await?;
@@ -838,7 +839,7 @@ impl LegalVote {
         ctx.rabbitmq_publish(
             control::rabbitmq::current_room_exchange_name(self.room_id),
             control::rabbitmq::room_all_routing_key().into(),
-            rabbitmq::Event::Stop(rabbitmq::Stop {
+            rabbitmq::Event::Stop(outgoing::Stopped {
                 legal_vote_id,
                 kind: stop_kind,
                 results: final_results,
@@ -849,18 +850,30 @@ impl LegalVote {
     }
 
     /// Checks if the vote results for `legal_vote_id` are equal to the protocols vote entries.
+    ///
+    /// Returns
     async fn validate_vote_results(
         &self,
         ctx: &mut ModuleContext<'_, Self>,
         legal_vote_id: LegalVoteId,
-    ) -> Result<FinalResults, Error> {
+    ) -> Result<outgoing::FinalResults, Error> {
         let parameters = storage::parameters::get(ctx.redis_conn(), self.room_id, legal_vote_id)
             .await?
             .ok_or(ErrorKind::InvalidVoteId)?;
 
         let protocol =
             storage::protocol::get(ctx.redis_conn(), self.room_id, legal_vote_id).await?;
-        let voters = reduce_protocol(protocol);
+        let vote_list = reduce_protocol(protocol)?;
+
+        let vote_options = vote_list.as_ref().either(
+            |voters| {
+                voters
+                    .iter()
+                    .map(|(_, vote_option)| *vote_option)
+                    .collect::<Vec<VoteOption>>()
+            },
+            |vote_list| vote_list.clone(),
+        );
 
         let mut protocol_vote_count = Votes {
             yes: 0,
@@ -876,7 +889,7 @@ impl LegalVote {
 
         let mut total_votes = 0;
 
-        for (_, vote_option) in voters {
+        for vote_option in &vote_options {
             total_votes += 1;
 
             match vote_option {
@@ -886,7 +899,7 @@ impl LegalVote {
                     if let Some(abstain) = &mut protocol_vote_count.abstain {
                         *abstain += 1;
                     } else {
-                        return Ok(FinalResults::Invalid(Invalid::AbstainDisabled));
+                        return Ok(outgoing::FinalResults::Invalid(Invalid::AbstainDisabled));
                     }
                 }
             }
@@ -900,10 +913,23 @@ impl LegalVote {
         )
         .await?;
 
-        if protocol_vote_count == vote_count && total_votes <= parameters.max_votes {
-            Ok(FinalResults::Valid(vote_count))
+        let voters = if parameters.inner.hidden {
+            None
+        } else if let Either::Left(voters) = vote_list {
+            Some(voters)
         } else {
-            Ok(FinalResults::Invalid(Invalid::VoteCountInconsistent))
+            return Err(anyhow!("Failed to get voters from vote protocol").into());
+        };
+
+        if protocol_vote_count == vote_count && total_votes <= parameters.max_votes {
+            Ok(outgoing::FinalResults::Valid(outgoing::Results {
+                votes: vote_count,
+                voters,
+            }))
+        } else {
+            Ok(outgoing::FinalResults::Invalid(
+                Invalid::VoteCountInconsistent,
+            ))
         }
     }
 

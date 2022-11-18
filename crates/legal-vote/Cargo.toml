@@ -13,6 +13,7 @@ database = { path = "../database", package = "k3k-database" }
 serde = { version = "1", features = ["derive"] }
 validator = { version = "0.15", features = ["derive"] }
 kustos = { path = "../kustos" }
+either = "1.8"
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util" }
