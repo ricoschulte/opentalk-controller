@@ -458,6 +458,7 @@ pub struct UpdateEvent {
     pub duration_secs: Option<Option<i32>>,
     pub is_recurring: Option<Option<bool>>,
     pub recurrence_pattern: Option<Option<String>>,
+    pub is_adhoc: Option<bool>,
 }
 
 impl UpdateEvent {

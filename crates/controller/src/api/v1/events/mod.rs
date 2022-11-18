@@ -1459,6 +1459,7 @@ fn patch_event_change_to_time_dependent(
             duration_secs: Some(duration_secs),
             is_recurring: Some(Some(recurrence_pattern.is_some())),
             recurrence_pattern: Some(recurrence_pattern),
+            is_adhoc: patch.is_adhoc,
         })
     } else {
         const MSG: Option<&str> = Some("Must be provided when changing to time dependent events");
@@ -1553,6 +1554,7 @@ fn patch_time_independent_event(
         duration_secs: Some(None),
         is_recurring: Some(None),
         recurrence_pattern: Some(None),
+        is_adhoc: patch.is_adhoc,
     })
 }
 
@@ -1600,6 +1602,7 @@ fn patch_time_dependent_event(
         ends_at_tz: Some(Some(ends_at_tz)),
         duration_secs: Some(duration_secs),
         is_recurring: Some(Some(recurrence_pattern.is_some())),
+        is_adhoc: patch.is_adhoc,
         recurrence_pattern: Some(recurrence_pattern),
     })
 }
