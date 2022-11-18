@@ -1,5 +1,5 @@
 use super::ObjectStorage;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use aws_sdk_s3::types::ByteStream;
 use bytes::Bytes;
 use database::Db;
@@ -28,7 +28,10 @@ pub async fn save_asset(
     let asset_id = AssetId::from(Uuid::new_v4());
 
     // upload to s3 storage
-    storage.put(&asset_key(&asset_id), data).await?;
+    storage
+        .put(&asset_key(&asset_id), data)
+        .await
+        .context("failed to upload asset file to storage")?;
 
     // create db entry
     let block_result = crate::block(move || {
