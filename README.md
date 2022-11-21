@@ -29,7 +29,6 @@ SUBCOMMANDS:
                   starting the controller using this command
 ```
 
-
 ## Build the container image
 
 The `Dockerfile` is located at `container/Dockerfile`.
@@ -43,9 +42,15 @@ To build the image, execute in the root of the repository:
 
 ## Configuration
 
-k3k-controller looks for a config file at ./config.toml.
-There is an example config file in extra/example.toml
-You can specify a different config file using the `-c` argument.
+k3k-controller looks for a config file `./config.toml` in the project root.
+
+There is an example config file in `extra/example.toml` that can be copied:
+
+```sh
+cp ./extra/example.toml ./config.toml
+```
+
+You can specify a different config file using the `-c` argument:
 
 ```sh
 k3k-controller -c other_config.toml
@@ -53,22 +58,28 @@ k3k-controller -c other_config.toml
 
 Settings specified in the config file can be overwritten by environment variables.
 To do so, set an environment variable with the prefix `K3K_CTRL_` followed by the field names you want to set.
-nested fields are separated by two underscores `__`.
+Nested fields are separated by two underscores `__`.
+
 ```sh
 K3K_CTRL_<field>__<field-of-field>...
 ```
+
 ### Example
 
 set the `database.url` field:
+
 ```sh
 K3K_CTRL_DATABASE__URL=postgres://k3k:s3cur3_p4ssw0rd@localhost:5432/k3k
 ```
 
 So the field 'database.max_connections' would resolve to:
+
 ```sh
 K3K_CTRL_DATABASE__MAX_CONNECTIONS=5
 ```
+
 ### Note
+
 Fields set via environment variables do not affect the underlying config file.
 
 ## Upgrading
@@ -80,7 +91,6 @@ After installing/deploying the new version you can run the `fix-acl` subcommand 
 A couple of ACLs can be set via the binary. For this use the `acl` subcommand.
 Currently only room access is a supported option for this subcommand.
 This subcommand is expected to change frequently when more features for access rules (e.g. invites) getting implemented.
-
 
 ## Sub-crates
 
