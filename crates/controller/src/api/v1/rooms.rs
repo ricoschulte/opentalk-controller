@@ -490,6 +490,10 @@ where
                 [AccessMethod::Post],
             )
             .add_resource(
+                room_id.resource_id().with_suffix("/assets"),
+                [AccessMethod::Get],
+            )
+            .add_resource(
                 room_id.resource_id().with_suffix("/assets/*"),
                 [AccessMethod::Get],
             )
@@ -507,6 +511,10 @@ where
         .add_resource(
             room_id.resource_id().with_suffix("/invites/*"),
             [AccessMethod::GET, AccessMethod::PUT, AccessMethod::DELETE],
+        )
+        .add_resource(
+            room_id.resource_id().with_suffix("/assets"),
+            [AccessMethod::Delete],
         )
         .add_resource(
             room_id.resource_id().with_suffix("/assets/*"),

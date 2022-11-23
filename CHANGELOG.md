@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller: introduce `v1/services/..` path for service related endpoints.
 - controller: move call-in's start endpoint from `v1/rooms/sip/start` to `v1/services/call_in/start` to make use of the new service authentication.
 
+### Fixed
+
+- controller: added the missing permission suffix `/assets` when giving access to a room
+
 ## [1.0.0-rc.8] - 2022-11-10
 
 ### Added
