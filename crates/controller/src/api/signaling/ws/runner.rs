@@ -32,6 +32,7 @@ use database::Db;
 use db_storage::rooms::Room;
 use db_storage::users::{User, UserId};
 use futures::stream::SelectAll;
+use itertools::Itertools;
 use kustos::Authz;
 use lapin::message::DeliveryResult;
 use lapin::options::{ExchangeDeclareOptions, QueueDeclareOptions};
@@ -867,11 +868,6 @@ impl Runner {
                     return Ok(());
                 }
 
-                if join.display_name.is_empty() || join.display_name.len() > 255 {
-                    self.ws_send_control_error(timestamp, outgoing::Error::InvalidUsername)
-                        .await;
-                }
-
                 let (display_name, avatar_url) = match &self.participant {
                     api::Participant::User(user) => {
                         let avatar_url = Some(format!(
@@ -880,9 +876,9 @@ impl Runner {
                             md5::compute(&user.email)
                         ));
 
-                        (join.display_name, avatar_url)
+                        (trim_display_name(join.display_name), avatar_url)
                     }
-                    api::Participant::Guest => (join.display_name, None),
+                    api::Participant::Guest => (trim_display_name(join.display_name), None),
                     api::Participant::Sip => {
                         if let Some(call_in) = self.settings.load().call_in.as_ref() {
                             let display_name = sip::display_name(
@@ -895,10 +891,15 @@ impl Runner {
 
                             (display_name, None)
                         } else {
-                            (join.display_name, None)
+                            (trim_display_name(join.display_name), None)
                         }
                     }
                 };
+
+                if display_name.is_empty() || display_name.len() > 100 {
+                    self.ws_send_control_error(timestamp, outgoing::Error::InvalidUsername)
+                        .await;
+                }
 
                 self.set_control_attributes(timestamp, &display_name, avatar_url.as_deref())
                     .await?;
@@ -1832,5 +1833,30 @@ impl Ws {
                 Ok(None)
             }
         }
+    }
+}
+
+/// Trim leading, trailing, and extra whitespaces between a given display name.
+fn trim_display_name(display_name: String) -> String {
+    display_name.split_whitespace().join(" ")
+}
+
+#[cfg(test)]
+mod test {
+    use super::trim_display_name;
+
+    #[test]
+    fn trim_display_name_leading_spaces() {
+        assert_eq!("First Last", trim_display_name("  First Last".to_string()));
+    }
+
+    #[test]
+    fn trim_display_name_trailing_spaces() {
+        assert_eq!("First Last", trim_display_name("First Last  ".to_string()));
+    }
+
+    #[test]
+    fn trim_display_name_spaces_between() {
+        assert_eq!("First Last", trim_display_name("First  Last".to_string()));
     }
 }
