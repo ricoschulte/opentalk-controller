@@ -45,6 +45,12 @@ ignore = [
     # https://github.com/tokio-rs/tracing/pull/2040
     # https://github.com/colin-kiegel/rust-pretty-assertions/pull/102
     "RUSTSEC-2021-0139",
+
+    # genpdf unmaintained crates:
+    "RUSTSEC-2020-0144",
+    "RUSTSEC-2021-0140",
+    "RUSTSEC-2020-0020",
+    "RUSTSEC-2020-0056",
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
@@ -171,6 +177,14 @@ skip = [
     { name = "sct", version = "=0.6.1" },
     { name = "rustls", version = "=0.19.1" },
     { name = "hyper-rustls", version = "=0.22.1" },
+
+    # genpdf
+    { name = "itoa", version = "=0.4.8" },
+    { name = "rustc_version", version = "=0.2.3" },
+    { name = "semver", version = "=0.9.0" },
+    { name = "time", version = "=0.2.27" },
+    { name = "time-macros", version = "=0.1.1" },
+
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive

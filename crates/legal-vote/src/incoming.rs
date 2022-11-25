@@ -15,6 +15,9 @@ pub enum Message {
     Cancel(Cancel),
     /// Vote for an item on a vote
     Vote(VoteMessage),
+
+    /// Generate a PDF from a passed vote
+    GeneratePdf(GeneratePdf),
 }
 
 impl Validate for Message {
@@ -24,6 +27,7 @@ impl Validate for Message {
             Message::Stop(_) => Ok(()),
             Message::Cancel(cancel) => cancel.validate(),
             Message::Vote(_) => Ok(()),
+            Message::GeneratePdf(_) => Ok(()),
         }
     }
 }
@@ -54,30 +58,37 @@ pub struct VoteMessage {
     pub option: VoteOption,
 }
 
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct GeneratePdf {
+    pub legal_vote_id: LegalVoteId,
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
     use controller::prelude::*;
     use controller_shared::ParticipantId;
+    use test_util::serde_json::json;
     use uuid::Uuid;
 
     #[test]
     fn start_message() {
-        let json_str = r#"
-        {
-            "action": "start",
-            "name": "Vote Test",
-            "subtitle": "A subtitle",
-            "topic": "Yes or No?",
-            "allowed_participants": ["00000000-0000-0000-0000-000000000000"],
-            "enable_abstain": false,
-            "auto_stop": false,
-            "hidden": false,
-            "duration": 60 
-        }
-        "#;
+        let json = json!(
+            {
+                "action": "start",
+                "name": "Vote Test",
+                "subtitle": "A subtitle",
+                "topic": "Yes or No?",
+                "allowed_participants": ["00000000-0000-0000-0000-000000000000"],
+                "enable_abstain": false,
+                "auto_stop": false,
+                "hidden": false,
+                "duration": 60,
+                "create_pdf": false
+            }
+        );
 
-        let start: Message = serde_json::from_str(json_str).unwrap();
+        let start: Message = serde_json::from_value(json).unwrap();
 
         if let Message::Start(UserParameters {
             name,
@@ -88,6 +99,7 @@ mod test {
             hidden,
             auto_stop,
             duration: time_in_sec,
+            create_pdf,
         }) = start
         {
             assert_eq!("Vote Test", name);
@@ -98,6 +110,7 @@ mod test {
             assert!(!hidden);
             assert!(!auto_stop);
             assert_eq!(time_in_sec, Some(60));
+            assert!(!create_pdf);
         } else {
             panic!()
         }
@@ -105,14 +118,14 @@ mod test {
 
     #[test]
     fn stop_message() {
-        let json_str = r#"
-        {
-            "action": "stop",
-            "legal_vote_id": "00000000-0000-0000-0000-000000000000"
-        }
-        "#;
+        let json = json!(
+            {
+                "action": "stop",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000"
+            }
+        );
 
-        let stop: Message = serde_json::from_str(json_str).unwrap();
+        let stop: Message = serde_json::from_value(json).unwrap();
 
         if let Message::Stop(Stop { legal_vote_id }) = stop {
             assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)))
@@ -123,15 +136,15 @@ mod test {
 
     #[test]
     fn cancel_message() {
-        let json_str = r#"
-        {
-            "action": "cancel",
-            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-            "reason": "Something is broken"
-        }
-        "#;
+        let json = json!(
+            {
+                "action": "cancel",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "reason": "Something is broken"
+            }
+        );
 
-        let cancel: Message = serde_json::from_str(json_str).unwrap();
+        let cancel: Message = serde_json::from_value(json).unwrap();
 
         if let Message::Cancel(Cancel {
             legal_vote_id,
@@ -147,15 +160,15 @@ mod test {
 
     #[test]
     fn vote_yes_message() {
-        let json_str = r#"
-        {
-            "action": "vote",
-            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-            "option": "yes"
-        }
-        "#;
+        let json = json!(
+            {
+                "action": "vote",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "option": "yes"
+            }
+        );
 
-        let vote: Message = serde_json::from_str(json_str).unwrap();
+        let vote: Message = serde_json::from_value(json).unwrap();
 
         if let Message::Vote(VoteMessage {
             legal_vote_id,
@@ -171,15 +184,15 @@ mod test {
 
     #[test]
     fn vote_no_message() {
-        let json_str = r#"
-        {
-            "action": "vote",
-            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-            "option": "no"
-        }
-        "#;
+        let json = json!(
+            {
+                "action": "vote",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "option": "no"
+            }
+        );
 
-        let vote: Message = serde_json::from_str(json_str).unwrap();
+        let vote: Message = serde_json::from_value(json).unwrap();
 
         if let Message::Vote(VoteMessage {
             legal_vote_id,
@@ -195,15 +208,15 @@ mod test {
 
     #[test]
     fn vote_abstain_message() {
-        let json_str = r#"
-        {
-            "action": "vote",
-            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-            "option": "abstain"
-        }
-        "#;
+        let json = json!(
+            {
+                "action": "vote",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "option": "abstain"
+            }
+        );
 
-        let vote: Message = serde_json::from_str(json_str).unwrap();
+        let vote: Message = serde_json::from_value(json).unwrap();
 
         if let Message::Vote(VoteMessage {
             legal_vote_id,
@@ -223,24 +236,22 @@ mod test {
         let string_256 = "X".repeat(256);
         let string_501 = "X".repeat(501);
 
-        let json_str = format!(
-            r#"
-        {{
-            "action": "start",
-            "name": "{}",
-            "subtitle": "{}",
-            "topic": "{}",
-            "allowed_participants": [],
-            "enable_abstain": false,
-            "hidden": false,
-            "auto_stop": false,
-            "duration": 4 
-        }}
-        "#,
-            string_151, string_256, string_501
+        let json = json!(
+            {
+                "action": "start",
+                "name": string_151,
+                "subtitle": string_256,
+                "topic": string_501,
+                "allowed_participants": [],
+                "enable_abstain": false,
+                "hidden": false,
+                "auto_stop": false,
+                "duration": 4,
+                "create_pdf": false
+            }
         );
 
-        let start: Message = serde_json::from_str(&json_str).unwrap();
+        let start: Message = serde_json::from_value(json).unwrap();
 
         if let Err(validation_errors) = start.validate() {
             let errors = validation_errors.errors();
@@ -261,18 +272,15 @@ mod test {
     fn invalid_cancel_message() {
         let string_256 = "X".repeat(256);
 
-        let json_str = format!(
-            r#"
-        {{
-            "action": "cancel",
-            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-            "reason": "{}"
-        }}
-        "#,
-            string_256
+        let json = json!(
+            {
+                "action": "cancel",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "reason": string_256
+            }
         );
 
-        let cancel: Message = serde_json::from_str(&json_str).unwrap();
+        let cancel: Message = serde_json::from_value(json).unwrap();
 
         if let Err(validation_errors) = cancel.validate() {
             let errors = validation_errors.errors();

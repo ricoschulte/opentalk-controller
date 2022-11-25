@@ -35,6 +35,7 @@ async fn basic_vote() {
         hidden: false,
         auto_stop: false,
         duration: None,
+        create_pdf: false,
     };
 
     module_tester
@@ -248,6 +249,7 @@ async fn hidden_legal_vote() {
         hidden: true,
         auto_stop: false,
         duration: None,
+        create_pdf: false,
     };
 
     module_tester
@@ -457,6 +459,7 @@ async fn basic_vote_abstain() {
         hidden: false,
         auto_stop: false,
         duration: None,
+        create_pdf: false,
     };
 
     module_tester
@@ -670,6 +673,7 @@ async fn expired_vote() {
         hidden: false,
         auto_stop: false,
         duration: Some(5),
+        create_pdf: false,
     };
 
     module_tester
@@ -777,6 +781,7 @@ async fn auto_stop_vote() {
         hidden: false,
         auto_stop: true,
         duration: None,
+        create_pdf: false,
     };
 
     module_tester
@@ -988,6 +993,7 @@ async fn start_with_one_participant() {
         hidden: false,
         auto_stop: false,
         duration: None,
+        create_pdf: false,
     };
 
     module_tester
@@ -1015,6 +1021,7 @@ async fn start_with_empty_participants() {
         hidden: false,
         auto_stop: false,
         duration: None,
+        create_pdf: false,
     };
 
     module_tester
@@ -1091,6 +1098,7 @@ async fn ineligible_voter() {
         hidden: false,
         auto_stop: false,
         duration: None,
+        create_pdf: false,
     };
 
     module_tester
@@ -1148,6 +1156,7 @@ async fn start_with_allowed_guest() {
         hidden: false,
         auto_stop: false,
         duration: None,
+        create_pdf: false,
     };
 
     // start vote with user 1
@@ -1277,6 +1286,7 @@ async fn vote_twice() {
         hidden: false,
         auto_stop: false,
         duration: None,
+        create_pdf: false,
     };
 
     // start vote with user 1
@@ -1478,6 +1488,7 @@ async fn default_vote_start(module_tester: &mut ModuleTester<LegalVote>) {
         hidden: false,
         auto_stop: false,
         duration: None,
+        create_pdf: false,
     };
 
     module_tester

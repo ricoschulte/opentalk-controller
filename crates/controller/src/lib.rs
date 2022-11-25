@@ -82,6 +82,7 @@ pub mod prelude {
     pub use anyhow;
     pub use async_trait;
     pub use aws_sdk_s3;
+    pub use bytes;
     pub use chrono;
     pub use displaydoc;
     pub use futures;

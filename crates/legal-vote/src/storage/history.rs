@@ -31,6 +31,18 @@ pub(crate) async fn get(
         .context("Failed to get vote history")
 }
 
+#[tracing::instrument(name = "legal_vote_history_contains", skip(redis_conn))]
+pub(crate) async fn contains(
+    redis_conn: &mut RedisConnection,
+    room_id: SignalingRoomId,
+    vote_id: LegalVoteId,
+) -> Result<bool> {
+    redis_conn
+        .sismember(VoteHistoryKey { room_id }, vote_id)
+        .await
+        .context("Failed to check if vote history contains vote")
+}
+
 /// Delete the vote history key
 #[tracing::instrument(name = "legal_vote_delete_history", skip(redis_conn))]
 pub(crate) async fn delete(

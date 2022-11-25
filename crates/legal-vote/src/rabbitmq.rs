@@ -1,4 +1,4 @@
-use crate::outgoing;
+use crate::outgoing::{self, PdfAsset};
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::{CancelReason, FinalResults, Parameters, VoteOption};
 use db_storage::legal_votes::LegalVoteId;
@@ -20,6 +20,8 @@ pub enum Event {
     Update(VoteUpdate),
     /// A fatal internal server error has occurred
     FatalServerError,
+
+    PdfAsset(PdfAsset),
 }
 
 /// A participant has successfully voted
