@@ -4,12 +4,17 @@ use controller::prelude::anyhow::Context;
 use controller::prelude::chrono::{Duration, Utc};
 use controller::prelude::control::storage::{get_all_participants, get_attribute};
 use controller::prelude::*;
+use controller::storage::assets::save_asset;
+use controller::storage::ObjectStorage;
 use controller_shared::ParticipantId;
+use database::Db;
 use etherpad_client::EtherpadClient;
+use futures::TryStreamExt;
 use incoming::ParticipantSelection;
-use outgoing::AccessUrl;
+use outgoing::{AccessUrl, PdfAsset};
 use rabbitmq::GenerateUrl;
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 pub mod incoming;
 pub mod outgoing;
@@ -35,10 +40,12 @@ pub struct Access {
     readonly: bool,
 }
 
-pub struct Protocol {
+struct Protocol {
     etherpad: EtherpadClient,
     participant_id: ParticipantId,
     room_id: SignalingRoomId,
+    db: Arc<Db>,
+    storage: Arc<ObjectStorage>,
 }
 
 #[async_trait::async_trait(?Send)]
@@ -63,6 +70,8 @@ impl SignalingModule for Protocol {
             etherpad,
             participant_id: ctx.participant_id(),
             room_id: ctx.room_id(),
+            db: ctx.db().clone(),
+            storage: ctx.storage().clone(),
         }))
     }
 
@@ -298,6 +307,60 @@ impl Protocol {
                     );
                 }
             }
+            incoming::Message::GeneratePdf => {
+                if ctx.role() != Role::Moderator {
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InsufficientPermissions,
+                    ));
+                    return Ok(());
+                }
+
+                if !matches!(
+                    storage::init::get(ctx.redis_conn(), self.room_id).await?,
+                    Some(InitState::Initialized)
+                ) {
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::NotInitialized));
+                    return Ok(());
+                }
+
+                let session_info =
+                    storage::session::get(ctx.redis_conn(), self.room_id, self.participant_id)
+                        .await?;
+                if let Some(session_info) = session_info {
+                    let group_id = storage::group::get(ctx.redis_conn(), self.room_id)
+                        .await?
+                        .unwrap();
+
+                    let pad_id = format!("{}${}", group_id, PAD_NAME);
+
+                    let data = self
+                        .etherpad
+                        .download_pdf(&session_info.session_id, &pad_id)
+                        .await?
+                        .map_err(Into::into);
+
+                    let filename = format!("protocol_{}.pdf", ctx.timestamp().to_rfc3339());
+                    let asset_id = save_asset(
+                        &self.storage,
+                        self.db.clone(),
+                        self.room_id.room_id(),
+                        Some(Self::NAMESPACE),
+                        &filename,
+                        "protocol_pdf",
+                        data,
+                    )
+                    .await?;
+
+                    ctx.rabbitmq_publish(
+                        control::rabbitmq::current_room_exchange_name(self.room_id),
+                        control::rabbitmq::room_all_routing_key().into(),
+                        rabbitmq::Event::PdfAsset(PdfAsset { filename, asset_id }),
+                    );
+                } else {
+                    ctx.ws_send(outgoing::Message::Error(outgoing::Error::NotInitialized));
+                    return Ok(());
+                }
+            }
         }
 
         Ok(())
@@ -321,6 +384,9 @@ impl Protocol {
                 }
 
                 ctx.invalidate_data();
+            }
+            rabbitmq::Event::PdfAsset(pdf_asset) => {
+                ctx.ws_send(outgoing::Message::PdfAsset(pdf_asset))
             }
         }
 

@@ -1,3 +1,4 @@
+use crate::outgoing::PdfAsset;
 use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
 
@@ -6,6 +7,8 @@ use serde::{Deserialize, Serialize};
 pub enum Event {
     /// Generate an access url for the current etherpad
     GenerateUrl(GenerateUrl),
+    /// A pdf asset has been generated from the protocol
+    PdfAsset(PdfAsset),
 }
 
 /// A receiving participant shall generate an access url.

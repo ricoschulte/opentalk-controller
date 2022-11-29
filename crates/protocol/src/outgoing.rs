@@ -1,4 +1,5 @@
-use serde::Serialize;
+use db_storage::assets::AssetId;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "message")]
@@ -7,6 +8,7 @@ pub enum Message {
     WriteUrl(AccessUrl),
     /// An access url containing a readonly session
     ReadUrl(AccessUrl),
+    PdfAsset(PdfAsset),
     Error(Error),
 }
 
@@ -14,6 +16,12 @@ pub enum Message {
 #[serde(rename_all = "snake_case")]
 pub struct AccessUrl {
     pub url: String,
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PdfAsset {
+    pub filename: String,
+    pub asset_id: AssetId,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize)]
