@@ -54,7 +54,7 @@ pub struct LegalVoteDetails {
     #[serde(flatten)]
     pub settings: Settings,
     /// A list of participants that voted on the legal vote
-    pub voters: Vec<Voter>,
+    pub voters: Option<Vec<Voter>>,
     /// The results of the legal vote
     pub vote_result: VoteResult,
 }
@@ -76,6 +76,8 @@ pub struct Settings {
     pub topic: String,
     /// Indicates that the `Abstain` vote option is enabled
     pub enable_abstain: bool,
+    /// Hide the participants vote choices from other participants
+    pub hidden: bool,
     /// The vote will automatically stop when every participant voted
     pub auto_stop: bool,
     /// The vote will stop when the duration (in seconds) has passed
@@ -361,6 +363,7 @@ fn parse_v1_entries(
                             topic,
                             allowed_participants: _,
                             enable_abstain,
+                            hidden,
                             auto_stop,
                             duration,
                         },
@@ -384,13 +387,16 @@ fn parse_v1_entries(
                     subtitle,
                     topic,
                     enable_abstain,
+                    hidden,
                     auto_stop,
                     duration,
                 });
             }
             VoteEvent::Vote(vote) => {
-                user_ids.push(vote.issuer);
-                raw_voters.insert(vote.issuer, vote.option);
+                if let Some(user_info) = vote.user_info {
+                    user_ids.push(user_info.issuer);
+                    raw_voters.insert(user_info.issuer, vote.option);
+                }
             }
             VoteEvent::Stop(kind) => {
                 stop_kind = Some(match kind {
@@ -463,30 +469,42 @@ fn parse_v1_entries(
         return Err(ProtocolError::InternalError);
     }
 
-    let mut voters = vec![];
-
-    for user in users {
-        let vote_option = raw_voters.remove(&user.id).ok_or_else(|| {
-            log::error!("Missing user while mapping vote options in legal vote protocol parsing");
-            ProtocolError::InvalidProtocol
-        })?;
-
-        let participant = ParticipantInfo {
-            firstname: user.firstname,
-            lastname: user.lastname,
-            email: user.email,
-        };
-
-        voters.push(Voter {
-            participant,
-            vote_option,
-        });
-    }
-
     let settings = settings.ok_or_else(|| {
         log::error!("Missing settings in legal vote protocol");
         ProtocolError::InvalidProtocol
     })?;
+
+    let voters = if settings.hidden {
+        if !user_ids.is_empty() || !raw_voters.is_empty() {
+            log::error!("Found user vote entries in hidden legal vote protocol");
+            return Err(ProtocolError::InvalidProtocol);
+        }
+
+        None
+    } else {
+        let mut voters = vec![];
+
+        for user in users {
+            let vote_option = raw_voters.remove(&user.id).ok_or_else(|| {
+                log::error!(
+                    "Missing user while mapping vote options in legal vote protocol parsing"
+                );
+                ProtocolError::InvalidProtocol
+            })?;
+
+            let participant = ParticipantInfo {
+                firstname: user.firstname,
+                lastname: user.lastname,
+                email: user.email,
+            };
+            voters.push(Voter {
+                participant,
+                vote_option,
+            });
+        }
+
+        Some(voters)
+    };
 
     Ok(LegalVoteDetails {
         settings,
@@ -521,13 +539,14 @@ mod test {
                     subtitle: "A subtitle".into(),
                     topic: "Does the test work".into(),
                     enable_abstain: false,
+                    hidden: false,
                     auto_stop: false,
                     duration: Some(60),
                 },
-                voters: vec![Voter {
+                voters: Some(vec![Voter {
                     participant: test_participant.clone(),
                     vote_option: VoteOption::Yes,
-                }],
+                }]),
                 vote_result: VoteResult::Success(Success {
                     stop_kind: StopKind::ByParticipant(test_participant),
                     votes: Votes {
@@ -554,6 +573,7 @@ mod test {
                 "subtitle": "A subtitle",
                 "topic": "Does the test work",
                 "enable_abstain": false,
+                "hidden": false,
                 "auto_stop": false,
                 "duration": 60,
                 "voters": [
@@ -598,13 +618,14 @@ mod test {
                     subtitle: "A subtitle".into(),
                     topic: "Does the test work".into(),
                     enable_abstain: false,
+                    hidden: false,
                     auto_stop: false,
                     duration: None,
                 },
-                voters: vec![Voter {
+                voters: Some(vec![Voter {
                     participant: test_participant.clone(),
                     vote_option: VoteOption::Yes,
-                }],
+                }]),
                 vote_result: VoteResult::Failed(FailReason::Canceled(CancelInfo {
                     canceled_by: test_participant,
                     reason: CancelReason::Custom("Some custom reason".into()),
@@ -627,6 +648,7 @@ mod test {
                 "subtitle": "A subtitle",
                 "topic": "Does the test work",
                 "enable_abstain": false,
+                "hidden": false,
                 "auto_stop": false,
                 "voters": [
                   {
@@ -670,13 +692,14 @@ mod test {
                     subtitle: "A subtitle".into(),
                     topic: "Does the test work".into(),
                     enable_abstain: false,
+                    hidden: false,
                     auto_stop: false,
                     duration: Some(60),
                 },
-                voters: vec![Voter {
+                voters: Some(vec![Voter {
                     participant: test_participant,
                     vote_option: VoteOption::Yes,
-                }],
+                }]),
                 vote_result: VoteResult::Failed(FailReason::InvalidResults(
                     Invalid::VoteCountInconsistent,
                 )),
@@ -698,6 +721,7 @@ mod test {
                 "subtitle": "A subtitle",
                 "topic": "Does the test work",
                 "enable_abstain": false,
+                "hidden": false,
                 "auto_stop": false,
                 "duration": 60,
                 "voters": [

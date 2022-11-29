@@ -56,6 +56,8 @@ pub struct UserParameters {
     pub allowed_participants: Vec<ParticipantId>,
     /// Indicates that the `Abstain` vote option is enabled
     pub enable_abstain: bool,
+    /// Hide the participants vote choices from other participants
+    pub hidden: bool,
     /// The vote will automatically stop when every participant voted
     pub auto_stop: bool,
     /// The vote will stop when the duration (in seconds) has passed

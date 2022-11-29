@@ -1,13 +1,14 @@
+use anyhow::anyhow;
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, VoteEvent};
+use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, UserInfo, VoteEvent};
 use db_storage::legal_votes::types::VoteOption;
 use db_storage::legal_votes::LegalVoteId;
 use displaydoc::Display;
+use either::Either;
 use redis::AsyncCommands;
 use std::collections::HashMap;
-
 #[derive(Display)]
 /// k3k-signaling:room={room_id}:vote={legal_vote_id}:protocol
 #[ignore_extra_doc_attributes]
@@ -63,10 +64,28 @@ pub(crate) async fn get(
         .context("Failed to get vote protocol")
 }
 
-/// Filters the protocol for vote events and returns a list of [`Vote`] events
+/// Filters the protocol for vote events
+///
+/// Returns a HashMap containing participants and their respective vote choice when the vote is public
+///
+/// Returns just the casted vote choices when the vote is configured to be hidden
 #[tracing::instrument(name = "legal_vote_reduce_protocol", skip(protocol))]
-pub(crate) fn reduce_protocol(protocol: Vec<ProtocolEntry>) -> HashMap<ParticipantId, VoteOption> {
-    protocol
+pub(crate) fn reduce_protocol(
+    protocol: Vec<ProtocolEntry>,
+) -> Result<Either<HashMap<ParticipantId, VoteOption>, Vec<VoteOption>>> {
+    // check if the vote is hidden
+    let hidden = protocol
+        .iter()
+        .find_map(|entry| {
+            if let VoteEvent::Start(start) = &entry.event {
+                Some(start.parameters.inner.hidden)
+            } else {
+                None
+            }
+        })
+        .ok_or_else(|| anyhow!("Missing 'Start' entry in legal vote protocol"))?;
+
+    let vote_list = protocol
         .into_iter()
         .filter_map(|entry| {
             if let VoteEvent::Vote(vote) = entry.event {
@@ -75,6 +94,38 @@ pub(crate) fn reduce_protocol(protocol: Vec<ProtocolEntry>) -> HashMap<Participa
                 None
             }
         })
-        .map(|vote| (vote.participant_id, vote.option))
-        .collect::<HashMap<ParticipantId, VoteOption>>()
+        .map(|vote| (vote.user_info, vote.option))
+        .collect::<Vec<(Option<UserInfo>, VoteOption)>>();
+
+    // avoid checking an empty list with Iterator::all]`
+    if vote_list.is_empty() {
+        return if hidden {
+            Ok(Either::Right(vec![]))
+        } else {
+            Ok(Either::Left(HashMap::new()))
+        };
+    }
+
+    if vote_list.iter().all(|(u, ..)| u.is_some()) {
+        // public vote
+        Ok(Either::Left(
+            vote_list
+                .into_iter()
+                .map(|(u, v)| (u.unwrap().participant_id, v))
+                .collect::<HashMap<ParticipantId, VoteOption>>(),
+        ))
+    } else if vote_list.iter().all(|(u, ..)| u.is_none()) {
+        // hidden vote
+        Ok(Either::Right(
+            vote_list
+                .into_iter()
+                .map(|(_, v)| v)
+                .collect::<Vec<VoteOption>>(),
+        ))
+    } else {
+        // invalid vote
+        Err(anyhow!(
+            "Legal vote protocol contains inconsistent vote entries"
+        ))
+    }
 }

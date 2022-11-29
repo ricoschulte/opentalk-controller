@@ -24,8 +24,6 @@ pub(crate) enum ErrorKind {
     InvalidVoteId,
     #[error("The given allowlist contains guests")]
     AllowlistContainsGuests(Vec<ParticipantId>),
-    #[error("The vote results are inconsistent")]
-    Inconsistency,
     #[error("Failed to validate request. Invalid fields: {0:?}")]
     BadRequest(Vec<String>),
     #[error("Failed to set or get permissions")]

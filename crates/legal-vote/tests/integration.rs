@@ -31,6 +31,7 @@ async fn basic_vote() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
+        hidden: false,
         auto_stop: false,
         duration: None,
     };
@@ -122,7 +123,7 @@ async fn basic_vote() {
                 no: 0,
                 abstain: None,
             },
-            voters: voters.clone(),
+            voters: Some(voters.clone()),
         },
     }));
 
@@ -173,7 +174,7 @@ async fn basic_vote() {
                 no: 1,
                 abstain: None,
             },
-            voters: voters.clone(),
+            voters: Some(voters.clone()),
         },
     }));
 
@@ -203,7 +204,7 @@ async fn basic_vote() {
                     no: 1,
                     abstain: None,
                 },
-                voters: voters.clone(),
+                voters: Some(voters.clone()),
             }),
         }));
 
@@ -231,6 +232,215 @@ async fn basic_vote() {
 
 #[actix_rt::test]
 #[serial]
+async fn hidden_legal_vote() {
+    let test_ctx = TestContext::new().await;
+    let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let mut db_conn = test_ctx.db_ctx.db.get_conn().unwrap();
+
+    // Start legal vote as user 1
+    let start_parameters = UserParameters {
+        name: "TestVote".into(),
+        subtitle: "A subtitle".into(),
+        topic: "Does the test work?".into(),
+        allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
+        enable_abstain: false,
+        hidden: true,
+        auto_stop: false,
+        duration: None,
+    };
+
+    module_tester
+        .send_ws_message(
+            &USER_1.participant_id,
+            incoming::Message::Start(start_parameters.clone()),
+        )
+        .unwrap();
+
+    // Expect Start response in websocket for user 1
+    let legal_vote_id = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
+        module_tester
+            .receive_ws_message(&USER_1.participant_id)
+            .await
+            .unwrap()
+    {
+        assert_eq!(parameters.initiator_id, USER_1.participant_id);
+        assert_eq!(parameters.inner, start_parameters);
+        assert_eq!(parameters.max_votes, 2);
+
+        parameters.legal_vote_id
+    } else {
+        panic!("Expected Start message")
+    };
+
+    // Expect Start response in websocket for user 2
+    if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
+        .receive_ws_message(&USER_2.participant_id)
+        .await
+        .unwrap()
+    {
+        assert_eq!(parameters.initiator_id, USER_1.participant_id);
+        assert_eq!(parameters.inner, start_parameters);
+        assert_eq!(parameters.legal_vote_id, legal_vote_id);
+        assert_eq!(parameters.max_votes, 2);
+    } else {
+        panic!("Expected Start message")
+    };
+
+    // Expect a empty legal_vote with `legal_vote_id` to exist in database
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
+
+    assert_eq!(legal_vote.id, legal_vote_id);
+    assert_eq!(legal_vote.created_by, user1.id);
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    assert_eq!(protocol_entries, Value::Array(vec![]));
+
+    // Start casting votes
+
+    // Vote 'Yes' with user 1
+    let vote_yes = incoming::Message::Vote(VoteMessage {
+        legal_vote_id,
+        option: VoteOption::Yes,
+    });
+
+    module_tester
+        .send_ws_message(&USER_1.participant_id, vote_yes)
+        .unwrap();
+
+    //Expect VoteSuccess
+    let vote_response = module_tester
+        .receive_ws_message(&USER_1.participant_id)
+        .await
+        .unwrap();
+
+    let expected_vote_response =
+        WsMessageOutgoing::Module(outgoing::Message::Voted(VoteResponse {
+            legal_vote_id,
+            response: Response::Success(VoteSuccess {
+                vote_option: VoteOption::Yes,
+                issuer: USER_1.participant_id,
+            }),
+        }));
+
+    assert_eq!(expected_vote_response, vote_response);
+
+    // Expect a vote Update message on all participants
+    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
+        legal_vote_id,
+        results: outgoing::Results {
+            votes: Votes {
+                yes: 1,
+                no: 0,
+                abstain: None,
+            },
+            voters: None,
+        },
+    }));
+
+    for user in USERS {
+        let update = module_tester
+            .receive_ws_message(&user.participant_id)
+            .await
+            .unwrap();
+
+        assert_eq!(expected_update, update);
+    }
+
+    // Vote 'No' with user 2
+    let vote_no = incoming::Message::Vote(VoteMessage {
+        legal_vote_id,
+        option: VoteOption::No,
+    });
+
+    module_tester
+        .send_ws_message(&USER_2.participant_id, vote_no)
+        .unwrap();
+
+    //Expect VoteSuccess
+    let vote_response = module_tester
+        .receive_ws_message(&USER_2.participant_id)
+        .await
+        .unwrap();
+
+    let expected_vote_response =
+        WsMessageOutgoing::Module(outgoing::Message::Voted(VoteResponse {
+            legal_vote_id,
+            response: Response::Success(VoteSuccess {
+                vote_option: VoteOption::No,
+                issuer: USER_2.participant_id,
+            }),
+        }));
+
+    assert_eq!(expected_vote_response, vote_response);
+
+    // Expect a vote Update message on all participants
+    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
+        legal_vote_id,
+        results: outgoing::Results {
+            votes: Votes {
+                yes: 1,
+                no: 1,
+                abstain: None,
+            },
+            voters: None,
+        },
+    }));
+
+    for user in USERS {
+        let update = module_tester
+            .receive_ws_message(&user.participant_id)
+            .await
+            .unwrap();
+
+        assert_eq!(expected_update, update);
+    }
+
+    // stop vote
+    let stop_vote = incoming::Message::Stop(Stop { legal_vote_id });
+
+    module_tester
+        .send_ws_message(&USER_1.participant_id, stop_vote)
+        .unwrap();
+
+    let expected_stop_message =
+        WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
+            legal_vote_id,
+            kind: StopKind::ByParticipant(USER_1.participant_id),
+            results: outgoing::FinalResults::Valid(outgoing::Results {
+                votes: Votes {
+                    yes: 1,
+                    no: 1,
+                    abstain: None,
+                },
+                voters: None,
+            }),
+        }));
+
+    // expect stop messages for all users
+    for user in USERS {
+        let stop_message = module_tester
+            .receive_ws_message(&user.participant_id)
+            .await
+            .expect("Expected stop message");
+
+        assert_eq!(expected_stop_message, stop_message);
+    }
+
+    // check the vote protocol
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
+
+    assert_eq!(legal_vote.id, legal_vote_id);
+    assert_eq!(legal_vote.created_by, user1.id);
+
+    // TODO: parse and check the vote entries
+    let protocol_entries = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    if let Value::Array(entries) = protocol_entries {
+        assert_eq!(entries.len(), 5);
+    }
+}
+
+#[actix_rt::test]
+#[serial]
 async fn basic_vote_abstain() {
     let test_ctx = TestContext::new().await;
     let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
@@ -243,6 +453,7 @@ async fn basic_vote_abstain() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: true,
+        hidden: false,
         auto_stop: false,
         duration: None,
     };
@@ -334,7 +545,7 @@ async fn basic_vote_abstain() {
                 no: 0,
                 abstain: Some(1),
             },
-            voters: voters.clone(),
+            voters: Some(voters.clone()),
         },
     }));
 
@@ -385,7 +596,7 @@ async fn basic_vote_abstain() {
                 no: 1,
                 abstain: Some(1),
             },
-            voters: voters.clone(),
+            voters: Some(voters.clone()),
         },
     }));
 
@@ -415,7 +626,7 @@ async fn basic_vote_abstain() {
                     no: 1,
                     abstain: Some(1),
                 },
-                voters: voters.clone(),
+                voters: Some(voters.clone()),
             }),
         }));
 
@@ -455,6 +666,7 @@ async fn expired_vote() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
+        hidden: false,
         auto_stop: false,
         duration: Some(5),
     };
@@ -515,7 +727,7 @@ async fn expired_vote() {
                     no: 0,
                     abstain: None,
                 },
-                voters: HashMap::new(),
+                voters: Some(HashMap::new()),
             }),
         }));
 
@@ -561,6 +773,7 @@ async fn auto_stop_vote() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
+        hidden: false,
         auto_stop: true,
         duration: None,
     };
@@ -652,7 +865,7 @@ async fn auto_stop_vote() {
 
     let results = outgoing::Results {
         votes,
-        voters: voters.clone(),
+        voters: Some(voters.clone()),
     };
 
     let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
@@ -708,7 +921,7 @@ async fn auto_stop_vote() {
 
     let results = outgoing::Results {
         votes,
-        voters: voters.clone(),
+        voters: Some(voters.clone()),
     };
 
     let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
@@ -771,6 +984,7 @@ async fn start_with_one_participant() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id],
         enable_abstain: false,
+        hidden: false,
         auto_stop: false,
         duration: None,
     };
@@ -797,6 +1011,7 @@ async fn start_with_empty_participants() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![],
         enable_abstain: false,
+        hidden: false,
         auto_stop: false,
         duration: None,
     };
@@ -872,6 +1087,7 @@ async fn ineligible_voter() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id],
         enable_abstain: false,
+        hidden: false,
         auto_stop: false,
         duration: None,
     };
@@ -928,6 +1144,7 @@ async fn start_with_allowed_guest() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, guest, USER_2.participant_id],
         enable_abstain: false,
+        hidden: false,
         auto_stop: false,
         duration: None,
     };
@@ -1056,6 +1273,7 @@ async fn vote_twice() {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
+        hidden: false,
         auto_stop: false,
         duration: None,
     };
@@ -1120,7 +1338,7 @@ async fn vote_twice() {
                 no: 0,
                 abstain: None,
             },
-            voters,
+            voters: Some(voters),
         },
     }));
 
@@ -1256,6 +1474,7 @@ async fn default_vote_start(module_tester: &mut ModuleTester<LegalVote>) {
         topic: "Does the test work?".into(),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
+        hidden: false,
         auto_stop: false,
         duration: None,
     };

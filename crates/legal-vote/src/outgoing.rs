@@ -2,7 +2,7 @@ use crate::rabbitmq::{Canceled, StopKind};
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::{Invalid, Parameters, VoteOption, Votes};
 use db_storage::legal_votes::LegalVoteId;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// A message to the participant, send via a websocket connection
@@ -62,13 +62,16 @@ pub enum VoteFailed {
     InvalidOption,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Results {
     /// The vote options with their respective vote count
     #[serde(flatten)]
     pub votes: Votes,
     /// A map of participants with their chosen vote option
-    pub voters: HashMap<ParticipantId, VoteOption>,
+    ///
+    /// This field is omitted when the vote is configured to be hidden
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voters: Option<HashMap<ParticipantId, VoteOption>>,
 }
 
 /// The results for a vote
@@ -82,7 +85,7 @@ pub struct VoteResults {
 }
 
 /// A stop message
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Stopped {
     /// The vote id
     pub legal_vote_id: LegalVoteId,
@@ -95,7 +98,7 @@ pub struct Stopped {
 }
 
 /// The final results for a vote
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "results")]
 pub enum FinalResults {
     /// Valid final results
@@ -118,8 +121,6 @@ pub enum ErrorKind {
     Ineligible,
     /// The provided allow list contains guest participants
     AllowlistContainsGuests(GuestParticipants),
-    /// A inconsistency occurred while handling a request
-    Inconsistency,
     /// The provided parameters of a request are invalid
     BadRequest(InvalidFields),
     /// Failed to set or get permissions
@@ -149,7 +150,6 @@ impl From<super::error::ErrorKind> for ErrorKind {
             crate::error::ErrorKind::VoteAlreadyActive => Self::VoteAlreadyActive,
             crate::error::ErrorKind::NoVoteActive => Self::NoVoteActive,
             crate::error::ErrorKind::InvalidVoteId => Self::InvalidVoteId,
-            crate::error::ErrorKind::Inconsistency => Self::Inconsistency,
             crate::error::ErrorKind::AllowlistContainsGuests(guests) => {
                 Self::AllowlistContainsGuests(GuestParticipants { guests })
             }
@@ -185,6 +185,7 @@ mod test {
                 topic: "Yes or No?".into(),
                 allowed_participants: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
                 enable_abstain: false,
+                hidden: false,
                 auto_stop: false,
                 duration: None,
             },
@@ -206,6 +207,7 @@ mod test {
                     "00000000-0000-0000-0000-000000000002"
                 ],
                 "enable_abstain": false,
+                "hidden": false,
                 "auto_stop": false,
                 "duration": null
             }
@@ -301,7 +303,10 @@ mod test {
 
         let message = Message::Updated(VoteResults {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
-            results: Results { votes, voters },
+            results: Results {
+                votes,
+                voters: Some(voters),
+            },
         });
 
         assert_eq_json!(
@@ -314,6 +319,33 @@ mod test {
                 "voters": {
                     "00000000-0000-0000-0000-000000000001": "yes"
                 }
+            }
+        );
+    }
+
+    #[test]
+    fn hidden_update_message() {
+        let votes = Votes {
+            yes: 1,
+            no: 0,
+            abstain: None,
+        };
+
+        let message = Message::Updated(VoteResults {
+            legal_vote_id: LegalVoteId::from(Uuid::nil()),
+            results: Results {
+                votes,
+                voters: None,
+            },
+        });
+
+        assert_eq_json!(
+            message,
+            {
+                "message": "updated",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "yes": 1,
+                "no": 0
             }
         );
     }
@@ -332,7 +364,10 @@ mod test {
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::ByParticipant(ParticipantId::nil()),
-            results: FinalResults::Valid(Results { votes, voters }),
+            results: FinalResults::Valid(Results {
+                votes,
+                voters: Some(voters),
+            }),
         });
 
         assert_eq_json!(
@@ -353,6 +388,37 @@ mod test {
     }
 
     #[test]
+    fn hidden_stop_message() {
+        let votes = Votes {
+            yes: 1,
+            no: 0,
+            abstain: None,
+        };
+
+        let message = Message::Stopped(Stopped {
+            legal_vote_id: LegalVoteId::from(Uuid::nil()),
+            kind: StopKind::ByParticipant(ParticipantId::nil()),
+            results: FinalResults::Valid(Results {
+                votes,
+                voters: None,
+            }),
+        });
+
+        assert_eq_json!(
+            message,
+            {
+                "message": "stopped",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "kind": "by_participant",
+                "issuer": "00000000-0000-0000-0000-000000000000",
+                "results": "valid",
+                "yes": 1,
+                "no": 0
+            }
+        );
+    }
+
+    #[test]
     fn auto_stop_message() {
         let votes = Votes {
             yes: 1,
@@ -366,7 +432,10 @@ mod test {
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::Auto,
-            results: FinalResults::Valid(Results { votes, voters }),
+            results: FinalResults::Valid(Results {
+                votes,
+                voters: Some(voters),
+            }),
         });
 
         assert_eq_json!(
@@ -399,7 +468,10 @@ mod test {
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::Expired,
-            results: FinalResults::Valid(Results { votes, voters }),
+            results: FinalResults::Valid(Results {
+                votes,
+                voters: Some(voters),
+            }),
         });
 
         assert_eq_json!(

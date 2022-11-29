@@ -2255,6 +2255,7 @@ version = "1.0.0-rc.8"
 dependencies = [
  "actix-rt",
  "diesel",
+ "either",
  "k3k-controller-core",
  "k3k-controller-shared",
  "k3k-database",
