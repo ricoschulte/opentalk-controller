@@ -11,9 +11,7 @@ anyhow = "1.0"
 controller = { path = "../controller", package = "k3k-controller-core" }
 
 janus-media = { path = "../janus-media", package = "k3k-janus-media" }
-automod = { path = "../automod", package = "k3k-automod" }
 chat = { path = "../chat", package = "k3k-chat" }
-legal-vote = { path = "../legal-vote", package = "k3k-legal-vote" }
 polls = { path = "../polls", package = "k3k-polls" }
 kustos = { path = "../kustos" }
 protocol = { path = "../protocol", package = "k3k-protocol" }
