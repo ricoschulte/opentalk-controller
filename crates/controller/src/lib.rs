@@ -12,7 +12,7 @@
 //! }
 //!
 //! async fn run() -> Result<()> {
-//!    if let Some(controller) = Controller::create().await? {
+//!    if let Some(controller) = Controller::create("K3K Controller Community Edition").await? {
 //!         controller.run().await?;
 //!     }
 //!
@@ -197,7 +197,7 @@ impl Controller {
     /// subprogram (e.g. `--reload`) and must now exit.
     ///
     /// Otherwise it will return itself which can be modified and then run using [`Controller::run`]
-    pub async fn create() -> Result<Option<Self>> {
+    pub async fn create(program_name: &str) -> Result<Option<Self>> {
         let args = cli::parse_args().await?;
 
         // Some args run commands by them self and thus should exit here
@@ -209,7 +209,7 @@ impl Controller {
 
         trace::init(&settings.logging)?;
 
-        log::info!("Starting K3K Controller");
+        log::info!("Starting {}", program_name);
 
         let controller = Self::init(settings, args).await?;
 

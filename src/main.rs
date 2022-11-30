@@ -7,7 +7,7 @@ async fn main() {
 }
 
 async fn run() -> Result<()> {
-    if let Some(mut controller) = Controller::create().await? {
+    if let Some(mut controller) = Controller::create("K3K Controller Community Edition").await? {
         chat::register(&mut controller);
         automod::register(&mut controller);
         janus_media::register(&mut controller).await?;
