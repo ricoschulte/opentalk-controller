@@ -55,7 +55,9 @@ pub async fn verify_db_schema(
 
         let rustfmt_output = run_rustfmt(diesel_output)?;
 
-        let schema_rs_on_disk = std::fs::read(locate_project_root()?.join(SCHEMA_RS_PATH))?;
+        let schema_rs_path =
+            std::env::var("SCHEMA_RS_PATH").unwrap_or_else(|_| SCHEMA_RS_PATH.to_string());
+        let schema_rs_on_disk = std::fs::read(locate_project_root()?.join(schema_rs_path))?;
         if rustfmt_output != schema_rs_on_disk {
             anyhow::bail!(
                 "schema.rs on disk differs.\n{}",
