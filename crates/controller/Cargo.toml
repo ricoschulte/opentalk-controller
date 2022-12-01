@@ -1,6 +1,6 @@
 [package]
 name = "k3k-controller-core"
-version = "1.0.0-rc.8"
+version = "1.0.0-rc.9"
 edition = "2021"
 publish = false
 build = "build.rs"

@@ -5,42 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0-rc.9] - 2022-12-02
 
 ### Added
 
-- controller: add an S3 storage interface for saving assets in a long-term storage ([#214](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/214))
-- whiteboard: save generated PDF files in S3 storage ([#225](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/225))
-- protocol: save generated PDF files in S3 storage ([#258](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/258))
+- controller: add an S3 storage interface for saving assets in a long-term storage ([#214](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/214))
+- whiteboard: save generated PDF files in S3 storage ([#225](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/225))
+- legal-vote: add `hidden` parameter to exclude vote choices from outgoing messages ([#260](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/260))
+- protocol: save generated PDF files in S3 storage ([#258](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/258))
+- controller: add the `recorder` module allowing moderators to record a meeting
 
 ### Removed
 
-- controller: `status` field from event resource ([#221](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/221))
+- controller: `status` field from event resource ([#221](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/221))
 
 ### Changed
 
 - controller: introduce `v1/services/..` path for service related endpoints.
 - controller: move call-in's start endpoint from `v1/rooms/sip/start` to `v1/services/call_in/start` to make use of the new service authentication.
-- controller: trim unnecessary whitespaces in the display name of users and guests ([#96](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/96))
+- controller: trim unnecessary whitespaces in the display name of users and guests ([#96](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/96))
 
 ### Fixed
 
+- Respect custom `--version` implementation ([#255](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/255))
+- controller: properly handle `is_adhoc` field in the `PATCH events/<event_id>` ([#264](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/264))
 - controller: added the missing permission suffix `/assets` when giving access to a room
+- controller: fixed a bug where environment variables did not overwrite config values ([#263](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/263))
 
 ## [1.0.0-rc.8] - 2022-11-10
 
 ### Added
 
-- controller: add `time_independent` filter to events GET request ([#155](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/155))
-- mail-worker-protocol: add types to support event-update emails ([#221](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/221))
-- controller: send email notification to invitees on event update ([#221](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/221))
-- controller: add `suppress_email_notification` flag to event and invite endpoints ([#267](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/267))
+- controller: add `time_independent` filter to events GET request ([#155](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/155))
+- mail-worker-protocol: add types to support event-update emails ([#221](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/221))
+- controller: send email notification to invitees on event update ([#221](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/221))
+- controller: add `suppress_email_notification` flag to event and invite endpoints ([#267](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/267))
 
 ### Changed
 
-- strictly follow keep-a-changelog format in `CHANGELOG.md` ([#254](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/254))
-- controller: rename `spacedeck` module to `whiteboard` ([#240](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/240))
-- controller: return any entry for `GET /events` overlapping `time_min..time_max` range, not just those fully enclosed by it. ([#154](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/154))
+- strictly follow keep-a-changelog format in `CHANGELOG.md` ([#254](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/254))
+- controller: rename `spacedeck` module to `whiteboard` ([#240](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/240))
+- controller: return any entry for `GET /events` overlapping `time_min..time_max` range, not just those fully enclosed by it. ([#154](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/154))
 - controller: disallow `users/find` queries under 3 characters
 
 ### Fixed
@@ -50,10 +55,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - chat/ee-chat: redundant timestamp removed from outgoing chat messages
-
-### Fixed
-
-- Respect custom `--version` implementation ([#255](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/255))
 
 ## [1.0.0-rc.7] - 2022-10-27
 
@@ -88,22 +89,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- protocol: added the `deselect_writer` action to revoke write access ([#145](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/145))
-- controller: added the spacedeck module that allows participants to collaboratively edit a whiteboard ([#209](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/209))
-- controller: added a query parameter to the `GET /events` endpoint to allow filtering by `invite_status` ([#213](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/213))
+- protocol: added the `deselect_writer` action to revoke write access ([#145](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/145))
+- controller: added the spacedeck module that allows participants to collaboratively edit a whiteboard ([#209](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/209))
+- controller: added a query parameter to the `GET /events` endpoint to allow filtering by `invite_status` ([#213](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/213))
 - breakout: added `joined_at` & `left_at` attributes to participants
-- controller: toggle raise hands status (actions `enable_raise_hands`, `disable_raise_hands` and according messages) ([#228](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/228))
-- controller: added moderator feature to forcefully lower raised hands of all participants ([#227](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/227))
-- chat: added feature to toggle chat status (actions `enable_chat`, `disable_chat` and according messages) ([#229](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/229))
-- ee-chat: added check for chat status (enabled/disabled) ([#229](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/229))
-- controller: added waiting room flag to stored events ([#224](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/224))
-- controller: events now include unregistered invitees in invitees lists, distinguishable by `kind` profile property ([#196](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/196))
+- controller: toggle raise hands status (actions `enable_raise_hands`, `disable_raise_hands` and according messages) ([#228](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/228))
+- controller: added moderator feature to forcefully lower raised hands of all participants ([#227](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/227))
+- chat: added feature to toggle chat status (actions `enable_chat`, `disable_chat` and according messages) ([#229](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/229))
+- ee-chat: added check for chat status (enabled/disabled) ([#229](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/229))
+- controller: added waiting room flag to stored events ([#224](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/224))
+- controller: events now include unregistered invitees in invitees lists, distinguishable by `kind` profile property ([#196](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/196))
 
 ### Fixed
 
-- controller: fixed a bug where a wrong `ends_at` value for reoccurring events was sent to the mail worker ([#218](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/218))
-- controller: fix pagination serialization ([#217](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/217))
-- janus-media: added target and type information to some error responses ([#219](https://git.heinlein-video.de/heinlein-video/k3k-controller/-/issues/219))
+- controller: fixed a bug where a wrong `ends_at` value for reoccurring events was sent to the mail worker ([#218](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/218))
+- controller: fix pagination serialization ([#217](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/217))
+- janus-media: added target and type information to some error responses ([#219](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/219))
 
 ## [1.0.0-rc.4] - 2022-08-29
 
@@ -165,12 +166,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - initial release candidate
 
-[Unreleased]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.8...main
-[1.0.0-rc.8]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.7...v1.0.0-rc.8
-[1.0.0-rc.7]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.6...v1.0.0-rc.7
-[1.0.0-rc.6]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.5...v1.0.0-rc.6
-[1.0.0-rc.5]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.4...v1.0.0-rc.5
-[1.0.0-rc.4]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.3...v1.0.0-rc.4
-[1.0.0-rc.3]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.2...v1.0.0-rc.3
-[1.0.0-rc.2]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.1...v1.0.0-rc.2
-[1.0.0-rc.1]: https://git.heinlein-video.de/heinlein-video/k3k-controller/-/commits/v1.0.0-rc.1
+[Unreleased]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.9...main
+[1.0.0-rc.9]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.8...v1.0.0-rc.9
+[1.0.0-rc.8]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.7...v1.0.0-rc.8
+[1.0.0-rc.7]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.6...v1.0.0-rc.7
+[1.0.0-rc.6]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.5...v1.0.0-rc.6
+[1.0.0-rc.5]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.4...v1.0.0-rc.5
+[1.0.0-rc.4]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.3...v1.0.0-rc.4
+[1.0.0-rc.3]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.2...v1.0.0-rc.3
+[1.0.0-rc.2]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.1...v1.0.0-rc.2
+[1.0.0-rc.1]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/commits/v1.0.0-rc.1
