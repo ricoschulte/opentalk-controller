@@ -2174,10 +2174,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "k3k-controller"
-version = "1.0.0-rc.10"
+name = "k3k-community-modules"
+version = "1.0.0-rc.9"
 dependencies = [
- "actix-web",
  "anyhow",
  "k3k-automod",
  "k3k-chat",
@@ -2188,6 +2187,17 @@ dependencies = [
  "k3k-protocol",
  "k3k-timer",
  "k3k-whiteboard",
+ "kustos",
+]
+
+[[package]]
+name = "k3k-controller"
+version = "1.0.0-rc.10"
+dependencies = [
+ "actix-web",
+ "anyhow",
+ "k3k-community-modules",
+ "k3k-controller-core",
  "kustos",
 ]
 
