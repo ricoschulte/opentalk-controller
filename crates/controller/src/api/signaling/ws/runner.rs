@@ -932,12 +932,9 @@ impl Runner {
 
                 self.metrics.increment_participants_count(&self.participant);
 
-                // Allow moderators and the recorder to skip the waiting room
+                // Allow moderators and invisible services to skip the waiting room
                 let skip_waiting_room = matches!(self.role, Role::Moderator)
-                    || matches!(
-                        &control_data.participation_kind,
-                        ParticipationKind::Recorder
-                    );
+                    || !control_data.participation_kind.is_visible();
 
                 let waiting_room_enabled = moderation::storage::init_waiting_room_key(
                     &mut self.redis_conn,
@@ -1306,7 +1303,7 @@ impl Runner {
         let control_data = ControlData::from_redis(&mut self.redis_conn, self.room_id, id).await?;
 
         // Do not build participants for invisible services
-        if matches!(control_data.participation_kind, ParticipationKind::Recorder) {
+        if !control_data.participation_kind.is_visible() {
             return Ok(None);
         };
 

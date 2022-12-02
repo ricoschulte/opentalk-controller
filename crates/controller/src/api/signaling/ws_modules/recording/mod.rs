@@ -127,15 +127,15 @@ impl SignalingModule for Recording {
             Event::ParticipantLeft(_) => {}
             Event::ParticipantUpdated(_, _) => {}
             Event::WsMessage(msg) => {
-                if ctx.role() != Role::Moderator {
-                    ctx.ws_send(outgoing::Message::Error(
-                        outgoing::Error::InsufficientPermissions,
-                    ));
-                    return Ok(());
-                }
-
                 match msg {
                     incoming::Message::Start => {
+                        if ctx.role() != Role::Moderator {
+                            ctx.ws_send(outgoing::Message::Error(
+                                outgoing::Error::InsufficientPermissions,
+                            ));
+                            return Ok(());
+                        }
+
                         if !storage::try_init(ctx.redis_conn(), self.room).await? {
                             ctx.ws_send(outgoing::Message::Error(
                                 outgoing::Error::AlreadyRecording,
@@ -153,6 +153,13 @@ impl SignalingModule for Recording {
                         );
                     }
                     incoming::Message::Stop(incoming::Stop { recording_id }) => {
+                        if ctx.role() != Role::Moderator {
+                            ctx.ws_send(outgoing::Message::Error(
+                                outgoing::Error::InsufficientPermissions,
+                            ));
+                            return Ok(());
+                        }
+
                         if !matches!(
                             storage::get_state(ctx.redis_conn(), self.room).await?,
                             Some(storage::RecordingState::Recording(id)) if id == recording_id
