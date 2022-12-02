@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use aws_sdk_s3::config::Builder;
-use aws_sdk_s3::output::CreateMultipartUploadOutput;
+use aws_sdk_s3::model::{CompletedMultipartUpload, CompletedPart};
 use aws_sdk_s3::types::ByteStream;
 use aws_sdk_s3::Client;
 use aws_sdk_s3::Credentials as AwsCred;
@@ -103,9 +103,15 @@ impl ObjectStorage {
                         .complete_multipart_upload()
                         .bucket(&self.bucket)
                         .key(key)
-                        .set_upload_id(ctx.upload_id().map(Into::into))
+                        .upload_id(ctx.upload_id)
+                        .multipart_upload(
+                            CompletedMultipartUpload::builder()
+                                .set_parts(Some(ctx.parts))
+                                .build(),
+                        )
                         .send()
-                        .await?;
+                        .await
+                        .context("failed to complete multipart upload")?;
                 }
                 Err(_) => {
                     // abort the multi part upload in case of error
@@ -113,9 +119,10 @@ impl ObjectStorage {
                         .abort_multipart_upload()
                         .bucket(&self.bucket)
                         .key(key)
-                        .set_upload_id(ctx.upload_id().map(Into::into))
+                        .upload_id(ctx.upload_id)
                         .send()
-                        .await?;
+                        .await
+                        .context("failed to abort multipart upload")?;
                 }
             }
         }
@@ -127,7 +134,7 @@ impl ObjectStorage {
         &self,
         key: &str,
         mut data: impl Stream<Item = Result<Bytes>> + Unpin,
-        multipart_context: &mut Option<CreateMultipartUploadOutput>,
+        multipart_context: &mut Option<MultipartUploadContext>,
     ) -> Result<usize> {
         let mut count = 0;
         let mut file_size = 0;
@@ -166,35 +173,56 @@ impl ObjectStorage {
                     .put_object()
                     .bucket(&self.bucket)
                     .key(key)
+                    .content_length(buf.len() as i64)
                     .body(buf.into())
                     .send()
-                    .await?;
+                    .await
+                    .context("failed to put object")?;
             } else {
                 let ctx = if let Some(ctx) = multipart_context {
                     ctx
                 } else {
+                    let output = self
+                        .client
+                        .create_multipart_upload()
+                        .bucket(&self.bucket)
+                        .key(key)
+                        .send()
+                        .await
+                        .context("failed to create multipart upload")?;
+
                     // initialize multipart upload lazily once there is data to upload
-                    multipart_context.insert(
-                        self.client
-                            .create_multipart_upload()
-                            .bucket(&self.bucket)
-                            .key(key)
-                            .send()
-                            .await?,
-                    )
+                    multipart_context.insert(MultipartUploadContext {
+                        upload_id: output
+                            .upload_id
+                            .context("no upload_id in create_multipart_upload response")?,
+                        parts: Vec::new(),
+                    })
                 };
 
                 // upload a part of the multipart
-                self.client
+                let part = self
+                    .client
                     .upload_part()
                     .bucket(&self.bucket)
                     .key(key)
-                    .set_upload_id(ctx.upload_id().map(Into::into))
+                    .upload_id(&ctx.upload_id)
                     .part_number(count)
                     .content_length(buf.len() as i64)
                     .body(buf.into())
                     .send()
-                    .await?;
+                    .await
+                    .context("failed to upload part")?;
+
+                ctx.parts.push(
+                    CompletedPart::builder()
+                        .e_tag(
+                            part.e_tag()
+                                .context("missing etag in upload_part response")?,
+                        )
+                        .part_number(count)
+                        .build(),
+                );
             }
 
             if last_part {
@@ -229,4 +257,9 @@ impl ObjectStorage {
 
         Ok(())
     }
+}
+
+struct MultipartUploadContext {
+    upload_id: String,
+    parts: Vec<CompletedPart>,
 }

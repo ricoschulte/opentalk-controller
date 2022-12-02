@@ -93,6 +93,13 @@ pub enum ParticipationKind {
     User,
     Guest,
     Sip,
+    Recorder,
+}
+
+impl ParticipationKind {
+    pub fn is_visible(&self) -> bool {
+        !matches!(self, Self::Recorder)
+    }
 }
 
 impl_to_redis_args_se!(ParticipationKind);

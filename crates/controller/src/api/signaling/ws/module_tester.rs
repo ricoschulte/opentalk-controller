@@ -383,6 +383,7 @@ where
             Participant::User(user) => Participant::User(user.id),
             Participant::Guest => Participant::Guest,
             Participant::Sip => Participant::Sip,
+            Participant::Recorder => Participant::Recorder,
         };
 
         Ok(Self {
@@ -493,6 +494,9 @@ where
                     Participant::Sip => {
                         attr_pipe.set("kind", ParticipationKind::Sip);
                     }
+                    Participant::Recorder => {
+                        attr_pipe.set("kind", ParticipationKind::Recorder);
+                    }
                 }
 
                 attr_pipe
@@ -545,6 +549,7 @@ where
                         Participant::User(_) => ParticipationKind::User,
                         Participant::Guest => ParticipationKind::Guest,
                         Participant::Sip => ParticipationKind::Sip,
+                        Participant::Recorder => ParticipationKind::Recorder,
                     },
                     hand_is_up: false,
                     joined_at: ctx.timestamp,
@@ -732,8 +737,8 @@ where
         })?;
 
         let rabbitmq_publish = RabbitMqPublish {
-            exchange: control::rabbitmq::current_room_exchange_name(SignalingRoomId::new_test(
-                self.room.id,
+            exchange: Some(control::rabbitmq::current_room_exchange_name(
+                SignalingRoomId::new_test(self.room.id),
             )),
             routing_key: control::rabbitmq::room_all_routing_key().into(),
             message,
@@ -764,7 +769,7 @@ where
                     return Ok(());
                 }
             }
-            Participant::Guest | Participant::Sip => {
+            Participant::Guest | Participant::Sip | Participant::Recorder => {
                 if !(rabbitmq_publish.routing_key == "participant.all"
                     || rabbitmq_publish.routing_key == participant_routing_key)
                 {

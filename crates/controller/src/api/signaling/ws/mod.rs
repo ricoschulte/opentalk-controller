@@ -241,7 +241,7 @@ where
 
 #[derive(Debug, Clone)]
 struct RabbitMqPublish {
-    exchange: String,
+    exchange: Option<String>,
     routing_key: String,
     message: String,
 }
@@ -276,14 +276,27 @@ where
         routing_key: String,
         message: M::RabbitMqMessage,
     ) {
+        self.rabbitmq_publish_any(
+            Some(exchange),
+            routing_key,
+            Namespaced {
+                namespace: M::NAMESPACE,
+                payload: message,
+            },
+        );
+    }
+
+    /// Queue any serializable outgoing message to be sent via rabbitmq
+    pub fn rabbitmq_publish_any(
+        &mut self,
+        exchange: Option<String>,
+        routing_key: String,
+        message: impl Serialize,
+    ) {
         self.rabbitmq_publish.push(RabbitMqPublish {
             exchange,
             routing_key,
-            message: Namespaced {
-                namespace: M::NAMESPACE,
-                payload: message,
-            }
-            .to_json(),
+            message: serde_json::to_string(&message).expect("value must be serializable to json"),
         });
     }
 
@@ -296,15 +309,14 @@ where
         routing_key: String,
         message: control::rabbitmq::Message,
     ) {
-        self.rabbitmq_publish.push(RabbitMqPublish {
-            exchange,
+        self.rabbitmq_publish_any(
+            Some(exchange),
             routing_key,
-            message: Namespaced {
+            Namespaced {
                 namespace: control::NAMESPACE,
                 payload: message,
-            }
-            .to_json(),
-        });
+            },
+        );
     }
 
     /// Access to the storage of the room

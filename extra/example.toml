@@ -82,9 +82,14 @@ from_routing_key = "from-janus"
 [rabbit_mq]
 # The URL to use to connect to the rabbit mq broker
 #url = "amqp://username:password@host/%2F"
+
 # The rabbitmq queue name for the mail worker,
 # mailing is disabled when this is not set.
 #mail_task_queue = "opentalk_mailer"
+
+# The rabbitmq queue name for the recorder,
+# recording is disabled when this is not set.
+#recording_task_queue = "opentalk_recorder"
 
 # Minimum amount of connections to retain when removing stale connections
 #min_connections = 10
