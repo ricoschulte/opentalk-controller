@@ -88,7 +88,11 @@ impl Settings {
     pub fn load(file_name: &str) -> Result<Self, ConfigError> {
         Config::builder()
             .add_source(File::new(file_name, FileFormat::Toml))
-            .add_source(Environment::with_prefix("K3K_CTRL").separator("__"))
+            .add_source(
+                Environment::with_prefix("K3K_CTRL")
+                    .prefix_separator("_")
+                    .separator("__"),
+            )
             .build()?
             .try_deserialize()
     }
@@ -392,4 +396,35 @@ pub struct MinIO {
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct Metrics {
     pub allowlist: Vec<cidr::IpInet>,
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::env;
+
+    #[test]
+    fn settings_env_vars_overwrite_config() -> Result<(), ConfigError> {
+        // Sanity check
+        let settings = Settings::load("../../extra/example.toml")?;
+
+        assert_eq!(
+            settings.database.url,
+            "postgres://postgres:password123@localhost:5432/k3k"
+        );
+        assert_eq!(settings.http.port, 11311u16);
+
+        // Set environment variables to overwrite default config file
+        let env_db_url = "postgres://envtest:password@localhost:5432/opentalk".to_string();
+        let env_http_port: u16 = 8000;
+        env::set_var("K3K_CTRL_DATABASE__URL", &env_db_url);
+        env::set_var("K3K_CTRL_HTTP__PORT", env_http_port.to_string());
+
+        let settings = Settings::load("../../extra/example.toml")?;
+
+        assert_eq!(settings.database.url, env_db_url);
+        assert_eq!(settings.http.port, env_http_port);
+
+        Ok(())
+    }
 }
