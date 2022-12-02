@@ -10,8 +10,7 @@ database = { path = "../crates//database", package = "k3k-database" }
 db-storage = { path = "../crates/db-storage", package = "k3k-db-storage" }
 
 tokio = { version = "1", features = ["macros"] }
-
-structopt = { version = "0.3" }
+clap = { version = "4", features = ["derive", "env"] }
 anyhow = { version = "1.0" }
 url = { version = "2.2.2" }
 cargo_metadata = { version = "0.14.1" }

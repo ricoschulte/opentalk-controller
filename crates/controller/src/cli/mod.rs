@@ -34,13 +34,13 @@ enum SubCommand {
     /// Rebuild ACLs based on current data
     FixAcl {
         /// Do not add user roles
-        #[clap(long = "no-user-roles", parse(from_flag = std::ops::Not::not))]
+        #[clap(long = "no-user-roles", default_value="true", action=ArgAction::SetFalse)]
         user_roles: bool,
         /// Do not add user groups
-        #[clap(long = "no-user-groups", parse(from_flag = std::ops::Not::not))]
+        #[clap(long = "no-user-groups", default_value="true", action=ArgAction::SetFalse)]
         user_groups: bool,
         /// Do not add room owner read/write access
-        #[clap(long = "no-room-creators", parse(from_flag = std::ops::Not::not))]
+        #[clap(long = "no-room-creators", default_value="true", action=ArgAction::SetFalse)]
         room_creators: bool,
     },
     /// Modify the ACLs.
@@ -82,7 +82,7 @@ impl Args {
 ///
 /// Also runs (optional) cli commands if necessary
 pub async fn parse_args() -> Result<Args> {
-    let args = Args::from_args();
+    let args = Args::parse();
 
     if args.version {
         print_version()
