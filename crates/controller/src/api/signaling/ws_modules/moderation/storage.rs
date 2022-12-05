@@ -208,9 +208,9 @@ pub async fn waiting_room_contains(
     participant_id: ParticipantId,
 ) -> Result<bool> {
     redis_conn
-        .srem(WaitingRoomList { room }, participant_id)
+        .sismember(WaitingRoomList { room }, participant_id)
         .await
-        .context("Failed to SREM waiting_room_list")
+        .context("Failed to SISMEMBER waiting_room_list")
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
@@ -238,4 +238,83 @@ pub async fn delete_waiting_room(redis_conn: &mut RedisConnection, room: RoomId)
         .del(WaitingRoomList { room })
         .await
         .context("Failed to DEL waiting_room_list")
+}
+
+#[derive(Display)]
+/// k3k-signaling:room={room}:waiting_room_accepted_list
+#[ignore_extra_doc_attributes]
+/// Set of participant ids inside the waiting room but accepted
+struct AcceptedWaitingRoomList {
+    room: RoomId,
+}
+
+impl_to_redis_args!(AcceptedWaitingRoomList);
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn waiting_room_accepted_add(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+    participant_id: ParticipantId,
+) -> Result<usize> {
+    redis_conn
+        .sadd(AcceptedWaitingRoomList { room }, participant_id)
+        .await
+        .context("Failed to SADD waiting_room_accepted_list")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn waiting_room_accepted_remove(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+    participant_id: ParticipantId,
+) -> Result<()> {
+    redis_conn
+        .srem(AcceptedWaitingRoomList { room }, participant_id)
+        .await
+        .context("Failed to SREM waiting_room_accepted_list")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn waiting_room_accepted_contains(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+    participant_id: ParticipantId,
+) -> Result<bool> {
+    redis_conn
+        .sismember(AcceptedWaitingRoomList { room }, participant_id)
+        .await
+        .context("Failed to SISMEMBER waiting_room_accepted_list")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn waiting_room_accepted_all(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+) -> Result<Vec<ParticipantId>> {
+    redis_conn
+        .smembers(AcceptedWaitingRoomList { room })
+        .await
+        .context("Failed to SMEMBERS waiting_room_accepted_list")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn waiting_room_accepted_len(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+) -> Result<usize> {
+    redis_conn
+        .scard(AcceptedWaitingRoomList { room })
+        .await
+        .context("Failed to SCARD waiting_room_accepted_list")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn delete_waiting_room_accepted(
+    redis_conn: &mut RedisConnection,
+    room: RoomId,
+) -> Result<()> {
+    redis_conn
+        .del(AcceptedWaitingRoomList { room })
+        .await
+        .context("Failed to DEL waiting_room_accepted_list")
 }

@@ -58,6 +58,13 @@ pub enum Error {
     NothingToDo,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum WaitingRoomState {
+    Waiting,
+    Accepted,
+}
+
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct Participant {
     pub id: ParticipantId,

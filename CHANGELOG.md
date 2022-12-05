@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- controller: added `waiting_room_state` enum to participants in waiting room ([#245](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/245))
+
 ## [1.0.0-rc.9] - 2022-12-02
 
 ### Added
@@ -37,8 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - controller: add `time_independent` filter to events GET request ([#155](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/155))
-- mail-worker-protocol: add types to support event-update emails ([#221](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/221))
-- controller: send email notification to invitees on event update ([#221](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/221))
+- mail-worker-protocol: add types to support event-update emails ([#211](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/211))
+- controller: send email notification to invitees on event update ([#211](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/211))
 - controller: add `suppress_email_notification` flag to event and invite endpoints ([#267](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/267))
 
 ### Changed

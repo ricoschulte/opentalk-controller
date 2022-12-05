@@ -1,8 +1,8 @@
-use crate::api::signaling::prelude::*;
+use crate::{api::signaling::prelude::*, redis_wrapper::RedisConnection};
 use actix_http::ws::CloseCode;
 use anyhow::Result;
 use controller_shared::ParticipantId;
-use db_storage::users::UserId;
+use db_storage::{rooms::RoomId, users::UserId};
 use serde::Serialize;
 use std::collections::HashMap;
 
@@ -21,8 +21,38 @@ pub struct ModerationModule {
 #[derive(Debug, Serialize)]
 pub struct ModerationModuleFrontendData {
     waiting_room_enabled: bool,
-    waiting_room: Vec<control::outgoing::Participant>,
+    waiting_room_participants: Vec<control::outgoing::Participant>,
     raise_hands_enabled: bool,
+}
+
+async fn build_waiting_room_participants(
+    redis_conn: &mut RedisConnection,
+    room_id: RoomId,
+    list: &Vec<ParticipantId>,
+    waiting_room_state: control::outgoing::WaitingRoomState,
+) -> Result<Vec<control::outgoing::Participant>> {
+    let mut waiting_room = Vec::with_capacity(list.len());
+
+    for id in list {
+        let control_data =
+            control::ControlData::from_redis(redis_conn, SignalingRoomId(room_id, None), *id)
+                .await?;
+
+        let module_data = HashMap::from([
+            (control::NAMESPACE, serde_json::to_value(control_data)?),
+            (
+                "waiting_room_state",
+                serde_json::to_value(&waiting_room_state)?,
+            ),
+        ]);
+
+        waiting_room.push(control::outgoing::Participant {
+            id: *id,
+            module_data,
+        });
+    }
+
+    Ok(waiting_room)
 }
 
 #[async_trait::async_trait(?Send)]
@@ -70,27 +100,30 @@ impl SignalingModule for ModerationModule {
 
                     let list =
                         storage::waiting_room_all(ctx.redis_conn(), self.room.room_id()).await?;
+                    let mut waiting_room_participants = build_waiting_room_participants(
+                        ctx.redis_conn(),
+                        self.room.room_id(),
+                        &list,
+                        control::outgoing::WaitingRoomState::Waiting,
+                    )
+                    .await?;
 
-                    let mut waiting_room = Vec::with_capacity(list.len());
+                    let list =
+                        storage::waiting_room_accepted_all(ctx.redis_conn(), self.room.room_id())
+                            .await?;
+                    let mut accepted_waiting_room_participants = build_waiting_room_participants(
+                        ctx.redis_conn(),
+                        self.room.room_id(),
+                        &list,
+                        control::outgoing::WaitingRoomState::Accepted,
+                    )
+                    .await?;
 
-                    for id in list {
-                        let mut module_data = HashMap::with_capacity(1);
-
-                        let control_data = control::ControlData::from_redis(
-                            ctx.redis_conn(),
-                            SignalingRoomId(self.room.room_id(), None),
-                            id,
-                        )
-                        .await?;
-
-                        module_data.insert(control::NAMESPACE, serde_json::to_value(control_data)?);
-
-                        waiting_room.push(control::outgoing::Participant { id, module_data });
-                    }
+                    waiting_room_participants.append(&mut accepted_waiting_room_participants);
 
                     *frontend_data = Some(ModerationModuleFrontendData {
                         waiting_room_enabled,
-                        waiting_room,
+                        waiting_room_participants,
                         raise_hands_enabled,
                     });
                 }
@@ -174,6 +207,10 @@ impl SignalingModule for ModerationModule {
                     return Ok(());
                 }
 
+                storage::waiting_room_accepted_add(ctx.redis_conn(), self.room.room_id(), target)
+                    .await?;
+                storage::waiting_room_remove(ctx.redis_conn(), self.room.room_id(), target).await?;
+
                 ctx.rabbitmq_publish_control(
                     control::rabbitmq::current_room_exchange_name(self.room),
                     control::rabbitmq::room_participant_routing_key(target),
@@ -239,12 +276,11 @@ impl SignalingModule for ModerationModule {
                     return Ok(());
                 }
 
-                let mut module_data = HashMap::with_capacity(1);
-
                 let control_data =
                     control::ControlData::from_redis(ctx.redis_conn(), self.room, id).await?;
 
-                module_data.insert(control::NAMESPACE, serde_json::to_value(control_data)?);
+                let module_data =
+                    HashMap::from([(control::NAMESPACE, serde_json::to_value(control_data)?)]);
 
                 ctx.ws_send(outgoing::Message::JoinedWaitingRoom(
                     control::outgoing::Participant { id, module_data },
@@ -297,6 +333,12 @@ impl SignalingModule for ModerationModule {
                 storage::delete_waiting_room(ctx.redis_conn(), self.room.room_id()).await
             {
                 log::error!("Failed to clean up waiting room list {}", e);
+            }
+
+            if let Err(e) =
+                storage::delete_waiting_room_accepted(ctx.redis_conn(), self.room.room_id()).await
+            {
+                log::error!("Failed to clean up accepted waiting room list {}", e);
             }
         }
     }
