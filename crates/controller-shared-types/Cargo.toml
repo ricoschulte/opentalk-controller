@@ -2,7 +2,7 @@
 name = "k3k-controller-shared"
 description = "Shared types and trait definitions for k3k-controller"
 version = "1.0.0-rc.9"
-edition = "2018"
+edition = "2021"
 publish = false
 authors = ["OpenTalk Team <we@opentalk.eu>"]
 

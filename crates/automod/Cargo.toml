@@ -1,7 +1,7 @@
 [package]
 name = "k3k-automod"
 version = "1.0.0-rc.9"
-edition = "2018"
+edition = "2021"
 publish = false
 authors = ["OpenTalk Team <we@opentalk.eu>"]
 
