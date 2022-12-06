@@ -2,6 +2,8 @@
 name = "k3k-whiteboard"
 version = "1.0.0-rc.10"
 edition = "2021"
+authors.workspace = true
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
