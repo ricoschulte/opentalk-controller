@@ -1,5 +1,5 @@
 ---
-image: git.opentalk.dev:5050/opentalk/backend/rust:1.64
+image: git.opentalk.dev:5050/opentalk/backend/rust:1.65
 
 stages:
   - lint
