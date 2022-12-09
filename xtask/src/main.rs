@@ -1,27 +1,27 @@
 use anyhow::Result;
+use clap::Parser;
 use std::path::PathBuf;
-use structopt::StructOpt;
 
 mod db_schema;
 
-#[derive(Debug, StructOpt)]
-#[structopt(
+#[derive(Debug, Parser)]
+#[command(
     name = "xtask",
     about = "This binary defines auxiliary ad-hoc scripts."
 )]
 enum XTasks {
     /// Create the diesel DB schema file
     GenerateDbSchema {
-        #[structopt(long, env = "POSTGRES_URL")]
+        #[arg(long, env = "POSTGRES_URL")]
         postgres_url: Option<url::Url>,
-        #[structopt(long, env = "DATABASE_NAME")]
+        #[arg(long, env = "DATABASE_NAME")]
         database_name: Option<String>,
     },
     /// Runs the db-storage crates migrations and verifies if the present schema.rs is correct.
     VerifyDbSchema {
-        #[structopt(long, env = "POSTGRES_URL")]
+        #[arg(long, env = "POSTGRES_URL")]
         postgres_url: Option<url::Url>,
-        #[structopt(long, env = "DATABASE_NAME")]
+        #[arg(long, env = "DATABASE_NAME")]
         database_name: Option<String>,
     },
 }
@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
         .parse_default_env();
     builder.init();
 
-    let opt = XTasks::from_args();
+    let opt = XTasks::parse();
     match opt {
         XTasks::GenerateDbSchema {
             postgres_url,
