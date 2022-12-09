@@ -1,7 +1,9 @@
 use controller::prelude::*;
 use controller::prelude::{ModuleTester, WsMessageOutgoing};
 use controller_shared::ParticipantId;
-use db_storage::legal_votes::types::{CancelReason, Parameters, UserParameters, VoteOption, Votes};
+use db_storage::legal_votes::types::{
+    CancelReason, Parameters, UserParameters, VoteKind, VoteOption, Votes,
+};
 use db_storage::legal_votes::{LegalVote as DbLegalVote, LegalVoteId};
 use k3k_legal_vote::incoming::{Stop, VoteMessage};
 use k3k_legal_vote::outgoing::{
@@ -27,13 +29,13 @@ async fn basic_vote() {
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
+        kind: VoteKind::RollCall,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
-        hidden: false,
-        auto_stop: false,
+        auto_close: false,
         duration: None,
         create_pdf: false,
     };
@@ -241,13 +243,13 @@ async fn hidden_legal_vote() {
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
+        kind: VoteKind::Pseudonymous,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
-        hidden: true,
-        auto_stop: false,
+        auto_close: false,
         duration: None,
         create_pdf: false,
     };
@@ -451,13 +453,13 @@ async fn basic_vote_abstain() {
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
+        kind: VoteKind::RollCall,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: true,
-        hidden: false,
-        auto_stop: false,
+        auto_close: false,
         duration: None,
         create_pdf: false,
     };
@@ -665,13 +667,13 @@ async fn expired_vote() {
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
+        kind: VoteKind::RollCall,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
-        hidden: false,
-        auto_stop: false,
+        auto_close: false,
         duration: Some(5),
         create_pdf: false,
     };
@@ -773,13 +775,13 @@ async fn auto_stop_vote() {
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
+        kind: VoteKind::RollCall,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
-        hidden: false,
-        auto_stop: true,
+        auto_close: true,
         duration: None,
         create_pdf: false,
     };
@@ -985,13 +987,13 @@ async fn start_with_one_participant() {
 
     // Start legal vote as user 1
     let start_parameters = UserParameters {
+        kind: VoteKind::RollCall,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id],
         enable_abstain: false,
-        hidden: false,
-        auto_stop: false,
+        auto_close: false,
         duration: None,
         create_pdf: false,
     };
@@ -1013,13 +1015,13 @@ async fn start_with_empty_participants() {
     let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let start_parameters = UserParameters {
+        kind: VoteKind::RollCall,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![],
         enable_abstain: false,
-        hidden: false,
-        auto_stop: false,
+        auto_close: false,
         duration: None,
         create_pdf: false,
     };
@@ -1090,13 +1092,13 @@ async fn ineligible_voter() {
     let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let start_parameters = UserParameters {
+        kind: VoteKind::RollCall,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id],
         enable_abstain: false,
-        hidden: false,
-        auto_stop: false,
+        auto_close: false,
         duration: None,
         create_pdf: false,
     };
@@ -1148,13 +1150,13 @@ async fn start_with_allowed_guest() {
     let guest = ParticipantId::new_test(11311);
 
     let start_parameters = UserParameters {
+        kind: VoteKind::RollCall,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, guest, USER_2.participant_id],
         enable_abstain: false,
-        hidden: false,
-        auto_stop: false,
+        auto_close: false,
         duration: None,
         create_pdf: false,
     };
@@ -1278,13 +1280,13 @@ async fn vote_twice() {
     let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let start_parameters = UserParameters {
+        kind: VoteKind::RollCall,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
-        hidden: false,
-        auto_stop: false,
+        auto_close: false,
         duration: None,
         create_pdf: false,
     };
@@ -1480,13 +1482,13 @@ async fn join_as_guest() {
 /// Start a vote with user1 with default UserParameters
 async fn default_vote_start(module_tester: &mut ModuleTester<LegalVote>) {
     let start_parameters = UserParameters {
+        kind: VoteKind::RollCall,
         name: "TestVote".into(),
         subtitle: Some("A subtitle".into()),
         topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
-        hidden: false,
-        auto_stop: false,
+        auto_close: false,
         duration: None,
         create_pdf: false,
     };

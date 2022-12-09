@@ -68,6 +68,7 @@ mod test {
     use super::*;
     use controller::prelude::*;
     use controller_shared::ParticipantId;
+    use db_storage::legal_votes::types::VoteKind;
     use test_util::serde_json::json;
     use uuid::Uuid;
 
@@ -75,14 +76,14 @@ mod test {
     fn start_message() {
         let json = json!(
             {
+                "kind": "roll_call",
                 "action": "start",
                 "name": "Vote Test",
                 "subtitle": "A subtitle",
                 "topic": "Yes or No?",
                 "allowed_participants": ["00000000-0000-0000-0000-000000000000"],
                 "enable_abstain": false,
-                "auto_stop": false,
-                "hidden": false,
+                "auto_close": false,
                 "duration": 60,
                 "create_pdf": false
             }
@@ -91,24 +92,24 @@ mod test {
         let start: Message = serde_json::from_value(json).unwrap();
 
         if let Message::Start(UserParameters {
+            kind,
             name,
             subtitle,
             topic,
             allowed_participants,
             enable_abstain,
-            hidden,
-            auto_stop,
+            auto_close,
             duration: time_in_sec,
             create_pdf,
         }) = start
         {
+            assert_eq!(VoteKind::RollCall, kind);
             assert_eq!("Vote Test", name);
             assert_eq!("A subtitle", subtitle.unwrap());
             assert_eq!("Yes or No?", topic.unwrap());
             assert_eq!(allowed_participants, vec![ParticipantId::nil()]);
             assert!(!enable_abstain);
-            assert!(!hidden);
-            assert!(!auto_stop);
+            assert!(!auto_close);
             assert_eq!(time_in_sec, Some(60));
             assert!(!create_pdf);
         } else {
@@ -238,14 +239,14 @@ mod test {
 
         let json = json!(
             {
+                "kind": "roll_call",
                 "action": "start",
                 "name": string_151,
                 "subtitle": string_256,
                 "topic": string_501,
                 "allowed_participants": [],
                 "enable_abstain": false,
-                "hidden": false,
-                "auto_stop": false,
+                "auto_close": false,
                 "duration": 4,
                 "create_pdf": false
             }

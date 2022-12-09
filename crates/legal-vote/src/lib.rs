@@ -16,10 +16,10 @@ use controller::storage::ObjectStorage;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::legal_votes::set_protocol;
-use db_storage::legal_votes::types::protocol as db_protocol;
 use db_storage::legal_votes::types::protocol::v1::UserInfo;
 use db_storage::legal_votes::types::protocol::v1::{Cancel, ProtocolEntry, Start, Vote, VoteEvent};
 use db_storage::legal_votes::types::protocol::NewProtocol;
+use db_storage::legal_votes::types::{protocol as db_protocol, VoteKind};
 use db_storage::legal_votes::types::{
     CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
 };
@@ -657,13 +657,12 @@ impl LegalVote {
             ));
         }
 
-        let user_info = if parameters.inner.hidden {
-            None
-        } else {
-            Some(UserInfo {
+        let user_info = match parameters.inner.kind {
+            VoteKind::Pseudonymous => None,
+            VoteKind::RollCall => Some(UserInfo {
                 issuer: self.user_id,
                 participant_id: self.participant_id,
-            })
+            }),
         };
 
         let vote_event = Vote {
@@ -688,12 +687,12 @@ impl LegalVote {
                 }),
                 false,
             ),
-            VoteScriptResult::SuccessAutoStop => (
+            VoteScriptResult::SuccessAutoClose => (
                 Response::Success(VoteSuccess {
                     vote_option: vote_message.option,
                     issuer: self.participant_id,
                 }),
-                parameters.inner.auto_stop,
+                parameters.inner.auto_close,
             ),
             VoteScriptResult::InvalidVoteId => (Response::Failed(VoteFailed::InvalidVoteId), false),
             VoteScriptResult::Ineligible => (Response::Failed(VoteFailed::Ineligible), false),
@@ -783,17 +782,19 @@ impl LegalVote {
         )
         .await?;
 
-        let voters = if parameters.inner.hidden {
-            None
-        } else {
-            let protocol = storage::protocol::get(redis_conn, self.room_id, legal_vote_id).await?;
+        let voters = match parameters.inner.kind {
+            VoteKind::Pseudonymous => None,
+            VoteKind::RollCall => {
+                let protocol =
+                    storage::protocol::get(redis_conn, self.room_id, legal_vote_id).await?;
 
-            let vote_list = reduce_protocol(protocol)?;
+                let vote_list = reduce_protocol(protocol)?;
 
-            if let Some(list) = vote_list.left() {
-                Some(list)
-            } else {
-                return Err(anyhow!("Failed to get voters from vote protocol").into());
+                if let Some(list) = vote_list.left() {
+                    Some(list)
+                } else {
+                    return Err(anyhow!("Failed to get voters from vote protocol").into());
+                }
             }
         };
 
@@ -983,12 +984,15 @@ impl LegalVote {
         )
         .await?;
 
-        let voters = if parameters.inner.hidden {
-            None
-        } else if let Either::Left(voters) = vote_list {
-            Some(voters)
-        } else {
-            return Err(anyhow!("Failed to get voters from vote protocol").into());
+        let voters = match parameters.inner.kind {
+            VoteKind::Pseudonymous => None,
+            VoteKind::RollCall => {
+                if let Either::Left(voters) = vote_list {
+                    Some(voters)
+                } else {
+                    return Err(anyhow!("Failed to get voters from vote protocol").into());
+                }
+            }
         };
 
         if protocol_vote_count == vote_count && total_votes <= parameters.max_votes {

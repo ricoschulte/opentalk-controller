@@ -8,7 +8,7 @@ use database::{Db, DbConnection};
 use db_storage::legal_votes::types::protocol::v1::{self, VoteEvent};
 use db_storage::legal_votes::types::protocol::{self, Protocol};
 use db_storage::legal_votes::types::{
-    CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
+    CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteKind, VoteOption, Votes,
 };
 use db_storage::legal_votes::{LegalVote, LegalVoteId};
 use db_storage::rooms::RoomId;
@@ -66,6 +66,8 @@ pub struct Settings {
     pub created_by: ParticipantInfo,
     /// The time the vote got started
     pub start_time: DateTime<Utc>,
+    /// Kind of vote
+    pub kind: VoteKind,
     /// The maximum amount of votes possible
     pub max_votes: u32,
     /// The name of the vote
@@ -78,10 +80,8 @@ pub struct Settings {
     pub topic: Option<String>,
     /// Indicates that the `Abstain` vote option is enabled
     pub enable_abstain: bool,
-    /// Hide the participants vote choices from other participants
-    pub hidden: bool,
-    /// The vote will automatically stop when every participant voted
-    pub auto_stop: bool,
+    /// The vote will automatically close when every participant voted
+    pub auto_close: bool,
     /// The vote will stop when the duration (in seconds) has passed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub duration: Option<u64>,
@@ -360,13 +360,13 @@ fn parse_v1_entries(
                     max_votes,
                     inner:
                         UserParameters {
+                            kind,
                             name,
                             subtitle,
                             topic,
                             allowed_participants: _,
                             enable_abstain,
-                            hidden,
-                            auto_stop,
+                            auto_close,
                             duration,
                             create_pdf: _,
                         },
@@ -385,13 +385,13 @@ fn parse_v1_entries(
                 settings = Some(Settings {
                     created_by: initiator,
                     start_time,
+                    kind,
                     max_votes,
                     name,
                     subtitle,
                     topic,
                     enable_abstain,
-                    hidden,
-                    auto_stop,
+                    auto_close,
                     duration,
                 });
             }
@@ -477,36 +477,39 @@ fn parse_v1_entries(
         ProtocolError::InvalidProtocol
     })?;
 
-    let voters = if settings.hidden {
-        if !user_ids.is_empty() || !raw_voters.is_empty() {
-            log::error!("Found user vote entries in hidden legal vote protocol");
-            return Err(ProtocolError::InvalidProtocol);
+    let voters = match settings.kind {
+        VoteKind::Pseudonymous => {
+            if !user_ids.is_empty() || !raw_voters.is_empty() {
+                log::error!("Found user vote entries in hidden legal vote protocol");
+                return Err(ProtocolError::InvalidProtocol);
+            }
+
+            None
         }
+        VoteKind::RollCall => {
+            let mut voters = vec![];
 
-        None
-    } else {
-        let mut voters = vec![];
+            for user in users {
+                let vote_option = raw_voters.remove(&user.id).ok_or_else(|| {
+                    log::error!(
+                        "Missing user while mapping vote options in legal vote protocol parsing"
+                    );
+                    ProtocolError::InvalidProtocol
+                })?;
 
-        for user in users {
-            let vote_option = raw_voters.remove(&user.id).ok_or_else(|| {
-                log::error!(
-                    "Missing user while mapping vote options in legal vote protocol parsing"
-                );
-                ProtocolError::InvalidProtocol
-            })?;
+                let participant = ParticipantInfo {
+                    firstname: user.firstname,
+                    lastname: user.lastname,
+                    email: user.email,
+                };
+                voters.push(Voter {
+                    participant,
+                    vote_option,
+                });
+            }
 
-            let participant = ParticipantInfo {
-                firstname: user.firstname,
-                lastname: user.lastname,
-                email: user.email,
-            };
-            voters.push(Voter {
-                participant,
-                vote_option,
-            });
+            Some(voters)
         }
-
-        Some(voters)
     };
 
     Ok(LegalVoteDetails {
@@ -536,11 +539,11 @@ mod test {
             start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
             max_votes: 1,
             name: "Test Vote".into(),
+            kind: VoteKind::RollCall,
             subtitle: Some("A subtitle".into()),
             topic: Some("Does the test work".into()),
             enable_abstain: false,
-            hidden: false,
-            auto_stop: false,
+            auto_close: false,
             duration: Some(60),
         };
 
@@ -555,11 +558,11 @@ mod test {
                 "start_time": "1970-01-01T00:00:00Z",
                 "max_votes": 1,
                 "name": "Test Vote",
+                "kind": "roll_call",
                 "subtitle": "A subtitle",
                 "topic": "Does the test work",
                 "enable_abstain": false,
-                "hidden": false,
-                "auto_stop": false,
+                "auto_close": false,
                 "duration": 60,
             }
         );
@@ -578,11 +581,11 @@ mod test {
             start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
             max_votes: 1,
             name: "Test Vote".into(),
+            kind: VoteKind::RollCall,
             subtitle: None,
             topic: None,
             enable_abstain: false,
-            hidden: false,
-            auto_stop: false,
+            auto_close: false,
             duration: None,
         };
 
@@ -597,9 +600,9 @@ mod test {
                 "start_time": "1970-01-01T00:00:00Z",
                 "max_votes": 1,
                 "name": "Test Vote",
+                "kind": "roll_call",
                 "enable_abstain": false,
-                "hidden": false,
-                "auto_stop": false,
+                "auto_close": false,
             }
         );
     }
@@ -618,13 +621,13 @@ mod test {
                 settings: Settings {
                     created_by: test_participant.clone(),
                     start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+                    kind: VoteKind::RollCall,
                     max_votes: 1,
                     name: "Test Vote".into(),
                     subtitle: Some("A subtitle".into()),
                     topic: Some("Does the test work".into()),
                     enable_abstain: false,
-                    hidden: false,
-                    auto_stop: false,
+                    auto_close: false,
                     duration: Some(60),
                 },
                 voters: Some(vec![Voter {
@@ -645,6 +648,7 @@ mod test {
         assert_eq_json!(
             legal_vote_entry,
             {
+                "kind": "roll_call",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000001",
                 "created_by": {
                   "firstname": "test",
@@ -657,8 +661,7 @@ mod test {
                 "subtitle": "A subtitle",
                 "topic": "Does the test work",
                 "enable_abstain": false,
-                "hidden": false,
-                "auto_stop": false,
+                "auto_close": false,
                 "duration": 60,
                 "voters": [
                   {
@@ -697,13 +700,13 @@ mod test {
                 settings: Settings {
                     created_by: test_participant.clone(),
                     start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+                    kind: VoteKind::RollCall,
                     max_votes: 1,
                     name: "Test Vote".into(),
                     subtitle: Some("A subtitle".into()),
                     topic: Some("Does the test work".into()),
                     enable_abstain: false,
-                    hidden: false,
-                    auto_stop: false,
+                    auto_close: false,
                     duration: None,
                 },
                 voters: Some(vec![Voter {
@@ -720,6 +723,7 @@ mod test {
         assert_eq_json!(
             legal_vote_entry,
             {
+                "kind": "roll_call",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000001",
                 "created_by": {
                   "firstname": "test",
@@ -732,8 +736,7 @@ mod test {
                 "subtitle": "A subtitle",
                 "topic": "Does the test work",
                 "enable_abstain": false,
-                "hidden": false,
-                "auto_stop": false,
+                "auto_close": false,
                 "voters": [
                   {
                     "firstname": "test",
@@ -771,13 +774,13 @@ mod test {
                 settings: Settings {
                     created_by: test_participant.clone(),
                     start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+                    kind: VoteKind::RollCall,
                     max_votes: 1,
                     name: "Test Vote".into(),
                     subtitle: Some("A subtitle".into()),
                     topic: Some("Does the test work".into()),
                     enable_abstain: false,
-                    hidden: false,
-                    auto_stop: false,
+                    auto_close: false,
                     duration: Some(60),
                 },
                 voters: Some(vec![Voter {
@@ -793,6 +796,7 @@ mod test {
         assert_eq_json!(
             legal_vote_entry,
             {
+                "kind": "roll_call",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000001",
                 "created_by": {
                     "firstname": "test",
@@ -805,8 +809,7 @@ mod test {
                 "subtitle": "A subtitle",
                 "topic": "Does the test work",
                 "enable_abstain": false,
-                "hidden": false,
-                "auto_stop": false,
+                "auto_close": false,
                 "duration": 60,
                 "voters": [
                     {

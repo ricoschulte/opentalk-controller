@@ -75,7 +75,7 @@ pub(crate) fn reduce_protocol(
         .iter()
         .find_map(|entry| {
             if let VoteEvent::Start(start) = &entry.event {
-                Some(start.parameters.inner.hidden)
+                Some(start.parameters.inner.kind.is_hidden())
             } else {
                 None
             }

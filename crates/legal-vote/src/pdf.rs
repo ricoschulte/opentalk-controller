@@ -164,13 +164,13 @@ fn summarize_start_entry(
                 max_votes,
                 inner:
                     UserParameters {
+                        kind,
                         name,
                         subtitle,
                         topic,
                         allowed_participants: _,
                         enable_abstain,
-                        auto_stop,
-                        hidden,
+                        auto_close,
                         duration,
                         create_pdf: _,
                     },
@@ -201,6 +201,11 @@ fn summarize_start_entry(
     let mut row = table.row();
     row.push_element(Break::new(1));
     row.push_element(Break::new(1));
+    row.push()?;
+
+    let mut row = table.row();
+    row.push_element(Paragraph::new("Abstimmungsart:"));
+    row.push_element(Paragraph::new(kind.to_string()));
     row.push()?;
 
     let mut row = table.row();
@@ -236,18 +241,13 @@ fn summarize_start_entry(
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Versteckte Abstimmung:"));
-    row.push_element(Paragraph::new(bool_to_string(hidden)));
-    row.push()?;
-
-    let mut row = table.row();
     row.push_element(Paragraph::new("Enthaltung erlaubt:"));
     row.push_element(Paragraph::new(bool_to_string(enable_abstain)));
     row.push()?;
 
     let mut row = table.row();
     row.push_element(Paragraph::new("Automatisches Ende:"));
-    row.push_element(Paragraph::new(bool_to_string(auto_stop)));
+    row.push_element(Paragraph::new(bool_to_string(auto_close)));
     row.push()?;
 
     Ok(())
@@ -483,6 +483,7 @@ mod test {
     use controller::prelude::uuid::Uuid;
     use controller_shared::ParticipantId;
     use db_storage::legal_votes::types::protocol::v1::UserInfo;
+    use db_storage::legal_votes::types::VoteKind;
     use db_storage::legal_votes::LegalVoteId;
     use db_storage::users::User;
     use std::fs;
@@ -548,13 +549,13 @@ mod test {
                 start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
                 max_votes: 3,
                 inner: UserParameters {
+                    kind: VoteKind::RollCall,
                     name: "Weather Vote".into(),
                     subtitle: Some("Another one of these weather votes".into()),
                     topic: Some("Is the weather good today?".into()),
                     allowed_participants: users.iter().map(|_| ParticipantId::nil()).collect(),
                     enable_abstain: false,
-                    auto_stop: false,
-                    hidden: false,
+                    auto_close: false,
                     duration: None,
                     create_pdf: true,
                 },

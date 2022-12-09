@@ -178,7 +178,7 @@ mod test {
     use chrono::prelude::*;
     use controller::prelude::*;
     use controller_shared::ParticipantId;
-    use db_storage::legal_votes::types::{CancelReason, Parameters, UserParameters};
+    use db_storage::legal_votes::types::{CancelReason, Parameters, UserParameters, VoteKind};
     use test_util::assert_eq_json;
     use uuid::Uuid;
 
@@ -190,13 +190,13 @@ mod test {
             start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
             max_votes: 2,
             inner: UserParameters {
+                kind: VoteKind::RollCall,
                 name: "TestVote".into(),
                 subtitle: Some("A subtitle".into()),
                 topic: Some("Yes or No?".into()),
                 allowed_participants: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
                 enable_abstain: false,
-                hidden: false,
-                auto_stop: false,
+                auto_close: false,
                 duration: None,
                 create_pdf: false,
             },
@@ -209,6 +209,7 @@ mod test {
                 "initiator_id": "00000000-0000-0000-0000-000000000000",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
                 "start_time": "1970-01-01T00:00:00Z",
+                "kind": "roll_call",
                 "max_votes": 2,
                 "name": "TestVote",
                 "subtitle": "A subtitle",
@@ -218,10 +219,9 @@ mod test {
                     "00000000-0000-0000-0000-000000000002"
                 ],
                 "enable_abstain": false,
-                "hidden": false,
-                "auto_stop": false,
+                "auto_close": false,
                 "duration": null,
-                "create_pdf": false
+                "create_pdf": false,
             }
         );
     }

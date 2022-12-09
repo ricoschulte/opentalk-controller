@@ -186,8 +186,8 @@ end
 pub(crate) enum VoteScriptResult {
     // Vote successful
     Success = 0,
-    // Vote successful & no more allowed users
-    SuccessAutoStop,
+    // Vote closed successfully & no more allowed users
+    SuccessAutoClose,
     // Provided vote id was not active
     InvalidVoteId,
     // User is not allowed to vote
@@ -199,7 +199,7 @@ impl FromRedisValue for VoteScriptResult {
         if let redis::Value::Int(val) = v {
             match val {
                 0 => Ok(VoteScriptResult::Success),
-                1 => Ok(VoteScriptResult::SuccessAutoStop),
+                1 => Ok(VoteScriptResult::SuccessAutoClose),
                 2 => Ok(VoteScriptResult::InvalidVoteId),
                 3 => Ok(VoteScriptResult::Ineligible),
 
