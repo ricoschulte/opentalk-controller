@@ -5,11 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0-rc.10] - 2022-12-09
 
 ### Added
 
 - controller: added `waiting_room_state` enum to participants in waiting room ([#245](https://git.opentalk.dev/heinlein-video/k3k-controller/-/issues/245))
+
+### Fixed
+
+- recording: properly read participants consent when they join or update their state
+- recording: only delete the current recording state when the actual recorder leaves
 
 ## [1.0.0-rc.9] - 2022-12-02
 
@@ -172,7 +177,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - initial release candidate
 
-[Unreleased]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.9...main
+[Unreleased]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.10...main
+[1.0.0-rc.10]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.9...v1.0.0-rc.10
 [1.0.0-rc.9]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.8...v1.0.0-rc.9
 [1.0.0-rc.8]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.7...v1.0.0-rc.8
 [1.0.0-rc.7]: https://git.opentalk.dev/heinlein-video/k3k-controller/-/compare/v1.0.0-rc.6...v1.0.0-rc.7
