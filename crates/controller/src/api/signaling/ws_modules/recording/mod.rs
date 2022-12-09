@@ -123,9 +123,22 @@ impl SignalingModule for Recording {
             }
             Event::RaiseHand => {}
             Event::LowerHand => {}
-            Event::ParticipantJoined(_, _) => {}
             Event::ParticipantLeft(_) => {}
-            Event::ParticipantUpdated(_, _) => {}
+            Event::ParticipantJoined(id, data) | Event::ParticipantUpdated(id, data) => {
+                let consent: Option<bool> = control::storage::get_attribute(
+                    ctx.redis_conn(),
+                    self.room,
+                    id,
+                    "recording_consent",
+                )
+                .await?;
+
+                if let Some(consent) = consent {
+                    *data = Some(PeerFrontendData {
+                        consents_recording: consent,
+                    })
+                }
+            }
             Event::WsMessage(msg) => {
                 match msg {
                     incoming::Message::Start => {
@@ -219,8 +232,10 @@ impl SignalingModule for Recording {
     }
 
     async fn on_destroy(self, mut ctx: DestroyContext<'_>) {
-        if let Err(e) = storage::del_state(ctx.redis_conn(), self.room).await {
-            log::error!("failed to delete state, {:?}", e);
+        if self.i_am_the_recorder {
+            if let Err(e) = storage::del_state(ctx.redis_conn(), self.room).await {
+                log::error!("failed to delete state, {:?}", e);
+            }
         }
     }
 }
