@@ -162,6 +162,7 @@ fn summarize_start_entry(
                 legal_vote_id,
                 start_time,
                 max_votes,
+                token: _,
                 inner:
                     UserParameters {
                         kind,
@@ -548,6 +549,7 @@ mod test {
                 legal_vote_id: LegalVoteId::from(Uuid::nil()),
                 start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
                 max_votes: 3,
+                token: None,
                 inner: UserParameters {
                     kind: VoteKind::RollCall,
                     name: "Weather Vote".into(),

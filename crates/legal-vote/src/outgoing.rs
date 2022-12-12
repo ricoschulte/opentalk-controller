@@ -175,6 +175,7 @@ impl From<super::error::ErrorKind> for ErrorKind {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::Token;
     use chrono::prelude::*;
     use controller::prelude::*;
     use controller_shared::ParticipantId;
@@ -189,6 +190,7 @@ mod test {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
             max_votes: 2,
+            token: Some(Token::new(0x68656c6c6f)),
             inner: UserParameters {
                 kind: VoteKind::RollCall,
                 name: "TestVote".into(),
@@ -211,6 +213,7 @@ mod test {
                 "start_time": "1970-01-01T00:00:00Z",
                 "kind": "roll_call",
                 "max_votes": 2,
+                "token": "1111Cn8eVZg",
                 "name": "TestVote",
                 "subtitle": "A subtitle",
                 "topic": "Yes or No?",

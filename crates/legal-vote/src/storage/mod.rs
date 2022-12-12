@@ -3,7 +3,7 @@
 //! Contains Lua scripts to manipulate multiple redis keys atomically in one request.
 //!
 //! Each key is defined in its own module with its related functions.
-use allowed_users::AllowedUsersKey;
+use allowed_tokens::AllowedTokensKey;
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use current_legal_vote_id::CurrentVoteIdKey;
@@ -16,7 +16,7 @@ use protocol::ProtocolKey;
 use redis::FromRedisValue;
 use vote_count::VoteCountKey;
 
-pub(crate) mod allowed_users;
+pub(crate) mod allowed_tokens;
 pub(crate) mod current_legal_vote_id;
 pub(crate) mod history;
 pub(crate) mod parameters;
@@ -121,7 +121,7 @@ pub(crate) async fn cleanup_vote(
             room_id,
             legal_vote_id,
         })
-        .key(AllowedUsersKey {
+        .key(AllowedTokensKey {
             room_id,
             legal_vote_id,
         })
@@ -234,7 +234,7 @@ pub(crate) async fn vote(
 
     redis::Script::new(VOTE_SCRIPT)
         .key(CurrentVoteIdKey { room_id })
-        .key(AllowedUsersKey {
+        .key(AllowedTokensKey {
             room_id,
             legal_vote_id,
         })

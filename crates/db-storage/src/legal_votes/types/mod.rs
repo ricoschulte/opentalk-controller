@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 pub mod protocol;
+mod token;
+
+pub use token::Token;
 
 /// The vote choices
 ///
@@ -38,6 +41,9 @@ pub struct Parameters {
     /// Parameters set by the initiator
     #[serde(flatten)]
     pub inner: UserParameters,
+    /// Token for users who are allowed to participate
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<Token>,
 }
 
 /// Kinds of votes
@@ -162,6 +168,7 @@ mod test {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
             max_votes: 2,
+            token: Some(Token::new(0x68656c6c6f)),
             inner: UserParameters {
                 name: "TestWithOptionalFields".into(),
                 kind: VoteKind::RollCall,
@@ -182,6 +189,7 @@ mod test {
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
                 "start_time": "1970-01-01T00:00:00Z",
                 "max_votes": 2,
+                "token": "1111Cn8eVZg",
                 "name": "TestWithOptionalFields",
                 "kind": "roll_call",
                 "subtitle": "A subtitle",
@@ -205,6 +213,7 @@ mod test {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
             max_votes: 2,
+            token: None,
             inner: UserParameters {
                 name: "TestWithOptionalFields".into(),
                 kind: VoteKind::RollCall,
@@ -236,7 +245,7 @@ mod test {
                 "enable_abstain": false,
                 "auto_close": false,
                 "duration": null,
-                "create_pdf": true
+                "create_pdf": true,
             }
         );
     }
@@ -248,6 +257,7 @@ mod test {
             "legal_vote_id": "00000000-0000-0000-0000-000000000000",
             "start_time": "1970-01-01T00:00:00Z",
             "max_votes": 2,
+            "token": "1111Cn8eVZg",
             "name": "Vote Test",
             "kind": "roll_call",
             "subtitle": "A subtitle",
@@ -266,6 +276,7 @@ mod test {
             legal_vote_id,
             start_time,
             max_votes,
+            token,
             inner:
                 UserParameters {
                     name,
@@ -284,6 +295,8 @@ mod test {
         assert_eq!(LegalVoteId::from(Uuid::nil()), legal_vote_id);
         assert_eq!(Utc.ymd(1970, 1, 1).and_hms(0, 0, 0), start_time);
         assert_eq!(2, max_votes);
+        assert_eq!(VoteKind::RollCall, kind);
+        assert_eq!(Some(Token::new(0x68656c6c6f)), token);
         assert_eq!("Vote Test", name);
         assert_eq!(VoteKind::RollCall, kind);
         assert_eq!("A subtitle", subtitle.unwrap());
@@ -320,6 +333,7 @@ mod test {
             legal_vote_id,
             start_time,
             max_votes,
+            token,
             inner:
                 UserParameters {
                     name,
@@ -338,6 +352,8 @@ mod test {
         assert_eq!(LegalVoteId::from(Uuid::nil()), legal_vote_id);
         assert_eq!(Utc.ymd(1970, 1, 1).and_hms(0, 0, 0), start_time);
         assert_eq!(2, max_votes);
+        assert_eq!(None, token);
+        assert_eq!(VoteKind::RollCall, kind);
         assert_eq!("Vote Test", name);
         assert_eq!(VoteKind::RollCall, kind);
         assert_eq!(None, subtitle);

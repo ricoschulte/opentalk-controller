@@ -370,6 +370,7 @@ fn parse_v1_entries(
                             duration,
                             create_pdf: _,
                         },
+                    token: _,
                 } = start.parameters;
 
                 let initiator = User::get(conn, start.issuer)
