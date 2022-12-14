@@ -109,9 +109,7 @@ Inside the crates folder following crates can be found:
 * [janus-media](crates/janus-media)
     - media signaling module using the `janus-client` crate
 * [chat](crates/chat)
-    - chat signaling module which implements a simple room- and private chat
-* [ee-chat](crates/ee-chat)
-    - chat signaling module for the enterprise edition which implements group chats inside a room
+    - chat signaling module which implements a simple room, group and private chat
 * [automod](crates/automod)
     - signaling module implementing automoderation for videoconferences
 * [legal-vote](crates/legal-vote)

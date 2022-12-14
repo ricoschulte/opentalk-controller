@@ -73,6 +73,26 @@ mod test {
     }
 
     #[test]
+    fn group_serialize() {
+        let produced = serde_json::to_value(&Message::MessageSent(MessageSent {
+            id: MessageId::nil(),
+            source: ParticipantId::nil(),
+            content: "Hello managers!".to_string(),
+            scope: Scope::Group("management".to_string()),
+        }))
+        .unwrap();
+        let expected = json!({
+            "message":"message_sent",
+            "id":"00000000-0000-0000-0000-000000000000",
+            "source":"00000000-0000-0000-0000-000000000000",
+            "content":"Hello managers!",
+            "scope":"group",
+            "target":"management",
+        });
+        assert_eq!(expected, produced);
+    }
+
+    #[test]
     fn private_serialize() {
         let produced = serde_json::to_value(&Message::MessageSent(MessageSent {
             id: MessageId::nil(),
@@ -90,7 +110,16 @@ mod test {
             "scope": "private",
             "target": "00000000-0000-0000-0000-000000000001",
         });
+        assert_eq!(expected, produced);
+    }
 
+    #[test]
+    fn error_serialize() {
+        let produced = serde_json::to_value(&Message::Error(Error::ChatDisabled)).unwrap();
+        let expected = json!({
+            "message": "error",
+            "error": "chat_disabled",
+        });
         assert_eq!(expected, produced);
     }
 }
