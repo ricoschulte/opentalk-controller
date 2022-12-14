@@ -1,4 +1,4 @@
-use db_storage::legal_votes::types::{UserParameters, VoteOption};
+use db_storage::legal_votes::types::{Token, UserParameters, VoteOption};
 use db_storage::legal_votes::LegalVoteId;
 use serde::Deserialize;
 use validator::Validate;
@@ -56,6 +56,8 @@ pub struct VoteMessage {
     pub legal_vote_id: LegalVoteId,
     /// The chosen vote option
     pub option: VoteOption,
+    /// The user's vote token
+    pub token: Token,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -65,6 +67,8 @@ pub struct GeneratePdf {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
     use super::*;
     use controller::prelude::*;
     use controller_shared::ParticipantId;
@@ -165,7 +169,8 @@ mod test {
             {
                 "action": "vote",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-                "option": "yes"
+                "option": "yes",
+                "token": "1111Cn8eVZg",
             }
         );
 
@@ -174,10 +179,12 @@ mod test {
         if let Message::Vote(VoteMessage {
             legal_vote_id,
             option,
+            token,
         }) = vote
         {
             assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::Yes);
+            assert_eq!(token, Token::from_str("1111Cn8eVZg").unwrap())
         } else {
             panic!()
         }
@@ -189,7 +196,8 @@ mod test {
             {
                 "action": "vote",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-                "option": "no"
+                "option": "no",
+                "token": "1111Cn8eVZg",
             }
         );
 
@@ -198,10 +206,12 @@ mod test {
         if let Message::Vote(VoteMessage {
             legal_vote_id,
             option,
+            token,
         }) = vote
         {
             assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::No);
+            assert_eq!(token, Token::from_str("1111Cn8eVZg").unwrap())
         } else {
             panic!()
         }
@@ -213,7 +223,8 @@ mod test {
             {
                 "action": "vote",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-                "option": "abstain"
+                "option": "abstain",
+                "token": "1111Cn8eVZg",
             }
         );
 
@@ -222,10 +233,12 @@ mod test {
         if let Message::Vote(VoteMessage {
             legal_vote_id,
             option,
+            token,
         }) = vote
         {
             assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::Abstain);
+            assert_eq!(token, Token::from_str("1111Cn8eVZg").unwrap())
         } else {
             panic!()
         }

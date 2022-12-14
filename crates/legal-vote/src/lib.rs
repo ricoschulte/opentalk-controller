@@ -693,7 +693,7 @@ impl LegalVote {
             redis_conn,
             self.room_id,
             vote_message.legal_vote_id,
-            self.user_id,
+            vote_message.token,
             vote_event,
         )
         .await?;

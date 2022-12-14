@@ -2,7 +2,7 @@ use controller::prelude::*;
 use controller::prelude::{ModuleTester, WsMessageOutgoing};
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::{
-    CancelReason, Parameters, UserParameters, VoteKind, VoteOption, Votes,
+    CancelReason, Parameters, Token, UserParameters, VoteKind, VoteOption, Votes,
 };
 use db_storage::legal_votes::{LegalVote as DbLegalVote, LegalVoteId};
 use k3k_legal_vote::incoming::{Stop, VoteMessage};
@@ -48,31 +48,36 @@ async fn basic_vote() {
         .unwrap();
 
     // Expect Start response in websocket for user 1
-    let legal_vote_id = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
-        module_tester
+    let (legal_vote_id, user_1_token) =
+        if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
             .receive_ws_message(&USER_1.participant_id)
+            .await
+            .unwrap()
+        {
+            assert_eq!(parameters.initiator_id, USER_1.participant_id);
+            assert_eq!(parameters.inner, start_parameters);
+            assert_eq!(parameters.max_votes, 2);
+            assert!(parameters.token.is_some());
+
+            (parameters.legal_vote_id, parameters.token.unwrap())
+        } else {
+            panic!("Expected Start message")
+        };
+
+    // Expect Start response in websocket for user 2
+    let user_2_token = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
+        module_tester
+            .receive_ws_message(&USER_2.participant_id)
             .await
             .unwrap()
     {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
-        assert_eq!(parameters.max_votes, 2);
-
-        parameters.legal_vote_id
-    } else {
-        panic!("Expected Start message")
-    };
-
-    // Expect Start response in websocket for user 2
-    if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
-        .receive_ws_message(&USER_2.participant_id)
-        .await
-        .unwrap()
-    {
-        assert_eq!(parameters.initiator_id, USER_1.participant_id);
-        assert_eq!(parameters.inner, start_parameters);
         assert_eq!(parameters.legal_vote_id, legal_vote_id);
         assert_eq!(parameters.max_votes, 2);
+        assert!(parameters.token.is_some());
+
+        parameters.token.unwrap()
     } else {
         panic!("Expected Start message")
     };
@@ -92,6 +97,7 @@ async fn basic_vote() {
     let vote_yes = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
         option: VoteOption::Yes,
+        token: user_1_token,
     });
 
     module_tester
@@ -144,6 +150,7 @@ async fn basic_vote() {
     let vote_no = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
         option: VoteOption::No,
+        token: user_2_token,
     });
 
     module_tester
@@ -262,31 +269,36 @@ async fn hidden_legal_vote() {
         .unwrap();
 
     // Expect Start response in websocket for user 1
-    let legal_vote_id = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
-        module_tester
+    let (legal_vote_id, user_1_token) =
+        if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
             .receive_ws_message(&USER_1.participant_id)
+            .await
+            .unwrap()
+        {
+            assert_eq!(parameters.initiator_id, USER_1.participant_id);
+            assert_eq!(parameters.inner, start_parameters);
+            assert_eq!(parameters.max_votes, 2);
+            assert!(parameters.token.is_some());
+
+            (parameters.legal_vote_id, parameters.token.unwrap())
+        } else {
+            panic!("Expected Start message")
+        };
+
+    // Expect Start response in websocket for user 2
+    let user_2_token = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
+        module_tester
+            .receive_ws_message(&USER_2.participant_id)
             .await
             .unwrap()
     {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
-        assert_eq!(parameters.max_votes, 2);
-
-        parameters.legal_vote_id
-    } else {
-        panic!("Expected Start message")
-    };
-
-    // Expect Start response in websocket for user 2
-    if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
-        .receive_ws_message(&USER_2.participant_id)
-        .await
-        .unwrap()
-    {
-        assert_eq!(parameters.initiator_id, USER_1.participant_id);
-        assert_eq!(parameters.inner, start_parameters);
         assert_eq!(parameters.legal_vote_id, legal_vote_id);
         assert_eq!(parameters.max_votes, 2);
+        assert!(parameters.token.is_some());
+
+        parameters.token.unwrap()
     } else {
         panic!("Expected Start message")
     };
@@ -306,6 +318,7 @@ async fn hidden_legal_vote() {
     let vote_yes = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
         option: VoteOption::Yes,
+        token: user_1_token,
     });
 
     module_tester
@@ -355,6 +368,7 @@ async fn hidden_legal_vote() {
     let vote_no = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
         option: VoteOption::No,
+        token: user_2_token,
     });
 
     module_tester
@@ -472,31 +486,36 @@ async fn basic_vote_abstain() {
         .unwrap();
 
     // Expect Start response in websocket for user 1
-    let legal_vote_id = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
-        module_tester
+    let (legal_vote_id, user_1_token) =
+        if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
             .receive_ws_message(&USER_1.participant_id)
+            .await
+            .unwrap()
+        {
+            assert_eq!(parameters.initiator_id, USER_1.participant_id);
+            assert_eq!(parameters.inner, start_parameters);
+            assert_eq!(parameters.max_votes, 2);
+            assert!(parameters.token.is_some());
+
+            (parameters.legal_vote_id, parameters.token.unwrap())
+        } else {
+            panic!("Expected Start message")
+        };
+
+    // Expect Start response in websocket for user 2
+    let user_2_token = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
+        module_tester
+            .receive_ws_message(&USER_2.participant_id)
             .await
             .unwrap()
     {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
-        assert_eq!(parameters.max_votes, 2);
-
-        parameters.legal_vote_id
-    } else {
-        panic!("Expected Start message")
-    };
-
-    // Expect Start response in websocket for user 2
-    if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
-        .receive_ws_message(&USER_2.participant_id)
-        .await
-        .unwrap()
-    {
-        assert_eq!(parameters.initiator_id, USER_1.participant_id);
-        assert_eq!(parameters.inner, start_parameters);
         assert_eq!(parameters.legal_vote_id, legal_vote_id);
         assert_eq!(parameters.max_votes, 2);
+        assert!(parameters.token.is_some());
+
+        parameters.token.unwrap()
     } else {
         panic!("Expected Start message")
     };
@@ -516,6 +535,7 @@ async fn basic_vote_abstain() {
     let vote_abstain = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
         option: VoteOption::Abstain,
+        token: user_1_token,
     });
 
     module_tester
@@ -568,6 +588,7 @@ async fn basic_vote_abstain() {
     let vote_no = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
         option: VoteOption::No,
+        token: user_2_token,
     });
 
     module_tester
@@ -794,31 +815,36 @@ async fn auto_stop_vote() {
         .unwrap();
 
     // Expect Start response in websocket for user 1
-    let legal_vote_id = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
-        module_tester
+    let (legal_vote_id, user_1_token) =
+        if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
             .receive_ws_message(&USER_1.participant_id)
+            .await
+            .unwrap()
+        {
+            assert_eq!(parameters.initiator_id, USER_1.participant_id);
+            assert_eq!(parameters.inner, start_parameters);
+            assert_eq!(parameters.max_votes, 2);
+            assert!(parameters.token.is_some());
+
+            (parameters.legal_vote_id, parameters.token.unwrap())
+        } else {
+            panic!("Expected Start message")
+        };
+
+    // Expect Start response in websocket for user 2
+    let user_2_token = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
+        module_tester
+            .receive_ws_message(&USER_2.participant_id)
             .await
             .unwrap()
     {
         assert_eq!(parameters.initiator_id, USER_1.participant_id);
         assert_eq!(parameters.inner, start_parameters);
-        assert_eq!(parameters.max_votes, 2);
-
-        parameters.legal_vote_id
-    } else {
-        panic!("Expected Start message")
-    };
-
-    // Expect Start response in websocket for user 2
-    if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
-        .receive_ws_message(&USER_2.participant_id)
-        .await
-        .unwrap()
-    {
-        assert_eq!(parameters.initiator_id, USER_1.participant_id);
-        assert_eq!(parameters.inner, start_parameters);
         assert_eq!(parameters.legal_vote_id, legal_vote_id);
         assert_eq!(parameters.max_votes, 2);
+        assert!(parameters.token.is_some());
+
+        parameters.token.unwrap()
     } else {
         panic!("Expected Start message")
     };
@@ -838,6 +864,7 @@ async fn auto_stop_vote() {
     let vote_yes = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
         option: VoteOption::Yes,
+        token: user_1_token,
     });
 
     module_tester
@@ -894,6 +921,7 @@ async fn auto_stop_vote() {
     let vote_no = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
         option: VoteOption::No,
+        token: user_2_token,
     });
 
     module_tester
@@ -1057,12 +1085,6 @@ async fn initiator_left() {
 
     default_start_setup(&mut module_tester).await;
 
-    //ignore start message for user 1
-    let _ = module_tester
-        .receive_ws_message(&USER_1.participant_id)
-        .await
-        .unwrap();
-
     // leave with user 1
     module_tester.leave(&USER_1.participant_id).await.unwrap();
 
@@ -1110,7 +1132,8 @@ async fn ineligible_voter() {
         )
         .unwrap();
 
-    let legal_vote_id = receive_start_on_user2(&mut module_tester).await;
+    let (legal_vote_id, token) = receive_start_on_user2(&mut module_tester).await;
+    assert!(token.is_none());
 
     // try to vote with ineligible user 2
     module_tester
@@ -1119,6 +1142,7 @@ async fn ineligible_voter() {
             incoming::Message::Vote(VoteMessage {
                 legal_vote_id,
                 option: VoteOption::Yes,
+                token: Token::default(),
             }),
         )
         .unwrap();
@@ -1199,6 +1223,7 @@ async fn vote_on_nonexistent_vote() {
             incoming::Message::Vote(VoteMessage {
                 legal_vote_id,
                 option: VoteOption::Yes,
+                token: Token::new(0),
             }),
         )
         .unwrap();
@@ -1225,7 +1250,7 @@ async fn vote_on_completed_vote() {
     let test_ctx = TestContext::new().await;
     let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
-    let legal_vote_id = default_start_setup(&mut module_tester).await;
+    let (legal_vote_id, tokens) = default_start_setup(&mut module_tester).await;
 
     // stop vote with user 1
     module_tester
@@ -1253,6 +1278,7 @@ async fn vote_on_completed_vote() {
             incoming::Message::Vote(VoteMessage {
                 legal_vote_id,
                 option: VoteOption::Yes,
+                token: tokens[1].unwrap(),
             }),
         )
         .unwrap();
@@ -1300,19 +1326,20 @@ async fn vote_twice() {
         .unwrap();
 
     // receive start vote on user 1
-    let legal_vote_id = if let WsMessageOutgoing::Module(outgoing::Message::Started(Parameters {
-        initiator_id: _,
-        legal_vote_id,
-        ..
-    })) = module_tester
-        .receive_ws_message(&USER_1.participant_id)
-        .await
-        .unwrap()
-    {
-        legal_vote_id
-    } else {
-        panic!("Expected started message")
-    };
+    let (legal_vote_id, token) =
+        if let WsMessageOutgoing::Module(outgoing::Message::Started(Parameters {
+            token,
+            legal_vote_id,
+            ..
+        })) = module_tester
+            .receive_ws_message(&USER_1.participant_id)
+            .await
+            .unwrap()
+        {
+            (legal_vote_id, token.unwrap())
+        } else {
+            panic!("Expected started message")
+        };
 
     // vote with user 1
     module_tester
@@ -1321,6 +1348,7 @@ async fn vote_twice() {
             incoming::Message::Vote(VoteMessage {
                 legal_vote_id,
                 option: VoteOption::Yes,
+                token,
             }),
         )
         .unwrap();
@@ -1369,6 +1397,7 @@ async fn vote_twice() {
             incoming::Message::Vote(VoteMessage {
                 legal_vote_id,
                 option: VoteOption::No,
+                token,
             }),
         )
         .unwrap();
@@ -1395,7 +1424,7 @@ async fn non_moderator_stop() {
     let test_ctx = TestContext::new().await;
     let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
-    let legal_vote_id = default_start_setup(&mut module_tester).await;
+    let (legal_vote_id, _) = default_start_setup(&mut module_tester).await;
 
     // stop vote with user 2
     let stop_vote = incoming::Message::Stop(Stop { legal_vote_id });
@@ -1423,7 +1452,7 @@ async fn non_moderator_cancel() {
     let test_ctx = TestContext::new().await;
     let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
-    let legal_vote_id = default_start_setup(&mut module_tester).await;
+    let (legal_vote_id, _) = default_start_setup(&mut module_tester).await;
 
     // cancel vote with user 2
     let cancel_vote = incoming::Message::Cancel(incoming::Cancel {
@@ -1480,7 +1509,9 @@ async fn join_as_guest() {
 }
 
 /// Start a vote with user1 with default UserParameters
-async fn default_vote_start(module_tester: &mut ModuleTester<LegalVote>) {
+async fn default_vote_start_by_user1(
+    module_tester: &mut ModuleTester<LegalVote>,
+) -> (LegalVoteId, Option<Token>) {
     let start_parameters = UserParameters {
         kind: VoteKind::RollCall,
         name: "TestVote".into(),
@@ -1499,12 +1530,28 @@ async fn default_vote_start(module_tester: &mut ModuleTester<LegalVote>) {
             incoming::Message::Start(start_parameters),
         )
         .unwrap();
+
+    if let WsMessageOutgoing::Module(outgoing::Message::Started(Parameters {
+        token,
+        legal_vote_id,
+        ..
+    })) = module_tester
+        .receive_ws_message(&USER_1.participant_id)
+        .await
+        .unwrap()
+    {
+        (legal_vote_id, token)
+    } else {
+        panic!("Expected started message")
+    }
 }
 
 /// Receive the vote start on user2 and return the corresponding vote id
-async fn receive_start_on_user2(module_tester: &mut ModuleTester<LegalVote>) -> LegalVoteId {
+async fn receive_start_on_user2(
+    module_tester: &mut ModuleTester<LegalVote>,
+) -> (LegalVoteId, Option<Token>) {
     if let WsMessageOutgoing::Module(outgoing::Message::Started(Parameters {
-        initiator_id: _,
+        token,
         legal_vote_id,
         ..
     })) = module_tester
@@ -1512,7 +1559,7 @@ async fn receive_start_on_user2(module_tester: &mut ModuleTester<LegalVote>) -> 
         .await
         .unwrap()
     {
-        legal_vote_id
+        (legal_vote_id, token)
     } else {
         panic!("Expected started message")
     }
@@ -1520,8 +1567,12 @@ async fn receive_start_on_user2(module_tester: &mut ModuleTester<LegalVote>) -> 
 
 /// A default setup where user1 starts the vote and user2 receives the started response.
 ///
-/// Note: This leaves the started response in the ws_receive buffer of user1.
-async fn default_start_setup(module_tester: &mut ModuleTester<LegalVote>) -> LegalVoteId {
-    default_vote_start(module_tester).await;
-    receive_start_on_user2(module_tester).await
+/// Returns a tuple with the first element being the legal vote id, and the secend element
+/// being a vector containing the tokens for user 1 and user 2.
+async fn default_start_setup(
+    module_tester: &mut ModuleTester<LegalVote>,
+) -> (LegalVoteId, Vec<Option<Token>>) {
+    let (legal_vote_id, user_1_token) = default_vote_start_by_user1(module_tester).await;
+    let (_, user_2_token) = receive_start_on_user2(module_tester).await;
+    (legal_vote_id, vec![user_1_token, user_2_token])
 }

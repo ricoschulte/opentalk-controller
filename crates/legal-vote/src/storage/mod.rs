@@ -8,8 +8,8 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use current_legal_vote_id::CurrentVoteIdKey;
 use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, Vote, VoteEvent};
+use db_storage::legal_votes::types::Token;
 use db_storage::legal_votes::LegalVoteId;
-use db_storage::users::UserId;
 use history::VoteHistoryKey;
 use parameters::VoteParametersKey;
 use protocol::ProtocolKey;
@@ -155,12 +155,12 @@ pub(crate) async fn cleanup_vote(
 /// The following parameters have to be provided:
 /// ```text
 /// ARGV[1] = vote id
-/// ARGV[2] = user id
+/// ARGV[2] = token
 /// ARGV[3] = protocol entry
 /// ARGV[4] = vote option
 ///
 /// KEYS[1] = current vote key
-/// KEYS[2] = allowed users key
+/// KEYS[2] = allowed tokens key
 /// KEYS[3] = protocol key
 /// KEYS[4] = vote count key
 /// ```
@@ -221,12 +221,12 @@ impl FromRedisValue for VoteScriptResult {
 ///
 /// The vote is done atomically on redis with a Lua script.
 /// See [`VOTE_SCRIPT`] for more details.
-#[tracing::instrument(name = "legal_vote_cast_vote", skip(redis_conn, user_id, vote_event))]
+#[tracing::instrument(name = "legal_vote_cast_vote", skip(redis_conn, token, vote_event))]
 pub(crate) async fn vote(
     redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
-    user_id: UserId,
+    token: Token,
     vote_event: Vote,
 ) -> Result<VoteScriptResult> {
     let vote_option = vote_event.option;
@@ -247,7 +247,7 @@ pub(crate) async fn vote(
             legal_vote_id,
         })
         .arg(legal_vote_id)
-        .arg(user_id)
+        .arg(token)
         .arg(entry)
         .arg(vote_option)
         .invoke_async(redis_conn)
