@@ -687,6 +687,7 @@ impl LegalVote {
         let vote_event = Vote {
             user_info,
             option: vote_message.option,
+            token: vote_message.token,
         };
 
         let vote_result = storage::vote(

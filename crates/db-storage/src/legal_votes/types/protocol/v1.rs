@@ -1,5 +1,5 @@
 use super::super::{CancelReason, FinalResults, Parameters, VoteOption};
-use crate::users::UserId;
+use crate::{legal_votes::types::Token, users::UserId};
 use chrono::{DateTime, Utc};
 use controller_shared::ParticipantId;
 use redis_args::{FromRedisValue, ToRedisArgs};
@@ -77,6 +77,8 @@ pub struct Vote {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
     pub user_info: Option<UserInfo>,
+    /// The token used for voting
+    pub token: Token,
     /// The chosen vote option
     pub option: VoteOption,
 }
