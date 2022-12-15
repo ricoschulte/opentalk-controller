@@ -5,6 +5,7 @@
 //! Each key is defined in its own module with its related functions.
 use allowed_tokens::AllowedTokensKey;
 use anyhow::{Context, Result};
+use controller::prelude::chrono::Utc;
 use controller::prelude::*;
 use current_legal_vote_id::CurrentVoteIdKey;
 use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, Vote, VoteEvent};
@@ -15,6 +16,8 @@ use parameters::VoteParametersKey;
 use protocol::ProtocolKey;
 use redis::FromRedisValue;
 use vote_count::VoteCountKey;
+
+use crate::error::{Error, ErrorKind};
 
 pub(crate) mod allowed_tokens;
 pub(crate) mod current_legal_vote_id;
@@ -228,11 +231,17 @@ pub(crate) async fn vote(
     legal_vote_id: LegalVoteId,
     token: Token,
     vote_event: Vote,
-) -> Result<VoteScriptResult> {
-    let vote_option = vote_event.option;
-    let entry = ProtocolEntry::new(VoteEvent::Vote(vote_event));
+) -> Result<VoteScriptResult, Error> {
+    let parameters = parameters::get(redis_conn, room_id, legal_vote_id)
+        .await?
+        .ok_or(Error::Vote(ErrorKind::InvalidVoteId))?;
 
-    redis::Script::new(VOTE_SCRIPT)
+    let timestamp = (!parameters.inner.kind.is_hidden()).then(Utc::now);
+
+    let vote_option = vote_event.option;
+    let entry = ProtocolEntry::new_with_optional_time(timestamp, VoteEvent::Vote(vote_event));
+
+    Ok(redis::Script::new(VOTE_SCRIPT)
         .key(CurrentVoteIdKey { room_id })
         .key(AllowedTokensKey {
             room_id,
@@ -252,7 +261,7 @@ pub(crate) async fn vote(
         .arg(vote_option)
         .invoke_async(redis_conn)
         .await
-        .context("Failed to cast vote")
+        .context("Failed to cast vote")?)
 }
 
 /// Check if the provided vote id is either active, complete or unknown.

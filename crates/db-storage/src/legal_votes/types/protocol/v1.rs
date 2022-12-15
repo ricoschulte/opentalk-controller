@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 #[from_redis_value(serde)]
 pub struct ProtocolEntry {
     /// The time that an entry got created
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Option<DateTime<Utc>>,
     /// The event of this entry
     pub event: VoteEvent,
 }
@@ -24,9 +24,13 @@ impl ProtocolEntry {
         Self::new_with_time(Utc::now(), event)
     }
 
+    pub fn new_with_optional_time(timestamp: Option<DateTime<Utc>>, event: VoteEvent) -> Self {
+        Self { timestamp, event }
+    }
+
     /// Create a new protocol entry using the provided `timestamp`
     pub fn new_with_time(timestamp: DateTime<Utc>, event: VoteEvent) -> Self {
-        Self { timestamp, event }
+        Self::new_with_optional_time(Some(timestamp), event)
     }
 }
 

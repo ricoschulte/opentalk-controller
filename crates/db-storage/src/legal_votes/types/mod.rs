@@ -62,7 +62,10 @@ pub enum VoteKind {
 
 impl VoteKind {
     pub fn is_hidden(&self) -> bool {
-        matches!(self, VoteKind::Pseudonymous)
+        match self {
+            VoteKind::Pseudonymous => true,
+            VoteKind::RollCall => false,
+        }
     }
 }
 
