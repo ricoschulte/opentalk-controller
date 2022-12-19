@@ -8,7 +8,7 @@ use database::{Db, DbConnection};
 use db_storage::legal_votes::types::protocol::v1::{self, VoteEvent};
 use db_storage::legal_votes::types::protocol::{self, Protocol};
 use db_storage::legal_votes::types::{
-    CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteKind, VoteOption, Votes,
+    CancelReason, FinalResults, Invalid, Parameters, Tally, UserParameters, VoteKind, VoteOption,
 };
 use db_storage::legal_votes::{LegalVote, LegalVoteId};
 use db_storage::rooms::RoomId;
@@ -128,7 +128,7 @@ pub struct Success {
     #[serde(flatten)]
     stop_kind: StopKind,
     #[serde(flatten)]
-    votes: Votes,
+    tally: Tally,
 }
 
 #[derive(Debug, Serialize)]
@@ -446,7 +446,7 @@ fn parse_v1_entries(
     } else if let Some(stop_kind) = stop_kind {
         if let Some(final_results) = final_results {
             match final_results {
-                FinalResults::Valid(votes) => VoteResult::Success(Success { stop_kind, votes }),
+                FinalResults::Valid(tally) => VoteResult::Success(Success { stop_kind, tally }),
                 FinalResults::Invalid(invalid) => {
                     VoteResult::Failed(FailReason::InvalidResults(invalid))
                 }
@@ -637,7 +637,7 @@ mod test {
                 }]),
                 vote_result: VoteResult::Success(Success {
                     stop_kind: StopKind::ByParticipant(test_participant),
-                    votes: Votes {
+                    tally: Tally {
                         yes: 1,
                         no: 0,
                         abstain: None,

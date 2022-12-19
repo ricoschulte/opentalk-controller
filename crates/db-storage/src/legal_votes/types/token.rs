@@ -1,11 +1,12 @@
 use anyhow::{Context, Error};
 use basen::BASE58;
+use rand::RngCore;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 use std::{fmt, str::FromStr};
 
 #[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, ToRedisArgs, FromRedisValue,
+    Debug, Clone, Copy, Default, Hash, PartialEq, Eq, PartialOrd, Ord, ToRedisArgs, FromRedisValue,
 )]
 #[to_redis_args(serde)]
 #[from_redis_value(serde)]
@@ -14,6 +15,10 @@ pub struct Token(u64);
 impl Token {
     pub fn new(v: u64) -> Self {
         Token(v)
+    }
+
+    pub fn generate() -> Self {
+        Self::new(rand::thread_rng().next_u64())
     }
 }
 

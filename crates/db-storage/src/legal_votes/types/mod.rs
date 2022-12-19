@@ -116,14 +116,14 @@ pub struct UserParameters {
 #[serde(rename_all = "snake_case", tag = "results")]
 pub enum FinalResults {
     /// Valid vote results
-    Valid(Votes),
+    Valid(Tally),
     /// Invalid vote results
     Invalid(Invalid),
 }
 
 /// The vote options with their respective vote count
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Votes {
+pub struct Tally {
     /// Vote count for yes
     pub yes: u64,
     /// Vote count for no

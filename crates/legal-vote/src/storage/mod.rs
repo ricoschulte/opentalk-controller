@@ -63,7 +63,7 @@ pub(crate) async fn end_current_vote(
     redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
-    end_entry: ProtocolEntry,
+    end_entry: &ProtocolEntry,
 ) -> Result<bool> {
     redis::Script::new(END_CURRENT_VOTE_SCRIPT)
         .key(CurrentVoteIdKey { room_id })

@@ -1,13 +1,15 @@
 use crate::rabbitmq::{Canceled, StopKind};
+use controller::prelude::chrono::{DateTime, Utc};
 use controller_shared::ParticipantId;
 use db_storage::assets::AssetId;
-use db_storage::legal_votes::types::{Invalid, Parameters, Token, VoteOption, Votes};
+use db_storage::legal_votes::types::{Invalid, Parameters, Tally, Token, VoteOption};
 use db_storage::legal_votes::LegalVoteId;
+use db_storage::users::UserId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// A message to the participant, send via a websocket connection
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "message")]
 pub enum Message {
     /// Vote has started
@@ -67,19 +69,37 @@ pub enum VoteFailed {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(untagged)]
+pub enum VotingRecord {
+    /// A collection of users and the votes they cast
+    UserVotes(HashMap<UserId, VoteOption>),
+    /// A collection of pseudonymous tokens and their votes
+    TokenVotes(HashMap<Token, VoteOption>),
+}
+
+impl VotingRecord {
+    pub fn vote_option_list(&self) -> Vec<VoteOption> {
+        match self {
+            Self::UserVotes(voters) => voters.values().cloned().collect(),
+            Self::TokenVotes(tokens) => tokens.values().cloned().collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Results {
     /// The vote options with their respective vote count
     #[serde(flatten)]
-    pub votes: Votes,
+    pub tally: Tally,
     /// A map of participants with their chosen vote option
     ///
     /// This field is omitted when the vote is configured to be hidden
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub voters: Option<HashMap<ParticipantId, VoteOption>>,
+    pub voting_record: Option<VotingRecord>,
 }
 
 /// The results for a vote
-#[derive(Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct VoteResults {
     /// The vote id
     pub legal_vote_id: LegalVoteId,
@@ -89,7 +109,7 @@ pub struct VoteResults {
 }
 
 /// A stop message
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Stopped {
     /// The vote id
     pub legal_vote_id: LegalVoteId,
@@ -99,10 +119,11 @@ pub struct Stopped {
     /// The final vote results
     #[serde(flatten)]
     pub results: FinalResults,
+    pub end_time: DateTime<Utc>,
 }
 
 /// The final results for a vote
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case", tag = "results")]
 pub enum FinalResults {
     /// Valid final results
@@ -111,7 +132,7 @@ pub enum FinalResults {
     Invalid(Invalid),
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PdfAsset {
     pub filename: String,
     pub legal_vote_id: LegalVoteId,
@@ -119,7 +140,7 @@ pub struct PdfAsset {
 }
 
 /// The error kind sent to the user
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "error")]
 pub enum ErrorKind {
     /// A vote is already active
@@ -145,12 +166,12 @@ pub enum ErrorKind {
 }
 
 /// The list of provided guest participants.
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct GuestParticipants {
     pub guests: Vec<ParticipantId>,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct InvalidFields {
     pub fields: Vec<String>,
 }
@@ -184,7 +205,7 @@ mod test {
     use controller_shared::ParticipantId;
     use db_storage::legal_votes::types::{CancelReason, Parameters, UserParameters, VoteKind};
     use test_util::assert_eq_json;
-    use uuid::Uuid;
+    use uuid::{uuid, Uuid};
 
     #[test]
     fn start_message() {
@@ -312,20 +333,25 @@ mod test {
 
     #[test]
     fn update_message() {
-        let votes = Votes {
+        let tally = Tally {
             yes: 1,
             no: 0,
             abstain: None,
         };
 
         let mut voters = HashMap::new();
-        voters.insert(ParticipantId::new_test(1), VoteOption::Yes);
+        voters.insert(
+            UserId::from(uuid!("00000000-0000-0000-0000-000000000001")),
+            VoteOption::Yes,
+        );
+
+        let voting_record = VotingRecord::UserVotes(voters);
 
         let message = Message::Updated(VoteResults {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             results: Results {
-                votes,
-                voters: Some(voters),
+                tally,
+                voting_record: Some(voting_record),
             },
         });
 
@@ -336,7 +362,7 @@ mod test {
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
                 "yes": 1,
                 "no": 0,
-                "voters": {
+                "voting_record": {
                     "00000000-0000-0000-0000-000000000001": "yes"
                 }
             }
@@ -345,7 +371,7 @@ mod test {
 
     #[test]
     fn hidden_update_message() {
-        let votes = Votes {
+        let tally = Tally {
             yes: 1,
             no: 0,
             abstain: None,
@@ -354,8 +380,8 @@ mod test {
         let message = Message::Updated(VoteResults {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             results: Results {
-                votes,
-                voters: None,
+                tally,
+                voting_record: None,
             },
         });
 
@@ -372,22 +398,28 @@ mod test {
 
     #[test]
     fn stop_message() {
-        let votes = Votes {
+        let tally = Tally {
             yes: 1,
             no: 0,
             abstain: None,
         };
 
         let mut voters = HashMap::new();
-        voters.insert(ParticipantId::new_test(1), VoteOption::Yes);
+        voters.insert(
+            UserId::from(uuid!("00000000-0000-0000-0000-000000000001")),
+            VoteOption::Yes,
+        );
+
+        let voting_record = VotingRecord::UserVotes(voters);
 
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Valid(Results {
-                votes,
-                voters: Some(voters),
+                tally,
+                voting_record: Some(voting_record),
             }),
+            end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
 
         assert_eq_json!(
@@ -400,16 +432,17 @@ mod test {
                 "results": "valid",
                 "yes": 1,
                 "no": 0,
-                "voters": {
+                "voting_record": {
                     "00000000-0000-0000-0000-000000000001": "yes"
-                }
+                },
+                "end_time": "1970-01-01T00:00:00Z",
             }
         );
     }
 
     #[test]
     fn hidden_stop_message() {
-        let votes = Votes {
+        let tally = Tally {
             yes: 1,
             no: 0,
             abstain: None,
@@ -419,9 +452,10 @@ mod test {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Valid(Results {
-                votes,
-                voters: None,
+                tally,
+                voting_record: None,
             }),
+            end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
 
         assert_eq_json!(
@@ -433,29 +467,36 @@ mod test {
                 "issuer": "00000000-0000-0000-0000-000000000000",
                 "results": "valid",
                 "yes": 1,
-                "no": 0
+                "no": 0,
+                "end_time": "1970-01-01T00:00:00Z",
             }
         );
     }
 
     #[test]
     fn auto_stop_message() {
-        let votes = Votes {
+        let tally = Tally {
             yes: 1,
             no: 0,
             abstain: None,
         };
 
         let mut voters = HashMap::new();
-        voters.insert(ParticipantId::new_test(1), VoteOption::Yes);
+        voters.insert(
+            UserId::from(uuid!("00000000-0000-0000-0000-000000000001")),
+            VoteOption::Yes,
+        );
+
+        let voting_record = VotingRecord::UserVotes(voters);
 
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::Auto,
             results: FinalResults::Valid(Results {
-                votes,
-                voters: Some(voters),
+                tally,
+                voting_record: Some(voting_record),
             }),
+            end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
 
         assert_eq_json!(
@@ -467,31 +508,38 @@ mod test {
                 "results": "valid",
                 "yes": 1,
                 "no": 0,
-                "voters": {
+                "voting_record": {
                     "00000000-0000-0000-0000-000000000001": "yes"
-                }
+                },
+                "end_time": "1970-01-01T00:00:00Z",
             }
         );
     }
 
     #[test]
     fn expired_stop_message() {
-        let votes = Votes {
+        let tally = Tally {
             yes: 0,
             no: 0,
             abstain: Some(1),
         };
 
         let mut voters = HashMap::new();
-        voters.insert(ParticipantId::new_test(1), VoteOption::Abstain);
+        voters.insert(
+            UserId::from(uuid!("00000000-0000-0000-0000-000000000001")),
+            VoteOption::Abstain,
+        );
+
+        let voting_record = VotingRecord::UserVotes(voters);
 
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::Expired,
             results: FinalResults::Valid(Results {
-                votes,
-                voters: Some(voters),
+                tally,
+                voting_record: Some(voting_record),
             }),
+            end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
 
         assert_eq_json!(
@@ -504,9 +552,10 @@ mod test {
                 "yes": 0,
                 "no": 0,
                 "abstain": 1,
-                "voters": {
+                "voting_record": {
                   "00000000-0000-0000-0000-000000000001": "abstain"
-                }
+                },
+                "end_time": "1970-01-01T00:00:00Z",
             }
         );
     }
@@ -517,6 +566,7 @@ mod test {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Invalid(Invalid::VoteCountInconsistent),
+            end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
 
         assert_eq_json!(
@@ -527,7 +577,8 @@ mod test {
                 "kind": "by_participant",
                 "issuer": "00000000-0000-0000-0000-000000000000",
                 "results": "invalid",
-                "reason": "vote_count_inconsistent"
+                "reason": "vote_count_inconsistent",
+                "end_time": "1970-01-01T00:00:00Z",
             }
         );
     }
@@ -537,6 +588,7 @@ mod test {
         let message = Message::Canceled(Canceled {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             reason: CancelReason::RoomDestroyed,
+            end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
 
         assert_eq_json!(
@@ -544,7 +596,8 @@ mod test {
             {
                 "message": "canceled",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-                "reason": "room_destroyed"
+                "reason": "room_destroyed",
+                "end_time": "1970-01-01T00:00:00Z",
             }
         );
     }
@@ -554,6 +607,7 @@ mod test {
         let message = Message::Canceled(Canceled {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             reason: CancelReason::InitiatorLeft,
+            end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
 
         assert_eq_json!(
@@ -561,7 +615,8 @@ mod test {
             {
                 "message": "canceled",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-                "reason": "initiator_left"
+                "reason": "initiator_left",
+                "end_time": "1970-01-01T00:00:00Z",
             }
         );
     }
@@ -571,6 +626,7 @@ mod test {
         let message = Message::Canceled(Canceled {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             reason: CancelReason::Custom("A custom reason".into()),
+            end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
 
         assert_eq_json!(
@@ -579,7 +635,8 @@ mod test {
                 "message": "canceled",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
                 "reason": "custom",
-                "custom": "A custom reason"
+                "custom": "A custom reason",
+                "end_time": "1970-01-01T00:00:00Z",
             }
         );
     }

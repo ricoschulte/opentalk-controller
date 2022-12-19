@@ -1,14 +1,15 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use anyhow::{Context, Result};
 use controller::prelude::*;
-use controller_shared::ParticipantId;
-use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, UserInfo, VoteEvent};
-use db_storage::legal_votes::types::VoteOption;
+use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, VoteEvent};
+use db_storage::legal_votes::types::{Token, VoteKind, VoteOption};
 use db_storage::legal_votes::LegalVoteId;
-use either::Either;
+use db_storage::users::UserId;
 use redis::AsyncCommands;
 use redis_args::ToRedisArgs;
 use std::collections::HashMap;
+
+use crate::outgoing::VotingRecord;
 
 /// Contains the vote protocol. The vote protocol is a list of [`ProtocolEntries`](ProtocolEntry)
 /// with information about the event that happened.
@@ -61,68 +62,57 @@ pub(crate) async fn get(
         .context("Failed to get vote protocol")
 }
 
-/// Filters the protocol for vote events
+/// Extracts the voting record from protocol entries
 ///
-/// Returns a HashMap containing participants and their respective vote choice when the vote is public
-///
-/// Returns just the casted vote choices when the vote is configured to be hidden
-#[tracing::instrument(name = "legal_vote_reduce_protocol", skip(protocol))]
-pub(crate) fn reduce_protocol(
-    protocol: Vec<ProtocolEntry>,
-) -> Result<Either<HashMap<ParticipantId, VoteOption>, Vec<VoteOption>>> {
-    // check if the vote is hidden
-    let hidden = protocol
+/// Returns a Result of [VotingRecord] matching the kind of vote
+#[tracing::instrument(name = "extract_voting_record_from_protocol", skip(protocol))]
+pub(crate) fn extract_voting_record_from_protocol(
+    protocol: &[ProtocolEntry],
+) -> Result<VotingRecord> {
+    // get the vote kind
+    let kind = protocol
         .iter()
         .find_map(|entry| {
             if let VoteEvent::Start(start) = &entry.event {
-                Some(start.parameters.inner.kind.is_hidden())
+                Some(start.parameters.inner.kind)
             } else {
                 None
             }
         })
         .ok_or_else(|| anyhow!("Missing 'Start' entry in legal vote protocol"))?;
 
-    let vote_list = protocol
-        .into_iter()
-        .filter_map(|entry| {
-            if let VoteEvent::Vote(vote) = entry.event {
-                Some(vote)
-            } else {
-                None
-            }
-        })
-        .map(|vote| (vote.user_info, vote.option))
-        .collect::<Vec<(Option<UserInfo>, VoteOption)>>();
-
-    // avoid checking an empty list with Iterator::all]`
-    if vote_list.is_empty() {
-        return if hidden {
-            Ok(Either::Right(vec![]))
+    let vote_iter = protocol.iter().filter_map(|entry| {
+        if let VoteEvent::Vote(ref vote) = entry.event {
+            Some(vote)
         } else {
-            Ok(Either::Left(HashMap::new()))
-        };
-    }
+            None
+        }
+    });
 
-    if vote_list.iter().all(|(u, ..)| u.is_some()) {
-        // public vote
-        Ok(Either::Left(
-            vote_list
-                .into_iter()
-                .map(|(u, v)| (u.unwrap().participant_id, v))
-                .collect::<HashMap<ParticipantId, VoteOption>>(),
-        ))
-    } else if vote_list.iter().all(|(u, ..)| u.is_none()) {
-        // hidden vote
-        Ok(Either::Right(
-            vote_list
-                .into_iter()
-                .map(|(_, v)| v)
-                .collect::<Vec<VoteOption>>(),
-        ))
-    } else {
-        // invalid vote
-        Err(anyhow!(
-            "Legal vote protocol contains inconsistent vote entries"
-        ))
+    match kind {
+        VoteKind::RollCall => {
+            let voters = vote_iter
+                .map(|vote| {
+                    if let Some(ref user) = vote.user_info {
+                        Ok((user.issuer, vote.option))
+                    } else {
+                        bail!("Legal vote protocol contains inconsistent vote entries");
+                    }
+                })
+                .collect::<Result<HashMap<UserId, VoteOption>>>()?;
+            Ok(VotingRecord::UserVotes(voters))
+        }
+        VoteKind::Pseudonymous => {
+            let tokens = vote_iter
+                .map(|vote| {
+                    if vote.user_info.is_none() {
+                        Ok((vote.token, vote.option))
+                    } else {
+                        bail!("Legal vote protocol contains inconsistent vote entries");
+                    }
+                })
+                .collect::<Result<HashMap<Token, VoteOption>>>()?;
+            Ok(VotingRecord::TokenVotes(tokens))
+        }
     }
 }

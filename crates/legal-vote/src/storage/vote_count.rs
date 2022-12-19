@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use controller::prelude::*;
-use db_storage::legal_votes::types::{VoteOption, Votes};
+use db_storage::legal_votes::types::{Tally, VoteOption};
 use db_storage::legal_votes::LegalVoteId;
 use redis::AsyncCommands;
 use redis_args::ToRedisArgs;
@@ -24,7 +24,7 @@ pub(crate) async fn get(
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
     enable_abstain: bool,
-) -> Result<Votes> {
+) -> Result<Tally> {
     let vote_count: HashMap<VoteOption, u64> = redis_conn
         .zrange_withscores(
             VoteCountKey {
@@ -42,7 +42,7 @@ pub(crate) async fn get(
             )
         })?;
 
-    Ok(Votes {
+    Ok(Tally {
         yes: *vote_count.get(&VoteOption::Yes).unwrap_or(&0),
         no: *vote_count.get(&VoteOption::No).unwrap_or(&0),
         abstain: {

@@ -5,7 +5,7 @@
 //! Offers full legal vote features including live voting with high safety guards (atomic changes, audit log).
 //! Stores the result for further archival storage in postgres.
 use anyhow::Context;
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{DateTime, Utc};
 use controller::prelude::bytes::Bytes;
 use controller::prelude::futures::stream::once;
@@ -16,17 +16,15 @@ use controller::storage::ObjectStorage;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::legal_votes::set_protocol;
-use db_storage::legal_votes::types::protocol::v1::UserInfo;
-use db_storage::legal_votes::types::protocol::v1::{Cancel, ProtocolEntry, Start, Vote, VoteEvent};
-use db_storage::legal_votes::types::protocol::NewProtocol;
-use db_storage::legal_votes::types::{protocol as db_protocol, Token, VoteKind};
-use db_storage::legal_votes::types::{
-    CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
+use db_storage::legal_votes::types::protocol::v1::{
+    Cancel, ProtocolEntry, Start, UserInfo, Vote, VoteEvent,
 };
-use db_storage::legal_votes::LegalVoteId;
-use db_storage::legal_votes::NewLegalVote;
+use db_storage::legal_votes::types::{
+    protocol as db_protocol, protocol::NewProtocol, CancelReason, FinalResults, Invalid,
+    Parameters, Tally, Token, UserParameters, VoteKind, VoteOption,
+};
+use db_storage::legal_votes::{LegalVoteId, NewLegalVote};
 use db_storage::users::UserId;
-use either::Either;
 use error::{Error, ErrorKind};
 use incoming::VoteMessage;
 use kustos::prelude::AccessMethod;
@@ -35,17 +33,17 @@ use kustos::Resource;
 use outgoing::{PdfAsset, Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess};
 use rabbitmq::Canceled;
 use rabbitmq::StopKind;
-use rand::RngCore;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use storage::protocol;
-use storage::protocol::reduce_protocol;
+use storage::protocol::extract_voting_record_from_protocol;
 use storage::VoteScriptResult;
 use tokio::time::sleep;
 use validator::Validate;
 
 mod error;
+pub mod frontend_data;
 pub mod incoming;
 pub mod outgoing;
 mod pdf;
@@ -78,7 +76,7 @@ impl SignalingModule for LegalVote {
     type Outgoing = outgoing::Message;
     type RabbitMqMessage = rabbitmq::Event;
     type ExtEvent = TimerEvent;
-    type FrontendData = ();
+    type FrontendData = frontend_data::FrontendData;
     type PeerFrontendData = ();
 
     async fn init(
@@ -106,20 +104,12 @@ impl SignalingModule for LegalVote {
         event: Event<'_, Self>,
     ) -> anyhow::Result<()> {
         match event {
-            Event::Joined { .. } => match self.handle_joined(ctx.redis_conn()).await {
-                Ok(current_vote_info) => {
-                    if let Some((parameters, results)) = current_vote_info {
-                        let legal_vote_id = parameters.legal_vote_id;
-
-                        ctx.ws_send(outgoing::Message::Started(parameters));
-                        ctx.ws_send(outgoing::Message::Updated(VoteResults {
-                            legal_vote_id,
-                            results,
-                        }));
-                    }
-                }
-                Err(error) => self.handle_error(&mut ctx, error)?,
-            },
+            Event::Joined { frontend_data, .. } => {
+                *frontend_data = Some(
+                    frontend_data::FrontendData::load_from_history(ctx.redis_conn(), self.room_id)
+                        .await?,
+                );
+            }
             Event::Leaving => {
                 if let Err(error) = self.handle_leaving(&mut ctx).await {
                     self.handle_error(&mut ctx, error)?;
@@ -203,7 +193,7 @@ impl SignalingModule for LegalVote {
                             )
                             .await
                         {
-                            Ok(()) => {
+                            Ok(_) => {
                                 if let Err(e) = self
                                     .save_protocol_in_database(ctx.redis_conn(), current_vote_id)
                                     .await
@@ -265,7 +255,8 @@ impl LegalVote {
                     return Err(ErrorKind::InsufficientPermissions.into());
                 }
 
-                self.cancel_vote(ctx.redis_conn(), legal_vote_id, reason.clone())
+                let entry = self
+                    .cancel_vote(ctx.redis_conn(), legal_vote_id, reason.clone())
                     .await?;
 
                 self.save_protocol_in_database(ctx.redis_conn(), legal_vote_id)
@@ -277,6 +268,9 @@ impl LegalVote {
                     rabbitmq::Event::Cancel(Canceled {
                         legal_vote_id,
                         reason: CancelReason::Custom(reason),
+                        end_time: entry
+                            .timestamp
+                            .expect("Missing timestamp for cancel vote ProtocolEntry"),
                     }),
                 );
 
@@ -380,14 +374,19 @@ impl LegalVote {
                 }))
             }
             rabbitmq::Event::Cancel(cancel) => {
-                ctx.ws_send(outgoing::Message::Canceled(Canceled {
-                    legal_vote_id: cancel.legal_vote_id,
-                    reason: cancel.reason,
-                }));
+                ctx.ws_send(outgoing::Message::Canceled(cancel));
             }
             rabbitmq::Event::Update(update) => {
+                let parameters =
+                    storage::parameters::get(ctx.redis_conn(), self.room_id, update.legal_vote_id)
+                        .await?
+                        .ok_or(ErrorKind::InvalidVoteId)?;
                 let results = self
-                    .get_vote_results(ctx.redis_conn(), update.legal_vote_id)
+                    .get_vote_results(
+                        ctx.redis_conn(),
+                        update.legal_vote_id,
+                        !parameters.inner.kind.is_hidden(),
+                    )
                     .await?;
 
                 ctx.ws_send(outgoing::Message::Updated(VoteResults {
@@ -546,14 +545,11 @@ impl LegalVote {
         let mut invalid_participants = Vec::new();
         let mut user_tokens = HashMap::new();
         let mut participant_tokens = HashMap::new();
-        let mut rng = rand::thread_rng();
 
         for (participant_id, maybe_user_id) in allowed_participants.iter().zip(allowed_users) {
             match maybe_user_id {
                 Some(user_id) => {
-                    let token = user_tokens
-                        .entry(user_id)
-                        .or_insert_with(|| Token::new(rng.next_u64()));
+                    let token = user_tokens.entry(user_id).or_insert_with(Token::generate);
                     participant_tokens.insert(*participant_id, *token);
                 }
                 None => {
@@ -766,7 +762,8 @@ impl LegalVote {
         if parameters.initiator_id == self.participant_id {
             let reason = CancelReason::InitiatorLeft;
 
-            self.cancel_vote_unchecked(redis_conn, current_vote_id, reason.clone())
+            let entry = self
+                .cancel_vote_unchecked(redis_conn, current_vote_id, reason.clone())
                 .await?;
 
             self.save_protocol_in_database(ctx.redis_conn(), current_vote_id)
@@ -778,6 +775,9 @@ impl LegalVote {
                 rabbitmq::Event::Cancel(rabbitmq::Canceled {
                     legal_vote_id: current_vote_id,
                     reason,
+                    end_time: entry
+                        .timestamp
+                        .expect("Missing timestamp on cancel vote ProtocolEntry"),
                 }),
             );
 
@@ -794,12 +794,13 @@ impl LegalVote {
         &self,
         redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
+        include_voting_record: bool,
     ) -> Result<outgoing::Results, Error> {
         let parameters = storage::parameters::get(redis_conn, self.room_id, legal_vote_id)
             .await?
             .ok_or(ErrorKind::InvalidVoteId)?;
 
-        let votes = storage::vote_count::get(
+        let tally = storage::vote_count::get(
             redis_conn,
             self.room_id,
             legal_vote_id,
@@ -807,23 +808,17 @@ impl LegalVote {
         )
         .await?;
 
-        let voters = match parameters.inner.kind {
-            VoteKind::Pseudonymous => None,
-            VoteKind::RollCall => {
-                let protocol =
-                    storage::protocol::get(redis_conn, self.room_id, legal_vote_id).await?;
-
-                let vote_list = reduce_protocol(protocol)?;
-
-                if let Some(list) = vote_list.left() {
-                    Some(list)
-                } else {
-                    return Err(anyhow!("Failed to get voters from vote protocol").into());
-                }
-            }
+        let voting_record = if include_voting_record {
+            let protocol = storage::protocol::get(redis_conn, self.room_id, legal_vote_id).await?;
+            Some(extract_voting_record_from_protocol(&protocol)?)
+        } else {
+            None
         };
 
-        Ok(outgoing::Results { votes, voters })
+        Ok(outgoing::Results {
+            tally,
+            voting_record,
+        })
     }
 
     /// Cancel a vote
@@ -834,7 +829,7 @@ impl LegalVote {
         redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
         reason: String,
-    ) -> Result<(), Error> {
+    ) -> Result<ProtocolEntry, Error> {
         if !self.is_current_vote_id(redis_conn, legal_vote_id).await? {
             return Err(ErrorKind::InvalidVoteId.into());
         }
@@ -852,23 +847,22 @@ impl LegalVote {
         redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
         reason: CancelReason,
-    ) -> Result<(), Error> {
+    ) -> Result<ProtocolEntry, Error> {
         let cancel_entry = ProtocolEntry::new(VoteEvent::Cancel(Cancel {
             issuer: self.user_id,
             reason,
         }));
 
-        if !storage::end_current_vote(redis_conn, self.room_id, legal_vote_id, cancel_entry).await?
+        if !storage::end_current_vote(redis_conn, self.room_id, legal_vote_id, &cancel_entry)
+            .await?
         {
             return Err(ErrorKind::InvalidVoteId.into());
         }
 
-        Ok(())
+        Ok(cancel_entry)
     }
 
     /// End the vote behind `legal_vote_id` using the provided parameters as stop parameters
-    ///
-    /// Generate the legal vote protocol PDF and sends it to the issuing user
     async fn end_vote(
         &self,
         ctx: &mut ModuleContext<'_, Self>,
@@ -876,7 +870,7 @@ impl LegalVote {
         end_entry: ProtocolEntry,
         stop_kind: StopKind,
     ) -> Result<(), Error> {
-        if !storage::end_current_vote(ctx.redis_conn(), self.room_id, legal_vote_id, end_entry)
+        if !storage::end_current_vote(ctx.redis_conn(), self.room_id, legal_vote_id, &end_entry)
             .await?
         {
             return Err(ErrorKind::InvalidVoteId.into());
@@ -886,7 +880,7 @@ impl LegalVote {
 
         let final_results_entry = match &final_results {
             outgoing::FinalResults::Valid(results) => {
-                ProtocolEntry::new(VoteEvent::FinalResults(FinalResults::Valid(results.votes)))
+                ProtocolEntry::new(VoteEvent::FinalResults(FinalResults::Valid(results.tally)))
             }
             outgoing::FinalResults::Invalid(invalid) => {
                 ProtocolEntry::new(VoteEvent::FinalResults(FinalResults::Invalid(*invalid)))
@@ -911,6 +905,9 @@ impl LegalVote {
                 legal_vote_id,
                 kind: stop_kind,
                 results: final_results,
+                end_time: end_entry
+                    .timestamp
+                    .expect("Missing timestamp for end vote ProtocolEntry"),
             }),
         );
 
@@ -959,19 +956,11 @@ impl LegalVote {
 
         let protocol =
             storage::protocol::get(ctx.redis_conn(), self.room_id, legal_vote_id).await?;
-        let vote_list = reduce_protocol(protocol)?;
+        let voting_record = extract_voting_record_from_protocol(&protocol)?;
 
-        let vote_options = vote_list.as_ref().either(
-            |voters| {
-                voters
-                    .iter()
-                    .map(|(_, vote_option)| *vote_option)
-                    .collect::<Vec<VoteOption>>()
-            },
-            |vote_list| vote_list.clone(),
-        );
+        let vote_options = voting_record.vote_option_list();
 
-        let mut protocol_vote_count = Votes {
+        let mut protocol_tally = Tally {
             yes: 0,
             no: 0,
             abstain: {
@@ -989,10 +978,10 @@ impl LegalVote {
             total_votes += 1;
 
             match vote_option {
-                VoteOption::Yes => protocol_vote_count.yes += 1,
-                VoteOption::No => protocol_vote_count.no += 1,
+                VoteOption::Yes => protocol_tally.yes += 1,
+                VoteOption::No => protocol_tally.no += 1,
                 VoteOption::Abstain => {
-                    if let Some(abstain) = &mut protocol_vote_count.abstain {
+                    if let Some(abstain) = &mut protocol_tally.abstain {
                         *abstain += 1;
                     } else {
                         return Ok(outgoing::FinalResults::Invalid(Invalid::AbstainDisabled));
@@ -1001,7 +990,7 @@ impl LegalVote {
             }
         }
 
-        let vote_count = storage::vote_count::get(
+        let tally = storage::vote_count::get(
             ctx.redis_conn(),
             self.room_id,
             legal_vote_id,
@@ -1009,21 +998,10 @@ impl LegalVote {
         )
         .await?;
 
-        let voters = match parameters.inner.kind {
-            VoteKind::Pseudonymous => None,
-            VoteKind::RollCall => {
-                if let Either::Left(voters) = vote_list {
-                    Some(voters)
-                } else {
-                    return Err(anyhow!("Failed to get voters from vote protocol").into());
-                }
-            }
-        };
-
-        if protocol_vote_count == vote_count && total_votes <= parameters.max_votes {
+        if protocol_tally == tally && total_votes <= parameters.max_votes {
             Ok(outgoing::FinalResults::Valid(outgoing::Results {
-                votes: vote_count,
-                voters,
+                tally,
+                voting_record: Some(voting_record),
             }))
         } else {
             Ok(outgoing::FinalResults::Invalid(
@@ -1091,27 +1069,6 @@ impl LegalVote {
         .await??;
 
         Ok(())
-    }
-
-    /// Returns the parameters and results of the current vote
-    async fn handle_joined(
-        &self,
-        redis_conn: &mut RedisConnection,
-    ) -> Result<Option<(Parameters, outgoing::Results)>, Error> {
-        if let Some(current_vote_id) =
-            storage::current_legal_vote_id::get(redis_conn, self.room_id).await?
-        {
-            let vote_parameters =
-                storage::parameters::get(redis_conn, self.room_id, current_vote_id)
-                    .await?
-                    .ok_or(ErrorKind::InvalidVoteId)?;
-
-            let vote_results = self.get_vote_results(redis_conn, current_vote_id).await?;
-
-            Ok(Some((vote_parameters, vote_results)))
-        } else {
-            Ok(None)
-        }
     }
 
     /// Save the legal vote protocol as PDF

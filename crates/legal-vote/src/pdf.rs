@@ -152,7 +152,7 @@ fn summarize_start_entry(
     user_cache: &mut UserCache,
     start: Start,
     table: &mut TableLayout,
-    _timestamp: DateTime<Utc>,
+    _timestamp: Option<DateTime<Utc>>,
 ) -> Result<()> {
     let Start {
         issuer,
@@ -307,8 +307,8 @@ fn get_result_elements(results: FinalResults) -> Result<Vec<BoxedElement>> {
     elements.push(BoxedElement::new(Paragraph::new("Ergebnisse:")));
 
     match results {
-        FinalResults::Valid(votes) => {
-            let Votes { yes, no, abstain } = votes;
+        FinalResults::Valid(tally) => {
+            let Tally { yes, no, abstain } = tally;
 
             let mut row = table.row();
             row.push_element(Paragraph::new("Ja:"));
@@ -352,13 +352,15 @@ fn summarize_stop_entry(
     db: Arc<Db>,
     table: &mut TableLayout,
     stop: StopKind,
-    timestamp: DateTime<Utc>,
+    timestamp: Option<DateTime<Utc>>,
 ) -> Result<()> {
+    let timestamp = timestamp
+        .map(|ts| ts.format("%d.%m.%Y %H:%M:%S %Z").to_string())
+        .unwrap_or_default();
+
     let mut row = table.row();
     row.push_element(Paragraph::new("Ende: "));
-    row.push_element(Paragraph::new(
-        timestamp.format("%d.%m.%Y %H:%M:%S %Z").to_string(),
-    ));
+    row.push_element(Paragraph::new(timestamp));
     row.push()?;
 
     let mut row = table.row();
@@ -392,13 +394,15 @@ fn summarize_cancel_entry(
     user_cache: &mut UserCache,
     table: &mut TableLayout,
     cancel: Cancel,
-    timestamp: DateTime<Utc>,
+    timestamp: Option<DateTime<Utc>>,
 ) -> Result<()> {
+    let timestamp = timestamp
+        .map(|ts| ts.format("%d.%m.%Y %H:%M:%S %Z").to_string())
+        .unwrap_or_default();
+
     let mut row = table.row();
     row.push_element(Paragraph::new("Ende: "));
-    row.push_element(Paragraph::new(
-        timestamp.format("%d.%m.%Y %H:%M:%S %Z").to_string(),
-    ));
+    row.push_element(Paragraph::new(timestamp));
     row.push()?;
 
     let mut row = table.row();
@@ -437,7 +441,6 @@ fn bool_to_string(value: bool) -> &'static str {
 
 fn vote_kind_to_string(value: VoteKind) -> &'static str {
     match value {
-        VoteKind::LiveRollCall => "Offene Abstimmung mit Live-Aktualisierungen",
         VoteKind::RollCall => "Offene Abstimmung",
         VoteKind::Pseudonymous => "Pseudonyme Abstimmung",
     }
@@ -576,7 +579,7 @@ mod test {
             },
         };
 
-        let results = FinalResults::Valid(Votes {
+        let results = FinalResults::Valid(Tally {
             yes: 0,
             no: 15,
             abstain: None,

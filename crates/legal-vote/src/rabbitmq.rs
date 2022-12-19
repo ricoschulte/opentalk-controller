@@ -1,4 +1,5 @@
 use crate::outgoing::{self, PdfAsset};
+use controller::prelude::chrono::{DateTime, Utc};
 use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::{CancelReason, FinalResults, Parameters, Token, VoteOption};
 use db_storage::legal_votes::LegalVoteId;
@@ -64,13 +65,14 @@ pub enum StopKind {
 }
 
 /// The specified vote has been canceled
-#[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Canceled {
     /// The id of the canceled vote
     pub legal_vote_id: LegalVoteId,
     /// The reason for the cancel
     #[serde(flatten)]
     pub reason: CancelReason,
+    pub end_time: DateTime<Utc>,
 }
 
 /// The results for a vote have changed
