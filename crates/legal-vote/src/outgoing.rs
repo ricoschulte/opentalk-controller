@@ -1,7 +1,7 @@
 use crate::rabbitmq::{Canceled, StopKind};
 use controller_shared::ParticipantId;
 use db_storage::assets::AssetId;
-use db_storage::legal_votes::types::{Invalid, Parameters, VoteOption, Votes};
+use db_storage::legal_votes::types::{Invalid, Parameters, Token, VoteOption, Votes};
 use db_storage::legal_votes::LegalVoteId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -51,6 +51,7 @@ pub enum Response {
 pub struct VoteSuccess {
     pub vote_option: VoteOption,
     pub issuer: ParticipantId,
+    pub consumed_token: Token,
 }
 
 /// Reasons for a failed vote request
@@ -174,6 +175,8 @@ impl From<super::error::ErrorKind> for ErrorKind {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
     use super::*;
     use crate::Token;
     use chrono::prelude::*;
@@ -236,6 +239,7 @@ mod test {
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::Yes,
                 issuer: ParticipantId::nil(),
+                consumed_token: Token::from_str("2QNav7b3FJw").unwrap(),
             }),
         });
 
@@ -246,7 +250,8 @@ mod test {
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
                 "response": "success",
                 "vote_option": "yes",
-                "issuer": "00000000-0000-0000-0000-000000000000"
+                "issuer": "00000000-0000-0000-0000-000000000000",
+                "consumed_token": "2QNav7b3FJw",
             }
         );
     }

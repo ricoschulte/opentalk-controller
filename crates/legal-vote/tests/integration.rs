@@ -116,6 +116,7 @@ async fn basic_vote() {
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::Yes,
                 issuer: USER_1.participant_id,
+                consumed_token: user_1_token,
             }),
         }));
 
@@ -169,6 +170,7 @@ async fn basic_vote() {
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::No,
                 issuer: USER_2.participant_id,
+                consumed_token: user_2_token,
             }),
         }));
 
@@ -337,6 +339,7 @@ async fn hidden_legal_vote() {
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::Yes,
                 issuer: USER_1.participant_id,
+                consumed_token: user_1_token,
             }),
         }));
 
@@ -387,6 +390,7 @@ async fn hidden_legal_vote() {
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::No,
                 issuer: USER_2.participant_id,
+                consumed_token: user_2_token,
             }),
         }));
 
@@ -554,6 +558,7 @@ async fn basic_vote_abstain() {
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::Abstain,
                 issuer: USER_1.participant_id,
+                consumed_token: user_1_token,
             }),
         }));
 
@@ -607,6 +612,7 @@ async fn basic_vote_abstain() {
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::No,
                 issuer: USER_2.participant_id,
+                consumed_token: user_2_token,
             }),
         }));
 
@@ -883,6 +889,7 @@ async fn auto_stop_vote() {
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::Yes,
                 issuer: USER_1.participant_id,
+                consumed_token: user_1_token,
             }),
         }));
 
@@ -940,6 +947,7 @@ async fn auto_stop_vote() {
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::No,
                 issuer: USER_2.participant_id,
+                consumed_token: user_2_token,
             }),
         }));
 
@@ -1359,6 +1367,7 @@ async fn vote_twice() {
             response: Response::Success(VoteSuccess {
                 vote_option: VoteOption::Yes,
                 issuer: USER_1.participant_id,
+                consumed_token: token,
             }),
         }));
 

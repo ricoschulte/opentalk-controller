@@ -295,6 +295,7 @@ impl LegalVote {
                 if let Response::Success(VoteSuccess {
                     vote_option,
                     issuer,
+                    consumed_token,
                 }) = vote_response.response
                 {
                     let update = rabbitmq::Event::Update(rabbitmq::VoteUpdate {
@@ -309,6 +310,7 @@ impl LegalVote {
                             legal_vote_id: vote_message.legal_vote_id,
                             vote_option,
                             issuer,
+                            consumed_token,
                         }),
                     );
 
@@ -373,6 +375,7 @@ impl LegalVote {
                     response: outgoing::Response::Success(outgoing::VoteSuccess {
                         vote_option: vote_success.vote_option,
                         issuer: vote_success.issuer,
+                        consumed_token: vote_success.consumed_token,
                     }),
                 }))
             }
@@ -704,6 +707,7 @@ impl LegalVote {
                 Response::Success(VoteSuccess {
                     vote_option: vote_message.option,
                     issuer: self.participant_id,
+                    consumed_token: vote_message.token,
                 }),
                 false,
             ),
@@ -711,6 +715,7 @@ impl LegalVote {
                 Response::Success(VoteSuccess {
                     vote_option: vote_message.option,
                     issuer: self.participant_id,
+                    consumed_token: vote_message.token,
                 }),
                 parameters.inner.auto_close,
             ),

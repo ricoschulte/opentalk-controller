@@ -1,6 +1,6 @@
 use crate::outgoing::{self, PdfAsset};
 use controller_shared::ParticipantId;
-use db_storage::legal_votes::types::{CancelReason, FinalResults, Parameters, VoteOption};
+use db_storage::legal_votes::types::{CancelReason, FinalResults, Parameters, Token, VoteOption};
 use db_storage::legal_votes::LegalVoteId;
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +35,8 @@ pub struct VoteSuccess {
     pub issuer: ParticipantId,
     /// The chosen vote option
     pub vote_option: VoteOption,
+    /// The token that is used to cast the vote
+    pub consumed_token: Token,
 }
 
 /// The specified vote has been stopped
