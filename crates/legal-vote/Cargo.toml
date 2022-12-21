@@ -2,8 +2,8 @@
 name = "k3k-legal-vote"
 version = "1.0.0-rc.10"
 edition = "2021"
+authors.workspace = true
 publish = false
-authors = ["OpenTalk Team <we@opentalk.eu>"]
 
 [dependencies]
 controller = { path = "../controller", package = "k3k-controller-core" }

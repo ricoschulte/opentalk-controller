@@ -2,11 +2,14 @@
 name = "k3k-controller"
 version = "1.0.0-rc.10"
 edition = "2021"
-authors = ["OpenTalk Team <we@opentalk.eu>"]
+authors.workspace = true
 publish = false
 
 [workspace]
 members = ["crates/*", "xtask"]
+
+[workspace.package]
+authors = ["OpenTalk Team <mail@opentalk.eu>"]
 
 [dependencies]
 anyhow = "1.0"

@@ -1,11 +1,8 @@
 [package]
 name = "r3dlock"
 version = "0.1.0"
-authors = [
-    "Rudi Floren <r.floren@heinlein-video.de>",
-    "Konstanin Baltruschat <k.baltruschat@heinlein-video.de>",
-]
 edition = "2021"
+authors.workspace = true
 publish = false
 
 [dependencies]

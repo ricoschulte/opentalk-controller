@@ -1,11 +1,8 @@
 [package]
 name = "janus-client"
 version = "0.2.0"
-authors = [
-    "Rudi Floren <r.floren@heinlein-video.de>",
-    "Konstanin Baltruschat <k.baltruschat@heinlein-video.de>",
-]
 edition = "2021"
+authors.workspace = true
 publish = false
 
 [dependencies]
