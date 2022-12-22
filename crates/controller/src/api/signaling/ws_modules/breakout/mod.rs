@@ -10,6 +10,7 @@ use chrono::{DateTime, Utc};
 use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
 use futures::FutureExt;
+use redis_args::ToRedisArgs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -22,10 +23,11 @@ pub mod outgoing;
 pub mod rabbitmq;
 pub mod storage;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, ToRedisArgs,
+)]
+#[to_redis_args(fmt = "{}")]
 pub struct BreakoutRoomId(Uuid);
-
-impl_to_redis_args!(BreakoutRoomId);
 
 impl BreakoutRoomId {
     pub const fn nil() -> Self {

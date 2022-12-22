@@ -23,6 +23,7 @@ COPY ./crates/timer/Cargo.toml ./crates/timer/Cargo.toml
 COPY ./crates/whiteboard/Cargo.toml ./crates/whiteboard/Cargo.toml
 COPY ./crates/polls/Cargo.toml ./crates/polls/Cargo.toml
 COPY ./crates/r3dlock/Cargo.toml ./crates/r3dlock/Cargo.toml
+COPY ./crates/redis-args/Cargo.toml ./crates/redis-args/Cargo.toml
 COPY ./crates/protocol/Cargo.toml ./crates/protocol/Cargo.toml
 COPY ./crates/test-util/Cargo.toml ./crates/test-util/Cargo.toml
 COPY ./xtask/Cargo.toml ./xtask/Cargo.toml

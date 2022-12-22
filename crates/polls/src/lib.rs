@@ -4,6 +4,7 @@ use controller::prelude::*;
 use futures::stream::once;
 use futures::FutureExt;
 use redis::{self, FromRedisValue, RedisResult};
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::{from_utf8, FromStr};
@@ -343,9 +344,9 @@ impl Polls {
     }
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, ToRedisArgs)]
+#[to_redis_args(fmt)]
 pub struct PollId(pub Uuid);
-impl_to_redis_args!(PollId);
 
 impl FromRedisValue for PollId {
     fn from_redis_value(v: &redis::Value) -> RedisResult<Self> {
@@ -387,7 +388,9 @@ pub struct Choice {
     pub content: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct Config {
     id: PollId,
     topic: String,
@@ -402,8 +405,6 @@ pub struct Config {
     #[serde(skip, default)]
     voted: bool,
 }
-impl_from_redis_value_de!(Config);
-impl_to_redis_args_se!(&Config);
 
 impl Config {
     fn remaining(&self) -> Option<Duration> {

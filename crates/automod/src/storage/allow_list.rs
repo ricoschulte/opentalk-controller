@@ -11,18 +11,15 @@
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:automod:allow_list
-#[ignore_extra_doc_attributes]
 /// Typed key to the allow_list
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:automod:allow_list")]
 struct RoomAutoModAllowList {
     room: SignalingRoomId,
 }
-
-impl_to_redis_args!(RoomAutoModAllowList);
 
 /// Override the current allow_list with the given one. If the `allow_list` parameter is empty,
 /// the entry will just be deleted.

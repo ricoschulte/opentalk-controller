@@ -2,20 +2,16 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use db_storage::legal_votes::types::Parameters;
 use db_storage::legal_votes::LegalVoteId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:vote={legal_vote_id}
-#[ignore_extra_doc_attributes]
-///
 /// Contains the [`Parameters`] of the a vote.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:vote={legal_vote_id}")]
 pub(super) struct VoteParametersKey {
     pub(super) room_id: SignalingRoomId,
     pub(super) legal_vote_id: LegalVoteId,
 }
-
-impl_to_redis_args!(VoteParametersKey);
 
 /// Set the vote [`Parameters`] for the provided `legal_vote_id`
 #[tracing::instrument(name = "legal_vote_set_parameters", skip(redis_conn, parameters))]

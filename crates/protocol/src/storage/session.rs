@@ -2,20 +2,16 @@ use crate::SessionInfo;
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:participant={participant_id}:protocol-session
-#[ignore_extra_doc_attributes]
-///
 /// Contains the [`SessionInfo`] of the a participant.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:participant={participant_id}:protocol-session")]
 pub(super) struct SessionInfoKey {
     pub(super) room_id: SignalingRoomId,
     pub(super) participant_id: ParticipantId,
 }
-
-impl_to_redis_args!(SessionInfoKey);
 
 #[tracing::instrument(name = "set_protocol_session_info", skip(redis_conn))]
 pub(crate) async fn set(

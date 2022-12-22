@@ -2141,9 +2141,11 @@ dependencies = [
  "k3k-controller-core",
  "k3k-controller-shared",
  "k3k-db-storage",
+ "k3k-redis-args",
  "k3k-test-util",
  "pretty_assertions",
  "rand",
+ "redis",
  "serde",
  "serial_test",
 ]
@@ -2156,8 +2158,10 @@ dependencies = [
  "k3k-controller-core",
  "k3k-controller-shared",
  "k3k-db-storage",
+ "k3k-redis-args",
  "k3k-test-util",
  "pretty_assertions",
+ "redis",
  "serde",
  "serial_test",
 ]
@@ -2206,7 +2210,6 @@ dependencies = [
  "clap",
  "config",
  "diesel",
- "displaydoc",
  "either",
  "email_address",
  "futures",
@@ -2217,6 +2220,7 @@ dependencies = [
  "k3k-database",
  "k3k-db-storage",
  "k3k-mail-worker-protocol",
+ "k3k-redis-args",
  "k3k-test-util",
  "keycloak-admin",
  "kustos",
@@ -2268,6 +2272,7 @@ dependencies = [
  "chrono",
  "cidr",
  "config",
+ "k3k-redis-args",
  "openidconnect",
  "phonenumber",
  "pretty_assertions",
@@ -2300,6 +2305,7 @@ dependencies = [
  "diesel",
  "k3k-controller-shared",
  "k3k-database",
+ "k3k-redis-args",
  "k3k-test-util",
  "kustos",
  "log",
@@ -2329,8 +2335,10 @@ dependencies = [
  "k3k-controller-shared",
  "k3k-database",
  "k3k-db-storage",
+ "k3k-redis-args",
  "k3k-test-util",
  "pretty_assertions",
+ "redis",
  "serde",
  "serial_test",
 ]
@@ -2342,9 +2350,11 @@ dependencies = [
  "janus-client",
  "k3k-controller-core",
  "k3k-controller-shared",
+ "k3k-redis-args",
  "k3k-test-util",
  "pin-project-lite",
  "pretty_assertions",
+ "redis",
  "serde",
 ]
 
@@ -2361,9 +2371,11 @@ dependencies = [
  "k3k-controller-shared",
  "k3k-database",
  "k3k-db-storage",
+ "k3k-redis-args",
  "k3k-test-util",
  "kustos",
  "pretty_assertions",
+ "redis",
  "serde",
  "serial_test",
  "validator",
@@ -2388,8 +2400,10 @@ version = "1.0.0-rc.10"
 dependencies = [
  "actix-rt",
  "k3k-controller-core",
+ "k3k-redis-args",
  "k3k-test-util",
  "pretty_assertions",
+ "redis",
  "serde",
  "serial_test",
 ]
@@ -2403,9 +2417,23 @@ dependencies = [
  "k3k-controller-shared",
  "k3k-database",
  "k3k-db-storage",
+ "k3k-redis-args",
  "k3k-test-util",
  "pretty_assertions",
+ "redis",
  "serde",
+]
+
+[[package]]
+name = "k3k-redis-args"
+version = "1.0.0-rc.10"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "redis",
+ "serde",
+ "serde_json",
+ "syn",
 ]
 
 [[package]]
@@ -2432,8 +2460,10 @@ dependencies = [
  "actix-rt",
  "k3k-controller-core",
  "k3k-controller-shared",
+ "k3k-redis-args",
  "k3k-test-util",
  "pretty_assertions",
+ "redis",
  "serde",
  "serial_test",
 ]
@@ -2451,8 +2481,10 @@ dependencies = [
  "k3k-controller-shared",
  "k3k-database",
  "k3k-db-storage",
+ "k3k-redis-args",
  "percent-encoding",
  "rand",
+ "redis",
  "reqwest",
  "serde",
  "serde_json",
@@ -3293,9 +3325,9 @@ checksum = "dbf0c48bc1d91375ae5c3cd81e3722dff1abcf81a30960240640d223f59fe0e5"
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.43"
+version = "1.0.49"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a2ca2c61bc9f3d74d2886294ab7b9853abd9c1ad903a3ac7815c58989bb7bab"
+checksum = "57a8eca9f9c4ffde41714334dee777596264c7825420f521abc92b5b5deb63a5"
 dependencies = [
  "unicode-ident",
 ]

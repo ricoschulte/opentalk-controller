@@ -13,6 +13,7 @@ use futures::TryStreamExt;
 use incoming::ParticipantSelection;
 use outgoing::{AccessUrl, PdfAsset};
 use rabbitmq::GenerateUrl;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -23,16 +24,15 @@ pub mod storage;
 
 const PAD_NAME: &str = "protocol";
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 struct SessionInfo {
     author_id: String,
     group_id: String,
     session_id: String,
     readonly: bool,
 }
-
-impl_to_redis_args_se!(SessionInfo);
-impl_from_redis_value_de!(SessionInfo);
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

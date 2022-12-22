@@ -2,24 +2,23 @@ use crate::TimerId;
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:timer
-#[ignore_extra_doc_attributes]
 /// The timer key holds a serialized [`Timer`].
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:timer")]
 struct TimerKey {
     room_id: SignalingRoomId,
 }
 
-impl_to_redis_args!(TimerKey);
-
 /// A timer
 ///
 /// Stores information about a running timer
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub(crate) struct Timer {
     /// The timers id
     ///
@@ -40,9 +39,6 @@ pub(crate) struct Timer {
     /// Flag to allow/disallow participants to mark themselves as ready
     pub(crate) ready_check_enabled: bool,
 }
-
-impl_to_redis_args_se!(&Timer);
-impl_from_redis_value_de!(Timer);
 
 /// Attempt to set a new timer
 ///

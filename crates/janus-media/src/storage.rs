@@ -2,20 +2,17 @@ use super::State;
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:participant={participant}:namespace=media:state
-#[ignore_extra_doc_attributes]
 /// Data related to a module inside a participant
 // TODO can this be removed?
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:participant={participant}:namespace=media:state")]
 struct MediaState {
     room: SignalingRoomId,
     participant: ParticipantId,
 }
-
-impl_to_redis_args!(MediaState);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_state(
@@ -64,14 +61,11 @@ pub async fn del_state(
         .context("Failed to delete media state")
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:namespace=media:presenters
-#[ignore_extra_doc_attributes]
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:namespace=media:presenters")]
 struct Presenters {
     room: SignalingRoomId,
 }
-
-impl_to_redis_args!(Presenters);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_presenter(

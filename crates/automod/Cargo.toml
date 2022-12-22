@@ -12,6 +12,8 @@ db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 chrono = "0.4"
 serde = { version = "1", features = ["derive"] }
 rand = "0.8"
+redis = "0.21"
+redis-args = { path = "../redis-args", package = "k3k-redis-args" }
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util" }

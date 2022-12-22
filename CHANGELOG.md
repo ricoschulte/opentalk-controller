@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - protocol: fixed the `createAuthorIfNotExistsFor` API call that always returned the same author id due to a typo in the query
 
+### Changed
+
+- controller: use derive and attribute macros for conversion to/from redis values ([#283](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/283))
+
 ## [1.0.0-rc.10] - 2022-12-09
 
 ### Added

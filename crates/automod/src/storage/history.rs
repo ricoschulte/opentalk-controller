@@ -10,30 +10,26 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:automod:history
-#[ignore_extra_doc_attributes]
 /// Typed key to the automod history
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:automod:history")]
 struct RoomAutoModHistory {
     room: SignalingRoomId,
 }
 
-impl_to_redis_args!(RoomAutoModHistory);
-
-#[derive(Debug, Serialize, Deserialize)]
 /// Entry inside the automod history
+#[derive(Debug, Serialize, Deserialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct Entry {
     pub timestamp: DateTime<Utc>,
     pub participant: ParticipantId,
     pub kind: EntryKind,
 }
-
-impl_to_redis_args_se!(&Entry);
-impl_from_redis_value_de!(Entry);
 
 /// The kind of history entry.  
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]

@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -80,7 +81,9 @@ pub struct Parameter {
     pub animation_on_random: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct StorageConfig {
     pub started: DateTime<Utc>,
     pub parameter: Parameter,

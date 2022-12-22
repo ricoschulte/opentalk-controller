@@ -12,8 +12,8 @@ use anyhow::{bail, Context, Result};
 use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
 use db_storage::users::UserId;
-use displaydoc::Display;
 use rand::Rng;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use tokio::time::sleep_until;
@@ -37,27 +37,23 @@ impl ResumptionToken {
     }
 }
 
-#[derive(Debug, Display)]
-/// k3k-signaling:resumption={resumption}
-#[ignore_extra_doc_attributes]
 /// Redis key for a resumption token containing [`ResumptionData`].
+#[derive(Debug, ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:resumption={resumption}")]
 pub struct ResumptionRedisKey {
     pub resumption: String,
 }
 
-impl_to_redis_args!(&ResumptionRedisKey);
-
 /// Data saved in redis behind the [`ResumptionRedisKey`]
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct ResumptionData {
     pub participant_id: ParticipantId,
     pub participant: Participant<UserId>,
     pub room: RoomId,
     pub breakout_room: Option<BreakoutRoomId>,
 }
-
-impl_from_redis_value_de!(ResumptionData);
-impl_to_redis_args_se!(&ResumptionData);
 
 /// Token refresh loop used in websocket runner to keep the resumption token alive and valid
 pub struct ResumptionTokenKeepAlive {

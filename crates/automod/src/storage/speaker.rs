@@ -4,18 +4,15 @@
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:automod:speaker
-#[ignore_extra_doc_attributes]
 /// Typed key to the automod's active speaker
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:automod:speaker")]
 pub struct RoomAutoModSpeaker {
     room: SignalingRoomId,
 }
-
-impl_to_redis_args!(RoomAutoModSpeaker);
 
 /// Get the current speaker. Returns [`None`] if there is no active speaker.
 #[tracing::instrument(name = "get_speaker", level = "debug", skip(redis_conn))]

@@ -4,20 +4,15 @@
 use crate::config::StorageConfig;
 use anyhow::{Context, Result};
 use controller::prelude::*;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:automod:config
-#[ignore_extra_doc_attributes]
 /// Typed key to the automod config
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:automod:config")]
 pub struct RoomAutoModConfig {
     room: SignalingRoomId,
 }
-
-impl_to_redis_args!(RoomAutoModConfig);
-impl_to_redis_args_se!(&StorageConfig);
-impl_from_redis_value_de!(StorageConfig);
 
 /// Set the current config.
 #[tracing::instrument(name = "set_config", level = "debug", skip(redis_conn, config))]

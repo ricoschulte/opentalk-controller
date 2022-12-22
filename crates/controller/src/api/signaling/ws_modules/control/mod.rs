@@ -4,6 +4,7 @@
 use crate::prelude::*;
 use anyhow::Result;
 use controller_shared::ParticipantId;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 
 pub mod incoming;
@@ -87,8 +88,12 @@ impl ControlData {
     }
 }
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(
+    Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, ToRedisArgs, FromRedisValue,
+)]
 #[serde(rename_all = "snake_case")]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub enum ParticipationKind {
     User,
     Guest,
@@ -101,6 +106,3 @@ impl ParticipationKind {
         !matches!(self, Self::Recorder)
     }
 }
-
-impl_to_redis_args_se!(ParticipationKind);
-impl_from_redis_value_de!(ParticipationKind);

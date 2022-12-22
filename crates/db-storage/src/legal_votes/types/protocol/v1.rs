@@ -1,22 +1,22 @@
 use super::super::{CancelReason, FinalResults, Parameters, VoteOption};
 use crate::users::UserId;
 use chrono::{DateTime, Utc};
-use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se, ParticipantId};
+use controller_shared::ParticipantId;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 
 /// A legal vote protocol entry
 ///
 /// Contains the event that will be logged in the vote protocol with some meta data.
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct ProtocolEntry {
     /// The time that an entry got created
     pub timestamp: DateTime<Utc>,
     /// The event of this entry
     pub event: VoteEvent,
 }
-
-impl_to_redis_args_se!(ProtocolEntry);
-impl_from_redis_value_de!(ProtocolEntry);
 
 impl ProtocolEntry {
     /// Create a new protocol entry
@@ -31,8 +31,10 @@ impl ProtocolEntry {
 }
 
 /// A event related to an active vote
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToRedisArgs, FromRedisValue)]
 #[serde(rename_all = "snake_case", tag = "event")]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub enum VoteEvent {
     /// The vote started
     Start(Start),
@@ -45,8 +47,6 @@ pub enum VoteEvent {
     /// The vote has been canceled
     Cancel(Cancel),
 }
-
-impl_to_redis_args_se!(VoteEvent);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Start {

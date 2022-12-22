@@ -2,24 +2,20 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use db_storage::legal_votes::types::{VoteOption, Votes};
 use db_storage::legal_votes::LegalVoteId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 use std::collections::HashMap;
 
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:vote={legal_vote_id}:vote_count
-#[ignore_extra_doc_attributes]
-///
 /// Contains a sorted set of [`VoteOption`] each with their respective vote count.
 ///
 /// When a vote is casted, the corresponding vote option in this list will get incremented.
 /// See [`VOTE_SCRIPT`](super::VOTE_SCRIPT) for more details on the vote process.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:vote={legal_vote_id}:vote_count")]
 pub(super) struct VoteCountKey {
     pub(super) room_id: SignalingRoomId,
     pub(super) legal_vote_id: LegalVoteId,
 }
-
-impl_to_redis_args!(VoteCountKey);
 
 /// Get the vote count for the specified `legal_vote_id`
 #[tracing::instrument(name = "legal_vote_get_vote_count", skip(redis_conn))]

@@ -2,18 +2,15 @@ use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
 use controller_shared::ParticipantId;
 use db_storage::{rooms::RoomId, users::UserId};
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:bans
-#[ignore_extra_doc_attributes]
 /// Set of user-ids banned in a room
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:bans")]
 struct Bans {
     room: RoomId,
 }
-
-impl_to_redis_args!(Bans);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn ban_user(
@@ -59,15 +56,12 @@ pub async fn delete_bans(redis_conn: &mut RedisConnection, room: RoomId) -> Resu
         .context("Failed to DEL bans")
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:waiting_room_enabled
-#[ignore_extra_doc_attributes]
 /// If set to true the waiting room is enabled
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:waiting_room_enabled")]
 struct WaitingRoomEnabled {
     room: RoomId,
 }
-
-impl_to_redis_args!(WaitingRoomEnabled);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_waiting_room_enabled(
@@ -122,15 +116,12 @@ pub async fn delete_waiting_room_enabled(
         .context("Failed to DEL waiting_room_enabled")
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:raise_hands_enabled
-#[ignore_extra_doc_attributes]
 /// If set to true the raise hands is enabled
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:raise_hands_enabled")]
 struct RaiseHandsEnabled {
     room: RoomId,
 }
-
-impl_to_redis_args!(RaiseHandsEnabled);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_raise_hands_enabled(
@@ -167,15 +158,12 @@ pub async fn delete_raise_hands_enabled(
         .context("Failed to DEL raise_hands_enabled")
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:waiting_room_list
-#[ignore_extra_doc_attributes]
 /// Set of participant ids inside the waiting room
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:waiting_room_list")]
 struct WaitingRoomList {
     room: RoomId,
 }
-
-impl_to_redis_args!(WaitingRoomList);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn waiting_room_add(
@@ -240,15 +228,12 @@ pub async fn delete_waiting_room(redis_conn: &mut RedisConnection, room: RoomId)
         .context("Failed to DEL waiting_room_list")
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:waiting_room_accepted_list
-#[ignore_extra_doc_attributes]
 /// Set of participant ids inside the waiting room but accepted
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:waiting_room_accepted_list")]
 struct AcceptedWaitingRoomList {
     room: RoomId,
 }
-
-impl_to_redis_args!(AcceptedWaitingRoomList);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn waiting_room_accepted_add(
