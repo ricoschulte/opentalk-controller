@@ -112,7 +112,7 @@ pub async fn get_event_instances(
         after,
     } = query.into_inner();
 
-    let per_page = per_page.unwrap_or(30).max(1).min(100);
+    let per_page = per_page.unwrap_or(30).clamp(1, 100);
     let page = after.map(|c| c.page).unwrap_or(1).max(1);
 
     let skip = per_page as usize;
