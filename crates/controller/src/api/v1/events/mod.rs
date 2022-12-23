@@ -875,8 +875,7 @@ pub async fn get_events(
         let per_page = query
             .per_page
             .unwrap_or_else(default_pagination_per_page)
-            .max(1)
-            .min(100);
+            .clamp(1, 100);
 
         let mut users = GetUserProfilesBatched::new();
 
