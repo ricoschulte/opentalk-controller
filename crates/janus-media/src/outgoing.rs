@@ -157,6 +157,7 @@ mod test {
     use super::*;
     use crate::rabbitmq::RequestMute;
     use controller::prelude::*;
+    use serde_json::json;
     use test_util::assert_eq_json;
 
     #[test]
@@ -326,31 +327,48 @@ mod test {
     #[test]
     fn test_errors() {
         let errors_and_expected = vec![
-            (Error::InvalidSdpOffer, "{\"error\":\"invalid_sdp_offer\"}"),
-            (Error::HandleSdpAnswer, "{\"error\":\"handle_sdp_answer\"}"),
-            (Error::InvalidCandidate, "{\"error\":\"invalid_candidate\"}"),
+            (
+                Error::InvalidSdpOffer,
+                json!({"error": "invalid_sdp_offer"}),
+            ),
+            (
+                Error::HandleSdpAnswer,
+                json!({"error": "handle_sdp_answer"}),
+            ),
+            (
+                Error::InvalidCandidate,
+                json!({"error": "invalid_candidate"}),
+            ),
             (
                 Error::InvalidEndOfCandidates,
-                "{\"error\":\"invalid_end_of_candidates\"}",
+                json!({"error": "invalid_end_of_candidates"}),
             ),
             (
                 Error::InvalidRequestOffer(Source {
                     source: ParticipantId::nil(),
                     media_session_type: MediaSessionType::Video,
                 }),
-                r#"{"error":"invalid_request_offer","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#,
+                json!({
+                    "error": "invalid_request_offer",
+                    "source": "00000000-0000-0000-0000-000000000000",
+                    "media_session_type": "video",
+                }),
             ),
             (
                 Error::InvalidConfigureRequest(Source {
                     source: ParticipantId::nil(),
                     media_session_type: MediaSessionType::Video,
                 }),
-                r#"{"error":"invalid_configure_request","source":"00000000-0000-0000-0000-000000000000","media_session_type":"video"}"#,
+                json!({
+                    "error": "invalid_configure_request",
+                    "source": "00000000-0000-0000-0000-000000000000",
+                    "media_session_type": "video"
+                }),
             ),
         ];
 
         for (error, expected) in errors_and_expected {
-            let produced = serde_json::to_string(&error).unwrap();
+            let produced = serde_json::to_value(&error).unwrap();
             println!("{}", produced);
             assert_eq!(expected, produced);
         }
