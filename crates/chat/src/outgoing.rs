@@ -48,31 +48,48 @@ pub enum Error {
 mod test {
     use super::*;
     use controller::prelude::serde_json;
+    use serde_json::json;
 
     #[test]
     fn global_serialize() {
-        let produced = serde_json::to_string(&Message::MessageSent(MessageSent {
+        let produced = serde_json::to_value(&Message::MessageSent(MessageSent {
             id: MessageId::nil(),
             source: ParticipantId::nil(),
             content: "Hello All!".to_string(),
             scope: Scope::Global,
         }))
         .unwrap();
-        let expected = r#"{"message":"message_sent","id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","content":"Hello All!","scope":"global"}"#;
+
+        let expected = json!({
+            "message": "message_sent",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "source": "00000000-0000-0000-0000-000000000000",
+            "content": "Hello All!",
+            "scope": "global"
+        });
 
         assert_eq!(expected, produced);
     }
 
     #[test]
     fn private_serialize() {
-        let produced = serde_json::to_string(&Message::MessageSent(MessageSent {
+        let produced = serde_json::to_value(&Message::MessageSent(MessageSent {
             id: MessageId::nil(),
             source: ParticipantId::nil(),
             content: "Hello All!".to_string(),
             scope: Scope::Private(ParticipantId::new_test(1)),
         }))
         .unwrap();
-        let expected = r#"{"message":"message_sent","id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","content":"Hello All!","scope":"private","target":"00000000-0000-0000-0000-000000000001"}"#;
+
+        let expected = json!({
+            "message": "message_sent",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "source": "00000000-0000-0000-0000-000000000000",
+            "content": "Hello All!",
+            "scope": "private",
+            "target": "00000000-0000-0000-0000-000000000001",
+        });
+
         assert_eq!(expected, produced);
     }
 }
