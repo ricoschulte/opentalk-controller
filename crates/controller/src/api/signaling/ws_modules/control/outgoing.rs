@@ -76,12 +76,20 @@ pub struct Participant {
 #[cfg(test)]
 mod test {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn join_success() {
-        let expected = r#"{"message":"join_success","id":"00000000-0000-0000-0000-000000000000","display_name":"name","avatar_url":"http://url","role":"user","participants":[]}"#;
+        let expected = json!({
+            "message": "join_success",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "display_name": "name",
+            "avatar_url": "http://url",
+            "role": "user",
+            "participants": [],
+        });
 
-        let produced = serde_json::to_string(&Message::JoinSuccess(JoinSuccess {
+        let produced = serde_json::to_value(&Message::JoinSuccess(JoinSuccess {
             id: ParticipantId::nil(),
             role: Role::User,
             display_name: "name".into(),
@@ -96,9 +104,15 @@ mod test {
 
     #[test]
     fn join_success_guest() {
-        let expected = r#"{"message":"join_success","id":"00000000-0000-0000-0000-000000000000","display_name":"name","role":"guest","participants":[]}"#;
+        let expected = json!({
+            "message": "join_success",
+            "id": "00000000-0000-0000-0000-000000000000",
+            "display_name": "name",
+            "role": "guest",
+            "participants": [],
+        });
 
-        let produced = serde_json::to_string(&Message::JoinSuccess(JoinSuccess {
+        let produced = serde_json::to_value(&Message::JoinSuccess(JoinSuccess {
             id: ParticipantId::nil(),
             display_name: "name".into(),
             avatar_url: None,
@@ -113,9 +127,9 @@ mod test {
 
     #[test]
     fn update() {
-        let expected = r#"{"message":"update","id":"00000000-0000-0000-0000-000000000000"}"#;
+        let expected = json!({"message": "update", "id": "00000000-0000-0000-0000-000000000000"});
 
-        let produced = serde_json::to_string(&Message::Update(Participant {
+        let produced = serde_json::to_value(&Message::Update(Participant {
             id: ParticipantId::nil(),
             module_data: Default::default(),
         }))
@@ -126,9 +140,9 @@ mod test {
 
     #[test]
     fn joined() {
-        let expected = r#"{"message":"joined","id":"00000000-0000-0000-0000-000000000000"}"#;
+        let expected = json!({"message": "joined", "id": "00000000-0000-0000-0000-000000000000"});
 
-        let produced = serde_json::to_string(&Message::Joined(Participant {
+        let produced = serde_json::to_value(&Message::Joined(Participant {
             id: ParticipantId::nil(),
             module_data: Default::default(),
         }))
@@ -139,9 +153,9 @@ mod test {
 
     #[test]
     fn left() {
-        let expected = r#"{"message":"left","id":"00000000-0000-0000-0000-000000000000"}"#;
+        let expected = json!({"message": "left","id": "00000000-0000-0000-0000-000000000000"});
 
-        let produced = serde_json::to_string(&Message::Left(AssociatedParticipant {
+        let produced = serde_json::to_value(&Message::Left(AssociatedParticipant {
             id: ParticipantId::nil(),
         }))
         .unwrap();
@@ -151,9 +165,9 @@ mod test {
 
     #[test]
     fn error() {
-        let expected = r#"{"message":"error","error":"raise_hands_disabled"}"#;
+        let expected = json!({"message": "error", "error": "raise_hands_disabled"});
 
-        let produced = serde_json::to_string(&Message::Error(Error::RaiseHandsDisabled)).unwrap();
+        let produced = serde_json::to_value(&Message::Error(Error::RaiseHandsDisabled)).unwrap();
 
         assert_eq!(expected, produced);
     }

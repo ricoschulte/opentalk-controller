@@ -35,14 +35,23 @@ mod test {
 
     use super::*;
     use controller_shared::ParticipantId;
+    use serde_json::json;
     use test_util::assert_eq_json;
     use uuid::Uuid;
 
     #[test]
     fn started() {
-        let expected = r#"{"message":"started","rooms":[{"id":"00000000-0000-0000-0000-000000000000","name":"Room 1"},{"id":"00000000-0000-0000-0000-000000000001","name":"Room 2"}],"expires":null,"assignment":"00000000-0000-0000-0000-000000000000"}"#;
+        let expected = json!({
+            "message": "started",
+            "rooms": [
+                {"id":"00000000-0000-0000-0000-000000000000", "name":"Room 1"},
+                {"id":"00000000-0000-0000-0000-000000000001","name":"Room 2"},
+            ],
+            "expires": null,
+            "assignment": "00000000-0000-0000-0000-000000000000",
+        });
 
-        let produced = serde_json::to_string(&Message::Started(Started {
+        let produced = serde_json::to_value(&Message::Started(Started {
             rooms: vec![
                 BreakoutRoom {
                     id: BreakoutRoomId(Uuid::from_u128(0)),
@@ -63,18 +72,18 @@ mod test {
 
     #[test]
     fn stopped() {
-        let expected = r#"{"message":"stopped"}"#;
+        let expected = json!({"message": "stopped"});
 
-        let produced = serde_json::to_string(&Message::Stopped).unwrap();
+        let produced = serde_json::to_value(&Message::Stopped).unwrap();
 
         assert_eq!(expected, produced);
     }
 
     #[test]
     fn expired() {
-        let expected = r#"{"message":"expired"}"#;
+        let expected = json!({"message": "expired"});
 
-        let produced = serde_json::to_string(&Message::Expired).unwrap();
+        let produced = serde_json::to_value(&Message::Expired).unwrap();
 
         assert_eq!(expected, produced);
     }
@@ -105,9 +114,13 @@ mod test {
 
     #[test]
     fn left() {
-        let expected = r#"{"message":"left","breakout_room":"00000000-0000-0000-0000-000000000000","id":"00000000-0000-0000-0000-000000000000"}"#;
+        let expected = json!({
+            "message": "left",
+            "breakout_room": "00000000-0000-0000-0000-000000000000",
+            "id": "00000000-0000-0000-0000-000000000000",
+        });
 
-        let produced = serde_json::to_string(&Message::Left(AssocParticipantInOtherRoom {
+        let produced = serde_json::to_value(&Message::Left(AssocParticipantInOtherRoom {
             breakout_room: Some(BreakoutRoomId::nil()),
             id: ParticipantId::nil(),
         }))
@@ -118,10 +131,10 @@ mod test {
 
     #[test]
     fn error() {
-        let expected = r#"{"message":"error","error":"insufficient_permissions"}"#;
+        let expected = json!({"message": "error", "error": "insufficient_permissions"});
 
         let produced =
-            serde_json::to_string(&Message::Error(Error::InsufficientPermissions)).unwrap();
+            serde_json::to_value(&Message::Error(Error::InsufficientPermissions)).unwrap();
 
         assert_eq!(expected, produced);
     }
