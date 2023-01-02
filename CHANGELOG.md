@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - controller: allow overriding some build-time environment variables ([#137](https://git.opentalk.dev/opental/k3k-controller/-/issues/137))
 
+### Fixed
+
+- protocol: fixed the `createAuthorIfNotExistsFor` API call that always returned the same author id due to a typo in the query
+
 ## [1.0.0-rc.10] - 2022-12-09
 
 ### Added
