@@ -47,10 +47,10 @@ pub struct UserParameters {
     pub name: String,
     /// A Subtitle for the vote
     #[validate(length(max = 255))]
-    pub subtitle: String,
+    pub subtitle: Option<String>,
     /// The topic that will be voted on
     #[validate(length(max = 500))]
-    pub topic: String,
+    pub topic: Option<String>,
     /// List of participants that are allowed to cast a vote
     #[validate(length(min = 1))]
     pub allowed_participants: Vec<ParticipantId>,
@@ -110,4 +110,201 @@ pub enum CancelReason {
     InitiatorLeft,
     /// Custom reason for a cancel
     Custom(String),
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use chrono::TimeZone;
+    use controller_shared::ParticipantId;
+    use test_util::assert_eq_json;
+    use uuid::Uuid;
+
+    #[test]
+    fn serialize_parameters_with_optional_fields() {
+        let params = Parameters {
+            initiator_id: ParticipantId::nil(),
+            legal_vote_id: LegalVoteId::from(Uuid::nil()),
+            start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+            max_votes: 2,
+            inner: UserParameters {
+                name: "TestWithOptionalFields".into(),
+                subtitle: Some("A subtitle".into()),
+                topic: Some("Yes or No?".into()),
+                allowed_participants: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
+                enable_abstain: false,
+                hidden: false,
+                auto_stop: false,
+                duration: Some(5u64),
+            },
+        };
+
+        assert_eq_json!(
+            params,
+            {
+                "initiator_id": "00000000-0000-0000-0000-000000000000",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "start_time": "1970-01-01T00:00:00Z",
+                "max_votes": 2,
+                "name": "TestWithOptionalFields",
+                "subtitle": "A subtitle",
+                "topic": "Yes or No?",
+                "allowed_participants": [
+                    "00000000-0000-0000-0000-000000000001",
+                    "00000000-0000-0000-0000-000000000002"
+                ],
+                "enable_abstain": false,
+                "hidden": false,
+                "auto_stop": false,
+                "duration": 5
+            }
+        );
+    }
+
+    #[test]
+    fn serialize_parameters_without_optional_fields() {
+        let params = Parameters {
+            initiator_id: ParticipantId::nil(),
+            legal_vote_id: LegalVoteId::from(Uuid::nil()),
+            start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+            max_votes: 2,
+            inner: UserParameters {
+                name: "TestWithOptionalFields".into(),
+                subtitle: None,
+                topic: None,
+                allowed_participants: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
+                enable_abstain: false,
+                hidden: false,
+                auto_stop: false,
+                duration: None,
+            },
+        };
+
+        assert_eq_json!(
+            params,
+            {
+                "initiator_id": "00000000-0000-0000-0000-000000000000",
+                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+                "start_time": "1970-01-01T00:00:00Z",
+                "max_votes": 2,
+                "name": "TestWithOptionalFields",
+                "subtitle": null,
+                "topic": null,
+                "allowed_participants": [
+                    "00000000-0000-0000-0000-000000000001",
+                    "00000000-0000-0000-0000-000000000002"
+                ],
+                "enable_abstain": false,
+                "hidden": false,
+                "auto_stop": false,
+                "duration": null
+            }
+        );
+    }
+
+    #[test]
+    fn deserialize_parameters_with_optional_fields() {
+        let json_str = r#"
+        {
+            "initiator_id": "00000000-0000-0000-0000-000000000000",
+            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+            "start_time": "1970-01-01T00:00:00Z",
+            "max_votes": 2,
+            "name": "Vote Test",
+            "subtitle": "A subtitle",
+            "topic": "Yes or No?",
+            "allowed_participants": ["00000000-0000-0000-0000-000000000000"],
+            "enable_abstain": false,
+            "auto_stop": false,
+            "hidden": false,
+            "duration": 60 
+        }
+        "#;
+
+        let params: Parameters = serde_json::from_str(json_str).unwrap();
+
+        let Parameters {
+            initiator_id,
+            legal_vote_id,
+            start_time,
+            max_votes,
+            inner:
+                UserParameters {
+                    name,
+                    subtitle,
+                    topic,
+                    allowed_participants,
+                    enable_abstain,
+                    hidden,
+                    auto_stop,
+                    duration,
+                },
+        } = params;
+
+        assert_eq!(ParticipantId::nil(), initiator_id);
+        assert_eq!(LegalVoteId::from(Uuid::nil()), legal_vote_id);
+        assert_eq!(Utc.ymd(1970, 1, 1).and_hms(0, 0, 0), start_time);
+        assert_eq!(2, max_votes);
+        assert_eq!("Vote Test", name);
+        assert_eq!("A subtitle", subtitle.unwrap());
+        assert_eq!("Yes or No?", topic.unwrap());
+        assert_eq!(allowed_participants, vec![ParticipantId::nil()]);
+        assert!(!enable_abstain);
+        assert!(!hidden);
+        assert!(!auto_stop);
+        assert_eq!(Some(60), duration);
+    }
+
+    #[test]
+    fn deserialize_user_parameters_without_optional_fields() {
+        let json_str = r#"
+        {
+            "initiator_id": "00000000-0000-0000-0000-000000000000",
+            "legal_vote_id": "00000000-0000-0000-0000-000000000000",
+            "start_time": "1970-01-01T00:00:00Z",
+            "max_votes": 2,
+            "name": "Vote Test",
+            "subtitle": null,
+            "topic": null,
+            "allowed_participants": ["00000000-0000-0000-0000-000000000000"],
+            "enable_abstain": false,
+            "auto_stop": false,
+            "hidden": false,
+            "duration": null
+        }
+        "#;
+
+        let params: Parameters = serde_json::from_str(json_str).unwrap();
+
+        let Parameters {
+            initiator_id,
+            legal_vote_id,
+            start_time,
+            max_votes,
+            inner:
+                UserParameters {
+                    name,
+                    subtitle,
+                    topic,
+                    allowed_participants,
+                    enable_abstain,
+                    hidden,
+                    auto_stop,
+                    duration,
+                },
+        } = params;
+
+        assert_eq!(ParticipantId::nil(), initiator_id);
+        assert_eq!(LegalVoteId::from(Uuid::nil()), legal_vote_id);
+        assert_eq!(Utc.ymd(1970, 1, 1).and_hms(0, 0, 0), start_time);
+        assert_eq!(2, max_votes);
+        assert_eq!("Vote Test", name);
+        assert_eq!(None, subtitle);
+        assert_eq!(None, topic);
+        assert_eq!(allowed_participants, vec![ParticipantId::nil()]);
+        assert!(!enable_abstain);
+        assert!(!hidden);
+        assert!(!auto_stop);
+        assert_eq!(None, duration);
+    }
 }

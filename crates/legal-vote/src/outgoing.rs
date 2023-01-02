@@ -181,8 +181,8 @@ mod test {
             max_votes: 2,
             inner: UserParameters {
                 name: "TestVote".into(),
-                subtitle: "A subtitle".into(),
-                topic: "Yes or No?".into(),
+                subtitle: Some("A subtitle".into()),
+                topic: Some("Yes or No?".into()),
                 allowed_participants: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
                 enable_abstain: false,
                 hidden: false,

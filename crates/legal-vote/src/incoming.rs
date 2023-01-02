@@ -91,8 +91,8 @@ mod test {
         }) = start
         {
             assert_eq!("Vote Test", name);
-            assert_eq!("A subtitle", subtitle);
-            assert_eq!("Yes or No?", topic);
+            assert_eq!("A subtitle", subtitle.unwrap());
+            assert_eq!("Yes or No?", topic.unwrap());
             assert_eq!(allowed_participants, vec![ParticipantId::nil()]);
             assert!(!enable_abstain);
             assert!(!hidden);
