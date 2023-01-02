@@ -11,6 +11,7 @@ pub enum Message {
 mod test {
     use super::*;
     use controller::prelude::serde_json::{self, json};
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn user_group_message() {

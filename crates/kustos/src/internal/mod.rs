@@ -76,6 +76,7 @@ mod test {
     use crate::subject::PolicyUser;
     use crate::{UserPolicies, UserPolicy};
     use casbin::{CoreApi, MgmtApi};
+    use pretty_assertions::assert_eq;
     use std::convert::TryInto;
     use std::iter::FromIterator;
     use std::str::FromStr;

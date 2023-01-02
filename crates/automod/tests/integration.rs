@@ -4,6 +4,7 @@ use automod::outgoing;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use k3k_automod as automod;
+use pretty_assertions::assert_eq;
 use serial_test::serial;
 use test_util::*;
 

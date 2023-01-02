@@ -10,6 +10,7 @@ use k3k_timer::outgoing::StopKind;
 use k3k_timer::outgoing::Stopped;
 use k3k_timer::Timer;
 use k3k_timer::TimerId;
+use pretty_assertions::assert_eq;
 use serial_test::serial;
 use test_util::USER_1;
 use test_util::USER_2;

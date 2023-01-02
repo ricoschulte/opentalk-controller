@@ -7,6 +7,7 @@ use k3k_db_storage::events::{
 };
 use k3k_db_storage::rooms::{NewRoom, RoomId};
 use k3k_db_storage::users::{NewUser, NewUserWithGroups, UserId};
+use pretty_assertions::assert_eq;
 use serial_test::serial;
 
 use crate::common::make_user;

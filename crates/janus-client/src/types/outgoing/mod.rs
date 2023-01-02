@@ -138,6 +138,7 @@ mod test {
     use super::*;
     use crate::assert_eq_json;
     use crate::types::{outgoing::JanusRequest, HandleId, SessionId};
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_trickle() {

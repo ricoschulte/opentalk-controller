@@ -163,6 +163,7 @@ pub struct SubscriberConfiguration {
 mod test {
     use super::*;
     use controller::prelude::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn publish() {

@@ -35,6 +35,7 @@ mod test {
 
     use super::*;
     use controller_shared::ParticipantId;
+    use pretty_assertions::assert_eq;
     use serde_json::json;
     use test_util::assert_eq_json;
     use uuid::Uuid;

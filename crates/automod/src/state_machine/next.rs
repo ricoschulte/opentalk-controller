@@ -88,6 +88,7 @@ mod test {
         self, rabbitmq,
         test::{rng, setup, unix_epoch, ROOM},
     };
+    use pretty_assertions::assert_eq;
     use serial_test::serial;
     use storage::history::Entry;
 

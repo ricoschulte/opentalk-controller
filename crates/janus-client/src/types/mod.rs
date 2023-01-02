@@ -347,6 +347,7 @@ mod tests {
     use super::*;
     use crate::assert_eq_json;
     use outgoing::{AttachToPlugin, JanusRequest, KeepAlive};
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn create() {

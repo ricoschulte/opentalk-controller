@@ -22,6 +22,7 @@ pub struct ParticipantSelection {
 mod test {
     use super::*;
     use controller::prelude::serde_json;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn select_writer() {

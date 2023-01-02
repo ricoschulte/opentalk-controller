@@ -76,6 +76,7 @@ mod test {
         incoming::{Event, JanusMessage, PluginData},
         HandleId, SessionId, TransactionId,
     };
+    use pretty_assertions::assert_eq;
 
     #[test]
     #[cfg(feature = "echotest")]

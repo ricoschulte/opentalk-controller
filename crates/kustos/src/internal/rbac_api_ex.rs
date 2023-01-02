@@ -72,6 +72,7 @@ impl<T: RbacApi> RbacApiEx for T {}
 mod test {
     use super::*;
     use casbin::{CoreApi, DefaultModel, Enforcer, MemoryAdapter, MgmtApi};
+    use pretty_assertions::assert_eq;
     use std::iter::FromIterator;
 
     fn to_owned(v: Vec<&str>) -> Vec<String> {
