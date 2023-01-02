@@ -15,7 +15,7 @@ use diesel::result::DatabaseErrorKind;
 use itertools::Itertools;
 use serde::Serialize;
 use std::borrow::Cow;
-use std::fmt::{self};
+use std::fmt;
 use validator::ValidationErrors;
 
 /// Error handler for the actix JSON extractor

@@ -43,10 +43,14 @@ pub enum Error {
 mod test {
     use super::*;
     use controller::prelude::serde_json;
+    use serde_json::json;
 
     #[test]
     fn write_url() {
-        let json_str = r#"{"message":"write_url","url":"http://localhost/auth_session?sessionID=s.session&padName=protocol&groupID=g.group"}"#;
+        let expected = json!({
+            "message": "write_url",
+            "url": "http://localhost/auth_session?sessionID=s.session&padName=protocol&groupID=g.group",
+        });
 
         let message = Message::WriteUrl(AccessUrl {
             url:
@@ -54,66 +58,69 @@ mod test {
                     .into(),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
+        let actual = serde_json::to_value(&message).unwrap();
 
-        assert_eq!(string, json_str)
+        assert_eq!(expected, actual);
     }
 
     #[test]
     fn read_url() {
-        let json_str = r#"{"message":"read_url","url":"http://localhost:9001/auth_session?sessionID=s.session_id&padName=r.readonly_id"}"#;
+        let expected = json!({
+            "message": "read_url",
+            "url": "http://localhost:9001/auth_session?sessionID=s.session_id&padName=r.readonly_id",
+        });
 
         let message = Message::ReadUrl(AccessUrl {
             url: "http://localhost:9001/auth_session?sessionID=s.session_id&padName=r.readonly_id"
                 .into(),
         });
 
-        let string = serde_json::to_string(&message).unwrap();
+        let actual = serde_json::to_value(&message).unwrap();
 
-        assert_eq!(string, json_str)
+        assert_eq!(expected, actual);
     }
 
     #[test]
     fn insufficient_permissions() {
-        let json_str = r#"{"message":"error","error":"insufficient_permissions"}"#;
+        let expected = json!({"message": "error", "error": "insufficient_permissions"});
 
         let message = Message::Error(Error::InsufficientPermissions);
 
-        let string = serde_json::to_string(&message).unwrap();
+        let actual = serde_json::to_value(&message).unwrap();
 
-        assert_eq!(string, json_str)
+        assert_eq!(expected, actual);
     }
 
     #[test]
     fn currently_initialization() {
-        let json_str = r#"{"message":"error","error":"failed_initialization"}"#;
+        let expected = json!({"message": "error", "error": "failed_initialization"});
 
         let message = Message::Error(Error::FailedInitialization);
 
-        let string = serde_json::to_string(&message).unwrap();
+        let actual = serde_json::to_value(&message).unwrap();
 
-        assert_eq!(string, json_str)
+        assert_eq!(expected, actual);
     }
 
     #[test]
     fn failed_initializing() {
-        let json_str = r#"{"message":"error","error":"currently_initializing"}"#;
+        let expected = json!({"message": "error", "error": "currently_initializing"});
 
         let message = Message::Error(Error::CurrentlyInitializing);
 
-        let string = serde_json::to_string(&message).unwrap();
+        let actual = serde_json::to_value(&message).unwrap();
 
-        assert_eq!(string, json_str)
+        assert_eq!(expected, actual);
     }
 
     #[test]
     fn invalid_participant_selection() {
-        let json_str = r#"{"message":"error","error":"invalid_participant_selection"}"#;
+        let expected = json!({"message": "error", "error": "invalid_participant_selection"});
 
         let message = Message::Error(Error::InvalidParticipantSelection);
 
-        let string = serde_json::to_string(&message).unwrap();
+        let actual = serde_json::to_value(&message).unwrap();
 
-        assert_eq!(string, json_str)
+        assert_eq!(expected, actual);
     }
 }

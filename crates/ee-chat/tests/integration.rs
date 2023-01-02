@@ -1,5 +1,6 @@
 use controller::prelude::*;
 use k3k_ee_chat::Chat;
+use serde_json::json;
 use test_util::*;
 
 #[actix_rt::test]
@@ -57,10 +58,10 @@ async fn common_groups_on_join() {
 
             // check own groups
             let ee_chat_data = module_data.get("ee_chat").unwrap();
-            let json = serde_json::to_string(&ee_chat_data).unwrap();
+            let json = serde_json::to_value(ee_chat_data).unwrap();
             assert_eq!(
                 json,
-                r#"[{"history":[],"name":"group1"},{"history":[],"name":"group2"}]"#
+                json!([{"history": [],"name": "group1"},{"history": [],"name": "group2"}])
             );
         }
         _ => panic!(),
@@ -88,15 +89,15 @@ async fn common_groups_on_join() {
 
             // check common groups here
             let peer_frontend_data = participants[0].module_data.get("ee_chat").unwrap();
-            let json = serde_json::to_string(&peer_frontend_data).unwrap();
-            assert_eq!(json, r#"{"groups":["group1"]}"#);
+            let json = serde_json::to_value(peer_frontend_data).unwrap();
+            assert_eq!(json, json!({"groups": ["group1"]}));
 
             // check own groups
             let ee_chat_data = module_data.get("ee_chat").unwrap();
-            let json = serde_json::to_string(&ee_chat_data).unwrap();
+            let json = serde_json::to_value(ee_chat_data).unwrap();
             assert_eq!(
                 json,
-                r#"[{"history":[],"name":"group1"},{"history":[],"name":"group3"}]"#
+                json!([{"history": [], "name": "group1"},{"history": [], "name": "group3"}])
             );
         }
         _ => panic!(),

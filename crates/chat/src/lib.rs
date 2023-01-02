@@ -316,12 +316,20 @@ pub fn register(controller: &mut controller::Controller) {
 mod test {
     use super::*;
     use controller::prelude::chrono::DateTime;
+    use serde_json::json;
     use std::str::FromStr;
 
     #[test]
     fn server_message() {
-        let expected = r#"{"id":"00000000-0000-0000-0000-000000000000","source":"00000000-0000-0000-0000-000000000000","timestamp":"2021-06-24T14:00:11.873753715Z","content":"Hello All!","scope":"global"}"#;
-        let produced = serde_json::to_string(&TimedMessage {
+        let expected = json!({
+            "id":"00000000-0000-0000-0000-000000000000",
+            "source":"00000000-0000-0000-0000-000000000000",
+            "timestamp":"2021-06-24T14:00:11.873753715Z",
+            "content":"Hello All!",
+            "scope":"global",
+        });
+
+        let produced = serde_json::to_value(&TimedMessage {
             id: MessageId::nil(),
             source: ParticipantId::nil(),
             timestamp: DateTime::from_str("2021-06-24T14:00:11.873753715Z")

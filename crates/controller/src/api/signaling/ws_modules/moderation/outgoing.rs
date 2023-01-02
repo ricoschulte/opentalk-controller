@@ -35,30 +35,31 @@ pub enum Error {
 #[cfg(test)]
 mod test {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn kicked() {
-        let expected = r#"{"message":"kicked"}"#;
+        let expected = json!({"message": "kicked"});
 
-        let produced = serde_json::to_string(&Message::Kicked).unwrap();
+        let produced = serde_json::to_value(&Message::Kicked).unwrap();
 
         assert_eq!(expected, produced);
     }
 
     #[test]
     fn banned() {
-        let expected = r#"{"message":"banned"}"#;
+        let expected = json!({"message": "banned"});
 
-        let produced = serde_json::to_string(&Message::Banned).unwrap();
+        let produced = serde_json::to_value(&Message::Banned).unwrap();
 
         assert_eq!(expected, produced);
     }
 
     #[test]
     fn in_waiting_room() {
-        let expected = r#"{"message":"in_waiting_room"}"#;
+        let expected = json!({"message": "in_waiting_room"});
 
-        let produced = serde_json::to_string(&Message::InWaitingRoom).unwrap();
+        let produced = serde_json::to_value(&Message::InWaitingRoom).unwrap();
 
         assert_eq!(expected, produced);
     }
