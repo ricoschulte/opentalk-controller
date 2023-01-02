@@ -88,7 +88,7 @@ impl EtherpadClient {
         url.query_pairs_mut()
             .append_pair("apikey", &self.api_key)
             .append_pair("name", author_name)
-            .append_pair("author_mapper", mapped_id);
+            .append_pair("authorMapper", mapped_id);
 
         let response = self.client.get(url).send().await?;
 
