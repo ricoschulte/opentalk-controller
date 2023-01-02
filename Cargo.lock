@@ -2281,6 +2281,7 @@ dependencies = [
 name = "k3k-test-util"
 version = "1.0.0-rc.10"
 dependencies = [
+ "anyhow",
  "diesel",
  "fern",
  "k3k-controller-core",

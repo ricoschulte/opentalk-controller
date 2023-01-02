@@ -6,16 +6,9 @@ authors.workspace = true
 publish = false
 
 [dependencies]
-controller = { path = "../controller", package = "k3k-controller-core" }
-controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
-
+anyhow = "1.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
-pretty_assertions = "1.3"
-
-kustos = { path = "../kustos", package = "kustos" }
-database = { path = "../database", package = "k3k-database" }
-db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 tokio = { version = "1" }
 diesel = { version = "2", features = [
     "postgres",
@@ -24,3 +17,15 @@ diesel = { version = "2", features = [
     "serde_json",
 ] }
 fern = "0.6"
+pretty_assertions = "1.3"
+
+controller = { path = "../controller", package = "k3k-controller-core", optional = true }
+controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared", optional = true }
+kustos = { path = "../kustos", package = "kustos", optional = true }
+database = { path = "../database", package = "k3k-database", optional = true }
+db-storage = { path = "../db-storage", package = "k3k-db-storage", optional = true }
+
+[features]
+controller = ["database", "dep:controller", "dep:controller-shared", "dep:kustos"]
+database = ["dep:database", "dep:db-storage"]
+
