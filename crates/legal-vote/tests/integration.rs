@@ -28,8 +28,8 @@ async fn basic_vote() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
         hidden: false,
@@ -241,8 +241,8 @@ async fn hidden_legal_vote() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
         hidden: true,
@@ -450,8 +450,8 @@ async fn basic_vote_abstain() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: true,
         hidden: false,
@@ -663,8 +663,8 @@ async fn expired_vote() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
         hidden: false,
@@ -770,8 +770,8 @@ async fn auto_stop_vote() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
         hidden: false,
@@ -981,8 +981,8 @@ async fn start_with_one_participant() {
     // Start legal vote as user 1
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id],
         enable_abstain: false,
         hidden: false,
@@ -1008,8 +1008,8 @@ async fn start_with_empty_participants() {
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![],
         enable_abstain: false,
         hidden: false,
@@ -1084,8 +1084,8 @@ async fn ineligible_voter() {
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id],
         enable_abstain: false,
         hidden: false,
@@ -1141,8 +1141,8 @@ async fn start_with_allowed_guest() {
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, guest, USER_2.participant_id],
         enable_abstain: false,
         hidden: false,
@@ -1270,8 +1270,8 @@ async fn vote_twice() {
 
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
         hidden: false,
@@ -1471,8 +1471,8 @@ async fn join_as_guest() {
 async fn default_vote_start(module_tester: &mut ModuleTester<LegalVote>) {
     let start_parameters = UserParameters {
         name: "TestVote".into(),
-        subtitle: "A subtitle".into(),
-        topic: "Does the test work?".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
         allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
         enable_abstain: false,
         hidden: false,

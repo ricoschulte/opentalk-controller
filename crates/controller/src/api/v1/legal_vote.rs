@@ -71,9 +71,11 @@ pub struct Settings {
     /// The name of the vote
     pub name: String,
     /// The subtitle of the vote
-    pub subtitle: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
     /// The topic that will be voted on
-    pub topic: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub topic: Option<String>,
     /// Indicates that the `Abstain` vote option is enabled
     pub enable_abstain: bool,
     /// Hide the participants vote choices from other participants
@@ -521,6 +523,87 @@ mod test {
     use uuid::Uuid;
 
     #[test]
+    fn serialize_settings_with_optional_fields() {
+        let test_participant = ParticipantInfo {
+            firstname: "test".into(),
+            lastname: "tester".into(),
+            email: "test.tester@heinlein-video.de".into(),
+        };
+
+        let settings = Settings {
+            created_by: test_participant,
+            start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+            max_votes: 1,
+            name: "Test Vote".into(),
+            subtitle: Some("A subtitle".into()),
+            topic: Some("Does the test work".into()),
+            enable_abstain: false,
+            hidden: false,
+            auto_stop: false,
+            duration: Some(60),
+        };
+
+        assert_eq_json!(
+            settings,
+            {
+                "created_by": {
+                  "firstname": "test",
+                  "lastname": "tester",
+                  "email": "test.tester@heinlein-video.de"
+                },
+                "start_time": "1970-01-01T00:00:00Z",
+                "max_votes": 1,
+                "name": "Test Vote",
+                "subtitle": "A subtitle",
+                "topic": "Does the test work",
+                "enable_abstain": false,
+                "hidden": false,
+                "auto_stop": false,
+                "duration": 60,
+            }
+        );
+    }
+
+    #[test]
+    fn serialize_settings_without_optional_fields() {
+        let test_participant = ParticipantInfo {
+            firstname: "test".into(),
+            lastname: "tester".into(),
+            email: "test.tester@heinlein-video.de".into(),
+        };
+
+        let settings = Settings {
+            created_by: test_participant,
+            start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+            max_votes: 1,
+            name: "Test Vote".into(),
+            subtitle: None,
+            topic: None,
+            enable_abstain: false,
+            hidden: false,
+            auto_stop: false,
+            duration: None,
+        };
+
+        assert_eq_json!(
+            settings,
+            {
+                "created_by": {
+                  "firstname": "test",
+                  "lastname": "tester",
+                  "email": "test.tester@heinlein-video.de"
+                },
+                "start_time": "1970-01-01T00:00:00Z",
+                "max_votes": 1,
+                "name": "Test Vote",
+                "enable_abstain": false,
+                "hidden": false,
+                "auto_stop": false,
+            }
+        );
+    }
+
+    #[test]
     fn successful_legal_vote_entry() {
         let test_participant = ParticipantInfo {
             firstname: "test".into(),
@@ -536,8 +619,8 @@ mod test {
                     start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
                     max_votes: 1,
                     name: "Test Vote".into(),
-                    subtitle: "A subtitle".into(),
-                    topic: "Does the test work".into(),
+                    subtitle: Some("A subtitle".into()),
+                    topic: Some("Does the test work".into()),
                     enable_abstain: false,
                     hidden: false,
                     auto_stop: false,
@@ -615,8 +698,8 @@ mod test {
                     start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
                     max_votes: 1,
                     name: "Test Vote".into(),
-                    subtitle: "A subtitle".into(),
-                    topic: "Does the test work".into(),
+                    subtitle: Some("A subtitle".into()),
+                    topic: Some("Does the test work".into()),
                     enable_abstain: false,
                     hidden: false,
                     auto_stop: false,
@@ -689,8 +772,8 @@ mod test {
                     start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
                     max_votes: 1,
                     name: "Test Vote".into(),
-                    subtitle: "A subtitle".into(),
-                    topic: "Does the test work".into(),
+                    subtitle: Some("A subtitle".into()),
+                    topic: Some("Does the test work".into()),
                     enable_abstain: false,
                     hidden: false,
                     auto_stop: false,
