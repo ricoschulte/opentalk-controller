@@ -1,5 +1,8 @@
+use controller::prelude::*;
 use controller_shared::ParticipantId;
 use serde::Deserialize;
+
+use crate::Scope;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -11,6 +14,11 @@ pub enum Message {
         content: String,
     },
     ClearHistory,
+    SetLastSeenTimestamp {
+        #[serde(flatten)]
+        scope: Scope,
+        timestamp: Timestamp,
+    },
 }
 
 #[cfg(test)]

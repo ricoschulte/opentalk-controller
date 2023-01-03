@@ -8,6 +8,7 @@ use displaydoc::Display;
 use r3dlock::{Mutex, MutexGuard};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Display)]
 /// k3k-signaling:room={room}:group={group}:participants
@@ -141,4 +142,55 @@ pub async fn delete_group_chat_history(
                 room, group
             )
         })
+}
+
+#[derive(Display)]
+/// k3k-signaling:room={room}:participant={participant}:chat:last_seen:group
+#[ignore_extra_doc_attributes]
+/// A hash of last-seen timestamps
+struct RoomParticipantLastSeenTimestampsGroup {
+    room: SignalingRoomId,
+    participant: ParticipantId,
+}
+
+impl_to_redis_args!(RoomParticipantLastSeenTimestampsGroup);
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn set_last_seen_timestamps_group(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+    participant: ParticipantId,
+    timestamps: &[(String, Timestamp)],
+) -> Result<()> {
+    redis_conn
+        .hset_multiple(
+            RoomParticipantLastSeenTimestampsGroup { room, participant },
+            timestamps,
+        )
+        .await
+        .context("Failed to HSET messages last seen timestamp for group chats")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn get_last_seen_timestamps_group(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+    participant: ParticipantId,
+) -> Result<HashMap<String, Timestamp>> {
+    redis_conn
+        .hgetall(RoomParticipantLastSeenTimestampsGroup { room, participant })
+        .await
+        .context("Failed to HGETALL messages last seen timestamp for group chats")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn delete_last_seen_timestamps_group(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+    participant: ParticipantId,
+) -> Result<()> {
+    redis_conn
+        .del(RoomParticipantLastSeenTimestampsGroup { room, participant })
+        .await
+        .context("Failed to DEL last seen timestamp for group chats")
 }

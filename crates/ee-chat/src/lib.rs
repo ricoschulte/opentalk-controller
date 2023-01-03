@@ -15,6 +15,7 @@ use db_storage::users::UserId;
 use outgoing::MessageSent;
 use r3dlock::Mutex;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::sync::Arc;
 use storage::StoredMessage;
 
@@ -33,6 +34,7 @@ pub struct Chat {
     db: Arc<Db>,
 
     groups: Vec<Group>,
+    last_seen_timestamps_group: HashMap<String, Timestamp>,
 }
 
 impl Chat {
@@ -56,6 +58,12 @@ pub struct FrontendDataEntry {
 }
 
 #[derive(Serialize)]
+pub struct FrontendData {
+    group_messages: Vec<FrontendDataEntry>,
+    last_seen_timestamps_group: HashMap<String, Timestamp>,
+}
+
+#[derive(Serialize)]
 pub struct PeerFrontendData {
     groups: Vec<String>,
 }
@@ -68,7 +76,7 @@ impl SignalingModule for Chat {
     type Outgoing = outgoing::Message;
     type RabbitMqMessage = outgoing::Message;
     type ExtEvent = ();
-    type FrontendData = Vec<FrontendDataEntry>;
+    type FrontendData = FrontendData;
     type PeerFrontendData = PeerFrontendData;
 
     async fn init(
@@ -103,6 +111,7 @@ impl SignalingModule for Chat {
                 room: ctx.room_id(),
                 db: ctx.db().clone(),
                 groups,
+                last_seen_timestamps_group: HashMap::new(),
             }))
         } else {
             Ok(None)
@@ -138,7 +147,14 @@ impl SignalingModule for Chat {
                     });
                 }
 
-                *frontend_data = Some(group_messages);
+                self.last_seen_timestamps_group =
+                    storage::get_last_seen_timestamps_group(ctx.redis_conn(), self.room, self.id)
+                        .await?;
+
+                *frontend_data = Some(FrontendData {
+                    last_seen_timestamps_group: self.last_seen_timestamps_group.clone(),
+                    group_messages,
+                });
 
                 // ==== Find other participant in our group ====
                 let participant_ids: Vec<ParticipantId> =
@@ -307,6 +323,11 @@ impl SignalingModule for Chat {
                     )
                 }
             }
+            Event::WsMessage(incoming::Message::SetLastSeenTimestamp { group, timestamp }) => {
+                if self.get_group(&group).is_some() {
+                    self.last_seen_timestamps_group.insert(group, timestamp);
+                }
+            }
             Event::RabbitMq(msg) => {
                 if self.outgoing_message_is_for_my_participant(&msg) {
                     ctx.ws_send(msg);
@@ -364,6 +385,45 @@ impl SignalingModule for Chat {
 
             if let Err(e) = guard.unlock(ctx.redis_conn()).await {
                 log::error!("Failed to unlock r3dlock, {}", e);
+            }
+        }
+
+        if ctx.destroy_room() {
+            let participants = control::storage::get_all_participants(ctx.redis_conn(), self.room)
+                .await
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to load room participants, {}", e);
+                    Vec::new()
+                });
+            for participant in participants {
+                if let Err(e) = storage::delete_last_seen_timestamps_group(
+                    ctx.redis_conn(),
+                    self.room,
+                    participant,
+                )
+                .await
+                {
+                    log::error!(
+                        "Failed to clean up last seen timestamps for group chats, {}",
+                        e
+                    );
+                }
+            }
+        } else if !self.last_seen_timestamps_group.is_empty() {
+            let timestamps: Vec<(String, Timestamp)> = self
+                .last_seen_timestamps_group
+                .iter()
+                .map(|(k, v)| (k.to_owned(), *v))
+                .collect();
+            if let Err(e) = storage::set_last_seen_timestamps_group(
+                ctx.redis_conn(),
+                self.room,
+                self.id,
+                &timestamps,
+            )
+            .await
+            {
+                log::error!("Failed to set last seen timestamps for group chat, {}", e);
             }
         }
     }
