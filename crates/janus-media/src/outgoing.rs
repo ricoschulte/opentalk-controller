@@ -157,6 +157,7 @@ mod test {
     use super::*;
     use crate::rabbitmq::RequestMute;
     use controller::prelude::*;
+    use pretty_assertions::assert_eq;
     use serde_json::json;
     use test_util::assert_eq_json;
 

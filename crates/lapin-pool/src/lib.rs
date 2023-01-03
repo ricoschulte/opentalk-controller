@@ -180,6 +180,8 @@ fn remove_where<T>(vec: &mut Vec<T>, mut f: impl FnMut(&T) -> bool) -> Vec<T> {
 
 #[cfg(test)]
 mod test {
+    use pretty_assertions::assert_eq;
+
     #[test]
     fn test_remove_where() {
         let mut items = vec![0, 1, 2, 3, 4, 5];

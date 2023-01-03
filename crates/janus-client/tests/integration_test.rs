@@ -5,6 +5,7 @@ use janus_client::types::outgoing;
 use janus_client::*;
 use lapin::Connection;
 use lapin::ConnectionProperties;
+use pretty_assertions::assert_eq;
 use std::sync::Arc;
 use test_log::test;
 use tokio::sync::mpsc;

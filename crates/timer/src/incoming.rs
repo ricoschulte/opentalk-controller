@@ -49,6 +49,7 @@ pub struct UpdateReadyStatus {
 mod test {
     use super::*;
     use controller::prelude::uuid::Uuid;
+    use pretty_assertions::assert_eq;
     use test_util::serde_json;
 
     #[test]

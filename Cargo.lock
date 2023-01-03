@@ -2027,6 +2027,7 @@ dependencies = [
  "k3k-controller-shared",
  "k3k-db-storage",
  "k3k-test-util",
+ "pretty_assertions",
  "rand",
  "serde",
  "serial_test",
@@ -2039,6 +2040,7 @@ dependencies = [
  "k3k-controller-core",
  "k3k-controller-shared",
  "k3k-db-storage",
+ "pretty_assertions",
  "serde",
 ]
 
@@ -2112,6 +2114,7 @@ dependencies = [
  "opentelemetry-prometheus",
  "parking_lot",
  "phonenumber",
+ "pretty_assertions",
  "prometheus",
  "r3dlock",
  "rand",
@@ -2149,6 +2152,7 @@ dependencies = [
  "config",
  "openidconnect",
  "phonenumber",
+ "pretty_assertions",
  "redis",
  "serde",
  "url",
@@ -2181,6 +2185,7 @@ dependencies = [
  "k3k-test-util",
  "kustos",
  "log",
+ "pretty_assertions",
  "rand",
  "redis",
  "refinery",
@@ -2207,6 +2212,7 @@ dependencies = [
  "k3k-database",
  "k3k-db-storage",
  "k3k-test-util",
+ "pretty_assertions",
  "serde",
  "serial_test",
 ]
@@ -2220,6 +2226,7 @@ dependencies = [
  "k3k-controller-shared",
  "k3k-test-util",
  "pin-project-lite",
+ "pretty_assertions",
  "serde",
 ]
 
@@ -2236,6 +2243,7 @@ dependencies = [
  "k3k-db-storage",
  "k3k-test-util",
  "kustos",
+ "pretty_assertions",
  "serde",
  "serial_test",
  "validator",
@@ -2261,6 +2269,7 @@ dependencies = [
  "actix-rt",
  "k3k-controller-core",
  "k3k-test-util",
+ "pretty_assertions",
  "serde",
  "serial_test",
 ]
@@ -2275,6 +2284,7 @@ dependencies = [
  "k3k-database",
  "k3k-db-storage",
  "k3k-test-util",
+ "pretty_assertions",
  "serde",
 ]
 
@@ -2289,6 +2299,7 @@ dependencies = [
  "k3k-database",
  "k3k-db-storage",
  "kustos",
+ "pretty_assertions",
  "serde",
  "serde_json",
  "tokio",
@@ -2302,6 +2313,7 @@ dependencies = [
  "k3k-controller-core",
  "k3k-controller-shared",
  "k3k-test-util",
+ "pretty_assertions",
  "serde",
  "serial_test",
 ]
@@ -2358,6 +2370,7 @@ dependencies = [
  "log",
  "opentelemetry",
  "parking_lot",
+ "pretty_assertions",
  "serial_test",
  "thiserror",
  "tokio",
@@ -2402,6 +2415,7 @@ dependencies = [
  "anyhow",
  "lapin",
  "log",
+ "pretty_assertions",
  "tokio",
  "tokio-executor-trait",
  "tokio-reactor-trait",
@@ -3195,6 +3209,7 @@ name = "r3dlock"
 version = "0.1.0"
 dependencies = [
  "displaydoc",
+ "pretty_assertions",
  "rand",
  "redis",
  "thiserror",

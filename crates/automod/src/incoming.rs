@@ -111,6 +111,7 @@ mod test {
     use super::*;
     use crate::config::SelectionStrategy;
     use controller::prelude::*;
+    use pretty_assertions::assert_eq;
     use std::time::Duration;
 
     #[test]

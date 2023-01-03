@@ -423,6 +423,7 @@ mod test {
         types::incoming::Event, types::incoming::PluginSuccess, types::Success,
         types::TransactionId, HandleId, JanusMessage, PluginData, SessionId,
     };
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn parse_room_create() {

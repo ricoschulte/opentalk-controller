@@ -136,6 +136,7 @@ mod test {
     use super::VerifyError;
     use openidconnect::core::{CoreJsonWebKey, CoreJsonWebKeySet, CoreJwsSigningAlgorithm};
     use openidconnect::{JsonWebKey, JsonWebKeyId};
+    use pretty_assertions::assert_eq;
     use ring::rand::SystemRandom;
     use ring::signature::{KeyPair, RsaKeyPair, RSA_PKCS1_SHA256};
     use std::time::{SystemTime, UNIX_EPOCH};

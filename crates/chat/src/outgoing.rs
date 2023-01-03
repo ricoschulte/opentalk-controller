@@ -48,6 +48,7 @@ pub enum Error {
 mod test {
     use super::*;
     use controller::prelude::serde_json;
+    use pretty_assertions::assert_eq;
     use serde_json::json;
 
     #[test]

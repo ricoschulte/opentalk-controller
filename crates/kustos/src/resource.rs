@@ -99,6 +99,7 @@ pub enum AccessibleResources<T: Resource + FromStr> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     struct ResourceX(uuid::Uuid);
 

@@ -406,6 +406,7 @@ pub struct Metrics {
 #[cfg(test)]
 mod test {
     use super::*;
+    use pretty_assertions::assert_eq;
     use std::env;
 
     #[test]

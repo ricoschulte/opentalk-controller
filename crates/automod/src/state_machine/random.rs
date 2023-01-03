@@ -80,6 +80,7 @@ mod test {
     use crate::state_machine::test::{rng, setup, unix_epoch, ROOM};
     use crate::state_machine::StateMachineOutput;
     use controller_shared::ParticipantId;
+    use pretty_assertions::{assert_eq, assert_ne};
     use serial_test::serial;
     use storage::history::{Entry, EntryKind};
 

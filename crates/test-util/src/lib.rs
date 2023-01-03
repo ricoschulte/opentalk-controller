@@ -12,6 +12,7 @@ use tokio::sync::broadcast::Sender;
 use uuid::Uuid;
 
 pub use ::serde_json;
+pub use pretty_assertions::assert_eq;
 
 pub mod common;
 pub mod database;
@@ -126,6 +127,6 @@ macro_rules! assert_eq_json {
     ($val:expr,$($json:tt)+) => {
         let val: $crate::serde_json::Value = $crate::serde_json::to_value(&$val).expect("Expected value to be serializable");
 
-        assert_eq!(val, $crate::serde_json::json!($($json)+));
+        $crate::assert_eq!(val, $crate::serde_json::json!($($json)+));
     };
 }

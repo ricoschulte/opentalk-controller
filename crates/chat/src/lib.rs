@@ -316,6 +316,7 @@ pub fn register(controller: &mut controller::Controller) {
 mod test {
     use super::*;
     use controller::prelude::chrono::DateTime;
+    use pretty_assertions::assert_eq;
     use serde_json::json;
     use std::str::FromStr;
 

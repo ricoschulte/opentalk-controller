@@ -1,6 +1,7 @@
 use super::*;
 use control::outgoing::Message;
 use db_storage::users::User;
+use pretty_assertions::assert_eq;
 
 /// Creates a new [`ModuleTester`] with two users
 pub async fn setup_users<M: SignalingModule>(

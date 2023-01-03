@@ -223,6 +223,7 @@ pub async fn check_access_token_or_invite(
 #[cfg(test)]
 mod test {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn test_create_credentials() {

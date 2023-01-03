@@ -374,6 +374,7 @@ mod tests {
     use super::*;
     use database::{query_helper, Db};
     use diesel::{Connection, PgConnection, RunQueryDsl};
+    use pretty_assertions::assert_eq;
     use serial_test::serial;
 
     const MODEL: &str = r#"

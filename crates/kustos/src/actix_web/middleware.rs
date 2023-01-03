@@ -196,6 +196,7 @@ mod tests {
     use casbin::function_map::key_match2;
     use casbin::prelude::*;
     use casbin::{DefaultModel, Result};
+    use pretty_assertions::assert_eq;
 
     fn to_owned(v: Vec<&str>) -> Vec<String> {
         v.into_iter().map(ToOwned::to_owned).collect()

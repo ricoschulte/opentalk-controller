@@ -10,6 +10,7 @@ use k3k_legal_vote::outgoing::{
 };
 use k3k_legal_vote::rabbitmq::{Canceled, StopKind};
 use k3k_legal_vote::{incoming, outgoing, LegalVote};
+use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serial_test::serial;
 use std::collections::HashMap;

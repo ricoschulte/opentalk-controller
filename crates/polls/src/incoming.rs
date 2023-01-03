@@ -34,6 +34,7 @@ pub struct Finish {
 mod test {
     use super::*;
     use controller::prelude::*;
+    use pretty_assertions::assert_eq;
     use uuid::Uuid;
 
     #[test]

@@ -11,6 +11,7 @@ controller-shared = { path = "../controller-shared-types", package = "k3k-contro
 
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1" }
+pretty_assertions = "1.3"
 
 kustos = { path = "../kustos", package = "kustos" }
 database = { path = "../database", package = "k3k-database" }

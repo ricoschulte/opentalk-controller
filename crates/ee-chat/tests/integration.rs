@@ -1,5 +1,6 @@
 use controller::prelude::*;
 use k3k_ee_chat::Chat;
+use pretty_assertions::assert_eq;
 use serde_json::json;
 use test_util::*;
 
