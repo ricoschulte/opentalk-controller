@@ -60,7 +60,7 @@ pub struct VoteSuccess {
 pub enum VoteFailed {
     /// The given vote id is not active or does not exist
     InvalidVoteId,
-    /// The requesting user already voted or is ineligible to vote. (requires the vote parameter `auto_stop` to be true)
+    /// The requesting user already voted or is ineligible to vote. (requires the vote parameter `auto_close` to be true)
     Ineligible,
     /// Invalid vote option
     InvalidOption,

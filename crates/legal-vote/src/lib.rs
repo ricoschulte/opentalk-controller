@@ -290,7 +290,7 @@ impl LegalVote {
                 }
             }
             incoming::Message::Vote(vote_message) => {
-                let (vote_response, auto_stop) = self.cast_vote(ctx, vote_message).await?;
+                let (vote_response, auto_close) = self.cast_vote(ctx, vote_message).await?;
 
                 if let Response::Success(VoteSuccess {
                     vote_option,
@@ -320,13 +320,13 @@ impl LegalVote {
                         update,
                     );
 
-                    if auto_stop {
+                    if auto_close {
                         let stop_kind = StopKind::Auto;
 
-                        let auto_stop_entry =
+                        let auto_close_entry =
                             ProtocolEntry::new(VoteEvent::Stop(db_protocol::v1::StopKind::Auto));
 
-                        self.end_vote(ctx, vote_message.legal_vote_id, auto_stop_entry, stop_kind)
+                        self.end_vote(ctx, vote_message.legal_vote_id, auto_close_entry, stop_kind)
                             .await?;
                     }
                 } else {
@@ -612,7 +612,7 @@ impl LegalVote {
     /// See [`storage::vote`] & [`storage::VOTE_SCRIPT`] for more details on the vote process.
     ///
     /// # Returns
-    /// - Ok([`VoteResponse`], <should_auto_stop>) in case of successfully executing [`storage::vote`].
+    /// - Ok([`VoteResponse`], <should_auto_close>) in case of successfully executing [`storage::vote`].
     ///   Ok contains a tuple with the VoteResponse and a boolean that indicates that this was the last
     ///   vote needed and this vote can now be auto stopped. The boolean can only be true when this feature is enabled.
     /// - Err([`Error`]) in case of an redis error.
@@ -702,7 +702,7 @@ impl LegalVote {
         )
         .await?;
 
-        let (response, should_auto_stop) = match vote_result {
+        let (response, should_auto_close) = match vote_result {
             VoteScriptResult::Success => (
                 Response::Success(VoteSuccess {
                     vote_option: vote_message.option,
@@ -728,7 +728,7 @@ impl LegalVote {
                 legal_vote_id: vote_message.legal_vote_id,
                 response,
             },
-            should_auto_stop,
+            should_auto_close,
         ))
     }
 

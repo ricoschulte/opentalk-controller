@@ -143,17 +143,17 @@ pub(crate) async fn cleanup_vote(
         })
 }
 
-/// The user vote script
+/// The user allowed token vote script
 ///
-/// Casts a user vote through a Lua script that is executed on redis. The script ensures that the provided `vote id` equals
+/// Casts a user vote via their token through a Lua script that is executed on redis. The script ensures that the provided `vote id` equals
 /// the currently active vote id.
 ///
-/// The requesting user will be removed from the `allowed users list`, the script aborts when the removal fails.
+/// The voting user's token will be removed from the `allowed tokens list`. This script aborts if the token removal fails.
 ///
-/// When every check succeeds, the `vote count` for the corresponding vote option will be increased and the provided protocol
+/// When every check succeeds, the `vote count` for the corresponding vote option will be incremented and the provided protocol
 /// entry will be pushed to the `protocol`.
 ///
-/// When the requested user is the last allowed user, the return code differs to indicate a [`protocol::Stop::AutoStop`].
+/// When the token of the voting user is the last allowed token, the return code differs to indicate a [`protocol::Stop::AutoStop`].
 ///
 /// The following parameters have to be provided:
 /// ```text
