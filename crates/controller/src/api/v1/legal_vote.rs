@@ -368,6 +368,7 @@ fn parse_v1_entries(
                             hidden,
                             auto_stop,
                             duration,
+                            create_pdf: _,
                         },
                 } = start.parameters;
 

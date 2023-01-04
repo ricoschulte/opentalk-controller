@@ -63,6 +63,8 @@ pub struct UserParameters {
     /// The vote will stop when the duration (in seconds) has passed
     #[validate(range(min = 5))]
     pub duration: Option<u64>,
+    /// A PDF document will be created when the vote is over
+    pub create_pdf: bool,
 }
 
 impl_to_redis_args_se!(UserParameters);
@@ -136,6 +138,7 @@ mod test {
                 hidden: false,
                 auto_stop: false,
                 duration: Some(5u64),
+                create_pdf: true,
             },
         };
 
@@ -156,7 +159,8 @@ mod test {
                 "enable_abstain": false,
                 "hidden": false,
                 "auto_stop": false,
-                "duration": 5
+                "duration": 5,
+                "create_pdf": true
             }
         );
     }
@@ -177,6 +181,7 @@ mod test {
                 hidden: false,
                 auto_stop: false,
                 duration: None,
+                create_pdf: true,
             },
         };
 
@@ -197,7 +202,8 @@ mod test {
                 "enable_abstain": false,
                 "hidden": false,
                 "auto_stop": false,
-                "duration": null
+                "duration": null,
+                "create_pdf": true
             }
         );
     }
@@ -217,7 +223,8 @@ mod test {
             "enable_abstain": false,
             "auto_stop": false,
             "hidden": false,
-            "duration": 60 
+            "duration": 60,
+            "create_pdf": true
         }
         "#;
 
@@ -238,6 +245,7 @@ mod test {
                     hidden,
                     auto_stop,
                     duration,
+                    create_pdf,
                 },
         } = params;
 
@@ -253,6 +261,7 @@ mod test {
         assert!(!hidden);
         assert!(!auto_stop);
         assert_eq!(Some(60), duration);
+        assert!(create_pdf);
     }
 
     #[test]
@@ -270,7 +279,8 @@ mod test {
             "enable_abstain": false,
             "auto_stop": false,
             "hidden": false,
-            "duration": null
+            "duration": null,
+            "create_pdf": true
         }
         "#;
 
@@ -291,6 +301,7 @@ mod test {
                     hidden,
                     auto_stop,
                     duration,
+                    create_pdf,
                 },
         } = params;
 
@@ -306,5 +317,6 @@ mod test {
         assert!(!hidden);
         assert!(!auto_stop);
         assert_eq!(None, duration);
+        assert!(create_pdf);
     }
 }

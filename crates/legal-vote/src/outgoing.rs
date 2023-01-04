@@ -1,5 +1,6 @@
 use crate::rabbitmq::{Canceled, StopKind};
 use controller_shared::ParticipantId;
+use db_storage::assets::AssetId;
 use db_storage::legal_votes::types::{Invalid, Parameters, VoteOption, Votes};
 use db_storage::legal_votes::LegalVoteId;
 use serde::{Deserialize, Serialize};
@@ -21,6 +22,8 @@ pub enum Message {
     Canceled(Canceled),
     /// A error message caused by invalid requests or internal errors
     Error(ErrorKind),
+
+    PdfAsset(PdfAsset),
 }
 
 /// The direct response to an issued vote request
@@ -107,6 +110,13 @@ pub enum FinalResults {
     Invalid(Invalid),
 }
 
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PdfAsset {
+    pub filename: String,
+    pub legal_vote_id: LegalVoteId,
+    pub asset_id: AssetId,
+}
+
 /// The error kind sent to the user
 #[derive(Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case", tag = "error")]
@@ -188,6 +198,7 @@ mod test {
                 hidden: false,
                 auto_stop: false,
                 duration: None,
+                create_pdf: false,
             },
         });
 
@@ -209,7 +220,8 @@ mod test {
                 "enable_abstain": false,
                 "hidden": false,
                 "auto_stop": false,
-                "duration": null
+                "duration": null,
+                "create_pdf": false
             }
         );
     }

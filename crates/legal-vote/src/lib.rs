@@ -7,9 +7,12 @@
 use anyhow::Context;
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
+use controller::prelude::bytes::Bytes;
 use controller::prelude::futures::stream::once;
 use controller::prelude::futures::FutureExt;
 use controller::prelude::*;
+use controller::storage::assets::save_asset;
+use controller::storage::ObjectStorage;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::legal_votes::set_protocol;
@@ -20,9 +23,8 @@ use db_storage::legal_votes::types::protocol::NewProtocol;
 use db_storage::legal_votes::types::{
     CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
 };
-use db_storage::legal_votes::NewLegalVote;
-
 use db_storage::legal_votes::LegalVoteId;
+use db_storage::legal_votes::NewLegalVote;
 use db_storage::users::UserId;
 use either::Either;
 use error::{Error, ErrorKind};
@@ -30,7 +32,7 @@ use incoming::VoteMessage;
 use kustos::prelude::AccessMethod;
 use kustos::Authz;
 use kustos::Resource;
-use outgoing::{Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess};
+use outgoing::{PdfAsset, Response, VoteFailed, VoteResponse, VoteResults, VoteSuccess};
 use rabbitmq::Canceled;
 use rabbitmq::StopKind;
 use std::sync::Arc;
@@ -44,6 +46,7 @@ use validator::Validate;
 mod error;
 pub mod incoming;
 pub mod outgoing;
+mod pdf;
 pub mod rabbitmq;
 mod storage;
 
@@ -58,6 +61,7 @@ pub struct TimerEvent {
 /// saved and managed in redis via the private `storage` module.
 pub struct LegalVote {
     db: Arc<Db>,
+    storage: Arc<ObjectStorage>,
     authz: Arc<Authz>,
     participant_id: ParticipantId,
     user_id: UserId,
@@ -83,6 +87,7 @@ impl SignalingModule for LegalVote {
         if let Participant::User(user) = ctx.participant() {
             Ok(Some(Self {
                 db: ctx.db().clone(),
+                storage: ctx.storage().clone(),
                 authz: ctx.authz().clone(),
                 participant_id: ctx.participant_id(),
                 user_id: user.id,
@@ -322,6 +327,15 @@ impl LegalVote {
                         reason: CancelReason::Custom(reason),
                     }),
                 );
+
+                let parameters =
+                    storage::parameters::get(ctx.redis_conn(), self.room_id, legal_vote_id)
+                        .await?
+                        .ok_or(ErrorKind::InvalidVoteId)?;
+
+                if parameters.inner.create_pdf {
+                    self.save_pdf(ctx, legal_vote_id, self.user_id).await?
+                }
             }
             incoming::Message::Vote(vote_message) => {
                 let (vote_response, auto_stop) = self.cast_vote(ctx, vote_message).await?;
@@ -364,6 +378,25 @@ impl LegalVote {
                 } else {
                     ctx.ws_send(outgoing::Message::Voted(vote_response));
                 }
+            }
+            incoming::Message::GeneratePdf(generate) => {
+                if !matches!(ctx.role(), Role::Moderator) {
+                    return Err(ErrorKind::InsufficientPermissions.into());
+                }
+
+                // check if the vote passed already
+                if !storage::history::contains(
+                    ctx.redis_conn(),
+                    self.room_id,
+                    generate.legal_vote_id,
+                )
+                .await?
+                {
+                    return Err(ErrorKind::InvalidVoteId.into());
+                }
+
+                self.save_pdf(ctx, generate.legal_vote_id, self.user_id)
+                    .await?;
             }
         }
         Ok(())
@@ -409,6 +442,9 @@ impl LegalVote {
             }
             rabbitmq::Event::FatalServerError => {
                 ctx.ws_send(outgoing::Message::Error(outgoing::ErrorKind::Internal));
+            }
+            rabbitmq::Event::PdfAsset(pdf_asset) => {
+                ctx.ws_send(outgoing::Message::PdfAsset(pdf_asset))
             }
         }
         Ok(())
@@ -720,6 +756,10 @@ impl LegalVote {
                     reason,
                 }),
             );
+
+            if parameters.inner.create_pdf {
+                self.save_pdf(ctx, current_vote_id, self.user_id).await?;
+            }
         }
 
         Ok(())
@@ -801,6 +841,8 @@ impl LegalVote {
     }
 
     /// End the vote behind `legal_vote_id` using the provided parameters as stop parameters
+    ///
+    /// Generate the legal vote protocol PDF and sends it to the issuing user
     async fn end_vote(
         &self,
         ctx: &mut ModuleContext<'_, Self>,
@@ -845,6 +887,34 @@ impl LegalVote {
                 results: final_results,
             }),
         );
+
+        let parameters = storage::parameters::get(ctx.redis_conn(), self.room_id, legal_vote_id)
+            .await?
+            .ok_or(ErrorKind::InvalidVoteId)?;
+
+        if parameters.inner.create_pdf {
+            match stop_kind {
+                // Send the pdf message to the participant id of the vote initiator in case of an auto stop
+                StopKind::Auto => {
+                    let protocol =
+                        storage::protocol::get(ctx.redis_conn(), self.room_id, legal_vote_id)
+                            .await?;
+
+                    let pdf_asset = self
+                        .create_pdf_asset(legal_vote_id, ctx.timestamp(), protocol)
+                        .await?;
+
+                    ctx.rabbitmq_publish(
+                        control::rabbitmq::current_room_exchange_name(self.room_id),
+                        control::rabbitmq::room_participant_routing_key(parameters.initiator_id),
+                        rabbitmq::Event::PdfAsset(pdf_asset),
+                    );
+                }
+                _ => {
+                    self.save_pdf(ctx, legal_vote_id, self.user_id).await?;
+                }
+            }
+        }
 
         Ok(())
     }
@@ -1013,6 +1083,71 @@ impl LegalVote {
         } else {
             Ok(None)
         }
+    }
+
+    /// Save the legal vote protocol as PDF
+    ///
+    /// Sends the [`Event::PdfAsset`] to the provided `msg_target`
+    async fn save_pdf(
+        &self,
+        ctx: &mut ModuleContext<'_, Self>,
+        legal_vote_id: LegalVoteId,
+        msg_target: UserId,
+    ) -> Result<()> {
+        let protocol =
+            storage::protocol::get(ctx.redis_conn(), self.room_id, legal_vote_id).await?;
+
+        let pdf_asset = self
+            .create_pdf_asset(legal_vote_id, ctx.timestamp(), protocol)
+            .await?;
+
+        ctx.rabbitmq_publish(
+            control::rabbitmq::current_room_exchange_name(self.room_id),
+            control::rabbitmq::room_user_routing_key(msg_target),
+            rabbitmq::Event::PdfAsset(pdf_asset),
+        );
+
+        Ok(())
+    }
+
+    async fn create_pdf_asset(
+        &self,
+        vote_id: LegalVoteId,
+        ts: Timestamp,
+        protocol: Vec<ProtocolEntry>,
+    ) -> Result<PdfAsset> {
+        let db = self.db.clone();
+
+        let pdf_data = controller::block(|| {
+            let mut data = vec![];
+
+            pdf::generate_pdf(db, protocol, &mut data).unwrap();
+
+            data
+        })
+        .await?;
+
+        // convert the data to a applicable type for the `save_asset()` fn
+        let data = tokio_stream::once(anyhow::Ok(Bytes::from(pdf_data)));
+
+        let filename = format!("vote_protocol_{}.pdf", ts.format("%Y-%m-%d_%H-%M-%S-%Z"));
+
+        let asset_id = save_asset(
+            &self.storage,
+            self.db.clone(),
+            self.room_id.room_id(),
+            Some(Self::NAMESPACE),
+            &filename,
+            "protocol_pdf",
+            data,
+        )
+        .await?;
+
+        Ok(PdfAsset {
+            filename,
+            legal_vote_id: vote_id,
+            asset_id,
+        })
     }
 
     /// Check the provided `error` and handles the error cases
