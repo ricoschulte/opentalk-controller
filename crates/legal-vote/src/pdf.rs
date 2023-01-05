@@ -156,7 +156,7 @@ fn summarize_start_entry(
                         name,
                         subtitle,
                         topic,
-                        allowed_participants: _,
+                        allowed_participants,
                         enable_abstain,
                         auto_stop,
                         hidden,
@@ -203,10 +203,22 @@ fn summarize_start_entry(
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Date: "));
+    row.push_element(Paragraph::new("Begin: "));
     row.push_element(Paragraph::new(
         start_time.format("%d/%m/%Y %H:%M:%S %Z").to_string(),
     ));
+    row.push()?;
+
+    let mut row = table.row();
+    row.push_element(Paragraph::new("End: "));
+    row.push_element(Paragraph::new(
+        Utc::now().format("%d/%m/%Y %H:%M:%S %Z").to_string(),
+    ));
+    row.push()?;
+
+    let mut row = table.row();
+    row.push_element(Paragraph::new("No of participants:"));
+    row.push_element(Paragraph::new(allowed_participants.len().to_string()));
     row.push()?;
 
     let mut row = table.row();
