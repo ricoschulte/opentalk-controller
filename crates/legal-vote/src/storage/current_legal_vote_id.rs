@@ -1,24 +1,20 @@
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use db_storage::legal_votes::LegalVoteId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:vote:current
-#[ignore_extra_doc_attributes]
-///
 /// Contains the [`VoteId`] of the active vote.
 ///
 /// The current vote id key acts like a kind of lock. When a vote is in progress and therefore
 /// this key has a value, no new vote can be started. This key gets deleted when a vote ends.
 ///
 /// See [`END_CURRENT_VOTE_SCRIPT`](super::END_CURRENT_VOTE_SCRIPT) for more details.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:vote:current")]
 pub(super) struct CurrentVoteIdKey {
     pub(super) room_id: SignalingRoomId,
 }
-
-impl_to_redis_args!(CurrentVoteIdKey);
 
 /// Set the current vote id to `new_vote_id`
 ///

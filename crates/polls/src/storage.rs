@@ -2,18 +2,16 @@ use super::Config;
 use crate::{ChoiceId, PollId};
 use anyhow::{bail, Context, Result};
 use controller::prelude::*;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 use std::collections::HashMap;
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:polls:config
-#[ignore_extra_doc_attributes]
 /// Key to the current poll config
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:polls:config")]
 struct PollConfig {
     room: SignalingRoomId,
 }
-impl_to_redis_args!(PollConfig);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub(super) async fn get_config(
@@ -61,15 +59,13 @@ pub(super) async fn del_config(
         .context("failed to del current config")
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:poll={poll}:results
-#[ignore_extra_doc_attributes]
 /// Key to the current vote results
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:poll={poll}:results")]
 struct PollResults {
     room: SignalingRoomId,
     poll: PollId,
 }
-impl_to_redis_args!(PollResults);
 
 pub(super) async fn del_results(
     redis_conn: &mut RedisConnection,
@@ -134,14 +130,12 @@ pub(super) async fn poll_results(
     Ok(votes)
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:polls:list
-#[ignore_extra_doc_attributes]
 /// Key to the list of all polls inside the given room
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:polls:list")]
 struct PollList {
     room: SignalingRoomId,
 }
-impl_to_redis_args!(PollList);
 
 /// Add a poll to the list
 pub(super) async fn list_add(

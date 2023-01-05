@@ -1,18 +1,14 @@
 use anyhow::{Context, Result};
 use controller::prelude::*;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:protocol:group
-#[ignore_extra_doc_attributes]
-///
 /// Stores the etherpad group_id that is associated with this room.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:protocol:group")]
 pub(super) struct GroupKey {
     pub(super) room_id: SignalingRoomId,
 }
-
-impl_to_redis_args!(GroupKey);
 
 #[tracing::instrument(name = "set_protocol_group", skip(redis_conn))]
 pub(crate) async fn set(

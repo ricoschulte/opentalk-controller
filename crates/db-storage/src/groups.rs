@@ -1,6 +1,5 @@
 use super::schema::{groups, user_groups};
 use super::users::{User, UserId};
-use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
 use database::{DbConnection, Result};
 use diesel::{
     BoolExpressionMethods, Connection, ExpressionMethods, Identifiable, Insertable,
@@ -9,12 +8,14 @@ use diesel::{
 use kustos::subject::PolicyGroup;
 
 diesel_newtype! {
-    #[derive(Copy)] GroupId(uuid::Uuid) => diesel::sql_types::Uuid,
-    #[derive(Copy)] SerialGroupId(i64) => diesel::sql_types::BigInt
-}
+    #[derive(Copy, redis_args::ToRedisArgs, redis_args::FromRedisValue)]
+    #[to_redis_args(serde)]
+    #[from_redis_value(serde)]
+    GroupId(uuid::Uuid) => diesel::sql_types::Uuid,
 
-impl_to_redis_args_se!(GroupId);
-impl_from_redis_value_de!(GroupId);
+    #[derive(Copy)]
+    SerialGroupId(i64) => diesel::sql_types::BigInt
+}
 
 impl From<GroupId> for PolicyGroup {
     fn from(group_id: GroupId) -> Self {

@@ -16,6 +16,8 @@ kustos = { path = "../kustos" }
 either = "1.8"
 genpdf = "0.2"
 itertools = "0.10"
+redis = "0.21"
+redis-args = { path = "../redis-args", package = "k3k-redis-args" }
 
 [dev-dependencies]
 pretty_assertions = "1.3"

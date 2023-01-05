@@ -3,7 +3,6 @@ use super::groups::{Group, UserGroupRelation};
 use super::schema::{groups, user_groups, users};
 use crate::groups::{GroupId, NewGroup, NewUserGroupRelation};
 use crate::{levenshtein, lower, soundex};
-use controller_shared::{impl_from_redis_value, impl_to_redis_args};
 use database::{DatabaseError, DbConnection, Paginate, Result};
 use diesel::{
     BelongingToDsl, BoolExpressionMethods, Connection, ExpressionMethods, GroupedBy, Identifiable,
@@ -13,12 +12,14 @@ use kustos::subject::PolicyUser;
 use std::fmt;
 
 diesel_newtype! {
-    #[derive(Copy)] SerialUserId(i64) => diesel::sql_types::BigInt,
-    #[derive(Copy)] UserId(uuid::Uuid) => diesel::sql_types::Uuid, "/users/"
-}
+    #[derive(Copy)]
+    SerialUserId(i64) => diesel::sql_types::BigInt,
 
-impl_to_redis_args!(UserId);
-impl_from_redis_value!(UserId);
+    #[derive(Copy, redis_args::ToRedisArgs, redis_args::FromRedisValue)]
+    #[to_redis_args(fmt)]
+    #[from_redis_value(FromStr)]
+    UserId(uuid::Uuid) => diesel::sql_types::Uuid, "/users/"
+}
 
 impl From<UserId> for PolicyUser {
     fn from(id: UserId) -> Self {

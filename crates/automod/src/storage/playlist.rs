@@ -11,18 +11,15 @@
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:automod:playlist
-#[ignore_extra_doc_attributes]
 /// Typed key to the automod playlist
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:automod:playlist")]
 struct RoomAutoModPlaylist {
     room: SignalingRoomId,
 }
-
-impl_to_redis_args!(RoomAutoModPlaylist);
 
 /// Set the playlist. If the `playlist` parameter is empty the old one will still be removed.
 #[tracing::instrument(name = "set_playlist", level = "debug", skip(redis_conn, playlist))]

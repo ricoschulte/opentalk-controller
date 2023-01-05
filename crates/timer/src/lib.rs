@@ -1,4 +1,3 @@
-use controller::impl_to_redis_args;
 use controller::prelude::anyhow::Result;
 use controller::prelude::chrono::{self, Utc};
 use controller::prelude::futures::stream::once;
@@ -16,6 +15,7 @@ use controller::prelude::{
 };
 use controller_shared::ParticipantId;
 use outgoing::StopKind;
+use redis_args::ToRedisArgs;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fmt;
@@ -28,9 +28,9 @@ pub mod outgoing;
 pub mod rabbitmq;
 mod storage;
 
-#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, ToRedisArgs)]
+#[to_redis_args(fmt)]
 pub struct TimerId(pub Uuid);
-impl_to_redis_args!(TimerId);
 
 impl FromRedisValue for TimerId {
     fn from_redis_value(v: &redis::Value) -> RedisResult<Self> {

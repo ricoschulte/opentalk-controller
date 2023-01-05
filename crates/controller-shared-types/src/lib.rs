@@ -1,19 +1,22 @@
 //! Shared types and trait definitions for the k3k controller.
 //! One purpose is to optimize compile time during development.
 use redis::{FromRedisValue, RedisError, RedisResult, Value};
+use redis_args::ToRedisArgs;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::{from_utf8, FromStr};
 use uuid::Uuid;
 
-pub mod macros;
 pub mod settings;
 
 /// Unique id of a participant inside a single room
 ///
 /// Generated as soon as the user connects to the websocket and authenticated himself,
 /// it is used to store all participant related data and relations.
-#[derive(Debug, Serialize, Deserialize, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
+#[derive(
+    Debug, Serialize, Deserialize, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, ToRedisArgs,
+)]
+#[to_redis_args(fmt)]
 pub struct ParticipantId(Uuid);
 
 impl ParticipantId {
@@ -56,5 +59,3 @@ impl FromRedisValue for ParticipantId {
         }
     }
 }
-
-impl_to_redis_args!(ParticipantId);

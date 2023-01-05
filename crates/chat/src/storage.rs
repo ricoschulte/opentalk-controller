@@ -4,15 +4,17 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Message type stores in redis
 ///
 /// This needs to have a inner timestamp.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct TimedMessage {
     pub id: MessageId,
     pub source: ParticipantId,
@@ -22,18 +24,12 @@ pub struct TimedMessage {
     pub scope: Scope,
 }
 
-impl_from_redis_value_de!(TimedMessage);
-impl_to_redis_args_se!(&TimedMessage);
-
-#[derive(Display)]
-/// k3k-signaling:room={room}:chat:history
-#[ignore_extra_doc_attributes]
 /// Key to the chat history inside a room
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:chat:history")]
 struct RoomChatHistory {
     room: SignalingRoomId,
 }
-
-impl_to_redis_args!(RoomChatHistory);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_room_chat_history(
@@ -75,15 +71,12 @@ pub async fn delete_room_chat_history(
     Ok(())
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:chat_enabled
-#[ignore_extra_doc_attributes]
 /// If set to true the chat is enabled
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:chat_enabled")]
 struct ChatEnabled {
     room: RoomId,
 }
-
-impl_to_redis_args!(ChatEnabled);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_chat_enabled(
@@ -114,16 +107,13 @@ pub async fn delete_chat_enabled(redis_conn: &mut RedisConnection, room: RoomId)
         .context("Failed to DEL chat_enabled")
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:participant={participant}:chat:last_seen:global
-#[ignore_extra_doc_attributes]
 /// A hash of last-seen timestamps
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:participant={participant}:chat:last_seen:global")]
 struct RoomParticipantLastSeenTimestampPrivate {
     room: SignalingRoomId,
     participant: ParticipantId,
 }
-
-impl_to_redis_args!(RoomParticipantLastSeenTimestampPrivate);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_last_seen_timestamps_private(
@@ -165,16 +155,13 @@ pub async fn delete_last_seen_timestamps_private(
         .context("Failed to DEL messages last seen timestamps for private chats")
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:participant={participant}:chat:last_seen:private
-#[ignore_extra_doc_attributes]
 /// A hash of last-seen timestamps
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:participant={participant}:chat:last_seen:private")]
 struct RoomParticipantLastSeenTimestampGlobal {
     room: SignalingRoomId,
     participant: ParticipantId,
 }
-
-impl_to_redis_args!(RoomParticipantLastSeenTimestampGlobal);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_last_seen_timestamp_global(
@@ -223,8 +210,10 @@ mod test {
     use chrono::{DateTime, Utc};
     use db_storage::rooms::RoomId;
     use redis::aio::ConnectionManager;
+    use redis::ToRedisArgs;
     use serial_test::serial;
     use std::time::{Duration, SystemTime};
+    use uuid::uuid;
 
     pub const ROOM: SignalingRoomId = SignalingRoomId::new_test(RoomId::from(uuid::Uuid::nil()));
     pub const SELF: ParticipantId = ParticipantId::nil();
@@ -405,5 +394,29 @@ mod test {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn redis_args() {
+        let room_id = RoomId::from(uuid!("ecead1b3-eed0-4cb9-912e-4bb31a3914bd"));
+
+        {
+            let id = RoomChatHistory {
+                room: SignalingRoomId::new_test(room_id),
+            };
+            assert_eq!(
+                id.to_redis_args(),
+                "k3k-signaling:room=ecead1b3-eed0-4cb9-912e-4bb31a3914bd:chat:history"
+                    .to_redis_args()
+            );
+        }
+        {
+            let id = ChatEnabled { room: room_id };
+            assert_eq!(
+                id.to_redis_args(),
+                "k3k-signaling:room=ecead1b3-eed0-4cb9-912e-4bb31a3914bd:chat_enabled"
+                    .to_redis_args()
+            )
+        }
     }
 }

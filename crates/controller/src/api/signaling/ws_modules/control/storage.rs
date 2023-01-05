@@ -2,42 +2,35 @@ use crate::api::signaling::{SignalingRoomId, Timestamp};
 use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
 use controller_shared::ParticipantId;
-use displaydoc::Display;
 use r3dlock::Mutex;
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
+use redis_args::ToRedisArgs;
 use std::convert::identity;
 use std::fmt::Debug;
 use std::time::Duration;
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:participants
-#[ignore_extra_doc_attributes]
 /// Describes a set of participants inside a room.
 /// This MUST always be locked before accessing it
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:participants")]
 struct RoomParticipants {
     room: SignalingRoomId,
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:participants.lock
-#[ignore_extra_doc_attributes]
 /// Key used for the lock over the room participants set
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:participants.lock")]
 pub struct RoomLock {
     pub room: SignalingRoomId,
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:participants:attributes:{attribute_name}
-#[ignore_extra_doc_attributes]
 /// Key used for the lock over the room participants set
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:participants:attributes:{attribute_name}")]
 struct RoomParticipantAttributes<'s> {
     room: SignalingRoomId,
     attribute_name: &'s str,
 }
-
-impl_to_redis_args!(RoomParticipants);
-impl_to_redis_args!(RoomLock);
-impl_to_redis_args!(RoomParticipantAttributes<'_>);
 
 /// The room's mutex
 ///
@@ -318,13 +311,11 @@ where
     }
 }
 
-#[derive(Debug, Display)]
-/// k3k-signaling:runner:{id}
+#[derive(Debug, ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:runner:{id}")]
 pub struct ParticipantIdRunnerLock {
     pub id: ParticipantId,
 }
-
-impl_to_redis_args!(ParticipantIdRunnerLock);
 
 pub async fn participant_id_in_use(
     redis_conn: &mut RedisConnection,

@@ -4,9 +4,9 @@ use anyhow::Context;
 use controller_shared::ParticipantId;
 use db_storage::rooms::RoomId;
 use db_storage::users::UserId;
-use displaydoc::Display;
 use rand::Rng;
 use redis::AsyncCommands;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -28,18 +28,17 @@ impl TicketToken {
     }
 }
 
-#[derive(Display, Debug, Copy, Clone)]
-/// k3k-signaling:ticket={ticket}
-#[ignore_extra_doc_attributes]
 /// Typed redis key for a signaling ticket containing [`TicketData`]
+#[derive(Debug, Copy, Clone, ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:ticket={ticket}")]
 pub struct TicketRedisKey<'s> {
     pub ticket: &'s str,
 }
 
-impl_to_redis_args!(TicketRedisKey<'_>);
-
 /// Data stored behind the [`Ticket`] key.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct TicketData {
     pub participant_id: ParticipantId,
     pub resuming: bool,
@@ -48,9 +47,6 @@ pub struct TicketData {
     pub breakout_room: Option<BreakoutRoomId>,
     pub resumption: ResumptionToken,
 }
-
-impl_from_redis_value_de!(TicketData);
-impl_to_redis_args_se!(&TicketData);
 
 pub async fn start_or_continue_signaling_session(
     redis_conn: &mut RedisConnection,

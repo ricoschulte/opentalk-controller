@@ -1,28 +1,23 @@
 use anyhow::{Context, Result};
 use controller::prelude::redis::AsyncCommands;
 use controller::prelude::*;
-use displaydoc::Display;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:protocol:init
-#[ignore_extra_doc_attributes]
-///
 /// Stores the [`InitState`] of this room.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:protocol:init")]
 pub(super) struct InitKey {
     pub(super) room_id: SignalingRoomId,
 }
 
-impl_to_redis_args!(InitKey);
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub enum InitState {
     Initializing,
     Initialized,
 }
-
-impl_to_redis_args_se!(InitState);
-impl_from_redis_value_de!(InitState);
 
 /// Attempts to set the room state to [`InitState::Initializing`] with a SETNX command.
 ///

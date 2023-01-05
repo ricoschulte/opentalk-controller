@@ -9,6 +9,7 @@ use control::rabbitmq;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use outgoing::{ChatDisabled, ChatEnabled, HistoryCleared, MessageSent};
+use redis_args::ToRedisArgs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -28,7 +29,8 @@ pub enum Scope {
     Private(ParticipantId),
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, Eq, PartialEq, ToRedisArgs)]
+#[to_redis_args(fmt)]
 pub struct MessageId(uuid::Uuid);
 
 impl MessageId {
@@ -78,8 +80,6 @@ impl redis::FromRedisValue for MessageId {
         }
     }
 }
-
-impl_to_redis_args!(MessageId);
 
 pub struct Chat {
     id: ParticipantId,

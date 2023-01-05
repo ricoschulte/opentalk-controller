@@ -3,7 +3,6 @@ use crate::rooms::RoomId;
 use crate::schema::legal_votes;
 use crate::users::UserId;
 use chrono::{DateTime, Utc};
-use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se};
 use database::{DatabaseError, DbConnection, Paginate, Result};
 use diesel::prelude::*;
 use diesel::result::DatabaseErrorKind;
@@ -13,12 +12,14 @@ use types::protocol::Protocol;
 pub mod types;
 
 diesel_newtype! {
-    #[derive(Copy)] LegalVoteId(uuid::Uuid) => diesel::sql_types::Uuid, "/legal_vote/",
-    #[derive(Copy)] SerialLegalVoteId(i64) => diesel::sql_types::BigInt
-}
+    #[derive(Copy, redis_args::ToRedisArgs, redis_args::FromRedisValue)]
+    #[to_redis_args(serde)]
+    #[from_redis_value(serde)]
+    LegalVoteId(uuid::Uuid) => diesel::sql_types::Uuid, "/legal_vote/",
 
-impl_to_redis_args_se!(LegalVoteId);
-impl_from_redis_value_de!(LegalVoteId);
+    #[derive(Copy)]
+    SerialLegalVoteId(i64) => diesel::sql_types::BigInt
+}
 
 /// Diesel legal_vote model
 ///

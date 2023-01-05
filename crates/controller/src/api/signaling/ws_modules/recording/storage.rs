@@ -1,35 +1,30 @@
 use crate::api::signaling::SignalingRoomId;
 use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 
 use super::RecordingId;
 
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:recording:init
-#[ignore_extra_doc_attributes]
-///
 /// Stores the [`RecordingState`] of this room.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:recording:init")]
 struct RecordingStateKey {
     room_id: SignalingRoomId,
 }
 
-impl_to_redis_args!(RecordingStateKey);
-
 /// State of the recording
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, ToRedisArgs, FromRedisValue)]
 #[serde(tag = "state", content = "recording_id", rename_all = "snake_case")]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub enum RecordingState {
     /// Waiting for a recorder to connect and start the recording
     Initializing,
     /// A recorder is connected and capturing the conference
     Recording(RecordingId),
 }
-
-impl_to_redis_args_se!(RecordingState);
-impl_from_redis_value_de!(RecordingState);
 
 pub(super) async fn try_init(
     redis_conn: &mut RedisConnection,

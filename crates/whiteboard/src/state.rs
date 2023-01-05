@@ -1,35 +1,27 @@
 use anyhow::{Context, Result};
 use controller::prelude::redis::AsyncCommands;
+use controller::prelude::SignalingRoomId;
 use controller::prelude::*;
-use controller::{
-    impl_from_redis_value_de, impl_to_redis_args, impl_to_redis_args_se,
-    prelude::{displaydoc::Display, SignalingRoomId},
-};
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:spacedeck:init
-#[ignore_extra_doc_attributes]
-///
 /// Stores the [`InitState`] of this room.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:spacedeck:init")]
 pub(super) struct InitStateKey {
     pub(super) room_id: SignalingRoomId,
 }
 
-impl_to_redis_args!(InitStateKey);
-
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub enum InitState {
     /// Spacedeck is initializing
     Initializing,
     /// Spacedeck has been initialized
     Initialized(SpaceInfo),
 }
-
-impl_to_redis_args_se!(InitState);
-impl_from_redis_value_de!(InitState);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SpaceInfo {

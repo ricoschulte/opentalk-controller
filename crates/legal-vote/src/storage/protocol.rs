@@ -5,22 +5,19 @@ use controller_shared::ParticipantId;
 use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, UserInfo, VoteEvent};
 use db_storage::legal_votes::types::VoteOption;
 use db_storage::legal_votes::LegalVoteId;
-use displaydoc::Display;
 use either::Either;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 use std::collections::HashMap;
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:vote={legal_vote_id}:protocol
-#[ignore_extra_doc_attributes]
-///
+
 /// Contains the vote protocol. The vote protocol is a list of [`ProtocolEntries`](ProtocolEntry)
 /// with information about the event that happened.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:vote={legal_vote_id}:protocol")]
 pub(super) struct ProtocolKey {
     pub(super) room_id: SignalingRoomId,
     pub(super) legal_vote_id: LegalVoteId,
 }
-
-impl_to_redis_args!(ProtocolKey);
 
 /// Add an entry to the vote protocol of `legal_vote_id`
 #[tracing::instrument(name = "legal_vote_add_protocol_entry", skip(redis_conn, entry))]

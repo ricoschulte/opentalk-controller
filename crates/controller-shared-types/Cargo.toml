@@ -18,6 +18,7 @@ uuid = { version = "1.0.0", features = ["serde", "v4"] }
 redis = { version = "0.21", features = ["tokio-comp", "connection-manager"] }
 cidr = { version = "0.2", features = ["serde"] }
 phonenumber = "0.3"
+redis-args = { path = "../redis-args", package = "k3k-redis-args" }
 
 [dev-dependencies]
 pretty_assertions = "1.3"

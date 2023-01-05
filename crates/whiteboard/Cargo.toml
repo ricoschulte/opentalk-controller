@@ -12,6 +12,8 @@ controller-shared = { path = "../controller-shared-types", package = "k3k-contro
 controller = { path = "../controller", package = "k3k-controller-core" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 database = { path = "../database", package = "k3k-database" }
+redis = "0.21"
+redis-args = { path = "../redis-args", package = "k3k-redis-args" }
 reqwest = { version = "0.11", default-features = false, features = [
     "json",
     "cookies",

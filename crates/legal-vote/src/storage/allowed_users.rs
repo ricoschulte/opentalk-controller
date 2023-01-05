@@ -2,25 +2,21 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use db_storage::legal_votes::LegalVoteId;
 use db_storage::users::UserId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::ToRedisArgs;
 
-#[derive(Display)]
-/// k3k-signaling:room={room_id}:vote={legal_vote_id}:allowed_users
-#[ignore_extra_doc_attributes]
-///
 /// A set of users that are allowed to vote.
 ///
 /// When a vote is casted, the requesting user has to be removed from this set in order to proceed.
 /// When a user is not contained in this set, the user either voted already or was never allowed to vote.
 ///
 /// See [`VOTE_SCRIPT`](super::VOTE_SCRIPT) for more details on the vote process.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:vote={legal_vote_id}:allowed_users")]
 pub(super) struct AllowedUsersKey {
     pub(super) room_id: SignalingRoomId,
     pub(super) legal_vote_id: LegalVoteId,
 }
-
-impl_to_redis_args!(AllowedUsersKey);
 
 /// Set the list of allowed users for the provided `legal_vote_id`
 #[tracing::instrument(name = "legal_vote_set_allowed_users", skip(redis_conn, allowed_users))]

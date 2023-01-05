@@ -4,42 +4,35 @@ use chrono::{DateTime, Utc};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::groups::GroupId;
-use displaydoc::Display;
 use r3dlock::{Mutex, MutexGuard};
 use redis::AsyncCommands;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:group={group}:participants
-#[ignore_extra_doc_attributes]
 /// A set of group members inside a room
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:group={group}:participants")]
 struct RoomGroupParticipants {
     room: SignalingRoomId,
     group: GroupId,
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:group={group}:participants.lock
-#[ignore_extra_doc_attributes]
-/// A lock for the set of group members inside a room
+// A lock for the set of group members inside a room
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:group={group}:participants.lock")]
 pub struct RoomGroupParticipantsLock {
     pub room: SignalingRoomId,
     pub group: GroupId,
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:group={group}:chat:history
-#[ignore_extra_doc_attributes]
 /// A lock for the set of group members inside a room
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:group={group}:chat:history")]
 struct RoomGroupChatHistory {
     room: SignalingRoomId,
     group: GroupId,
 }
-
-impl_to_redis_args!(RoomGroupParticipants);
-impl_to_redis_args!(RoomGroupParticipantsLock);
-impl_to_redis_args!(RoomGroupChatHistory);
 
 pub async fn add_participant_to_set(
     redis_conn: &mut RedisConnection,
@@ -86,16 +79,15 @@ pub async fn remove_participant_from_set(
 }
 
 /// Message stored inside redis and sent to frontend on `join_success`
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct StoredMessage {
     pub id: MessageId,
     pub source: ParticipantId,
     pub timestamp: DateTime<Utc>,
     pub content: String,
 }
-
-impl_from_redis_value_de!(StoredMessage);
-impl_to_redis_args_se!(&StoredMessage);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn get_group_chat_history(
@@ -144,16 +136,13 @@ pub async fn delete_group_chat_history(
         })
 }
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:participant={participant}:chat:last_seen:group
-#[ignore_extra_doc_attributes]
 /// A hash of last-seen timestamps
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:participant={participant}:chat:last_seen:group")]
 struct RoomParticipantLastSeenTimestampsGroup {
     room: SignalingRoomId,
     participant: ParticipantId,
 }
-
-impl_to_redis_args!(RoomParticipantLastSeenTimestampsGroup);
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
 pub async fn set_last_seen_timestamps_group(

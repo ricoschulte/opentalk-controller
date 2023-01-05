@@ -1,63 +1,10 @@
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use chrono::TimeZone;
 use db_storage::rooms::RoomId;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::Deref;
-
-/// Implement [`redis::ToRedisArgs`] for a type that implements display
-#[macro_export]
-macro_rules! impl_to_redis_args {
-    ($ty:ty) => {
-        impl redis::ToRedisArgs for $ty {
-            fn write_redis_args<W>(&self, out: &mut W)
-            where
-                W: ?Sized + redis::RedisWrite,
-            {
-                out.write_arg_fmt(self)
-            }
-        }
-    };
-}
-
-/// Implement [`redis::FromRedisValue`] for a type that implements deserialize
-#[macro_export]
-macro_rules! impl_from_redis_value_de {
-    ($ty:ty) => {
-        impl redis::FromRedisValue for $ty {
-            fn from_redis_value(v: &redis::Value) -> redis::RedisResult<$ty> {
-                match *v {
-                    redis::Value::Data(ref bytes) => serde_json::from_slice(bytes).map_err(|_| {
-                        redis::RedisError::from((
-                            redis::ErrorKind::TypeError,
-                            "invalid data content",
-                        ))
-                    }),
-                    _ => redis::RedisResult::Err(redis::RedisError::from((
-                        redis::ErrorKind::TypeError,
-                        "invalid data type",
-                    ))),
-                }
-            }
-        }
-    };
-}
-
-/// Implement [`redis::ToRedisArgs`] for a type that implements serialize
-#[macro_export]
-macro_rules! impl_to_redis_args_se {
-    ($ty:ty) => {
-        impl redis::ToRedisArgs for $ty {
-            fn write_redis_args<W>(&self, out: &mut W)
-            where
-                W: ?Sized + redis::RedisWrite,
-            {
-                let json_val = serde_json::to_vec(self).expect("Failed to serialize");
-                out.write_arg(&json_val);
-            }
-        }
-    };
-}
 
 pub(crate) mod metrics;
 pub(crate) mod resumption;
@@ -80,16 +27,17 @@ pub mod prelude {
 }
 
 /// Role of the participant inside a room
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, ToRedisArgs, FromRedisValue,
+)]
 #[serde(rename_all = "lowercase")]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub enum Role {
     Guest,
     User,
     Moderator,
 }
-
-impl_to_redis_args_se!(Role);
-impl_from_redis_value_de!(Role);
 
 /// The complete room id
 ///

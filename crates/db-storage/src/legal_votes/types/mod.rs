@@ -1,6 +1,7 @@
 use super::LegalVoteId;
 use chrono::{DateTime, Utc};
-use controller_shared::{impl_from_redis_value_de, impl_to_redis_args_se, ParticipantId};
+use controller_shared::ParticipantId;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -9,19 +10,22 @@ pub mod protocol;
 /// The vote choices
 ///
 /// Abstain can be disabled through the vote parameters (See [`UserParameters`]).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToRedisArgs, FromRedisValue,
+)]
 #[serde(rename_all = "snake_case")]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub enum VoteOption {
     Yes,
     No,
     Abstain,
 }
 
-impl_to_redis_args_se!(VoteOption);
-impl_from_redis_value_de!(VoteOption);
-
 /// Wraps the [`UserParameters`] with additional server side information
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct Parameters {
     /// The participant id of the vote initiator
     pub initiator_id: ParticipantId,
@@ -36,11 +40,12 @@ pub struct Parameters {
     pub inner: UserParameters,
 }
 
-impl_to_redis_args_se!(&Parameters);
-impl_from_redis_value_de!(Parameters);
-
 /// The users parameters to start a new vote
-#[derive(Debug, Clone, Serialize, PartialEq, Eq, Deserialize, Validate)]
+#[derive(
+    Debug, Clone, Serialize, PartialEq, Eq, Deserialize, Validate, ToRedisArgs, FromRedisValue,
+)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct UserParameters {
     /// The name of the vote
     #[validate(length(max = 150))]
@@ -66,9 +71,6 @@ pub struct UserParameters {
     /// A PDF document will be created when the vote is over
     pub create_pdf: bool,
 }
-
-impl_to_redis_args_se!(UserParameters);
-impl_from_redis_value_de!(UserParameters);
 
 /// Final vote results
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -3,38 +3,34 @@ use crate::prelude::*;
 use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
 use db_storage::rooms::RoomId;
-use displaydoc::Display;
 use redis::AsyncCommands;
+use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::time::{Duration, SystemTime};
 
-#[derive(Display)]
-/// k3k-signaling:room={room}:breakout:rooms
-#[ignore_extra_doc_attributes]
 /// Typed key to a set which contains all breakout-room ids
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:breakout:rooms")]
 struct BreakoutRooms {
     room: RoomId,
 }
 
-impl_to_redis_args!(BreakoutRooms);
-
-#[derive(Display)]
-/// k3k-signaling:room={room}:breakout:config
-#[ignore_extra_doc_attributes]
 /// Typed key to the breakout-room config for the specified room
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:breakout:config")]
 struct BreakoutRoomConfig {
     room: RoomId,
 }
-
-impl_to_redis_args!(BreakoutRoomConfig);
 
 /// Configuration of the current breakout rooms which lives inside redis
 ///
 /// When the configuration is set the breakoutrooms are considered active.
 /// Breakout rooms with a duration will have the redis entry expire
 /// whenever the breakoutrooms expire.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToRedisArgs, FromRedisValue)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct BreakoutConfig {
     pub rooms: Vec<BreakoutRoom>,
     pub started: SystemTime,
@@ -46,9 +42,6 @@ impl BreakoutConfig {
         self.rooms.iter().any(|room| room.id == id)
     }
 }
-
-impl_from_redis_value_de!(BreakoutConfig);
-impl_to_redis_args_se!(&BreakoutConfig);
 
 pub async fn set_config(
     redis_conn: &mut RedisConnection,
