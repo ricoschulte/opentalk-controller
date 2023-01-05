@@ -6,7 +6,7 @@ use db_storage::legal_votes::types::protocol::v1::{
     Cancel, ProtocolEntry, Start, StopKind, Vote, VoteEvent,
 };
 use db_storage::legal_votes::types::{
-    CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
+    CancelReason, FinalResults, Invalid, Parameters, Tally, UserParameters, VoteKind, VoteOption,
 };
 use db_storage::users::{User, UserId};
 use genpdf::elements::*;
@@ -206,7 +206,7 @@ fn summarize_start_entry(
 
     let mut row = table.row();
     row.push_element(Paragraph::new("Abstimmungsart:"));
-    row.push_element(Paragraph::new(kind.to_string()));
+    row.push_element(Paragraph::new(vote_kind_to_string(kind).to_string()));
     row.push()?;
 
     let mut row = table.row();
@@ -257,9 +257,9 @@ fn summarize_start_entry(
 fn render_votes(
     db: Arc<Db>,
     user_cache: &mut UserCache,
-    votes: Vec<(Vote, DateTime<Utc>)>,
+    votes: Vec<(Vote, Option<DateTime<Utc>>)>,
 ) -> Result<TableLayout> {
-    let mut votes_table = TableLayout::new(vec![5, 2, 5]);
+    let mut votes_table = TableLayout::new(vec![5, 3, 2, 5]);
 
     let mut conn = db.get_conn()?;
 
@@ -277,6 +277,8 @@ fn render_votes(
 
         row.push_element(Paragraph::new(identifier));
 
+        row.push_element(Paragraph::new(vote.token.to_string()));
+
         let vote_string = match vote.option {
             VoteOption::Yes => "ja",
             VoteOption::No => "nein",
@@ -285,9 +287,11 @@ fn render_votes(
 
         row.push_element(Paragraph::new(vote_string));
 
-        row.push_element(Paragraph::new(
-            ts.format("%d.%m.%Y %H:%M:%S %Z").to_string(),
-        ));
+        let ts = ts
+            .map(|ts| ts.format("%d.%m.%Y %H:%M:%S %Z").to_string())
+            .unwrap_or_default();
+
+        row.push_element(Paragraph::new(ts));
 
         row.push()?;
     }
@@ -431,6 +435,14 @@ fn bool_to_string(value: bool) -> &'static str {
     }
 }
 
+fn vote_kind_to_string(value: VoteKind) -> &'static str {
+    match value {
+        VoteKind::LiveRollCall => "Offene Abstimmung mit Live-Aktualisierungen",
+        VoteKind::RollCall => "Offene Abstimmung",
+        VoteKind::Pseudonymous => "Pseudonyme Abstimmung",
+    }
+}
+
 /// A cache to prevent us from looking up the same user multiple times in the database
 #[derive(Default)]
 struct UserCache {
@@ -484,7 +496,7 @@ mod test {
     use controller::prelude::uuid::Uuid;
     use controller_shared::ParticipantId;
     use db_storage::legal_votes::types::protocol::v1::UserInfo;
-    use db_storage::legal_votes::types::VoteKind;
+    use db_storage::legal_votes::types::{Token, VoteKind};
     use db_storage::legal_votes::LegalVoteId;
     use db_storage::users::User;
     use std::fs;
@@ -578,6 +590,7 @@ mod test {
                         issuer: user.id,
                         participant_id: ParticipantId::nil(),
                     }),
+                    token: Token::new(0x0),
                     option: VoteOption::No,
                 }))
             })

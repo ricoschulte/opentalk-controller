@@ -17,6 +17,12 @@ impl Token {
     }
 }
 
+impl ToString for Token {
+    fn to_string(&self) -> String {
+        BASE58.encode_const_len(&self.0)
+    }
+}
+
 impl FromStr for Token {
     type Err = Error;
 
@@ -50,7 +56,7 @@ impl Serialize for Token {
     where
         S: Serializer,
     {
-        serializer.serialize_str(&BASE58.encode_const_len(&self.0))
+        serializer.serialize_str(&self.to_string())
     }
 }
 
