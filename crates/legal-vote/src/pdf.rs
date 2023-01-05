@@ -109,7 +109,7 @@ pub(crate) fn generate_pdf(
     }
 
     let title = Paragraph::default().styled_string(
-        "OpenTalk Vote Protocol",
+        "OpenTalk-Abstimmungsprotokoll",
         Style::default().with_font_size(18),
     );
     doc.push(title);
@@ -125,7 +125,7 @@ pub(crate) fn generate_pdf(
 
     if !votes.is_empty() {
         doc.push(Break::new(1));
-        doc.push(Paragraph::new("Recorded votes:"));
+        doc.push(Paragraph::new("Erfasste Stimmabgaben:"));
 
         let votes_table = render_votes(db, &mut user_cache, votes)?;
 
@@ -169,20 +169,20 @@ fn summarize_start_entry(
     let issuer_name = user_cache.get_user_name(&mut db.get_conn()?, issuer)?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Title:"));
+    row.push_element(Paragraph::new("Titel:"));
     row.push_element(Paragraph::new(name));
     row.push()?;
 
     if let Some(subtitle) = subtitle {
         let mut row = table.row();
-        row.push_element(Paragraph::new("Subtitle:"));
+        row.push_element(Paragraph::new("Untertitel:"));
         row.push_element(Paragraph::new(subtitle));
         row.push()?;
     }
 
     if let Some(topic) = topic {
         let mut row = table.row();
-        row.push_element(Paragraph::new("Topic:"));
+        row.push_element(Paragraph::new("Thema:"));
         row.push_element(Paragraph::new(topic));
         row.push()?;
     }
@@ -193,56 +193,56 @@ fn summarize_start_entry(
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Vote initiator:"));
+    row.push_element(Paragraph::new("Abstimmungsleiter:"));
     row.push_element(Paragraph::new(issuer_name));
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Vote ID:"));
+    row.push_element(Paragraph::new("Abstimmungs-ID:"));
     row.push_element(Paragraph::new(legal_vote_id.to_string()));
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Begin: "));
+    row.push_element(Paragraph::new("Beginn: "));
     row.push_element(Paragraph::new(
-        start_time.format("%d/%m/%Y %H:%M:%S %Z").to_string(),
+        start_time.format("%d.%m.%Y %H:%M:%S %Z").to_string(),
     ));
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("End: "));
+    row.push_element(Paragraph::new("Ende: "));
     row.push_element(Paragraph::new(
-        Utc::now().format("%d/%m/%Y %H:%M:%S %Z").to_string(),
+        Utc::now().format("%d.%m.%Y %H:%M:%S %Z").to_string(),
     ));
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("No of participants:"));
+    row.push_element(Paragraph::new("Anzahl Teilnehmer:"));
     row.push_element(Paragraph::new(allowed_participants.len().to_string()));
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Configured Duration:"));
+    row.push_element(Paragraph::new("Festgelegte Dauer:"));
 
     if let Some(duration) = duration {
         row.push_element(Paragraph::new(format!("{} seconds", duration)));
     } else {
-        row.push_element(Paragraph::new("Not Set"));
+        row.push_element(Paragraph::new("Nicht festgelegt"));
     }
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Hidden:"));
+    row.push_element(Paragraph::new("Versteckte Abstimmung:"));
     row.push_element(Paragraph::new(bool_to_string(hidden)));
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Abstention:"));
+    row.push_element(Paragraph::new("Enthaltung erlaubt:"));
     row.push_element(Paragraph::new(bool_to_string(enable_abstain)));
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Automatic Stop:"));
+    row.push_element(Paragraph::new("Automatisches Ende:"));
     row.push_element(Paragraph::new(bool_to_string(auto_stop)));
     row.push()?;
 
@@ -267,21 +267,21 @@ fn render_votes(
             // workaround for genpdf rendering
             break_string(user_name, 36)
         } else {
-            "anonymous".into()
+            "anonym".into()
         };
 
         row.push_element(Paragraph::new(identifier));
 
         let vote_string = match vote.option {
-            VoteOption::Yes => "yes",
-            VoteOption::No => "no",
-            VoteOption::Abstain => "abstain",
+            VoteOption::Yes => "ja",
+            VoteOption::No => "nein",
+            VoteOption::Abstain => "enthalten",
         };
 
         row.push_element(Paragraph::new(vote_string));
 
         row.push_element(Paragraph::new(
-            ts.format("%d/%m/%Y %H:%M:%S %Z").to_string(),
+            ts.format("%d.%m.%Y %H:%M:%S %Z").to_string(),
         ));
 
         row.push()?;
@@ -295,36 +295,38 @@ fn get_result_elements(results: FinalResults) -> Result<Vec<BoxedElement>> {
 
     let mut table = TableLayout::new(vec![2, 8]);
 
-    elements.push(BoxedElement::new(Paragraph::new("Results:")));
+    elements.push(BoxedElement::new(Paragraph::new("Ergebnisse:")));
 
     match results {
         FinalResults::Valid(votes) => {
             let Votes { yes, no, abstain } = votes;
 
             let mut row = table.row();
-            row.push_element(Paragraph::new("Yes:"));
+            row.push_element(Paragraph::new("Ja:"));
             row.push_element(Paragraph::new(yes.to_string()));
             row.push()?;
 
             let mut row = table.row();
-            row.push_element(Paragraph::new("No:"));
+            row.push_element(Paragraph::new("Nein:"));
             row.push_element(Paragraph::new(no.to_string()));
             row.push()?;
 
             if let Some(abstain) = abstain {
                 let mut row = table.row();
-                row.push_element(Paragraph::new("Abstain:"));
+                row.push_element(Paragraph::new("Enthalten:"));
                 row.push_element(Paragraph::new(abstain.to_string()));
                 row.push()?;
             }
         }
         FinalResults::Invalid(invalid) => {
             let mut row = table.row();
-            row.push_element(Paragraph::new("Vote invalid -"));
+            row.push_element(Paragraph::new("Abstimmung ungültig -"));
 
             let invalid_string = match invalid {
-                Invalid::AbstainDisabled => "Vote protocol contained disallowed abstain vote",
-                Invalid::VoteCountInconsistent => "Tracked vote count does not match protocol",
+                Invalid::AbstainDisabled => "Abstimmung enthält unerlaubte Enthaltung",
+                Invalid::VoteCountInconsistent => {
+                    "Erfasste Stimmanzahl entspricht nicht dem Protokoll"
+                }
             };
 
             row.push_element(Paragraph::new(invalid_string));
@@ -339,7 +341,7 @@ fn get_result_elements(results: FinalResults) -> Result<Vec<BoxedElement>> {
 
 fn summarize_stop_entry(db: Arc<Db>, table: &mut TableLayout, stop: StopKind) -> Result<()> {
     let mut row = table.row();
-    row.push_element(Paragraph::new("Vote ended by:"));
+    row.push_element(Paragraph::new("Abstimmung beendet durch:"));
 
     match stop {
         StopKind::ByUser(user) => {
@@ -352,10 +354,10 @@ fn summarize_stop_entry(db: Arc<Db>, table: &mut TableLayout, stop: StopKind) ->
             row.push_element(Paragraph::new(user_name));
         }
         StopKind::Auto => {
-            row.push_element(Paragraph::new("Everyone voted"));
+            row.push_element(Paragraph::new("Alle haben abgestimmt"));
         }
         StopKind::Expired => {
-            row.push_element(Paragraph::new("Expiry"));
+            row.push_element(Paragraph::new("Abgelaufen"));
         }
     }
 
@@ -371,11 +373,11 @@ fn summarize_cancel_entry(
     cancel: Cancel,
 ) -> Result<()> {
     let mut row = table.row();
-    row.push_element(Paragraph::new("Vote ended by:"));
+    row.push_element(Paragraph::new("Abstimmung beendet durch:"));
 
     let reason = match cancel.reason {
-        CancelReason::RoomDestroyed => "Room closed".into(),
-        CancelReason::InitiatorLeft => "Vote initiator left".into(),
+        CancelReason::RoomDestroyed => "Raum geschlossen".into(),
+        CancelReason::InitiatorLeft => "Abstimmungsleiter hat den Raum verlassen".into(),
         CancelReason::Custom(custom) => {
             let issuer_name = user_cache.get_user_name(&mut db.get_conn()?, cancel.issuer)?;
 
@@ -398,9 +400,9 @@ fn push_elements(doc: &mut Document, elements: Vec<BoxedElement>) {
 
 fn bool_to_string(value: bool) -> &'static str {
     if value {
-        "On"
+        "Aktiviert"
     } else {
-        "Off"
+        "Deaktiviert"
     }
 }
 
