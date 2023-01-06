@@ -96,10 +96,6 @@ impl SignalingModule for Protocol {
 
                     ctx.ws_send(outgoing::Message::ReadUrl(AccessUrl { url: read_url }));
 
-                    if ctx.role() != Role::Moderator {
-                        return Ok(());
-                    }
-
                     for (participant_id, access) in participants {
                         let session_info =
                             storage::session::get(ctx.redis_conn(), self.room_id, *participant_id)
@@ -129,11 +125,6 @@ impl SignalingModule for Protocol {
             }
             Event::ParticipantUpdated(participant_id, peer_frontend_data)
             | Event::ParticipantJoined(participant_id, peer_frontend_data) => {
-                // Participant access state changes will only be send to moderator
-                if ctx.role() != Role::Moderator {
-                    return Ok(());
-                }
-
                 let session_info =
                     storage::session::get(ctx.redis_conn(), self.room_id, participant_id).await?;
 

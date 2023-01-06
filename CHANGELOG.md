@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - controller: use derive and attribute macros for conversion to/from redis values ([#283](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/283))
+- protocol: read/write access level information is now sent to every participant [#299](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/299)
 
 ## [1.0.0-rc.10] - 2022-12-09
 
