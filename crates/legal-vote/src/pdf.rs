@@ -93,18 +93,28 @@ pub(crate) fn generate_pdf(
     for entry in protocol {
         match entry.event {
             VoteEvent::Start(start) => {
-                summarize_start_entry(db.clone(), &mut user_cache, start, &mut summary_table)?;
+                summarize_start_entry(
+                    db.clone(),
+                    &mut user_cache,
+                    start,
+                    &mut summary_table,
+                    entry.timestamp,
+                )?;
             }
             VoteEvent::Vote(vote) => votes.push((vote, entry.timestamp)),
             VoteEvent::Stop(stop_kind) => {
-                summarize_stop_entry(db.clone(), &mut summary_table, stop_kind)?
+                summarize_stop_entry(db.clone(), &mut summary_table, stop_kind, entry.timestamp)?
             }
             VoteEvent::FinalResults(results) => {
                 final_result = Some(get_result_elements(results)?);
             }
-            VoteEvent::Cancel(cancel) => {
-                summarize_cancel_entry(db.clone(), &mut user_cache, &mut summary_table, cancel)?
-            }
+            VoteEvent::Cancel(cancel) => summarize_cancel_entry(
+                db.clone(),
+                &mut user_cache,
+                &mut summary_table,
+                cancel,
+                entry.timestamp,
+            )?,
         }
     }
 
@@ -142,6 +152,7 @@ fn summarize_start_entry(
     user_cache: &mut UserCache,
     start: Start,
     table: &mut TableLayout,
+    _timestamp: DateTime<Utc>,
 ) -> Result<()> {
     let Start {
         issuer,
@@ -150,13 +161,13 @@ fn summarize_start_entry(
                 initiator_id: _,
                 legal_vote_id,
                 start_time,
-                max_votes: _,
+                max_votes,
                 inner:
                     UserParameters {
                         name,
                         subtitle,
                         topic,
-                        allowed_participants,
+                        allowed_participants: _,
                         enable_abstain,
                         auto_stop,
                         hidden,
@@ -210,15 +221,8 @@ fn summarize_start_entry(
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Ende: "));
-    row.push_element(Paragraph::new(
-        Utc::now().format("%d.%m.%Y %H:%M:%S %Z").to_string(),
-    ));
-    row.push()?;
-
-    let mut row = table.row();
     row.push_element(Paragraph::new("Anzahl Teilnehmer:"));
-    row.push_element(Paragraph::new(allowed_participants.len().to_string()));
+    row.push_element(Paragraph::new(max_votes.to_string()));
     row.push()?;
 
     let mut row = table.row();
@@ -339,7 +343,19 @@ fn get_result_elements(results: FinalResults) -> Result<Vec<BoxedElement>> {
     Ok(elements)
 }
 
-fn summarize_stop_entry(db: Arc<Db>, table: &mut TableLayout, stop: StopKind) -> Result<()> {
+fn summarize_stop_entry(
+    db: Arc<Db>,
+    table: &mut TableLayout,
+    stop: StopKind,
+    timestamp: DateTime<Utc>,
+) -> Result<()> {
+    let mut row = table.row();
+    row.push_element(Paragraph::new("Ende: "));
+    row.push_element(Paragraph::new(
+        timestamp.format("%d.%m.%Y %H:%M:%S %Z").to_string(),
+    ));
+    row.push()?;
+
     let mut row = table.row();
     row.push_element(Paragraph::new("Abstimmung beendet durch:"));
 
@@ -371,7 +387,15 @@ fn summarize_cancel_entry(
     user_cache: &mut UserCache,
     table: &mut TableLayout,
     cancel: Cancel,
+    timestamp: DateTime<Utc>,
 ) -> Result<()> {
+    let mut row = table.row();
+    row.push_element(Paragraph::new("Ende: "));
+    row.push_element(Paragraph::new(
+        timestamp.format("%d.%m.%Y %H:%M:%S %Z").to_string(),
+    ));
+    row.push()?;
+
     let mut row = table.row();
     row.push_element(Paragraph::new("Abstimmung beendet durch:"));
 
