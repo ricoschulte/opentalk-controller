@@ -164,6 +164,7 @@ impl SignalingModule for Media {
             }
             Event::WsMessage(incoming::Message::UpdateMediaSession(info)) => {
                 if info.media_session_type == MediaSessionType::Screen
+                    && ctx.role() != Role::Moderator
                     && !storage::is_presenter(ctx.redis_conn(), self.room, self.id).await?
                 {
                     ctx.ws_send(outgoing::Message::Error(outgoing::Error::PermissionDenied));

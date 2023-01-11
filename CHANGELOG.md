@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - protocol: fixed the `createAuthorIfNotExistsFor` API call that always returned the same author id due to a typo in the query
+- janus-media: fixed a permission check for screen-share media session updates
 
 ### Changed
 
