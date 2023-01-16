@@ -2157,6 +2157,7 @@ dependencies = [
  "actix-rt",
  "k3k-controller-core",
  "k3k-controller-shared",
+ "k3k-database",
  "k3k-db-storage",
  "k3k-redis-args",
  "k3k-test-util",
@@ -2175,7 +2176,6 @@ dependencies = [
  "k3k-automod",
  "k3k-chat",
  "k3k-controller-core",
- "k3k-ee-chat",
  "k3k-janus-media",
  "k3k-legal-vote",
  "k3k-polls",
@@ -2323,24 +2323,6 @@ dependencies = [
  "url",
  "uuid",
  "validator",
-]
-
-[[package]]
-name = "k3k-ee-chat"
-version = "1.0.0-rc.10"
-dependencies = [
- "actix-rt",
- "k3k-chat",
- "k3k-controller-core",
- "k3k-controller-shared",
- "k3k-database",
- "k3k-db-storage",
- "k3k-redis-args",
- "k3k-test-util",
- "pretty_assertions",
- "redis",
- "serde",
- "serial_test",
 ]
 
 [[package]]

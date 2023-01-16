@@ -10,7 +10,6 @@ COPY ./crates/controller/Cargo.toml ./crates/controller/Cargo.toml
 COPY ./crates/controller-shared-types/Cargo.toml ./crates/controller-shared-types/Cargo.toml
 COPY ./crates/database/Cargo.toml ./crates/database/Cargo.toml
 COPY ./crates/db-storage/Cargo.toml ./crates/db-storage/Cargo.toml
-COPY ./crates/ee-chat/Cargo.toml ./crates/ee-chat/Cargo.toml
 COPY ./crates/etherpad-client/Cargo.toml ./crates/etherpad-client/Cargo.toml
 COPY ./crates/janus-client/Cargo.toml ./crates/janus-client/Cargo.toml
 COPY ./crates/janus-media/Cargo.toml ./crates/janus-media/Cargo.toml

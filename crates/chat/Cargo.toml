@@ -9,6 +9,7 @@ publish = false
 controller = { path = "../controller", package = "k3k-controller-core" }
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
+database = { path = "../database", package = "k3k-database" }
 serde = { version = "1", features = ["derive"] }
 redis = "0.21"
 redis-args = { path = "../redis-args", package = "k3k-redis-args" }
