@@ -156,6 +156,6 @@ fn write_schema(content: Vec<u8>) -> Result<PathBuf> {
         log::info!("{} exists. Deleting it first.", target_file.display())
     }
 
-    std::fs::write(&target_file, &content)?;
+    std::fs::write(&target_file, content)?;
     Ok(target_file)
 }
