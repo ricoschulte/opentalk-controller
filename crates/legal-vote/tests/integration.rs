@@ -154,7 +154,186 @@ async fn basic_vote_roll_call() {
     let mut voters = HashMap::new();
     voters.insert(user1.id, VoteOption::Yes);
 
-    let voting_record = VotingRecord::UserVotes(voters.clone());
+    // Vote 'No' with user 2
+    let vote_no = incoming::Message::Vote(VoteMessage {
+        legal_vote_id,
+        option: VoteOption::No,
+        token: user_2_token,
+    });
+
+    module_tester
+        .send_ws_message(&USER_2.participant_id, vote_no)
+        .unwrap();
+
+    //Expect VoteSuccess
+    let vote_response = module_tester
+        .receive_ws_message(&USER_2.participant_id)
+        .await
+        .unwrap();
+
+    let expected_vote_response =
+        WsMessageOutgoing::Module(outgoing::Message::Voted(VoteResponse {
+            legal_vote_id,
+            response: Response::Success(VoteSuccess {
+                vote_option: VoteOption::No,
+                issuer: USER_2.participant_id,
+                consumed_token: user_2_token,
+            }),
+        }));
+
+    assert_eq!(expected_vote_response, vote_response);
+
+    voters.insert(user2.id, VoteOption::No);
+
+    // stop vote
+    let stop_vote = incoming::Message::Stop(Stop { legal_vote_id });
+
+    module_tester
+        .send_ws_message(&USER_1.participant_id, stop_vote)
+        .unwrap();
+
+    let expected_stop_message =
+        WsMessageOutgoing::Module(outgoing::Message::Stopped(outgoing::Stopped {
+            legal_vote_id,
+            kind: rabbitmq::StopKind::ByParticipant(USER_1.participant_id),
+            results: outgoing::FinalResults::Valid(outgoing::Results {
+                tally: Tally {
+                    yes: 1,
+                    no: 1,
+                    abstain: None,
+                },
+                voting_record: VotingRecord::UserVotes(voters),
+            }),
+            end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+        }));
+
+    // expect stop messages for all users
+    for user in USERS {
+        let stop_message = module_tester
+            .receive_ws_message(&user.participant_id)
+            .await
+            .expect("Expected stop message");
+
+        compare_stopped_message_except_for_timestamp(stop_message, expected_stop_message.clone());
+    }
+
+    // check the vote protocol
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
+
+    assert_eq!(legal_vote.id, legal_vote_id);
+    assert_eq!(legal_vote.created_by, user1.id);
+
+    let protocol_entries = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    if let Value::Array(entries) = protocol_entries {
+        assert_eq!(entries.len(), 5);
+    }
+}
+
+#[actix_rt::test]
+#[serial]
+async fn basic_vote_live_roll_call() {
+    let test_ctx = TestContext::new().await;
+    let (mut module_tester, user1, user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let mut db_conn = test_ctx.db_ctx.db.get_conn().unwrap();
+
+    // Start legal vote as user 1
+    let start_parameters = UserParameters {
+        kind: VoteKind::LiveRollCall,
+        name: "TestVote".into(),
+        subtitle: Some("A subtitle".into()),
+        topic: Some("Does the test work?".into()),
+        allowed_participants: vec![USER_1.participant_id, USER_2.participant_id],
+        enable_abstain: false,
+        auto_close: false,
+        duration: None,
+        create_pdf: false,
+    };
+
+    module_tester
+        .send_ws_message(
+            &USER_1.participant_id,
+            incoming::Message::Start(start_parameters.clone()),
+        )
+        .unwrap();
+
+    // Expect Start response in websocket for user 1
+    let (legal_vote_id, user_1_token) =
+        if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) = module_tester
+            .receive_ws_message(&USER_1.participant_id)
+            .await
+            .unwrap()
+        {
+            assert_eq!(parameters.initiator_id, USER_1.participant_id);
+            assert_eq!(parameters.inner, start_parameters);
+            assert_eq!(parameters.max_votes, 2);
+            assert!(parameters.token.is_some());
+
+            (parameters.legal_vote_id, parameters.token.unwrap())
+        } else {
+            panic!("Expected Start message")
+        };
+
+    // Expect Start response in websocket for user 2
+    let user_2_token = if let WsMessageOutgoing::Module(outgoing::Message::Started(parameters)) =
+        module_tester
+            .receive_ws_message(&USER_2.participant_id)
+            .await
+            .unwrap()
+    {
+        assert_eq!(parameters.initiator_id, USER_1.participant_id);
+        assert_eq!(parameters.inner, start_parameters);
+        assert_eq!(parameters.legal_vote_id, legal_vote_id);
+        assert_eq!(parameters.max_votes, 2);
+        assert!(parameters.token.is_some());
+
+        parameters.token.unwrap()
+    } else {
+        panic!("Expected Start message")
+    };
+
+    // Expect a empty legal_vote with `legal_vote_id` to exist in database
+    let legal_vote = DbLegalVote::get(&mut db_conn, legal_vote_id).unwrap();
+
+    assert_eq!(legal_vote.id, legal_vote_id);
+    assert_eq!(legal_vote.created_by, user1.id);
+
+    let protocol_entries: Value = serde_json::from_str(legal_vote.protocol.entries.get()).unwrap();
+    assert_eq!(protocol_entries, Value::Array(vec![]));
+
+    // Start casting votes
+
+    // Vote 'Yes' with user 1
+    let vote_yes = incoming::Message::Vote(VoteMessage {
+        legal_vote_id,
+        option: VoteOption::Yes,
+        token: user_1_token,
+    });
+
+    module_tester
+        .send_ws_message(&USER_1.participant_id, vote_yes)
+        .unwrap();
+
+    //Expect VoteSuccess
+    let vote_response = module_tester
+        .receive_ws_message(&USER_1.participant_id)
+        .await
+        .unwrap();
+
+    let expected_vote_response =
+        WsMessageOutgoing::Module(outgoing::Message::Voted(VoteResponse {
+            legal_vote_id,
+            response: Response::Success(VoteSuccess {
+                vote_option: VoteOption::Yes,
+                issuer: USER_1.participant_id,
+                consumed_token: user_1_token,
+            }),
+        }));
+
+    assert_eq!(expected_vote_response, vote_response);
+
+    // Expect a vote Update message on all participants
+    let mut voters = HashMap::new();
+    voters.insert(user1.id, VoteOption::Yes);
 
     let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
         legal_vote_id,
@@ -164,7 +343,7 @@ async fn basic_vote_roll_call() {
                 no: 0,
                 abstain: None,
             },
-            voting_record: Some(voting_record.clone()),
+            voting_record: VotingRecord::UserVotes(voters.clone()),
         },
     }));
 
@@ -209,8 +388,6 @@ async fn basic_vote_roll_call() {
     // Expect a vote Update message on all participants
     voters.insert(user2.id, VoteOption::No);
 
-    let voting_record = VotingRecord::UserVotes(voters);
-
     let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
         legal_vote_id,
         results: outgoing::Results {
@@ -219,7 +396,7 @@ async fn basic_vote_roll_call() {
                 no: 1,
                 abstain: None,
             },
-            voting_record: Some(voting_record.clone()),
+            voting_record: VotingRecord::UserVotes(voters.clone()),
         },
     }));
 
@@ -249,7 +426,7 @@ async fn basic_vote_roll_call() {
                     no: 1,
                     abstain: None,
                 },
-                voting_record: Some(voting_record.clone()),
+                voting_record: VotingRecord::UserVotes(voters),
             }),
             end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         }));
@@ -378,28 +555,6 @@ async fn basic_vote_pseudonymous() {
 
     assert_eq!(expected_vote_response, vote_response);
 
-    // Expect a vote Update message on all participants
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
-        legal_vote_id,
-        results: outgoing::Results {
-            tally: Tally {
-                yes: 1,
-                no: 0,
-                abstain: None,
-            },
-            voting_record: None,
-        },
-    }));
-
-    for user in USERS {
-        let update = module_tester
-            .receive_ws_message(&user.participant_id)
-            .await
-            .unwrap();
-
-        assert_eq!(expected_update, update);
-    }
-
     // Vote 'No' with user 2
     let vote_no = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
@@ -429,28 +584,6 @@ async fn basic_vote_pseudonymous() {
 
     assert_eq!(expected_vote_response, vote_response);
 
-    // Expect a vote Update message on all participants
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
-        legal_vote_id,
-        results: outgoing::Results {
-            tally: Tally {
-                yes: 1,
-                no: 1,
-                abstain: None,
-            },
-            voting_record: None,
-        },
-    }));
-
-    for user in USERS {
-        let update = module_tester
-            .receive_ws_message(&user.participant_id)
-            .await
-            .unwrap();
-
-        assert_eq!(expected_update, update);
-    }
-
     // stop vote
     let stop_vote = incoming::Message::Stop(Stop { legal_vote_id });
 
@@ -473,7 +606,7 @@ async fn basic_vote_pseudonymous() {
                     no: 1,
                     abstain: None,
                 },
-                voting_record: Some(VotingRecord::TokenVotes(token_votes)),
+                voting_record: VotingRecord::TokenVotes(token_votes),
             }),
             end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         }));
@@ -602,28 +735,6 @@ async fn hidden_legal_vote() {
 
     assert_eq!(expected_vote_response, vote_response);
 
-    // Expect a vote Update message on all participants
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
-        legal_vote_id,
-        results: outgoing::Results {
-            tally: Tally {
-                yes: 1,
-                no: 0,
-                abstain: None,
-            },
-            voting_record: None,
-        },
-    }));
-
-    for user in USERS {
-        let update = module_tester
-            .receive_ws_message(&user.participant_id)
-            .await
-            .unwrap();
-
-        assert_eq!(expected_update, update);
-    }
-
     // Vote 'No' with user 2
     let vote_no = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
@@ -653,28 +764,6 @@ async fn hidden_legal_vote() {
 
     assert_eq!(expected_vote_response, vote_response);
 
-    // Expect a vote Update message on all participants
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
-        legal_vote_id,
-        results: outgoing::Results {
-            tally: Tally {
-                yes: 1,
-                no: 1,
-                abstain: None,
-            },
-            voting_record: None,
-        },
-    }));
-
-    for user in USERS {
-        let update = module_tester
-            .receive_ws_message(&user.participant_id)
-            .await
-            .unwrap();
-
-        assert_eq!(expected_update, update);
-    }
-
     // stop vote
     let stop_vote = incoming::Message::Stop(Stop { legal_vote_id });
 
@@ -697,7 +786,7 @@ async fn hidden_legal_vote() {
                     no: 1,
                     abstain: None,
                 },
-                voting_record: Some(VotingRecord::TokenVotes(token_votes)),
+                voting_record: VotingRecord::TokenVotes(token_votes),
             }),
             end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         }));
@@ -831,29 +920,6 @@ async fn basic_vote_abstain() {
     let mut voters = HashMap::new();
     voters.insert(user1.id, VoteOption::Abstain);
 
-    let voting_record = VotingRecord::UserVotes(voters.clone());
-
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
-        legal_vote_id,
-        results: outgoing::Results {
-            tally: Tally {
-                yes: 0,
-                no: 0,
-                abstain: Some(1),
-            },
-            voting_record: Some(voting_record.clone()),
-        },
-    }));
-
-    for user in USERS {
-        let update = module_tester
-            .receive_ws_message(&user.participant_id)
-            .await
-            .unwrap();
-
-        assert_eq!(expected_update, update);
-    }
-
     // Vote 'No' with user 2
     let vote_no = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
@@ -886,29 +952,6 @@ async fn basic_vote_abstain() {
     // Expect a vote Update message on all participants
     voters.insert(user2.id, VoteOption::No);
 
-    let voting_record = VotingRecord::UserVotes(voters);
-
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
-        legal_vote_id,
-        results: outgoing::Results {
-            tally: Tally {
-                yes: 0,
-                no: 1,
-                abstain: Some(1),
-            },
-            voting_record: Some(voting_record.clone()),
-        },
-    }));
-
-    for user in USERS {
-        let update = module_tester
-            .receive_ws_message(&user.participant_id)
-            .await
-            .unwrap();
-
-        assert_eq!(expected_update, update);
-    }
-
     // stop vote
     let stop_vote = incoming::Message::Stop(Stop { legal_vote_id });
 
@@ -926,7 +969,7 @@ async fn basic_vote_abstain() {
                     no: 1,
                     abstain: Some(1),
                 },
-                voting_record: Some(voting_record),
+                voting_record: VotingRecord::UserVotes(voters),
             }),
             end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         }));
@@ -1029,7 +1072,7 @@ async fn expired_vote() {
                     no: 0,
                     abstain: None,
                 },
-                voting_record: Some(VotingRecord::UserVotes(HashMap::new())),
+                voting_record: VotingRecord::UserVotes(HashMap::new()),
             }),
             end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         }));
@@ -1164,36 +1207,8 @@ async fn auto_stop_vote() {
 
     assert_eq!(expected_vote_response, vote_response);
 
-    // Expect a vote Update message on all participants
-    let tally = Tally {
-        yes: 1,
-        no: 0,
-        abstain: None,
-    };
-
     let mut voters = HashMap::new();
     voters.insert(user1.id, VoteOption::Yes);
-
-    let voting_record = VotingRecord::UserVotes(voters.clone());
-
-    let results = outgoing::Results {
-        tally,
-        voting_record: Some(voting_record),
-    };
-
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
-        legal_vote_id,
-        results,
-    }));
-
-    for user in USERS {
-        let update = module_tester
-            .receive_ws_message(&user.participant_id)
-            .await
-            .unwrap();
-
-        assert_eq!(expected_update, update);
-    }
 
     // Vote 'No' with user 2 (auto stop should happen here)
     let vote_no = incoming::Message::Vote(VoteMessage {
@@ -1224,7 +1239,6 @@ async fn auto_stop_vote() {
 
     assert_eq!(expected_vote_response, vote_response);
 
-    // Expect a vote Update message on all participants
     let tally = Tally {
         yes: 1,
         no: 1,
@@ -1237,22 +1251,8 @@ async fn auto_stop_vote() {
 
     let results = outgoing::Results {
         tally,
-        voting_record: Some(voting_record.clone()),
+        voting_record: voting_record.clone(),
     };
-
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
-        legal_vote_id,
-        results: results.clone(),
-    }));
-
-    for user in USERS {
-        let update = module_tester
-            .receive_ws_message(&user.participant_id)
-            .await
-            .unwrap();
-
-        assert_eq!(expected_update, update);
-    }
 
     let final_results = outgoing::FinalResults::Valid(results);
 
@@ -1585,7 +1585,7 @@ async fn vote_on_completed_vote() {
 #[serial]
 async fn vote_twice() {
     let test_ctx = TestContext::new().await;
-    let (mut module_tester, user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
+    let (mut module_tester, _user1, _user2) = common::setup_users::<LegalVote>(&test_ctx, ()).await;
 
     let start_parameters = UserParameters {
         kind: VoteKind::RollCall,
@@ -1651,30 +1651,6 @@ async fn vote_twice() {
         .unwrap();
 
     assert_eq!(expected_success_vote_response, message);
-
-    let mut voters = HashMap::new();
-    voters.insert(user1.id, VoteOption::Yes);
-
-    let voting_record = VotingRecord::UserVotes(voters);
-
-    let expected_update = WsMessageOutgoing::Module(outgoing::Message::Updated(VoteResults {
-        legal_vote_id,
-        results: outgoing::Results {
-            tally: Tally {
-                yes: 1,
-                no: 0,
-                abstain: None,
-            },
-            voting_record: Some(voting_record),
-        },
-    }));
-
-    let message = module_tester
-        .receive_ws_message(&USER_1.participant_id)
-        .await
-        .unwrap();
-
-    assert_eq!(expected_update, message);
 
     // vote again with user 1
     module_tester
@@ -1956,14 +1932,6 @@ async fn frontend_data() {
         .await
         .unwrap();
 
-    // Ignore a vote Update message on all participants
-    for user in USERS {
-        module_tester
-            .receive_ws_message(&user.participant_id)
-            .await
-            .unwrap();
-    }
-
     // Vote 'No' with user 2 (auto stop should happen here)
     let vote_no = incoming::Message::Vote(VoteMessage {
         legal_vote_id,
@@ -1980,14 +1948,6 @@ async fn frontend_data() {
         .receive_ws_message(&USER_2.participant_id)
         .await
         .unwrap();
-
-    // Ignore a vote Update message on all participants
-    for user in USERS {
-        module_tester
-            .receive_ws_message(&user.participant_id)
-            .await
-            .unwrap();
-    }
 
     // Check stop messages for all users and extract timestamp
     let mut timestamp = None;
@@ -2021,10 +1981,10 @@ async fn frontend_data() {
                         no: 1,
                         abstain: None,
                     },
-                    voting_record: Some(VotingRecord::UserVotes(HashMap::from_iter([
+                    voting_record: VotingRecord::UserVotes(HashMap::from_iter([
                         (user1.id, VoteOption::Yes),
                         (user2.id, VoteOption::No),
-                    ]))),
+                    ])),
                 },
             },
             end_time: timestamp,

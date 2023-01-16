@@ -292,10 +292,6 @@ impl LegalVote {
                     consumed_token,
                 }) = vote_response.response
                 {
-                    let update = rabbitmq::Event::Update(rabbitmq::VoteUpdate {
-                        legal_vote_id: vote_message.legal_vote_id,
-                    });
-
                     // Send a vote success message to all participants that have the same user id
                     ctx.rabbitmq_publish(
                         control::rabbitmq::current_room_exchange_name(self.room_id),
@@ -308,11 +304,24 @@ impl LegalVote {
                         }),
                     );
 
-                    ctx.rabbitmq_publish(
-                        control::rabbitmq::current_room_exchange_name(self.room_id),
-                        control::rabbitmq::room_all_routing_key().into(),
-                        update,
-                    );
+                    let parameters = storage::parameters::get(
+                        ctx.redis_conn(),
+                        self.room_id,
+                        vote_message.legal_vote_id,
+                    )
+                    .await?
+                    .ok_or(ErrorKind::InvalidVoteId)?;
+                    if parameters.inner.kind.is_live() {
+                        let update = rabbitmq::Event::Update(rabbitmq::VoteUpdate {
+                            legal_vote_id: vote_message.legal_vote_id,
+                        });
+
+                        ctx.rabbitmq_publish(
+                            control::rabbitmq::current_room_exchange_name(self.room_id),
+                            control::rabbitmq::room_all_routing_key().into(),
+                            update,
+                        );
+                    }
 
                     if auto_close {
                         let stop_kind = StopKind::Auto;
@@ -377,16 +386,8 @@ impl LegalVote {
                 ctx.ws_send(outgoing::Message::Canceled(cancel));
             }
             rabbitmq::Event::Update(update) => {
-                let parameters =
-                    storage::parameters::get(ctx.redis_conn(), self.room_id, update.legal_vote_id)
-                        .await?
-                        .ok_or(ErrorKind::InvalidVoteId)?;
                 let results = self
-                    .get_vote_results(
-                        ctx.redis_conn(),
-                        update.legal_vote_id,
-                        !parameters.inner.kind.is_hidden(),
-                    )
+                    .get_vote_results(ctx.redis_conn(), update.legal_vote_id)
                     .await?;
 
                 ctx.ws_send(outgoing::Message::Updated(VoteResults {
@@ -677,7 +678,7 @@ impl LegalVote {
 
         let user_info = match parameters.inner.kind {
             VoteKind::Pseudonymous => None,
-            VoteKind::RollCall => Some(UserInfo {
+            VoteKind::RollCall | VoteKind::LiveRollCall => Some(UserInfo {
                 issuer: self.user_id,
                 participant_id: self.participant_id,
             }),
@@ -794,7 +795,6 @@ impl LegalVote {
         &self,
         redis_conn: &mut RedisConnection,
         legal_vote_id: LegalVoteId,
-        include_voting_record: bool,
     ) -> Result<outgoing::Results, Error> {
         let parameters = storage::parameters::get(redis_conn, self.room_id, legal_vote_id)
             .await?
@@ -808,12 +808,8 @@ impl LegalVote {
         )
         .await?;
 
-        let voting_record = if include_voting_record {
-            let protocol = storage::protocol::get(redis_conn, self.room_id, legal_vote_id).await?;
-            Some(extract_voting_record_from_protocol(&protocol)?)
-        } else {
-            None
-        };
+        let protocol = storage::protocol::get(redis_conn, self.room_id, legal_vote_id).await?;
+        let voting_record = extract_voting_record_from_protocol(&protocol)?;
 
         Ok(outgoing::Results {
             tally,
@@ -1001,7 +997,7 @@ impl LegalVote {
         if protocol_tally == tally && total_votes <= parameters.max_votes {
             Ok(outgoing::FinalResults::Valid(outgoing::Results {
                 tally,
-                voting_record: Some(voting_record),
+                voting_record,
             }))
         } else {
             Ok(outgoing::FinalResults::Invalid(

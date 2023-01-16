@@ -487,7 +487,7 @@ fn parse_v1_entries(
 
             None
         }
-        VoteKind::RollCall => {
+        VoteKind::RollCall | VoteKind::LiveRollCall => {
             let mut voters = vec![];
 
             for user in users {

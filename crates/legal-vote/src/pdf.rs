@@ -441,6 +441,7 @@ fn bool_to_string(value: bool) -> &'static str {
 
 fn vote_kind_to_string(value: VoteKind) -> &'static str {
     match value {
+        VoteKind::LiveRollCall => "Offene Abstimmung mit Echtzeitaktualisierung",
         VoteKind::RollCall => "Offene Abstimmung",
         VoteKind::Pseudonymous => "Pseudonyme Abstimmung",
     }

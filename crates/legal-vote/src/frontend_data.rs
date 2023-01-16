@@ -93,9 +93,8 @@ impl VoteSummary {
                 }
                 VoteEvent::FinalResults(results) => match results {
                     FinalResults::Valid(tally) => {
-                        let voting_record = Some(
-                            storage::protocol::extract_voting_record_from_protocol(protocol)?,
-                        );
+                        let voting_record =
+                            storage::protocol::extract_voting_record_from_protocol(protocol)?;
                         let stop_kind = StopKind::from(stop_kind.clone().with_context(|| {
                             "Missing 'Stop' entry before 'FinalResults' in legal vote protocol"
                         })?);
@@ -266,13 +265,13 @@ mod test {
                         no: 2,
                         abstain: None,
                     },
-                    voting_record: Some(outgoing::VotingRecord::TokenVotes(HashMap::from_iter([
+                    voting_record: outgoing::VotingRecord::TokenVotes(HashMap::from_iter([
                         (Token::from_str("9AMndyeorvB").unwrap(), VoteOption::Yes),
                         (Token::from_str("G9rLx7vkeMD").unwrap(), VoteOption::No),
                         (Token::from_str("Mypgay5rhRj").unwrap(), VoteOption::Yes),
                         (Token::from_str("TjR94viayBf").unwrap(), VoteOption::No),
                         (Token::from_str("UuLLU1sxgPw").unwrap(), VoteOption::Yes),
-                    ]))),
+                    ])),
                 },
             },
             end_time: None,

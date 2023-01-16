@@ -91,11 +91,8 @@ pub struct Results {
     /// The vote options with their respective vote count
     #[serde(flatten)]
     pub tally: Tally,
-    /// A map of participants with their chosen vote option
-    ///
-    /// This field is omitted when the vote is configured to be hidden
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub voting_record: Option<VotingRecord>,
+    /// The record of cast votes
+    pub voting_record: VotingRecord,
 }
 
 /// The results for a vote
@@ -345,13 +342,11 @@ mod test {
             VoteOption::Yes,
         );
 
-        let voting_record = VotingRecord::UserVotes(voters);
-
         let message = Message::Updated(VoteResults {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             results: Results {
                 tally,
-                voting_record: Some(voting_record),
+                voting_record: VotingRecord::UserVotes(voters),
             },
         });
 
@@ -370,33 +365,6 @@ mod test {
     }
 
     #[test]
-    fn hidden_update_message() {
-        let tally = Tally {
-            yes: 1,
-            no: 0,
-            abstain: None,
-        };
-
-        let message = Message::Updated(VoteResults {
-            legal_vote_id: LegalVoteId::from(Uuid::nil()),
-            results: Results {
-                tally,
-                voting_record: None,
-            },
-        });
-
-        assert_eq_json!(
-            message,
-            {
-                "message": "updated",
-                "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-                "yes": 1,
-                "no": 0
-            }
-        );
-    }
-
-    #[test]
     fn stop_message() {
         let tally = Tally {
             yes: 1,
@@ -410,14 +378,12 @@ mod test {
             VoteOption::Yes,
         );
 
-        let voting_record = VotingRecord::UserVotes(voters);
-
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Valid(Results {
                 tally,
-                voting_record: Some(voting_record),
+                voting_record: VotingRecord::UserVotes(voters),
             }),
             end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
@@ -448,12 +414,17 @@ mod test {
             abstain: None,
         };
 
+        let tokens = HashMap::from_iter([
+            (Token::from_str("9AMndyeorvB").unwrap(), VoteOption::Yes),
+            (Token::from_str("G9rLx7vkeMD").unwrap(), VoteOption::No),
+        ]);
+
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::ByParticipant(ParticipantId::nil()),
             results: FinalResults::Valid(Results {
                 tally,
-                voting_record: None,
+                voting_record: VotingRecord::TokenVotes(tokens),
             }),
             end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
@@ -469,6 +440,10 @@ mod test {
                 "yes": 1,
                 "no": 0,
                 "end_time": "1970-01-01T00:00:00Z",
+                "voting_record": {
+                    "9AMndyeorvB": "yes",
+                    "G9rLx7vkeMD": "no",
+                }
             }
         );
     }
@@ -487,14 +462,12 @@ mod test {
             VoteOption::Yes,
         );
 
-        let voting_record = VotingRecord::UserVotes(voters);
-
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::Auto,
             results: FinalResults::Valid(Results {
                 tally,
-                voting_record: Some(voting_record),
+                voting_record: VotingRecord::UserVotes(voters),
             }),
             end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });
@@ -530,14 +503,12 @@ mod test {
             VoteOption::Abstain,
         );
 
-        let voting_record = VotingRecord::UserVotes(voters);
-
         let message = Message::Stopped(Stopped {
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
             kind: StopKind::Expired,
             results: FinalResults::Valid(Results {
                 tally,
-                voting_record: Some(voting_record),
+                voting_record: VotingRecord::UserVotes(voters),
             }),
             end_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
         });

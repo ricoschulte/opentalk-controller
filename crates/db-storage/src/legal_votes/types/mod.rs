@@ -58,6 +58,8 @@ pub enum VoteKind {
     Pseudonymous,
     /// Roll call. All participants and their voings will be published with the results.
     RollCall,
+    /// Live roll call. All votes are sent live to all participants.
+    LiveRollCall,
 }
 
 impl VoteKind {
@@ -65,6 +67,15 @@ impl VoteKind {
         match self {
             VoteKind::Pseudonymous => true,
             VoteKind::RollCall => false,
+            VoteKind::LiveRollCall => false,
+        }
+    }
+
+    pub fn is_live(&self) -> bool {
+        match self {
+            VoteKind::Pseudonymous => false,
+            VoteKind::RollCall => false,
+            VoteKind::LiveRollCall => true,
         }
     }
 }
@@ -74,6 +85,7 @@ impl ToString for VoteKind {
         match self {
             Self::Pseudonymous => "pseudonymous",
             Self::RollCall => "roll call",
+            Self::LiveRollCall => "live roll call",
         }
         .to_string()
     }

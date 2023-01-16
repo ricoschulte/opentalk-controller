@@ -90,7 +90,7 @@ pub(crate) fn extract_voting_record_from_protocol(
     });
 
     match kind {
-        VoteKind::RollCall => {
+        VoteKind::RollCall | VoteKind::LiveRollCall => {
             let voters = vote_iter
                 .map(|vote| {
                     if let Some(ref user) = vote.user_info {
