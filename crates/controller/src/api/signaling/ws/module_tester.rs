@@ -965,6 +965,19 @@ where
     Control(control::outgoing::Message),
 }
 
+impl<M> Clone for WsMessageOutgoing<M>
+where
+    M: SignalingModule,
+    M::Outgoing: Clone,
+{
+    fn clone(&self) -> Self {
+        match self {
+            Self::Module(outgoing) => Self::Module(outgoing.clone()),
+            Self::Control(outgoing) => Self::Control(outgoing.clone()),
+        }
+    }
+}
+
 impl<M> std::fmt::Debug for WsMessageOutgoing<M>
 where
     M: SignalingModule,

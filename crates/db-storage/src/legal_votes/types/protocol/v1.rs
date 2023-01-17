@@ -1,5 +1,5 @@
 use super::super::{CancelReason, FinalResults, Parameters, VoteOption};
-use crate::users::UserId;
+use crate::{legal_votes::types::Token, users::UserId};
 use chrono::{DateTime, Utc};
 use controller_shared::ParticipantId;
 use redis_args::{FromRedisValue, ToRedisArgs};
@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 #[from_redis_value(serde)]
 pub struct ProtocolEntry {
     /// The time that an entry got created
-    pub timestamp: DateTime<Utc>,
+    pub timestamp: Option<DateTime<Utc>>,
     /// The event of this entry
     pub event: VoteEvent,
 }
@@ -24,9 +24,13 @@ impl ProtocolEntry {
         Self::new_with_time(Utc::now(), event)
     }
 
+    pub fn new_with_optional_time(timestamp: Option<DateTime<Utc>>, event: VoteEvent) -> Self {
+        Self { timestamp, event }
+    }
+
     /// Create a new protocol entry using the provided `timestamp`
     pub fn new_with_time(timestamp: DateTime<Utc>, event: VoteEvent) -> Self {
-        Self { timestamp, event }
+        Self::new_with_optional_time(Some(timestamp), event)
     }
 }
 
@@ -73,6 +77,8 @@ pub struct Vote {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
     pub user_info: Option<UserInfo>,
+    /// The token used for voting
+    pub token: Token,
     /// The chosen vote option
     pub option: VoteOption,
 }

@@ -1,4 +1,4 @@
-use db_storage::legal_votes::types::{UserParameters, VoteOption};
+use db_storage::legal_votes::types::{Token, UserParameters, VoteOption};
 use db_storage::legal_votes::LegalVoteId;
 use serde::Deserialize;
 use validator::Validate;
@@ -56,6 +56,8 @@ pub struct VoteMessage {
     pub legal_vote_id: LegalVoteId,
     /// The chosen vote option
     pub option: VoteOption,
+    /// The user's vote token
+    pub token: Token,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -65,9 +67,12 @@ pub struct GeneratePdf {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
     use super::*;
     use controller::prelude::*;
     use controller_shared::ParticipantId;
+    use db_storage::legal_votes::types::VoteKind;
     use test_util::serde_json::json;
     use uuid::Uuid;
 
@@ -75,14 +80,14 @@ mod test {
     fn start_message() {
         let json = json!(
             {
+                "kind": "roll_call",
                 "action": "start",
                 "name": "Vote Test",
                 "subtitle": "A subtitle",
                 "topic": "Yes or No?",
                 "allowed_participants": ["00000000-0000-0000-0000-000000000000"],
                 "enable_abstain": false,
-                "auto_stop": false,
-                "hidden": false,
+                "auto_close": false,
                 "duration": 60,
                 "create_pdf": false
             }
@@ -91,24 +96,24 @@ mod test {
         let start: Message = serde_json::from_value(json).unwrap();
 
         if let Message::Start(UserParameters {
+            kind,
             name,
             subtitle,
             topic,
             allowed_participants,
             enable_abstain,
-            hidden,
-            auto_stop,
+            auto_close,
             duration: time_in_sec,
             create_pdf,
         }) = start
         {
+            assert_eq!(VoteKind::RollCall, kind);
             assert_eq!("Vote Test", name);
             assert_eq!("A subtitle", subtitle.unwrap());
             assert_eq!("Yes or No?", topic.unwrap());
             assert_eq!(allowed_participants, vec![ParticipantId::nil()]);
             assert!(!enable_abstain);
-            assert!(!hidden);
-            assert!(!auto_stop);
+            assert!(!auto_close);
             assert_eq!(time_in_sec, Some(60));
             assert!(!create_pdf);
         } else {
@@ -164,7 +169,8 @@ mod test {
             {
                 "action": "vote",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-                "option": "yes"
+                "option": "yes",
+                "token": "1111Cn8eVZg",
             }
         );
 
@@ -173,10 +179,12 @@ mod test {
         if let Message::Vote(VoteMessage {
             legal_vote_id,
             option,
+            token,
         }) = vote
         {
             assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::Yes);
+            assert_eq!(token, Token::from_str("1111Cn8eVZg").unwrap())
         } else {
             panic!()
         }
@@ -188,7 +196,8 @@ mod test {
             {
                 "action": "vote",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-                "option": "no"
+                "option": "no",
+                "token": "1111Cn8eVZg",
             }
         );
 
@@ -197,10 +206,12 @@ mod test {
         if let Message::Vote(VoteMessage {
             legal_vote_id,
             option,
+            token,
         }) = vote
         {
             assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::No);
+            assert_eq!(token, Token::from_str("1111Cn8eVZg").unwrap())
         } else {
             panic!()
         }
@@ -212,7 +223,8 @@ mod test {
             {
                 "action": "vote",
                 "legal_vote_id": "00000000-0000-0000-0000-000000000000",
-                "option": "abstain"
+                "option": "abstain",
+                "token": "1111Cn8eVZg",
             }
         );
 
@@ -221,10 +233,12 @@ mod test {
         if let Message::Vote(VoteMessage {
             legal_vote_id,
             option,
+            token,
         }) = vote
         {
             assert_eq!(legal_vote_id, LegalVoteId::from(Uuid::from_u128(0)));
             assert_eq!(option, VoteOption::Abstain);
+            assert_eq!(token, Token::from_str("1111Cn8eVZg").unwrap())
         } else {
             panic!()
         }
@@ -238,14 +252,14 @@ mod test {
 
         let json = json!(
             {
+                "kind": "roll_call",
                 "action": "start",
                 "name": string_151,
                 "subtitle": string_256,
                 "topic": string_501,
                 "allowed_participants": [],
                 "enable_abstain": false,
-                "hidden": false,
-                "auto_stop": false,
+                "auto_close": false,
                 "duration": 4,
                 "create_pdf": false
             }

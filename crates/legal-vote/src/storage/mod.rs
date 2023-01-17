@@ -3,20 +3,23 @@
 //! Contains Lua scripts to manipulate multiple redis keys atomically in one request.
 //!
 //! Each key is defined in its own module with its related functions.
-use allowed_users::AllowedUsersKey;
+use allowed_tokens::AllowedTokensKey;
 use anyhow::{Context, Result};
+use controller::prelude::chrono::Utc;
 use controller::prelude::*;
 use current_legal_vote_id::CurrentVoteIdKey;
 use db_storage::legal_votes::types::protocol::v1::{ProtocolEntry, Vote, VoteEvent};
+use db_storage::legal_votes::types::Token;
 use db_storage::legal_votes::LegalVoteId;
-use db_storage::users::UserId;
 use history::VoteHistoryKey;
 use parameters::VoteParametersKey;
 use protocol::ProtocolKey;
 use redis::FromRedisValue;
 use vote_count::VoteCountKey;
 
-pub(crate) mod allowed_users;
+use crate::error::{Error, ErrorKind};
+
+pub(crate) mod allowed_tokens;
 pub(crate) mod current_legal_vote_id;
 pub(crate) mod history;
 pub(crate) mod parameters;
@@ -60,7 +63,7 @@ pub(crate) async fn end_current_vote(
     redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
-    end_entry: ProtocolEntry,
+    end_entry: &ProtocolEntry,
 ) -> Result<bool> {
     redis::Script::new(END_CURRENT_VOTE_SCRIPT)
         .key(CurrentVoteIdKey { room_id })
@@ -121,7 +124,7 @@ pub(crate) async fn cleanup_vote(
             room_id,
             legal_vote_id,
         })
-        .key(AllowedUsersKey {
+        .key(AllowedTokensKey {
             room_id,
             legal_vote_id,
         })
@@ -140,27 +143,27 @@ pub(crate) async fn cleanup_vote(
         })
 }
 
-/// The user vote script
+/// The user allowed token vote script
 ///
-/// Casts a user vote through a Lua script that is executed on redis. The script ensures that the provided `vote id` equals
+/// Casts a user vote via their token through a Lua script that is executed on redis. The script ensures that the provided `vote id` equals
 /// the currently active vote id.
 ///
-/// The requesting user will be removed from the `allowed users list`, the script aborts when the removal fails.
+/// The voting user's token will be removed from the `allowed tokens list`. This script aborts if the token removal fails.
 ///
-/// When every check succeeds, the `vote count` for the corresponding vote option will be increased and the provided protocol
+/// When every check succeeds, the `vote count` for the corresponding vote option will be incremented and the provided protocol
 /// entry will be pushed to the `protocol`.
 ///
-/// When the requested user is the last allowed user, the return code differs to indicate a [`protocol::Stop::AutoStop`].
+/// When the token of the voting user is the last allowed token, the return code differs to indicate a [`protocol::Stop::AutoStop`].
 ///
 /// The following parameters have to be provided:
 /// ```text
 /// ARGV[1] = vote id
-/// ARGV[2] = user id
+/// ARGV[2] = token
 /// ARGV[3] = protocol entry
 /// ARGV[4] = vote option
 ///
 /// KEYS[1] = current vote key
-/// KEYS[2] = allowed users key
+/// KEYS[2] = allowed tokens key
 /// KEYS[3] = protocol key
 /// KEYS[4] = vote count key
 /// ```
@@ -186,8 +189,8 @@ end
 pub(crate) enum VoteScriptResult {
     // Vote successful
     Success = 0,
-    // Vote successful & no more allowed users
-    SuccessAutoStop,
+    // Vote closed successfully & no more allowed users
+    SuccessAutoClose,
     // Provided vote id was not active
     InvalidVoteId,
     // User is not allowed to vote
@@ -199,7 +202,7 @@ impl FromRedisValue for VoteScriptResult {
         if let redis::Value::Int(val) = v {
             match val {
                 0 => Ok(VoteScriptResult::Success),
-                1 => Ok(VoteScriptResult::SuccessAutoStop),
+                1 => Ok(VoteScriptResult::SuccessAutoClose),
                 2 => Ok(VoteScriptResult::InvalidVoteId),
                 3 => Ok(VoteScriptResult::Ineligible),
 
@@ -221,20 +224,26 @@ impl FromRedisValue for VoteScriptResult {
 ///
 /// The vote is done atomically on redis with a Lua script.
 /// See [`VOTE_SCRIPT`] for more details.
-#[tracing::instrument(name = "legal_vote_cast_vote", skip(redis_conn, user_id, vote_event))]
+#[tracing::instrument(name = "legal_vote_cast_vote", skip(redis_conn, token, vote_event))]
 pub(crate) async fn vote(
     redis_conn: &mut RedisConnection,
     room_id: SignalingRoomId,
     legal_vote_id: LegalVoteId,
-    user_id: UserId,
+    token: Token,
     vote_event: Vote,
-) -> Result<VoteScriptResult> {
-    let vote_option = vote_event.option;
-    let entry = ProtocolEntry::new(VoteEvent::Vote(vote_event));
+) -> Result<VoteScriptResult, Error> {
+    let parameters = parameters::get(redis_conn, room_id, legal_vote_id)
+        .await?
+        .ok_or(Error::Vote(ErrorKind::InvalidVoteId))?;
 
-    redis::Script::new(VOTE_SCRIPT)
+    let timestamp = (!parameters.inner.kind.is_hidden()).then(Utc::now);
+
+    let vote_option = vote_event.option;
+    let entry = ProtocolEntry::new_with_optional_time(timestamp, VoteEvent::Vote(vote_event));
+
+    Ok(redis::Script::new(VOTE_SCRIPT)
         .key(CurrentVoteIdKey { room_id })
-        .key(AllowedUsersKey {
+        .key(AllowedTokensKey {
             room_id,
             legal_vote_id,
         })
@@ -247,12 +256,12 @@ pub(crate) async fn vote(
             legal_vote_id,
         })
         .arg(legal_vote_id)
-        .arg(user_id)
+        .arg(token)
         .arg(entry)
         .arg(vote_option)
         .invoke_async(redis_conn)
         .await
-        .context("Failed to cast vote")
+        .context("Failed to cast vote")?)
 }
 
 /// Check if the provided vote id is either active, complete or unknown.

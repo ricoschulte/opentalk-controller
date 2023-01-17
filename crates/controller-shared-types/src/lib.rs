@@ -19,6 +19,12 @@ pub mod settings;
 #[to_redis_args(fmt)]
 pub struct ParticipantId(Uuid);
 
+impl From<Uuid> for ParticipantId {
+    fn from(value: Uuid) -> Self {
+        Self(value)
+    }
+}
+
 impl ParticipantId {
     /// Create a ZERO participant id for testing purposes
     pub const fn nil() -> Self {

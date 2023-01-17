@@ -6,7 +6,7 @@ use db_storage::legal_votes::types::protocol::v1::{
     Cancel, ProtocolEntry, Start, StopKind, Vote, VoteEvent,
 };
 use db_storage::legal_votes::types::{
-    CancelReason, FinalResults, Invalid, Parameters, UserParameters, VoteOption, Votes,
+    CancelReason, FinalResults, Invalid, Parameters, Tally, UserParameters, VoteKind, VoteOption,
 };
 use db_storage::users::{User, UserId};
 use genpdf::elements::*;
@@ -152,7 +152,7 @@ fn summarize_start_entry(
     user_cache: &mut UserCache,
     start: Start,
     table: &mut TableLayout,
-    _timestamp: DateTime<Utc>,
+    _timestamp: Option<DateTime<Utc>>,
 ) -> Result<()> {
     let Start {
         issuer,
@@ -162,15 +162,16 @@ fn summarize_start_entry(
                 legal_vote_id,
                 start_time,
                 max_votes,
+                token: _,
                 inner:
                     UserParameters {
+                        kind,
                         name,
                         subtitle,
                         topic,
                         allowed_participants: _,
                         enable_abstain,
-                        auto_stop,
-                        hidden,
+                        auto_close,
                         duration,
                         create_pdf: _,
                     },
@@ -201,6 +202,11 @@ fn summarize_start_entry(
     let mut row = table.row();
     row.push_element(Break::new(1));
     row.push_element(Break::new(1));
+    row.push()?;
+
+    let mut row = table.row();
+    row.push_element(Paragraph::new("Abstimmungsart:"));
+    row.push_element(Paragraph::new(vote_kind_to_string(kind).to_string()));
     row.push()?;
 
     let mut row = table.row();
@@ -236,18 +242,13 @@ fn summarize_start_entry(
     row.push()?;
 
     let mut row = table.row();
-    row.push_element(Paragraph::new("Versteckte Abstimmung:"));
-    row.push_element(Paragraph::new(bool_to_string(hidden)));
-    row.push()?;
-
-    let mut row = table.row();
     row.push_element(Paragraph::new("Enthaltung erlaubt:"));
     row.push_element(Paragraph::new(bool_to_string(enable_abstain)));
     row.push()?;
 
     let mut row = table.row();
     row.push_element(Paragraph::new("Automatisches Ende:"));
-    row.push_element(Paragraph::new(bool_to_string(auto_stop)));
+    row.push_element(Paragraph::new(bool_to_string(auto_close)));
     row.push()?;
 
     Ok(())
@@ -256,9 +257,9 @@ fn summarize_start_entry(
 fn render_votes(
     db: Arc<Db>,
     user_cache: &mut UserCache,
-    votes: Vec<(Vote, DateTime<Utc>)>,
+    votes: Vec<(Vote, Option<DateTime<Utc>>)>,
 ) -> Result<TableLayout> {
-    let mut votes_table = TableLayout::new(vec![5, 2, 5]);
+    let mut votes_table = TableLayout::new(vec![5, 3, 2, 5]);
 
     let mut conn = db.get_conn()?;
 
@@ -276,6 +277,8 @@ fn render_votes(
 
         row.push_element(Paragraph::new(identifier));
 
+        row.push_element(Paragraph::new(vote.token.to_string()));
+
         let vote_string = match vote.option {
             VoteOption::Yes => "ja",
             VoteOption::No => "nein",
@@ -284,9 +287,11 @@ fn render_votes(
 
         row.push_element(Paragraph::new(vote_string));
 
-        row.push_element(Paragraph::new(
-            ts.format("%d.%m.%Y %H:%M:%S %Z").to_string(),
-        ));
+        let ts = ts
+            .map(|ts| ts.format("%d.%m.%Y %H:%M:%S %Z").to_string())
+            .unwrap_or_default();
+
+        row.push_element(Paragraph::new(ts));
 
         row.push()?;
     }
@@ -302,8 +307,8 @@ fn get_result_elements(results: FinalResults) -> Result<Vec<BoxedElement>> {
     elements.push(BoxedElement::new(Paragraph::new("Ergebnisse:")));
 
     match results {
-        FinalResults::Valid(votes) => {
-            let Votes { yes, no, abstain } = votes;
+        FinalResults::Valid(tally) => {
+            let Tally { yes, no, abstain } = tally;
 
             let mut row = table.row();
             row.push_element(Paragraph::new("Ja:"));
@@ -347,13 +352,15 @@ fn summarize_stop_entry(
     db: Arc<Db>,
     table: &mut TableLayout,
     stop: StopKind,
-    timestamp: DateTime<Utc>,
+    timestamp: Option<DateTime<Utc>>,
 ) -> Result<()> {
+    let timestamp = timestamp
+        .map(|ts| ts.format("%d.%m.%Y %H:%M:%S %Z").to_string())
+        .unwrap_or_default();
+
     let mut row = table.row();
     row.push_element(Paragraph::new("Ende: "));
-    row.push_element(Paragraph::new(
-        timestamp.format("%d.%m.%Y %H:%M:%S %Z").to_string(),
-    ));
+    row.push_element(Paragraph::new(timestamp));
     row.push()?;
 
     let mut row = table.row();
@@ -387,13 +394,15 @@ fn summarize_cancel_entry(
     user_cache: &mut UserCache,
     table: &mut TableLayout,
     cancel: Cancel,
-    timestamp: DateTime<Utc>,
+    timestamp: Option<DateTime<Utc>>,
 ) -> Result<()> {
+    let timestamp = timestamp
+        .map(|ts| ts.format("%d.%m.%Y %H:%M:%S %Z").to_string())
+        .unwrap_or_default();
+
     let mut row = table.row();
     row.push_element(Paragraph::new("Ende: "));
-    row.push_element(Paragraph::new(
-        timestamp.format("%d.%m.%Y %H:%M:%S %Z").to_string(),
-    ));
+    row.push_element(Paragraph::new(timestamp));
     row.push()?;
 
     let mut row = table.row();
@@ -427,6 +436,14 @@ fn bool_to_string(value: bool) -> &'static str {
         "Aktiviert"
     } else {
         "Deaktiviert"
+    }
+}
+
+fn vote_kind_to_string(value: VoteKind) -> &'static str {
+    match value {
+        VoteKind::LiveRollCall => "Offene Abstimmung mit Echtzeitaktualisierung",
+        VoteKind::RollCall => "Offene Abstimmung",
+        VoteKind::Pseudonymous => "Pseudonyme Abstimmung",
     }
 }
 
@@ -483,6 +500,7 @@ mod test {
     use controller::prelude::uuid::Uuid;
     use controller_shared::ParticipantId;
     use db_storage::legal_votes::types::protocol::v1::UserInfo;
+    use db_storage::legal_votes::types::{Token, VoteKind};
     use db_storage::legal_votes::LegalVoteId;
     use db_storage::users::User;
     use std::fs;
@@ -547,21 +565,22 @@ mod test {
                 legal_vote_id: LegalVoteId::from(Uuid::nil()),
                 start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
                 max_votes: 3,
+                token: None,
                 inner: UserParameters {
+                    kind: VoteKind::RollCall,
                     name: "Weather Vote".into(),
                     subtitle: Some("Another one of these weather votes".into()),
                     topic: Some("Is the weather good today?".into()),
                     allowed_participants: users.iter().map(|_| ParticipantId::nil()).collect(),
                     enable_abstain: false,
-                    auto_stop: false,
-                    hidden: false,
+                    auto_close: false,
                     duration: None,
                     create_pdf: true,
                 },
             },
         };
 
-        let results = FinalResults::Valid(Votes {
+        let results = FinalResults::Valid(Tally {
             yes: 0,
             no: 15,
             abstain: None,
@@ -575,6 +594,7 @@ mod test {
                         issuer: user.id,
                         participant_id: ParticipantId::nil(),
                     }),
+                    token: Token::new(0x0),
                     option: VoteOption::No,
                 }))
             })

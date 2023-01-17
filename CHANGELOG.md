@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - controller: allow overriding some build-time environment variables ([#137](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/137))
 - chat: add `last_seen_timestamp` fields [#242](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/242)
-- legalvote: add option to automatically create a PDF asset when a vote has ended ([#259](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/259))
+- legal-vote: add option to automatically create a PDF asset when a vote has ended ([#259](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/259))
+- legal-vote: add new `live_roll_call` vote kind which sends out live updates while the vote is running ([#285](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/285))
 
 ### Fixed
 
@@ -23,6 +24,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller: use derive and attribute macros for conversion to/from redis values ([#283](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/283))
 - protocol: read/write access level information is now sent to every participant [#299](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/299)
 - chat/ee-chat: merged ee-chat into chat ([#265](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/265))
+- legal-vote: votes are now token-based, allowing for `pseudonymous` votings where only the tokens, not the participants are published ([#271](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/271))
+
+### Removed
+
+- legal-vote: live updates for `roll_call` and `pseudonymous` votes, results are instead published with the `stopped` message ([#272](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/272))
 
 ## [1.0.0-rc.10] - 2022-12-09
 

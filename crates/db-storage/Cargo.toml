@@ -15,6 +15,9 @@ kustos = { path = "../kustos" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
 
+### Base<n> encodings
+basen = "0.1.0"
+
 ### Error handling
 anyhow = "1.0"
 thiserror = "1.0"
