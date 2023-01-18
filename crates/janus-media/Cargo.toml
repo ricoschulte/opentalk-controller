@@ -15,5 +15,5 @@ redis = "0.21"
 redis-args = { path = "../redis-args", package = "k3k-redis-args" }
 
 [dev-dependencies]
+test-util = { path = "../test-util", package = "k3k-test-util", features = ["database"] }
 pretty_assertions = "1.3"
-test-util = { path = "../test-util", package = "k3k-test-util" }
