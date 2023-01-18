@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - protocol: fixed the `createAuthorIfNotExistsFor` API call that always returned the same author id due to a typo in the query
 - janus-media: fixed a permission check for screen-share media session updates
+- protocol: fixed a bug where joining participants got write access by default ([#306](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/306))
 
 ### Changed
 
