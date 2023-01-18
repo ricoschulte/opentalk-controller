@@ -4,8 +4,8 @@ WORKDIR /controller
 
 RUN apt-get update && apt-get install -y libpq-dev
 
-COPY ./crates/automod/Cargo.toml ./crates/automod/Cargo.toml
 COPY ./crates/chat/Cargo.toml ./crates/chat/Cargo.toml
+COPY ./crates/community-modules/Cargo.toml ./crates/community-modules/Cargo.toml
 COPY ./crates/controller/Cargo.toml ./crates/controller/Cargo.toml
 COPY ./crates/controller-shared-types/Cargo.toml ./crates/controller-shared-types/Cargo.toml
 COPY ./crates/database/Cargo.toml ./crates/database/Cargo.toml
@@ -16,7 +16,6 @@ COPY ./crates/janus-media/Cargo.toml ./crates/janus-media/Cargo.toml
 COPY ./crates/keycloak-admin/Cargo.toml ./crates/keycloak-admin/Cargo.toml
 COPY ./crates/kustos/Cargo.toml ./crates/kustos/Cargo.toml
 COPY ./crates/lapin-pool/Cargo.toml ./crates/lapin-pool/Cargo.toml
-COPY ./crates/legal-vote/Cargo.toml ./crates/legal-vote/Cargo.toml
 COPY ./crates/mail-worker-protocol/Cargo.toml ./crates/mail-worker-protocol/Cargo.toml
 COPY ./crates/timer/Cargo.toml ./crates/timer/Cargo.toml
 COPY ./crates/whiteboard/Cargo.toml ./crates/whiteboard/Cargo.toml

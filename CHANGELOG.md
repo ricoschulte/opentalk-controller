@@ -29,6 +29,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - legal-vote: live updates for `roll_call` and `pseudonymous` votes, results are instead published with the `stopped` message ([#272](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/272))
+- automod module - will not be part of the community edition ([#257](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/257))
+- legal-vote module - will not be part of the community edition ([#257](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/257))
 
 ## [1.0.0-rc.10] - 2022-12-09
 

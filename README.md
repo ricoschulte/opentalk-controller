@@ -108,6 +108,9 @@ Inside the crates folder following crates can be found:
     - Database types used for the controller and modules
 * [janus-media](crates/janus-media)
     - media signaling module using the `janus-client` crate
+* [community-modules](crates/community-modules)
+    - functionality for registering all modules in the community edition
+    - depends on all modules in the community edition
 * [chat](crates/chat)
     - chat signaling module which implements a simple room, group and private chat
 * [automod](crates/automod)

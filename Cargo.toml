@@ -14,13 +14,7 @@ authors = ["OpenTalk Team <mail@opentalk.eu>"]
 [dependencies]
 anyhow = "1.0"
 actix-web = { version = "4", default-features = false }
+
 controller = { path = "crates/controller", package = "k3k-controller-core" }
-janus-media = { path = "crates/janus-media", package = "k3k-janus-media" }
-automod = { path = "crates/automod", package = "k3k-automod" }
-chat = { path = "crates/chat", package = "k3k-chat" }
-legal-vote = { path = "crates/legal-vote", package = "k3k-legal-vote" }
-polls = { path = "crates/polls", package = "k3k-polls" }
+community-modules = { path = "crates/community-modules", package = "k3k-community-modules" }
 kustos = { path = "crates/kustos" }
-protocol = { path = "crates/protocol", package = "k3k-protocol" }
-timer = { path = "crates/timer", package = "k3k-timer" }
-whiteboard = { path = "crates/whiteboard", package = "k3k-whiteboard" }
