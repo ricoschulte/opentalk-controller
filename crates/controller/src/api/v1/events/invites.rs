@@ -253,8 +253,7 @@ async fn create_email_event_invite(
 
             let (event, room, sip_config) = Event::get_with_room(&mut conn, event_id)?;
 
-            let invitee_user =
-                User::get_by_email(&mut conn, &current_user.oidc_issuer, email.as_ref())?;
+            let invitee_user = User::get_by_email(&mut conn, email.as_ref())?;
 
             if let Some(invitee_user) = invitee_user {
                 if event.created_by == invitee_user.id {

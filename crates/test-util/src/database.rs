@@ -63,7 +63,6 @@ impl DatabaseContext {
     pub fn create_test_user(&self, n: u32, groups: Vec<String>) -> Result<User> {
         let new_user = NewUser {
             oidc_sub: format!("oidc_sub{}", n),
-            oidc_issuer: "".into(),
             email: format!("k3k_test_user{}@heinlein.de", n),
             title: "".into(),
             firstname: "test".into(),

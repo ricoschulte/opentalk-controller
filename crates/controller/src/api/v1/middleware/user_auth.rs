@@ -114,8 +114,8 @@ pub async fn check_access_token(
     oidc_ctx: Data<OidcContext>,
     access_token: AccessToken,
 ) -> Result<User, ApiError> {
-    let (issuer, sub) = match oidc_ctx.verify_access_token::<UserClaims>(&access_token) {
-        Ok(claims) => (claims.iss, claims.sub),
+    let sub = match oidc_ctx.verify_access_token::<UserClaims>(&access_token) {
+        Ok(claims) => claims.sub,
         Err(e) => {
             log::error!("Invalid access token, {}", e);
             return Err(ApiError::unauthorized()
@@ -126,7 +126,7 @@ pub async fn check_access_token(
     let current_user = crate::block(move || {
         let mut conn = db.get_conn()?;
 
-        match User::get_by_oidc_sub(&mut conn, &issuer, &sub)? {
+        match User::get_by_oidc_sub(&mut conn, &sub)? {
             Some(user) => Ok(user),
             None => Err(ApiError::unauthorized()
                 .with_code("unknown_sub")

@@ -366,11 +366,8 @@ impl Controller {
             log::info!("Making sure the default permissions are set");
             // This gets the groupId (uuid) from the DB for the respective Group, and then uses
             // kustos to assign this group to the administrator role.
-            // TODO(r.floren): When we support multiple issuers, this logic needs some rework,
-            // either by creating one admin Group per issuer or making the role assignment a manual task for more security.
             let mut conn = self.db.get_conn()?;
             let admin_group = NewGroup {
-                oidc_issuer: self.oidc.provider.metadata.issuer().to_string(),
                 name: "/OpenTalk_Administrator",
             }
             .insert_or_get(&mut conn)?;
