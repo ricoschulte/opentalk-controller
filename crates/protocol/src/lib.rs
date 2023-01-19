@@ -92,7 +92,7 @@ impl SignalingModule for Protocol {
                 let state = storage::init::get(ctx.redis_conn(), self.room_id).await?;
 
                 if matches!(state, Some(state) if state == InitState::Initialized) {
-                    let read_url = self.generate_url(&mut ctx, false).await?;
+                    let read_url = self.generate_url(&mut ctx, true).await?;
 
                     ctx.ws_send(outgoing::Message::ReadUrl(AccessUrl { url: read_url }));
 
