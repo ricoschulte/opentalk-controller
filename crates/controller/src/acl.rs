@@ -18,12 +18,7 @@ pub(crate) async fn check_or_create_kustos_default_permissions(
             authz
                 .add_group_to_role(group.id, "administrator")
                 .await
-                .with_context(|| {
-                    format!(
-                        "Adding default administrator role to {}, {:?}",
-                        group.name, group.oidc_issuer
-                    )
-                })?;
+                .with_context(|| format!("Adding default administrator role to {}", group.name))?;
         }
     }
 

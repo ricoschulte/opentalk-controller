@@ -6,8 +6,8 @@ use super::schema::{groups, user_groups};
 use super::users::{User, UserId};
 use database::{DbConnection, Result};
 use diesel::{
-    BoolExpressionMethods, Connection, ExpressionMethods, Identifiable, Insertable,
-    OptionalExtension, QueryDsl, Queryable, RunQueryDsl,
+    Connection, ExpressionMethods, Identifiable, Insertable, OptionalExtension, QueryDsl,
+    Queryable, RunQueryDsl,
 };
 use kustos::subject::PolicyGroup;
 
@@ -32,7 +32,6 @@ impl From<GroupId> for PolicyGroup {
 pub struct Group {
     pub id: GroupId,
     pub id_serial: SerialGroupId,
-    pub oidc_issuer: String,
     pub name: String,
 }
 
@@ -53,7 +52,6 @@ impl Group {
 #[derive(Debug, Insertable)]
 #[diesel(table_name = groups)]
 pub struct NewGroup<'a> {
-    pub oidc_issuer: String,
     pub name: &'a str,
 }
 
@@ -62,11 +60,9 @@ impl NewGroup<'_> {
     #[tracing::instrument(err, skip_all)]
     pub fn insert_or_get(self, conn: &mut DbConnection) -> Result<Group> {
         conn.transaction(|conn| {
-            let query = groups::table.select(groups::all_columns).filter(
-                groups::oidc_issuer
-                    .eq(&self.oidc_issuer)
-                    .and(groups::name.eq(&self.name)),
-            );
+            let query = groups::table
+                .select(groups::all_columns)
+                .filter(groups::name.eq(&self.name));
 
             let group: Option<Group> = query.first(conn).optional()?;
 

@@ -112,7 +112,6 @@ table! {
     groups (id) {
         id -> Uuid,
         id_serial -> Int8,
-        oidc_issuer -> Text,
         name -> Text,
     }
 }
@@ -207,7 +206,6 @@ table! {
         id -> Uuid,
         id_serial -> Int8,
         oidc_sub -> Varchar,
-        oidc_issuer -> Text,
         email -> Varchar,
         title -> Varchar,
         firstname -> Varchar,

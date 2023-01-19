@@ -77,7 +77,7 @@ pub async fn login(
             let db_result = crate::block(move || -> database::Result<_> {
                 let mut conn = db.get_conn()?;
 
-                let user = User::get_by_oidc_sub(&mut conn, &info.issuer, &info.sub)?;
+                let user = User::get_by_oidc_sub(&mut conn, &info.sub)?;
 
                 let settings = settings.load_full();
 
@@ -106,7 +106,6 @@ pub async fn login(
 
                         let new_user = NewUser {
                             oidc_sub: info.sub,
-                            oidc_issuer: info.issuer,
                             email: info.email,
                             title: String::new(),
                             display_name,
@@ -175,7 +174,6 @@ fn create_changeset<'a>(
         id: _,
         id_serial: _,
         oidc_sub: _,
-        oidc_issuer: _,
         email,
         title: _,
         firstname,

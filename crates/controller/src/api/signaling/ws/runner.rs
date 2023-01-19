@@ -923,13 +923,8 @@ impl Runner {
                     api::Participant::Recorder => (join.display_name, None),
                     api::Participant::Sip => {
                         if let Some(call_in) = self.settings.load().call_in.as_ref() {
-                            let display_name = sip::display_name(
-                                &self.db,
-                                call_in,
-                                self.room.created_by,
-                                join.display_name,
-                            )
-                            .await;
+                            let display_name =
+                                sip::display_name(&self.db, call_in, join.display_name).await;
 
                             (display_name, None)
                         } else {

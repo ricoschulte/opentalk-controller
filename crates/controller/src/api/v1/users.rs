@@ -239,7 +239,6 @@ pub struct UnregisteredUser {
 pub async fn find(
     settings: SharedSettingsActix,
     kc_admin_client: Data<KeycloakAdminClient>,
-    current_user: ReqData<User>,
     db: Data<Db>,
     query: Query<FindQuery>,
 ) -> Result<Json<Vec<UserFindResponseItem>>, ApiError> {
@@ -269,7 +268,7 @@ pub async fn find(
                 .map(|kc_user| kc_user.id.as_str())
                 .collect();
 
-            let users = User::get_all_by_oidc_subs(&mut conn, &current_user.oidc_issuer, &kc_subs)?;
+            let users = User::get_all_by_oidc_subs(&mut conn, &kc_subs)?;
 
             found_kc_users.retain(|kc_user| !users.iter().any(|user| user.oidc_sub == kc_user.id));
 

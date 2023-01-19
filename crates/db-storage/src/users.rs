@@ -39,7 +39,6 @@ pub struct User {
     pub id: UserId,
     pub id_serial: SerialUserId,
     pub oidc_sub: String,
-    pub oidc_issuer: String,
     pub email: String,
     pub title: String,
     pub firstname: String,
@@ -77,19 +76,11 @@ impl User {
 
     /// Get a user with the given id
     ///
-    /// Returns None if no user matches `oidc_issuer` and `email`
+    /// Returns None if no user matches `email`
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_email(
-        conn: &mut DbConnection,
-        oidc_issuer: &str,
-        email: &str,
-    ) -> Result<Option<User>> {
+    pub fn get_by_email(conn: &mut DbConnection, email: &str) -> Result<Option<User>> {
         let user = users::table
-            .filter(
-                users::oidc_issuer
-                    .eq(oidc_issuer)
-                    .and(users::email.eq(email)),
-            )
+            .filter(users::email.eq(email))
             .get_result(conn)
             .optional()?;
 
@@ -98,17 +89,9 @@ impl User {
 
     /// Get one or more users with the given phone number
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_phone(
-        conn: &mut DbConnection,
-        oidc_issuer: &str,
-        phone: &str,
-    ) -> Result<Vec<User>> {
+    pub fn get_by_phone(conn: &mut DbConnection, phone: &str) -> Result<Vec<User>> {
         let users = users::table
-            .filter(
-                users::oidc_issuer
-                    .eq(oidc_issuer)
-                    .and(users::phone.eq(phone)),
-            )
+            .filter(users::phone.eq(phone))
             .get_results(conn)?;
 
         Ok(users)
@@ -177,36 +160,24 @@ impl User {
         Ok(users)
     }
 
-    /// Get user with the given issuer and sub
+    /// Get user with the given sub
     ///
-    /// Returns None if not user matched `issue` and `sub`
+    /// Returns None no user matched `sub`
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_oidc_sub(
-        conn: &mut DbConnection,
-        issuer: &str,
-        sub: &str,
-    ) -> Result<Option<User>> {
+    pub fn get_by_oidc_sub(conn: &mut DbConnection, sub: &str) -> Result<Option<User>> {
         let user = users::table
-            .filter(users::oidc_issuer.eq(issuer).and(users::oidc_sub.eq(sub)))
+            .filter(users::oidc_sub.eq(sub))
             .get_result(conn)
             .optional()?;
 
         Ok(user)
     }
 
-    /// Get all users filtered by the issuer and subs
+    /// Get all users filtered by the given subs
     #[tracing::instrument(err, skip_all)]
-    pub fn get_all_by_oidc_subs(
-        conn: &mut DbConnection,
-        issuer: &str,
-        subs: &[&str],
-    ) -> Result<Vec<User>> {
+    pub fn get_all_by_oidc_subs(conn: &mut DbConnection, subs: &[&str]) -> Result<Vec<User>> {
         let users = users::table
-            .filter(
-                users::oidc_issuer
-                    .eq(issuer)
-                    .and(users::oidc_sub.eq_any(subs)),
-            )
+            .filter(users::oidc_sub.eq_any(subs))
             .load(conn)?;
 
         Ok(users)
@@ -270,7 +241,6 @@ impl User {
 #[diesel(table_name = users)]
 pub struct NewUser {
     pub oidc_sub: String,
-    pub oidc_issuer: String,
     pub email: String,
     pub title: String,
     pub firstname: String,
@@ -297,7 +267,7 @@ impl NewUserWithGroups {
                 .values(self.new_user)
                 .get_result(conn)?;
 
-            let groups = get_ids_for_group_names(conn, &user, &self.groups)?;
+            let groups = get_ids_for_group_names(conn, &self.groups)?;
             let group_ids = groups.iter().map(|(id, _)| *id).collect();
             insert_user_into_user_groups(conn, &user, groups)?;
 
@@ -351,7 +321,7 @@ impl UpdateUser<'_> {
 
             // modify groups if parameter exists
             if let Some(groups) = groups {
-                let groups = get_ids_for_group_names(conn, &user, groups)?;
+                let groups = get_ids_for_group_names(conn, groups)?;
 
                 let curr_groups = Group::get_all_for_user(conn, user.id)?;
 
@@ -403,25 +373,17 @@ impl UpdateUser<'_> {
 // Does not preserve the order of groups passed to the function
 fn get_ids_for_group_names(
     conn: &mut DbConnection,
-    user: &User,
     groups: &[String],
 ) -> Result<Vec<(GroupId, String)>> {
     let present_groups: Vec<(GroupId, String)> = groups::table
         .select((groups::id, groups::name))
-        .filter(
-            groups::oidc_issuer
-                .eq(&user.oidc_issuer)
-                .and(groups::name.eq_any(groups)),
-        )
+        .filter(groups::name.eq_any(groups))
         .load(conn)?;
 
     let new_groups: Vec<NewGroup> = groups
         .iter()
         .filter(|wanted| !present_groups.iter().any(|(_, name)| name == *wanted))
-        .map(|name| NewGroup {
-            oidc_issuer: user.oidc_issuer.clone(),
-            name,
-        })
+        .map(|name| NewGroup { name })
         .collect();
 
     let new_groups: Vec<(GroupId, String)> = diesel::insert_into(groups::table)
