@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Auth related API structs and Endpoints
 use super::events::EventPoliciesBuilderExt;
 use super::rooms::RoomsPoliciesBuilderExt;

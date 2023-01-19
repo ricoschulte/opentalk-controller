@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 #![allow(clippy::extra_unused_lifetimes)]
 
 //! Contains the database ORM and database migrations for the controller/storage

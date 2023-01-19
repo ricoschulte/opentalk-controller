@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use anyhow::{Context, Result};
 use aws_sdk_s3::config::Builder;
 use aws_sdk_s3::model::{CompletedMultipartUpload, CompletedPart};

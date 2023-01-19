@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use crate::policy::{GroupPolicy, Policy, RolePolicy, UserPolicy};
 use crate::prelude::{PolicyGroup, PolicyRole, PolicyUser};
 use crate::{AccessMethod, IsSubject, ResourceId};

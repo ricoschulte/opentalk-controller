@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use controller::prelude::anyhow::Result;
 use controller::prelude::chrono::{self, Utc};
 use controller::prelude::futures::stream::once;

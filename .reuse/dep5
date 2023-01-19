@@ -1,0 +1,12 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Source: https://git.opentalk.dev/opentalk/k3k-controller
+Upstream-Name: OpenTalk Controller
+Upstream-Contact: OpenTalk GmbH <mail@opentaalk.dev>
+
+Files:
+ Cargo.lock
+ CHANGELOG.md
+ crates/db-storage/src/migrations/*.sql
+ crates/db-storage/src/schema.rs
+Copyright: OpenTalk GmbH <mail@opentalk.eu>
+License: EUPL-1.2

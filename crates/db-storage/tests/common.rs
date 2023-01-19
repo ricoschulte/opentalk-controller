@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use database::DbConnection;
 use k3k_db_storage::users::{NewUser, NewUserWithGroups, User};
 

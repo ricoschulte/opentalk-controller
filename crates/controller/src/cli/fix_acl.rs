@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Fixes acl rules based on the database content
 //! Currently it can add users to roles and their groups.
 //! Might fix invite acls and room access acl in the future too.

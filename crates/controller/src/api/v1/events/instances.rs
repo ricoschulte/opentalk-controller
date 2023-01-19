@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::{
     can_edit, ApiResponse, DateTimeTz, DefaultApiResult, EventAndInstanceId, EventInvitee,
     EventRoomInfo, EventStatus, EventType, InstanceId, LOCAL_DT_FORMAT,

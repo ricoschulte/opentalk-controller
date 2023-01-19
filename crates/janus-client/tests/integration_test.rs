@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use janus_client::transport::RabbitMqConfig;
 use janus_client::transport::WebSocketConfig;
 use janus_client::types::incoming;

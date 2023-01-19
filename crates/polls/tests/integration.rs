@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use controller::prelude::*;
 use k3k_polls::*;
 use pretty_assertions::assert_eq;

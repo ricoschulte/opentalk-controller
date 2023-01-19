@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Implementation of a redlock mutex for a single redis instance
 
 use rand::{thread_rng, Rng};

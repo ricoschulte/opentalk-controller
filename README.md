@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+
+SPDX-License-Identifier: EUPL-1.2
+-->
+
 # K3K Controller
 
 Authentication and scheduling backend for the K3K conference system.

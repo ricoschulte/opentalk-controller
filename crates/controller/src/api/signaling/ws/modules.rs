@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::{Event, ModuleContext};
 use super::{SignalingModule, Timestamp};
 use crate::api::signaling::metrics::SignalingMetrics;

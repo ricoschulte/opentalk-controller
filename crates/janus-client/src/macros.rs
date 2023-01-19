@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 /// Helper macro to compare a `[Serialize]` implementor with a JSON literal
 ///
 /// Asserts that the left expression equals the right JSON literal when serialized.

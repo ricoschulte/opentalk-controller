@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 /// Trait to tag a type as a subject
 ///
 /// Types tagged with this trait need to implement the underlying internal conversion types as well.

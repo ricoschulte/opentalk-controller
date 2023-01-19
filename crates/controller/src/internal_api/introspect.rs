@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use crate::api::v1::middleware::user_auth::check_access_token;
 use crate::oidc::OidcContext;
 use actix_web::web::{Data, Json};

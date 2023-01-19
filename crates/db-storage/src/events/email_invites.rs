@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::{Event, EventId, NewEventInvite};
 use crate::rooms::RoomId;
 use crate::schema::{event_email_invites, event_invites, events};

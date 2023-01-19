@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Utility to map a phone number to a users display name or convert it to a more readable format
 
 use crate::api::util::parse_phone_number;

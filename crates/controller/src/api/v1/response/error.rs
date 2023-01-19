@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Error response types for REST APIv1
 use super::{
     CODE_INVALID_EMAIL, CODE_INVALID_LENGTH, CODE_INVALID_URL, CODE_INVALID_VALUE,

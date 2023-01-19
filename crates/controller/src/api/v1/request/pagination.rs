@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Pagination Query types
 //!
 //! Great blogposts are: <https://phauer.com/2015/restful-api-design-best-practices/> and <https://phauer.com/2018/web-api-pagination-timestamp-id-continuation-token/>

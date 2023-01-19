@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::response::error::ApiError;
 use super::{ApiResponse, PagePaginationQuery};
 use actix_web::get;

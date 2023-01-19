@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 /// Creates a diesel expression that checks if the passed $v is empty
 ///
 /// Originally from [casbin-rs/diesel-adapter][origin]

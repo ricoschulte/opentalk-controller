@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Test utility functions for use with the module tester and the controller
 pub use ::serde_json;
 pub use pretty_assertions::assert_eq;

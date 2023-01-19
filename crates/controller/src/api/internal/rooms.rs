@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use crate::api::internal::NoContent;
 use crate::api::v1::events::associated_resource_ids;
 use crate::api::v1::response::ApiError;

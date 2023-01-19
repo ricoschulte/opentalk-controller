@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Helper binary that creates the schema.rs file
 use crate::locate_project_root;
 use anyhow::Result;

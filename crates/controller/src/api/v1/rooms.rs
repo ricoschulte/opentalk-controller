@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Room related API structs and Endpoints
 //!
 //! The defined structs are exposed to the REST API and will be serialized/deserialized. Similar

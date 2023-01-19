@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use crate::metrics::{DatabaseMetrics, MetricsConnection};
 use crate::{DatabaseError, DbConnection};
 use controller_shared::settings;

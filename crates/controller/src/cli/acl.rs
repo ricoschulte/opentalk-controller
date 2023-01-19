@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! Allows to manipulate the acls
 //! Currently supported is enabling/disabling room access for all users.
 use super::AclSubCommand;

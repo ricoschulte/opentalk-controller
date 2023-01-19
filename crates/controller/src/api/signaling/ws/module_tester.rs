@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 //! The ModuleTester simulates a runner environment for a specified module.
 //!
 //! This module is exclusively used for testing and does not contribute to the controllers behavior.

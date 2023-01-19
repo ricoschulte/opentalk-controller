@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use crate::api::signaling::metrics::SignalingMetrics;
 use crate::redis_wrapper::RedisMetrics;
 use crate::settings::SharedSettingsActix;

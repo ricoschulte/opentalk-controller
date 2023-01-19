@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use crate::api::signaling::resumption::ResumptionToken;
 use crate::api::signaling::ticket::start_or_continue_signaling_session;
 use crate::api::signaling::ticket::TicketToken;

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use crate::api::v1::response::{ApiError, Created, NoContent};
 use actix_web::web::{Data, Path, ReqData};
 use actix_web::{delete, put, Either};

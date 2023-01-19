@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+//
+// SPDX-License-Identifier: EUPL-1.2
+
 use super::resumption::{ResumptionData, ResumptionToken};
 use crate::{api::v1::response::ApiError, prelude::*};
 use anyhow::Context;
