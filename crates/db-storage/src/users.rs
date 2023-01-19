@@ -5,7 +5,7 @@
 //! Contains the user specific database structs amd queries
 use super::groups::{Group, UserGroupRelation};
 use super::schema::{groups, user_groups, users};
-use crate::groups::{GroupId, NewGroup, NewUserGroupRelation};
+use crate::groups::{GroupId, GroupName, NewGroup, NewUserGroupRelation};
 use crate::{levenshtein, lower, soundex};
 use database::{DatabaseError, DbConnection, Paginate, Result};
 use diesel::{
@@ -253,7 +253,7 @@ pub struct NewUser {
 
 pub struct NewUserWithGroups {
     pub new_user: NewUser,
-    pub groups: Vec<String>,
+    pub groups: Vec<GroupName>,
 }
 
 impl NewUserWithGroups {
@@ -269,7 +269,7 @@ impl NewUserWithGroups {
 
             let groups = get_ids_for_group_names(conn, &self.groups)?;
             let group_ids = groups.iter().map(|(id, _)| *id).collect();
-            insert_user_into_user_groups(conn, &user, groups)?;
+            insert_user_into_user_groups(conn, &user, &groups)?;
 
             Ok((user, group_ids))
         })
@@ -313,7 +313,7 @@ impl UpdateUser<'_> {
         self,
         conn: &mut DbConnection,
         user_id: UserId,
-        groups: Option<&[String]>,
+        groups: Option<&[GroupName]>,
     ) -> Result<UserUpdatedInfo> {
         conn.transaction::<UserUpdatedInfo, DatabaseError, _>(move |conn| {
             let query = diesel::update(users::table.filter(users::id.eq(user_id))).set(self);
@@ -347,7 +347,7 @@ impl UpdateUser<'_> {
                         DatabaseError::from(e)
                     })?;
 
-                    insert_user_into_user_groups(conn, &user, groups)?
+                    insert_user_into_user_groups(conn, &user, &groups)?
                 }
 
                 Ok(UserUpdatedInfo {
@@ -373,9 +373,9 @@ impl UpdateUser<'_> {
 // Does not preserve the order of groups passed to the function
 fn get_ids_for_group_names(
     conn: &mut DbConnection,
-    groups: &[String],
-) -> Result<Vec<(GroupId, String)>> {
-    let present_groups: Vec<(GroupId, String)> = groups::table
+    groups: &[GroupName],
+) -> Result<Vec<(GroupId, GroupName)>> {
+    let present_groups: Vec<(GroupId, GroupName)> = groups::table
         .select((groups::id, groups::name))
         .filter(groups::name.eq_any(groups))
         .load(conn)?;
@@ -386,7 +386,7 @@ fn get_ids_for_group_names(
         .map(|name| NewGroup { name })
         .collect();
 
-    let new_groups: Vec<(GroupId, String)> = diesel::insert_into(groups::table)
+    let new_groups: Vec<(GroupId, GroupName)> = diesel::insert_into(groups::table)
         .values(&new_groups)
         .returning((groups::id, groups::name))
         .load(conn)?;
@@ -401,13 +401,13 @@ fn get_ids_for_group_names(
 fn insert_user_into_user_groups(
     conn: &mut DbConnection,
     user: &User,
-    groups: Vec<(GroupId, String)>,
+    groups: &[(GroupId, GroupName)],
 ) -> Result<()> {
     let new_user_groups = groups
-        .into_iter()
+        .iter()
         .map(|(id, _)| NewUserGroupRelation {
             user_id: user.id,
-            group_id: id,
+            group_id: *id,
         })
         .collect::<Vec<_>>();
 

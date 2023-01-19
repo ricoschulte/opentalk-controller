@@ -52,6 +52,7 @@ pub enum Error {
 mod test {
     use super::*;
     use controller::prelude::serde_json;
+    use db_storage::groups::GroupName;
     use pretty_assertions::assert_eq;
     use serde_json::json;
 
@@ -82,7 +83,7 @@ mod test {
             id: MessageId::nil(),
             source: ParticipantId::nil(),
             content: "Hello managers!".to_string(),
-            scope: Scope::Group("management".to_string()),
+            scope: Scope::Group(GroupName::from("management".to_owned())),
         }))
         .unwrap();
         let expected = json!({

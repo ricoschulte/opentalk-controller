@@ -32,6 +32,7 @@ mod test {
     use super::*;
     use controller::prelude::serde_json;
     use controller_shared::ParticipantId;
+    use db_storage::groups::GroupName;
     use pretty_assertions::assert_eq;
     use serde_json::json;
 
@@ -66,7 +67,10 @@ mod test {
         let msg: Message = serde_json::from_value(json).unwrap();
 
         if let Message::SendMessage(SendMessage { content, scope }) = msg {
-            assert_eq!(scope, Scope::Group("management".to_string()));
+            assert_eq!(
+                scope,
+                Scope::Group(GroupName::from("management".to_owned()))
+            );
             assert_eq!(content, "Hello managers!");
         } else {
             panic!()

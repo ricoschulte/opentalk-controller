@@ -4,6 +4,7 @@
 
 use chrono::{DateTime, Utc};
 use controller::prelude::*;
+use db_storage::groups::GroupName;
 use k3k_chat::{incoming, Chat, Scope};
 use pretty_assertions::assert_eq;
 use serde_json::json;
@@ -132,7 +133,7 @@ async fn last_seen_timestamps() {
             DateTime::<Utc>::from(DateTime::parse_from_rfc3339(timestamp_group_raw).unwrap())
                 .into();
         let message = incoming::Message::SetLastSeenTimestamp {
-            scope: Scope::Group("group1".to_string()),
+            scope: Scope::Group(GroupName::from("group1".to_owned())),
             timestamp,
         };
         module_tester

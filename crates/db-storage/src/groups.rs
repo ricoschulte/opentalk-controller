@@ -1,6 +1,8 @@
 // SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
 //
 // SPDX-License-Identifier: EUPL-1.2
+use core::convert::Infallible;
+use core::str::FromStr;
 
 use super::schema::{groups, user_groups};
 use super::users::{User, UserId};
@@ -18,7 +20,20 @@ diesel_newtype! {
     GroupId(uuid::Uuid) => diesel::sql_types::Uuid,
 
     #[derive(Copy)]
-    SerialGroupId(i64) => diesel::sql_types::BigInt
+    SerialGroupId(i64) => diesel::sql_types::BigInt,
+
+    #[derive(redis_args::ToRedisArgs, redis_args::FromRedisValue)]
+    #[to_redis_args(fmt = "{0}")]
+    #[from_redis_value(FromStr)]
+    GroupName(String) => diesel::sql_types::Text
+}
+
+impl FromStr for GroupName {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(Self::from(s.into()))
+    }
 }
 
 impl From<GroupId> for PolicyGroup {
@@ -32,7 +47,7 @@ impl From<GroupId> for PolicyGroup {
 pub struct Group {
     pub id: GroupId,
     pub id_serial: SerialGroupId,
-    pub name: String,
+    pub name: GroupName,
 }
 
 impl Group {
@@ -52,7 +67,7 @@ impl Group {
 #[derive(Debug, Insertable)]
 #[diesel(table_name = groups)]
 pub struct NewGroup<'a> {
-    pub name: &'a str,
+    pub name: &'a GroupName,
 }
 
 impl NewGroup<'_> {

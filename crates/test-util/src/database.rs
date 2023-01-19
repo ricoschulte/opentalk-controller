@@ -4,6 +4,7 @@
 
 use anyhow::{Context, Result};
 use database::Db;
+use db_storage::groups::GroupName;
 use db_storage::migrations::migrate_from_url;
 use db_storage::rooms::{NewRoom, Room, RoomId};
 use db_storage::users::{NewUser, NewUserWithGroups, User, UserId};
@@ -75,7 +76,10 @@ impl DatabaseContext {
             phone: None,
         };
 
-        let new_user_with_groups = NewUserWithGroups { new_user, groups };
+        let new_user_with_groups = NewUserWithGroups {
+            new_user,
+            groups: groups.into_iter().map(GroupName::from).collect(),
+        };
         let mut conn = self.db.get_conn()?;
         let user = new_user_with_groups.insert(&mut conn)?;
 
