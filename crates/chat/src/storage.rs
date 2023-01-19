@@ -7,7 +7,7 @@ use crate::{MessageId, Scope};
 use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use db_storage::groups::GroupId;
+use db_storage::groups::{GroupId, GroupName};
 use db_storage::rooms::RoomId;
 use r3dlock::{Mutex, MutexGuard};
 use redis::AsyncCommands;
@@ -174,7 +174,7 @@ pub async fn set_last_seen_timestamps_group(
     redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
-    timestamps: &[(String, Timestamp)],
+    timestamps: &[(GroupName, Timestamp)],
 ) -> Result<()> {
     redis_conn
         .hset_multiple(
@@ -190,7 +190,7 @@ pub async fn get_last_seen_timestamps_group(
     redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
     participant: ParticipantId,
-) -> Result<HashMap<String, Timestamp>> {
+) -> Result<HashMap<GroupName, Timestamp>> {
     redis_conn
         .hgetall(RoomParticipantLastSeenTimestampsGroup { room, participant })
         .await

@@ -38,7 +38,7 @@ use anyhow::{anyhow, Context, Result};
 use arc_swap::ArcSwap;
 use breakout::BreakoutRooms;
 use database::Db;
-use db_storage::groups::NewGroup;
+use db_storage::groups::{GroupName, NewGroup};
 use keycloak_admin::KeycloakAdminClient;
 use lapin_pool::{RabbitMqChannel, RabbitMqPool};
 use moderation::ModerationModule;
@@ -372,7 +372,7 @@ impl Controller {
             // kustos to assign this group to the administrator role.
             let mut conn = self.db.get_conn()?;
             let admin_group = NewGroup {
-                name: "/OpenTalk_Administrator",
+                name: &GroupName::from("/OpenTalk_Administrator".into()),
             }
             .insert_or_get(&mut conn)?;
             // Drop early to avoid holding a single connection from the pool for the whole runtime

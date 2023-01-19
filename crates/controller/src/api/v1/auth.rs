@@ -14,10 +14,11 @@ use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
 use controller_shared::settings::Settings;
+use core::mem::take;
 use database::Db;
 use db_storage::events::email_invites::EventEmailInvite;
 use db_storage::events::EventId;
-use db_storage::groups::GroupId;
+use db_storage::groups::{GroupId, GroupName};
 use db_storage::rooms::RoomId;
 use db_storage::users::{NewUser, NewUserWithGroups, UpdateUser, User, UserUpdatedInfo};
 use kustos::prelude::PoliciesBuilder;
@@ -71,13 +72,17 @@ pub async fn login(
                     .with_www_authenticate(AuthenticationError::InvalidIdToken)),
             }
         }
-        Ok(info) => {
+        Ok(mut info) => {
             // TODO(r.floren): Find a neater way for relaying the information here.
 
             let db_result = crate::block(move || -> database::Result<_> {
                 let mut conn = db.get_conn()?;
 
                 let user = User::get_by_oidc_sub(&mut conn, &info.sub)?;
+                let user_groups: Vec<GroupName> = take(&mut info.x_grp)
+                    .into_iter()
+                    .map(GroupName::from)
+                    .collect();
 
                 let settings = settings.load_full();
 
@@ -86,7 +91,7 @@ pub async fn login(
                         let changeset = create_changeset(&settings, &user, &info);
 
                         let updated_info =
-                            changeset.apply(&mut conn, user.id, Some(&info.x_grp))?;
+                            changeset.apply(&mut conn, user.id, Some(&user_groups))?;
 
                         Ok(LoginResult::UserUpdated(updated_info))
                     }
@@ -119,7 +124,7 @@ pub async fn login(
 
                         let new_user = NewUserWithGroups {
                             new_user,
-                            groups: info.x_grp,
+                            groups: user_groups,
                         };
 
                         let (user, group_ids) = new_user.insert(&mut conn)?;

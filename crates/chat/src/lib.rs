@@ -13,7 +13,7 @@ use control::rabbitmq;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use database::Db;
-use db_storage::groups::{Group, GroupId};
+use db_storage::groups::{Group, GroupId, GroupName};
 use db_storage::users::UserId;
 use outgoing::{ChatDisabled, ChatEnabled, HistoryCleared, MessageSent};
 use r3dlock::Mutex;
@@ -39,7 +39,7 @@ fn group_routing_key(group_id: GroupId) -> String {
 #[serde(tag = "scope", content = "target", rename_all = "snake_case")]
 pub enum Scope {
     Global,
-    Group(String),
+    Group(GroupName),
     Private(ParticipantId),
 }
 
@@ -100,14 +100,14 @@ pub struct Chat {
     room: SignalingRoomId,
     last_seen_timestamp_global: Option<Timestamp>,
     last_seen_timestamps_private: HashMap<ParticipantId, Timestamp>,
-    last_seen_timestamps_group: HashMap<String, Timestamp>,
+    last_seen_timestamps_group: HashMap<GroupName, Timestamp>,
     db: Arc<Db>,
     groups: Vec<Group>,
 }
 
 impl Chat {
-    fn get_group(&self, name: &str) -> Option<&Group> {
-        self.groups.iter().find(|group| group.name == name)
+    fn get_group(&self, name: &GroupName) -> Option<&Group> {
+        self.groups.iter().find(|group| group.name == *name)
     }
 }
 
@@ -118,7 +118,7 @@ pub struct ChatState {
     groups_history: Vec<GroupHistory>,
     last_seen_timestamp_global: Option<Timestamp>,
     last_seen_timestamps_private: HashMap<ParticipantId, Timestamp>,
-    last_seen_timestamps_group: HashMap<String, Timestamp>,
+    last_seen_timestamps_group: HashMap<GroupName, Timestamp>,
 }
 
 impl ChatState {
@@ -162,13 +162,13 @@ impl ChatState {
 
 #[derive(Debug, Serialize)]
 pub struct GroupHistory {
-    name: String,
+    name: GroupName,
     history: Vec<StoredMessage>,
 }
 
 #[derive(Serialize)]
 pub struct PeerFrontendData {
-    groups: Vec<String>,
+    groups: Vec<GroupName>,
 }
 
 #[async_trait::async_trait(? Send)]
@@ -285,7 +285,7 @@ impl SignalingModule for Chat {
 
                 // Inquire the database about each user's groups
                 let participant_to_common_groups_mappings =
-                    controller::block(move || -> Result<Vec<(ParticipantId, Vec<String>)>> {
+                    controller::block(move || -> Result<Vec<(ParticipantId, Vec<GroupName>)>> {
                         let mut conn = db.get_conn()?;
 
                         let mut participant_to_common_groups_mappings = vec![];
@@ -339,7 +339,7 @@ impl SignalingModule for Chat {
                     let db = self.db.clone();
                     let self_groups = self.groups.clone();
 
-                    let common_groups = controller::block(move || -> Result<Vec<String>> {
+                    let common_groups = controller::block(move || -> Result<Vec<GroupName>> {
                         // Get the user's groups
                         let mut conn = db.get_conn()?;
 
@@ -630,7 +630,7 @@ impl SignalingModule for Chat {
                 }
             }
             if !self.last_seen_timestamps_group.is_empty() {
-                let timestamps: Vec<(String, Timestamp)> = self
+                let timestamps: Vec<(GroupName, Timestamp)> = self
                     .last_seen_timestamps_group
                     .iter()
                     .map(|(k, v)| (k.to_owned(), *v))
