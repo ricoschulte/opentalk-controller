@@ -2025,7 +2025,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-chat"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "actix-rt",
  "k3k-controller-core",
@@ -2042,7 +2042,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-community-modules"
-version = "1.0.0-rc.9"
+version = "0.1.0-rc.1"
 dependencies = [
  "anyhow",
  "k3k-chat",
@@ -2057,7 +2057,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-controller"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "actix-web",
  "anyhow",
@@ -2068,7 +2068,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-controller-core"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "actix",
  "actix-cors",
@@ -2147,7 +2147,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-controller-shared"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "arc-swap",
  "chrono",
@@ -2165,7 +2165,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-database"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "diesel",
  "k3k-controller-shared",
@@ -2177,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-db-storage"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "anyhow",
  "barrel",
@@ -2209,7 +2209,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-janus-media"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "janus-client",
  "k3k-controller-core",
@@ -2224,7 +2224,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-mail-worker-protocol"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "chrono",
  "k3k-db-storage",
@@ -2237,7 +2237,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-polls"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "actix-rt",
  "k3k-controller-core",
@@ -2251,7 +2251,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-protocol"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "etherpad-client",
  "k3k-controller-core",
@@ -2267,7 +2267,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-redis-args"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2279,7 +2279,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-test-util"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "anyhow",
  "diesel",
@@ -2297,7 +2297,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-timer"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "actix-rt",
  "k3k-controller-core",
@@ -2312,7 +2312,7 @@ dependencies = [
 
 [[package]]
 name = "k3k-whiteboard"
-version = "1.0.0-rc.10"
+version = "0.1.0-rc.1"
 dependencies = [
  "actix-rt",
  "anyhow",
