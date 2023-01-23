@@ -8,5 +8,6 @@ Files:
  CHANGELOG.md
  crates/db-storage/src/migrations/*.sql
  crates/db-storage/src/schema.rs
+ .gitlab/issue_templates/*.md
 Copyright: OpenTalk GmbH <mail@opentalk.eu>
 License: EUPL-1.2
