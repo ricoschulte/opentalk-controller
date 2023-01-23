@@ -49,11 +49,15 @@ use std::mem::replace;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc};
-use tokio::time::sleep;
+use tokio::time::{interval, sleep};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 
 mod sip;
+
+// The expiry in seconds for the `skip_waiting_room` key in Redis
+const SKIP_WAITING_ROOM_KEY_EXPIRY: usize = 120;
+const SKIP_WAITING_ROOM_KEY_REFRESH_INTERVAL: u64 = 60;
 
 /// Builder to the runner type.
 ///
@@ -774,6 +778,17 @@ impl Runner {
     pub async fn run(mut self) {
         let mut manual_close_ws = false;
 
+        // Set default `skip_waiting_room` key value with the default expiration time in seconds
+        _ = storage::set_skip_waiting_room_with_expiry_nx(
+            &mut self.redis_conn,
+            self.id,
+            false,
+            SKIP_WAITING_ROOM_KEY_EXPIRY,
+        )
+        .await;
+        let mut skip_waiting_room_refresh_interval =
+            interval(Duration::from_secs(SKIP_WAITING_ROOM_KEY_REFRESH_INTERVAL));
+
         while matches!(self.ws.state, State::Open) {
             if self.exit && matches!(self.ws.state, State::Open) {
                 // This case handles exit on errors unrelated to websocket or controller shutdown
@@ -815,6 +830,14 @@ impl Runner {
                         .expect("Should not get events from unknown modules");
 
                     self.handle_module_requested_actions(timestamp, actions).await;
+                }
+                _ = skip_waiting_room_refresh_interval.tick() => {
+                    _ = storage::reset_skip_waiting_room_expiry(
+                        &mut self.redis_conn,
+                        self.id,
+                        SKIP_WAITING_ROOM_KEY_EXPIRY,
+                    )
+                    .await;
                 }
                 _ = self.shutdown_sig.recv() => {
                     self.ws.close(CloseCode::Away).await;
@@ -971,9 +994,13 @@ impl Runner {
 
                 self.metrics.increment_participants_count(&self.participant);
 
-                // Allow moderators and invisible services to skip the waiting room
+                // Allow moderators, invisible services, and already accepted participants to skip the waiting room
+                let can_skip_waiting_room: bool =
+                    storage::get_skip_waiting_room(&mut self.redis_conn, self.id).await?;
+
                 let skip_waiting_room = matches!(self.role, Role::Moderator)
-                    || !control_data.participation_kind.is_visible();
+                    || !control_data.participation_kind.is_visible()
+                    || can_skip_waiting_room;
 
                 let waiting_room_enabled = moderation::storage::init_waiting_room_key(
                     &mut self.redis_conn,
@@ -1535,6 +1562,16 @@ impl Runner {
                 {
                     if !*accepted {
                         *accepted = true;
+
+                        // Allow the participant to skip future waiting room once they are accepted
+                        // Set the key with the given expiration time in seconds
+                        storage::set_skip_waiting_room_with_expiry(
+                            &mut self.redis_conn,
+                            self.id,
+                            true,
+                            SKIP_WAITING_ROOM_KEY_EXPIRY,
+                        )
+                        .await?;
 
                         self.ws
                             .send(Message::Text(
