@@ -45,19 +45,8 @@ notice = "deny"
 # output a note when they are encountered.
 ignore = [
     "RUSTSEC-2020-0071",
-    # See
-    # https://github.com/tokio-rs/tracing/pull/2040
-    # https://github.com/colin-kiegel/rust-pretty-assertions/pull/102
-    "RUSTSEC-2021-0139",
-
-    # genpdf unmaintained crates:
-    "RUSTSEC-2020-0144",
-    "RUSTSEC-2021-0140",
-    "RUSTSEC-2020-0020",
-    "RUSTSEC-2020-0056",
 
     # Windows only
-    "RUSTSEC-2023-0001",
     "RUSTSEC-2021-0145",
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
@@ -168,24 +157,18 @@ deny = []
 # Certain crates/versions that will be skipped when doing duplicate detection.
 skip = [
     { name = "ahash", version = "=0.7.6" },
-    { name = "nom", version = "=5.1.2" },
-    { name = "time", version = "=0.1.44" },
+    { name = "base64", version = "=0.13.1" },
+    { name = "hashbrown", version = "=0.11.2" },
+    { name = "hermit-abi", version = "=0.1" },
+    { name = "idna", version = "=0.2" },
     { name = "itertools", version = "=0.9" },
+    { name = "nom", version = "=5.1.2" },
     { name = "num-bigint", version = "=0.4.3" },
     { name = "ordered-float", version = "=1.1.1" },
     { name = "sha1", version = "=0.6.1" },
     { name = "spin", version = "=0.5.2" },
+    { name = "time", version = "=0.1.45" },
     { name = "wasi", version = "=0.10.0+wasi-snapshot-preview1" },
-    { name = "uuid", version = "=1.1.2" },
-    { name = "hashbrown", version = "=0.11.2" },
-
-    # genpdf
-    { name = "itoa", version = "=0.4.8" },
-    { name = "rustc_version", version = "=0.2.3" },
-    { name = "semver", version = "=0.9.0" },
-    { name = "time", version = "=0.2.27" },
-    { name = "time-macros", version = "=0.1.1" },
-
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive
@@ -211,7 +194,9 @@ allow-git = []
 
 [sources.allow-org]
 # 1 or more github.com organizations to allow git sources for
-github = []
+github = [
+    "kbalt",
+]
 # 1 or more gitlab.com organizations to allow git sources for
 gitlab = []
 # 1 or more bitbucket.org organizations to allow git sources for

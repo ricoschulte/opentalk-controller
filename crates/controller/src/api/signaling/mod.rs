@@ -111,9 +111,11 @@ impl redis::ToRedisArgs for Timestamp {
 
 impl redis::FromRedisValue for Timestamp {
     fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Timestamp> {
-        Ok(Timestamp(
-            chrono::Utc.timestamp(i64::from_redis_value(v)?, 0),
-        ))
+        let timestamp = chrono::Utc
+            .timestamp_opt(i64::from_redis_value(v)?, 0)
+            .latest()
+            .unwrap();
+        Ok(Timestamp(timestamp))
     }
 }
 

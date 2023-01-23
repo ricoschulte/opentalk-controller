@@ -185,7 +185,7 @@ mod test {
         let params = Parameters {
             initiator_id: ParticipantId::nil(),
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
-            start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+            start_time: Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
             max_votes: 2,
             token: Some(Token::new(0x68656c6c6f)),
             inner: UserParameters {
@@ -230,7 +230,7 @@ mod test {
         let params = Parameters {
             initiator_id: ParticipantId::nil(),
             legal_vote_id: LegalVoteId::from(Uuid::nil()),
-            start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+            start_time: Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
             max_votes: 2,
             token: None,
             inner: UserParameters {
@@ -312,7 +312,10 @@ mod test {
 
         assert_eq!(ParticipantId::nil(), initiator_id);
         assert_eq!(LegalVoteId::from(Uuid::nil()), legal_vote_id);
-        assert_eq!(Utc.ymd(1970, 1, 1).and_hms(0, 0, 0), start_time);
+        assert_eq!(
+            Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
+            start_time
+        );
         assert_eq!(2, max_votes);
         assert_eq!(VoteKind::RollCall, kind);
         assert_eq!(Some(Token::new(0x68656c6c6f)), token);
@@ -370,7 +373,10 @@ mod test {
 
         assert_eq!(ParticipantId::nil(), initiator_id);
         assert_eq!(LegalVoteId::from(Uuid::nil()), legal_vote_id);
-        assert_eq!(Utc.ymd(1970, 1, 1).and_hms(0, 0, 0), start_time);
+        assert_eq!(
+            Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
+            start_time
+        );
         assert_eq!(2, max_votes);
         assert_eq!(None, token);
         assert_eq!(VoteKind::RollCall, kind);

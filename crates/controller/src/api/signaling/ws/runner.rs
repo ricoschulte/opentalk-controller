@@ -1358,7 +1358,7 @@ impl Runner {
                 return;
             }
 
-            let timestamp: Timestamp = delivery.properties.timestamp().map(|value| chrono::Utc.timestamp(value as i64, 0)).unwrap_or_else(|| {
+            let timestamp: Timestamp = delivery.properties.timestamp().map(|value| chrono::Utc.timestamp_opt(value as i64, 0).latest()).flatten().unwrap_or_else(|| {
                 log::warn!("Got RabbitMQ message without timestamp. Creating current timestamp as fallback.");
                 chrono::Utc::now()
             }
