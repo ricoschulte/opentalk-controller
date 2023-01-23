@@ -1909,7 +1909,7 @@ fn parse_event_dt_params(
     }
 
     if is_all_day {
-        let zero = NaiveTime::from_hms(0, 0, 0);
+        let zero = NaiveTime::from_hms_opt(0, 0, 0).unwrap();
 
         if starts_at.datetime.time() != zero || ends_at.datetime.time() != zero {
             return Err(ApiError::unprocessable_entity()

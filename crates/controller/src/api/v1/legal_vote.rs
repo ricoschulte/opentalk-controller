@@ -541,7 +541,7 @@ mod test {
 
         let settings = Settings {
             created_by: test_participant,
-            start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+            start_time: Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
             max_votes: 1,
             name: "Test Vote".into(),
             kind: VoteKind::RollCall,
@@ -583,7 +583,7 @@ mod test {
 
         let settings = Settings {
             created_by: test_participant,
-            start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+            start_time: Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
             max_votes: 1,
             name: "Test Vote".into(),
             kind: VoteKind::RollCall,
@@ -625,7 +625,7 @@ mod test {
             protocol_result: ProtocolResult::Ok(LegalVoteDetails {
                 settings: Settings {
                     created_by: test_participant.clone(),
-                    start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+                    start_time: Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
                     kind: VoteKind::RollCall,
                     max_votes: 1,
                     name: "Test Vote".into(),
@@ -704,7 +704,7 @@ mod test {
             protocol_result: ProtocolResult::Ok(LegalVoteDetails {
                 settings: Settings {
                     created_by: test_participant.clone(),
-                    start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+                    start_time: Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
                     kind: VoteKind::RollCall,
                     max_votes: 1,
                     name: "Test Vote".into(),
@@ -778,7 +778,7 @@ mod test {
             protocol_result: ProtocolResult::Ok(LegalVoteDetails {
                 settings: Settings {
                     created_by: test_participant.clone(),
-                    start_time: Utc.ymd(1970, 1, 1).and_hms(0, 0, 0),
+                    start_time: Utc.with_ymd_and_hms(1970, 1, 1, 0, 0, 0).unwrap(),
                     kind: VoteKind::RollCall,
                     max_votes: 1,
                     name: "Test Vote".into(),
