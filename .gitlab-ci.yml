@@ -48,7 +48,7 @@ lint:dependency_check:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
     - if: $CI_PIPELINE_SOURCE == 'schedule'
   stage: lint
-  script: cargo-deny check
+  script: cargo-deny --workspace check
 
 lint:yaml:
   rules:
