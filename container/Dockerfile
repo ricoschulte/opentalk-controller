@@ -28,23 +28,23 @@ COPY ./crates/r3dlock/Cargo.toml ./crates/r3dlock/Cargo.toml
 COPY ./crates/redis-args/Cargo.toml ./crates/redis-args/Cargo.toml
 COPY ./crates/protocol/Cargo.toml ./crates/protocol/Cargo.toml
 COPY ./crates/test-util/Cargo.toml ./crates/test-util/Cargo.toml
+COPY ./crates/main/Cargo.toml ./crates/main/Cargo.toml
 COPY ./xtask/Cargo.toml ./xtask/Cargo.toml
 COPY ./Cargo.toml ./Cargo.toml
 COPY ./Cargo.lock ./Cargo.lock
 
 RUN find crates -mindepth 1 -maxdepth 1 -type d -exec mkdir {}/src \; -exec touch {}/src/lib.rs \;
-RUN mkdir src xtask/src
+RUN mkdir -p crates/main/src xtask/src
 # We need a proper main.rs to make the first cargo build run
-RUN echo 'fn main() {println!("Hello World!");}' > src/main.rs
+RUN echo 'fn main() {println!("Hello World!");}' > crates/main/src/main.rs
 RUN echo 'fn main() {println!("Hello World!");}' > xtask/src/main.rs
 # As we haven't copied any source files yet, this will only compile the dependencies
 RUN cargo fetch --locked
 
 # Now copy the real source over
-COPY src src
 COPY crates crates
 # Cargo detects changes only by mtime
-RUN touch src/main.rs xtask/src/main.rs && find crates -iname lib.rs -exec touch {} \;
+RUN touch crates/main/src/main.rs xtask/src/main.rs && find crates -iname lib.rs -exec touch {} \;
 RUN cargo build --release --locked
 
 FROM debian:bullseye-slim
