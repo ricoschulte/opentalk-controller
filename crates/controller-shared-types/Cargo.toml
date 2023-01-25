@@ -5,10 +5,10 @@
 [package]
 name = "k3k-controller-shared"
 description = "Shared types and trait definitions for k3k-controller"
-version = "0.1.0-rc.1"
 edition = "2021"
 license = "EUPL-1.2"
 authors.workspace = true
+version.workspace = true
 publish = false
 
 [dependencies]
