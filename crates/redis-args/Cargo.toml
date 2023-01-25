@@ -4,10 +4,10 @@
 
 [package]
 name = "k3k-redis-args"
-version = "0.1.0-rc.1"
 edition = "2021"
+authors.workspace = true
+version.workspace = true
 publish = false
-authors = ["OpenTalk Team <mail@opentalk.eu>"]
 
 [lib]
 proc-macro = true
