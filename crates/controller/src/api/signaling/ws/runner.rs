@@ -519,7 +519,7 @@ impl Runner {
 
     /// Destroys the runner and all associated resources
     #[tracing::instrument(skip(self), fields(id = %self.id))]
-    pub async fn destroy(mut self) {
+    pub async fn destroy(mut self, close_ws: bool) {
         let destroy_start_time = Instant::now();
         let mut encountered_error = false;
 
@@ -748,6 +748,11 @@ impl Runner {
             destroy_start_time.elapsed().as_secs_f64(),
             !encountered_error,
         );
+
+        // If a Close frame is received from the websocket actor, manually return a close command
+        if close_ws {
+            self.ws.close(CloseCode::Normal).await;
+        }
     }
 
     /// Remove all room and control module related data from redis  
@@ -767,6 +772,8 @@ impl Runner {
 
     /// Runs the runner until the peer closes its websocket connection or a fatal error occurres.
     pub async fn run(mut self) {
+        let mut manual_close_ws = false;
+
         while matches!(self.ws.state, State::Open) {
             if self.exit && matches!(self.ws.state, State::Open) {
                 // This case handles exit on errors unrelated to websocket or controller shutdown
@@ -776,13 +783,18 @@ impl Runner {
             tokio::select! {
                 res = self.ws.receive() => {
                     match res {
+                        Ok(Some(Message::Close(_))) => {
+                            // Received Close frame from ws actor, break to destroy the runner
+                            manual_close_ws = true;
+                            break;
+                        }
                         Ok(Some(msg)) => self.handle_ws_message(msg).await,
                         Ok(None) => {
                             // Ws was in closing state, runner will now exit gracefully
                         }
                         Err(e) => {
                             // Ws is now going to be in error state and cause the runner to exit
-                            log::error!("Failed to receive ws message for participant {}, {}", self.id ,e);
+                            log::error!("Failed to receive ws message for participant {}, {}", self.id, e);
                         }
                     }
                 }
@@ -831,7 +843,7 @@ impl Runner {
 
         log::debug!("Stopping ws-runner task for participant {}", self.id);
 
-        self.destroy().await
+        self.destroy(manual_close_ws).await;
     }
 
     #[tracing::instrument(skip(self, message), fields(id = %self.id))]

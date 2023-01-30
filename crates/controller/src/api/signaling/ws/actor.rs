@@ -146,12 +146,9 @@ impl StreamHandler<Result<Message, ProtocolError>> for WebSocketActor {
                 self.forward_to_runner(ctx, msg);
             }
             Ok(Message::Continuation(item)) => self.handle_continuation(ctx, item),
-            Ok(Message::Close(_)) => {
-                ctx.close(Some(CloseReason {
-                    code: CloseCode::Normal,
-                    description: None,
-                }));
-                ctx.stop();
+            Ok(msg @ Message::Close(_)) => {
+                // Pass the Close frame to the runner to handle
+                self.forward_to_runner(ctx, msg);
             }
             Ok(Message::Nop) => {}
             Err(e) => {
