@@ -15,6 +15,14 @@ variables:
   # Enable one network per build for the test container and services
   FF_NETWORK_PER_BUILD: 'true'
 
+trigger_enterprise_ci:
+  rules:
+    - if: $CI_COMMIT_BRANCH =~ /^main$/
+      exists:
+        - crates/community-modules/Cargo.toml
+  trigger:
+    project: opentalk/controller-enterprise
+
 lint:fmt:
   rules:
     # Run in merge requests (if there is one job with this instruction, all jobs without
