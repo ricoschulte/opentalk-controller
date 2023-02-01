@@ -17,13 +17,24 @@ pub enum Message {
     UpdateReadyStatus(UpdateReadyStatus),
 }
 
+/// The different timer variations
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Kind {
+    /// The timer continues to run until a moderator stops it.
+    Stopwatch,
+    /// The timer continues to run until its duration expires or if a moderator stops it beforehand.
+    Countdown { duration: u64 },
+}
+
 /// Start a new timer
 #[derive(Debug, Deserialize)]
 pub struct Start {
-    /// The duration of the timer.
-    ///
-    /// When not set, the timer behaves like a stopwatch, waiting for a stop by moderator
-    pub duration: Option<u64>,
+    /// The timer kind
+    #[serde(flatten)]
+    pub kind: Kind,
+    /// An optional string tag to flag this timer with a custom style
+    pub style: Option<String>,
     /// An optional title for the timer
     pub title: Option<String>,
     /// Flag to allow/disallow participants to mark themselves as ready
@@ -57,11 +68,39 @@ mod test {
     use test_util::serde_json;
 
     #[test]
-    fn start() {
+    fn countdown_start() {
         let json = r#"
         {
             "action": "start",
+            "kind": "countdown",
             "duration": 5,
+            "style": "coffee_break",
+            "enable_ready_check": false
+        }
+        "#;
+
+        match serde_json::from_str(json).unwrap() {
+            Message::Start(Start {
+                kind,
+                style,
+                title,
+                enable_ready_check,
+            }) => {
+                assert_eq!(kind, Kind::Countdown { duration: 5 });
+                assert_eq!(style, Some("coffee_break".into()));
+                assert_eq!(title, None);
+                assert!(!enable_ready_check);
+            }
+            unexpected => panic!("Expected start message, got: {:?}", unexpected),
+        }
+    }
+
+    #[test]
+    fn stopwatch_start() {
+        let json = r#"
+        {
+            "action": "start",
+            "kind": "stopwatch",
             "title": "Testing the timer!",
             "enable_ready_check": false
         }
@@ -69,11 +108,13 @@ mod test {
 
         match serde_json::from_str(json).unwrap() {
             Message::Start(Start {
-                duration,
+                kind,
+                style,
                 title,
                 enable_ready_check,
             }) => {
-                assert_eq!(duration, Some(5));
+                assert_eq!(kind, Kind::Stopwatch);
+                assert_eq!(style, None);
                 assert_eq!(title, Some("Testing the timer!".into()));
                 assert!(!enable_ready_check);
             }
