@@ -21,6 +21,16 @@ pub enum Message {
     Error(Error),
 }
 
+/// The different timer variations
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum Kind {
+    /// The timer continues to run until a moderator stops it.
+    Stopwatch,
+    /// The timer continues to run until its duration expires or if a moderator stops it beforehand.
+    Countdown { ends_at: Timestamp },
+}
+
 /// A timer has been started
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Started {
@@ -28,12 +38,14 @@ pub struct Started {
     pub timer_id: TimerId,
     /// start time of the timer
     pub started_at: Timestamp,
-    /// optional end time of the timer
-    ///
-    /// When no end is set, the timer has acts like a stopwatch (count up)
-    pub ends_at: Option<Timestamp>,
-
+    /// Timer kind
+    #[serde(flatten)]
+    pub kind: Kind,
+    /// Style to use for the timer. Set by the sender.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub style: Option<String>,
     /// The optional title of the timer
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// Flag to allow/disallow participants to mark themselves as ready
     pub ready_check_enabled: bool,
@@ -98,16 +110,43 @@ mod test {
     use test_util::assert_eq_json;
 
     #[test]
-    fn started() {
+    fn countdown_started() {
         let started_at: Timestamp = DateTime::from(SystemTime::UNIX_EPOCH).into();
         let ends_at = started_at
             .checked_add_signed(Duration::seconds(5))
-            .map(Timestamp::from);
+            .map(Timestamp::from)
+            .unwrap();
 
         let started = Message::Started(Started {
             timer_id: TimerId(Uuid::nil()),
             started_at,
-            ends_at,
+            kind: Kind::Countdown { ends_at },
+            style: Some("coffee_break".into()),
+            title: None,
+            ready_check_enabled: true,
+        });
+
+        assert_eq_json!(started,
+        {
+            "message": "started",
+            "timer_id": "00000000-0000-0000-0000-000000000000",
+            "started_at": "1970-01-01T00:00:00Z",
+            "kind": "countdown",
+            "ends_at": "1970-01-01T00:00:05Z",
+            "style": "coffee_break",
+            "ready_check_enabled": true
+        });
+    }
+
+    #[test]
+    fn stopwatch_started() {
+        let started_at: Timestamp = DateTime::from(SystemTime::UNIX_EPOCH).into();
+
+        let started = Message::Started(Started {
+            timer_id: TimerId(Uuid::nil()),
+            started_at,
+            kind: Kind::Stopwatch,
+            style: None,
             title: Some("Testing the timer!".into()),
             ready_check_enabled: false,
         });
@@ -117,7 +156,7 @@ mod test {
             "message": "started",
             "timer_id": "00000000-0000-0000-0000-000000000000",
             "started_at": "1970-01-01T00:00:00Z",
-            "ends_at": "1970-01-01T00:00:05Z",
+            "kind": "stopwatch",
             "title": "Testing the timer!",
             "ready_check_enabled": false
         });

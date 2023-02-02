@@ -121,7 +121,8 @@ impl SignalingModule for Timer {
                 *frontend_data = Some(outgoing::Started {
                     timer_id: timer.id,
                     started_at: timer.started_at,
-                    ends_at: timer.ends_at,
+                    kind: timer.kind,
+                    style: timer.style,
                     title: timer.title,
                     ready_check_enabled: timer.ready_check_enabled,
                 });
@@ -194,8 +195,8 @@ impl Timer {
                 let started_at = ctx.timestamp();
 
                 // determine the end time at the start of the timer to later calculate the remaining duration for joining participants
-                let ends_at = match start.duration {
-                    Some(duration) => {
+                let kind = match start.kind {
+                    incoming::Kind::Countdown { duration } => {
                         let duration = match duration.try_into() {
                             Ok(duration) => duration,
                             Err(_) => {
@@ -208,25 +209,28 @@ impl Timer {
                         };
 
                         match started_at.checked_add_signed(chrono::Duration::seconds(duration)) {
-                            Some(ends_at) => Some(Timestamp::from(ends_at)),
+                            Some(ends_at) => outgoing::Kind::Countdown {
+                                ends_at: Timestamp::from(ends_at),
+                            },
                             None => {
                                 log::error!("DateTime overflow in timer module");
                                 ctx.ws_send(outgoing::Message::Error(
                                     outgoing::Error::InvalidDuration,
                                 ));
 
-                                None
+                                return Ok(());
                             }
                         }
                     }
-                    None => None,
+                    incoming::Kind::Stopwatch => outgoing::Kind::Stopwatch,
                 };
 
                 let timer = storage::timer::Timer {
                     id: timer_id,
                     created_by: self.participant_id,
                     started_at,
-                    ends_at,
+                    kind,
+                    style: start.style.clone(),
                     title: start.title.clone(),
                     ready_check_enabled: start.enable_ready_check,
                 };
@@ -240,10 +244,10 @@ impl Timer {
                     return Ok(());
                 }
 
-                if let Some(end_time) = ends_at {
+                if let outgoing::Kind::Countdown { ends_at } = kind {
                     ctx.add_event_stream(once(
                         sleep(
-                            end_time
+                            ends_at
                                 .signed_duration_since(Utc::now())
                                 .to_std()
                                 .unwrap_or_default(),
@@ -255,7 +259,8 @@ impl Timer {
                 let started = outgoing::Started {
                     timer_id,
                     started_at,
-                    ends_at,
+                    kind,
+                    style: start.style,
                     title: start.title,
                     ready_check_enabled: start.enable_ready_check,
                 };

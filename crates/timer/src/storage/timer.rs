@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+use crate::outgoing;
 use crate::TimerId;
 use anyhow::{Context, Result};
 use controller::prelude::*;
@@ -34,10 +35,10 @@ pub(crate) struct Timer {
     ///
     /// Allows us to calculate the passed duration for joining participants
     pub(crate) started_at: Timestamp,
-    /// The end of the timer
-    ///
-    /// Allows us to calculate the remaining duration for joining participants
-    pub(crate) ends_at: Option<Timestamp>,
+    /// The Timer kind
+    pub(crate) kind: outgoing::Kind,
+    /// An optional string tag to flag this timer with a custom style
+    pub(crate) style: Option<String>,
     /// The optional title
     pub(crate) title: Option<String>,
     /// Flag to allow/disallow participants to mark themselves as ready
