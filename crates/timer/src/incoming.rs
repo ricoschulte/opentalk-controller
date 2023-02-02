@@ -66,20 +66,19 @@ mod test {
     use controller::prelude::uuid::Uuid;
     use pretty_assertions::assert_eq;
     use test_util::serde_json;
+    use test_util::serde_json::json;
 
     #[test]
     fn countdown_start() {
-        let json = r#"
-        {
+        let json = json!({
             "action": "start",
             "kind": "countdown",
             "duration": 5,
             "style": "coffee_break",
             "enable_ready_check": false
-        }
-        "#;
+        });
 
-        match serde_json::from_str(json).unwrap() {
+        match serde_json::from_value(json).unwrap() {
             Message::Start(Start {
                 kind,
                 style,
@@ -97,16 +96,14 @@ mod test {
 
     #[test]
     fn stopwatch_start() {
-        let json = r#"
-        {
+        let json = json!({
             "action": "start",
             "kind": "stopwatch",
             "title": "Testing the timer!",
             "enable_ready_check": false
-        }
-        "#;
+        });
 
-        match serde_json::from_str(json).unwrap() {
+        match serde_json::from_value(json).unwrap() {
             Message::Start(Start {
                 kind,
                 style,
@@ -124,15 +121,13 @@ mod test {
 
     #[test]
     fn stop() {
-        let json = r#"
-        {
+        let json = json!({
             "action": "stop",
             "timer_id": "00000000-0000-0000-0000-000000000000",
             "reason": "test"
-        }
-        "#;
+        });
 
-        match serde_json::from_str(json).unwrap() {
+        match serde_json::from_value(json).unwrap() {
             Message::Stop(Stop { timer_id, reason }) => {
                 assert_eq!(reason, Some("test".into()));
                 assert_eq!(timer_id, TimerId(Uuid::nil()))
@@ -143,15 +138,13 @@ mod test {
 
     #[test]
     fn update_ready_status() {
-        let json = r#"
-        {
+        let json = json!({
             "action": "update_ready_status",
             "timer_id": "00000000-0000-0000-0000-000000000000",
             "status": true
-        }
-        "#;
+        });
 
-        match serde_json::from_str(json).unwrap() {
+        match serde_json::from_value(json).unwrap() {
             Message::UpdateReadyStatus(UpdateReadyStatus { timer_id, status }) => {
                 assert!(status);
                 assert_eq!(timer_id, TimerId(Uuid::nil()))
