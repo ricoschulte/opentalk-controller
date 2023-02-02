@@ -143,20 +143,22 @@ impl SignalingModule for Protocol {
     }
 
     async fn on_destroy(self, mut ctx: DestroyContext<'_>) {
-        if let Err(e) = self.cleanup_etherpad(ctx.redis_conn()).await {
-            log::error!(
-                "Failed to cleanup etherpad for room {} in redis: {}",
-                self.room_id,
-                e
-            );
-        }
+        if ctx.destroy_room() {
+            if let Err(e) = self.cleanup_etherpad(ctx.redis_conn()).await {
+                log::error!(
+                    "Failed to cleanup etherpad for room {} in redis: {}",
+                    self.room_id,
+                    e
+                );
+            }
 
-        if let Err(e) = storage::cleanup(ctx.redis_conn(), self.room_id).await {
-            log::error!(
-                "Failed to cleanup protocol keys for room {} in redis: {}",
-                self.room_id,
-                e
-            );
+            if let Err(e) = storage::cleanup(ctx.redis_conn(), self.room_id).await {
+                log::error!(
+                    "Failed to cleanup protocol keys for room {} in redis: {}",
+                    self.room_id,
+                    e
+                );
+            }
         }
     }
 }
