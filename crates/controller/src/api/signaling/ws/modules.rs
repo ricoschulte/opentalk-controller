@@ -42,6 +42,10 @@ pub(super) struct Modules {
 }
 
 impl Modules {
+    pub fn get_module_names(&self) -> Vec<&'static str> {
+        self.modules.keys().copied().collect()
+    }
+
     pub async fn add_module<M>(&mut self, module: M)
     where
         M: SignalingModule,

@@ -36,6 +36,8 @@ pub struct JoinSuccess {
 
     pub role: Role,
 
+    pub modules: Vec<&'static str>,
+
     #[serde(flatten)]
     pub module_data: HashMap<&'static str, serde_json::Value>,
 
@@ -91,6 +93,7 @@ mod test {
             "display_name": "name",
             "avatar_url": "http://url",
             "role": "user",
+            "modules": [],
             "participants": [],
         });
 
@@ -99,6 +102,7 @@ mod test {
             role: Role::User,
             display_name: "name".into(),
             avatar_url: Some("http://url".into()),
+            modules: vec![],
             module_data: Default::default(),
             participants: vec![],
         }))
@@ -114,6 +118,7 @@ mod test {
             "id": "00000000-0000-0000-0000-000000000000",
             "display_name": "name",
             "role": "guest",
+            "modules": [],
             "participants": [],
         });
 
@@ -122,6 +127,7 @@ mod test {
             display_name: "name".into(),
             avatar_url: None,
             role: Role::Guest,
+            modules: vec![],
             module_data: Default::default(),
             participants: vec![],
         }))

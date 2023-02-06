@@ -1244,6 +1244,7 @@ impl Runner {
                 role: self.role,
                 display_name: control_data.display_name.clone(),
                 avatar_url: control_data.avatar_url.clone(),
+                modules: self.modules.get_module_names(),
                 module_data,
                 participants,
             }),
