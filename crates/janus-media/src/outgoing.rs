@@ -374,7 +374,7 @@ mod test {
 
         for (error, expected) in errors_and_expected {
             let produced = serde_json::to_value(error).unwrap();
-            println!("{}", produced);
+            println!("{produced}");
             assert_eq!(expected, produced);
         }
     }

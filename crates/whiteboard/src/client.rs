@@ -93,7 +93,7 @@ impl SpacedeckClient {
     ///
     /// Returns the URL to the document
     pub(crate) async fn get_pdf(&self, id: &str) -> Result<Url> {
-        let url = self.base_url.join(&format!("api/spaces/{}/pdf", id))?;
+        let url = self.base_url.join(&format!("api/spaces/{id}/pdf"))?;
 
         let response = self
             .client
@@ -135,7 +135,7 @@ impl SpacedeckClient {
 
     /// Delete the space with the provided `id`
     pub(crate) async fn delete_space(&self, id: &str) -> Result<()> {
-        let url = self.base_url.join(&format!("api/spaces/{}", id))?;
+        let url = self.base_url.join(&format!("api/spaces/{id}"))?;
 
         let response = self
             .client

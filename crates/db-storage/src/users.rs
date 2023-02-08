@@ -196,7 +196,7 @@ impl User {
             return Ok(vec![]);
         }
 
-        let like_query = format!("%{}%", search_str);
+        let like_query = format!("%{search_str}%");
 
         let lower_display_name = lower(users::display_name);
 

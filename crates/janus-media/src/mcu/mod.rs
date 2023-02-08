@@ -67,7 +67,7 @@ impl McuId {
         janus_exchange_key: &str,
         from_janus_key: &str,
     ) -> String {
-        format!("{}-{}-{}", to_janus_key, janus_exchange_key, from_janus_key)
+        format!("{to_janus_key}-{janus_exchange_key}-{from_janus_key}")
     }
 }
 
@@ -396,10 +396,7 @@ impl McuPool {
             .hget(PUBLISHER_INFO, media_session_key.to_string())
             .await
             .with_context(|| {
-                format!(
-                    "Failed to get mcu id for media session key {}",
-                    media_session_key
-                )
+                format!("Failed to get mcu id for media session key {media_session_key}",)
             })?;
 
         let info: PublisherInfo = serde_json::from_str(&publisher_info_json)

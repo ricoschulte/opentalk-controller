@@ -549,7 +549,7 @@ async fn get_event_invites() {
     let invites_with_invitees = EventInvite::get_for_events(&mut conn, events).unwrap();
 
     for (event, invites_with_users) in events.iter().zip(invites_with_invitees) {
-        println!("Event: {:#?}", event);
+        println!("Event: {event:#?}");
         println!(
             "Invitees: {:#?}",
             invites_with_users

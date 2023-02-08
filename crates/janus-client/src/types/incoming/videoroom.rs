@@ -445,7 +445,7 @@ mod test {
             }
         }
         }"#;
-        println!("{}", json);
+        println!("{json}");
 
         let parsed_result: JanusMessage = serde_json::from_str(json).unwrap();
         match parsed_result {
@@ -485,7 +485,7 @@ mod test {
         },
         "jsep": {"type": "offer", "sdp": "v=0.."}
         }"#;
-        println!("{}", json);
+        println!("{json}");
 
         let parsed_result: JanusMessage = serde_json::from_str(json).unwrap();
         dbg!(&parsed_result);
@@ -520,7 +520,7 @@ mod test {
                   }
                }
         }"#;
-        println!("{}", json);
+        println!("{json}");
 
         let parsed_result: JanusMessage = serde_json::from_str(json).unwrap();
         dbg!(&parsed_result);
@@ -558,7 +558,7 @@ mod test {
                }
             }
          }"#;
-        println!("{}", json);
+        println!("{json}");
 
         let parsed_result: JanusMessage = serde_json::from_str(json).unwrap();
         dbg!(&parsed_result);
@@ -602,7 +602,7 @@ mod test {
                 "sdp": "v=0\r\no=mozilla...THIS_IS_SDPARTA-88.0 1621934037162508 1 IN IP4 192.168.0.157\r\ns=VideoRoom 1132341855884658\r\nt=0 0\r\na=group:BUNDLE 0\r\na=msid-semantic: WMS janus\r\nm=video 9 UDP/TLS/RTP/SAVPF 120 124\r\nc=IN IP4 192.168.0.157\r\nb=TIAS:64000\r\na=recvonly\r\na=mid:0\r\na=rtcp-mux\r\na=ice-ufrag:tzKY\r\na=ice-pwd:AMOgviPceqysnvGfi+5/d2\r\na=ice-options:trickle\r\na=fingerprint:sha-256 2D:50:B4:8E:4D:A7:57:62:8A:B3:A1:CC:A3:46:A0:C6:FA:06:CC:39:EC:3F:A2:54:C7:84:8B:2E:81:BF:C3:CB\r\na=setup:active\r\na=rtpmap:120 VP8/90000\r\na=rtcp-fb:120 ccm fir\r\na=rtcp-fb:120 nack\r\na=rtcp-fb:120 nack pli\r\na=rtcp-fb:120 goog-remb\r\na=rtcp-fb:120 transport-cc\r\na=extmap:3 urn:ietf:params:rtp-hdrext:sdes:mid\r\na=extmap:6/inactive http://www.webrtc.org/experiments/rtp-hdrext/playout-delay\r\na=extmap:7 http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01\r\na=fmtp:120 max-fs=12288;max-fr=60\r\na=rtpmap:124 rtx/90000\r\na=fmtp:124 apt=120\r\na=msid:janus janusv0\r\na=ssrc:4045672590 cname:janus\r\na=ssrc:4045672590 msid:janus janusv0\r\na=ssrc:4045672590 mslabel:janus\r\na=ssrc:4045672590 label:janusv0\r\na=ssrc:2597748152 cname:janus\r\na=ssrc:2597748152 msid:janus janusv0\r\na=ssrc:2597748152 mslabel:janus\r\na=ssrc:2597748152 label:janusv0\r\na=candidate:1 1 udp 2015363839 192.168.0.157 33995 typ host\r\na=candidate:2 1 udp 2015364095 10.0.50.30 39626 typ host\r\na=end-of-candidates\r\n"
             }
             }"#;
-        println!("{}", json);
+        println!("{json}");
 
         let parsed_result: JanusMessage = serde_json::from_str(json).unwrap();
         dbg!(&parsed_result);
@@ -659,7 +659,7 @@ mod test {
                }
             }
          }"#;
-        println!("{}", json);
+        println!("{json}");
 
         let parsed_result: JanusMessage = serde_json::from_str(json).unwrap();
         dbg!(&parsed_result);
@@ -723,7 +723,7 @@ mod test {
                }
             }
         }"#;
-        println!("{}", json);
+        println!("{json}");
 
         let parsed_result: JanusMessage = serde_json::from_str(json).unwrap();
         dbg!(&parsed_result);
@@ -762,7 +762,7 @@ mod test {
                }
             }
         }"#;
-        println!("{}", json);
+        println!("{json}");
 
         let parsed_result: JanusMessage = serde_json::from_str(json).unwrap();
         dbg!(&parsed_result);

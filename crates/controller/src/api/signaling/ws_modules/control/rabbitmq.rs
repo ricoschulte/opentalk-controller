@@ -43,17 +43,17 @@ pub enum Message {
 /// Returns the name of the RabbitMQ topic exchange used inside the current room.
 /// This exchange should be used when writing behavior constrained to a single room
 pub fn current_room_exchange_name(room: SignalingRoomId) -> String {
-    format!("k3k-signaling.room={}", room)
+    format!("k3k-signaling.room={room}")
 }
 
 /// Returns the routing-key/topic used to send a message to the given user
 pub fn room_user_routing_key(id: UserId) -> String {
-    format!("user.{}", id)
+    format!("user.{id}")
 }
 
 /// Returns the routing-key/topic used to send a message to the given participant
 pub fn room_participant_routing_key(id: ParticipantId) -> String {
-    format!("participant.{}", id)
+    format!("participant.{id}")
 }
 
 /// Returns the routing-key/topic used to send a message to ALL participants inside a room

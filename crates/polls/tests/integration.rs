@@ -66,7 +66,7 @@ async fn start_poll(module_tester: &mut ModuleTester<Polls>, live_poll: bool) ->
             duration,
         }
     } else {
-        panic!("unexpected {:?}", started1)
+        panic!("unexpected {started1:?}")
     }
 }
 
@@ -122,7 +122,7 @@ async fn full_poll_with_2sec_duration() {
             ]
         );
     } else {
-        panic!("unexpected {:?}", update1)
+        panic!("unexpected {update1:?}")
     }
 
     // User 2 vote
@@ -169,7 +169,7 @@ async fn full_poll_with_2sec_duration() {
             ]
         );
     } else {
-        panic!("unexpected {:?}", update1)
+        panic!("unexpected {update1:?}")
     }
 
     // User 2 vote again but fails
@@ -194,7 +194,7 @@ async fn full_poll_with_2sec_duration() {
     {
         // OK
     } else {
-        panic!("unexpected {:?}", error)
+        panic!("unexpected {error:?}")
     }
 
     // Poll expired, getting results in `Done` event
@@ -225,7 +225,7 @@ async fn full_poll_with_2sec_duration() {
             ]
         );
     } else {
-        panic!("unexpected {:?}", done1)
+        panic!("unexpected {done1:?}")
     }
 
     let done2 = module_tester

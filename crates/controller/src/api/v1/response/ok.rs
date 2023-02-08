@@ -250,7 +250,7 @@ fn vec_to_header_value(
 ) -> Result<header::HeaderValue, header::InvalidHeaderValue> {
     let buf = vec
         .iter()
-        .map(|(rel, url)| format!("<{url}>; rel=\"{rel}\"", url = url, rel = rel))
+        .map(|(rel, url)| format!("<{url}>; rel=\"{rel}\""))
         .collect::<Vec<_>>()
         .join(",");
 

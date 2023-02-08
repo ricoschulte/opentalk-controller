@@ -339,8 +339,7 @@ impl TryFrom<Jsep> for SdpAnswer {
             Ok(SdpAnswer(value))
         } else {
             Err(error::Error::InvalidConversion(format!(
-                "TryFrom Jsep {:?} into SdpAnswer",
-                value
+                "TryFrom Jsep {value:?} into SdpAnswer",
             )))
         }
     }

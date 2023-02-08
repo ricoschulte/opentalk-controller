@@ -427,7 +427,7 @@ impl Authz {
             .get_implicit_resources_for_user(user)?;
 
         let prefix = T::PREFIX;
-        let type_wildcard = format!("{}*", prefix);
+        let type_wildcard = format!("{prefix}*");
 
         // Check if a wildcard policy is present and fulfills the access request
         let has_wildcard_access = policies

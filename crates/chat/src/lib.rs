@@ -32,7 +32,7 @@ mod storage;
 pub use storage::is_chat_enabled;
 
 fn group_routing_key(group_id: GroupId) -> String {
-    format!("group.{}", group_id)
+    format!("group.{group_id}")
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]

@@ -38,7 +38,7 @@ impl FromStr for Token {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let v = BASE58
             .decode_const_len(s)
-            .context(format!("not a base58-encoded u64 value: {:?}", s))?;
+            .context(format!("not a base58-encoded u64 value: {s:?}"))?;
         Ok(Self(v))
     }
 }

@@ -716,7 +716,7 @@ where
         let mut string = first.to_string();
 
         for el in iter {
-            let _ = write!(string, ",{}", el);
+            let _ = write!(string, ",{el}");
         }
 
         serializer.serialize_str(&string)

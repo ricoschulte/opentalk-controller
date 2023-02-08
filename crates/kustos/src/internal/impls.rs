@@ -96,8 +96,7 @@ impl<T: FromStr<Err = crate::ParsingError> + IsSubject> TryFrom<Vec<String>> for
     fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
         if value.len() != 3 {
             return Err(crate::ParsingError::Custom(format!(
-                "Wrong amount of casbin args: {:?}",
-                value
+                "Wrong amount of casbin args: {value:?}",
             )));
         }
 

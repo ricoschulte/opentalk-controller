@@ -328,7 +328,7 @@ impl Protocol {
                         .await?
                         .unwrap();
 
-                    let pad_id = format!("{}${}", group_id, PAD_NAME);
+                    let pad_id = format!("{group_id}${PAD_NAME}");
 
                     let data = self
                         .etherpad
@@ -560,7 +560,7 @@ impl Protocol {
             .await?
             .unwrap();
 
-        let pad_id = format!("{}${}", group_id, PAD_NAME);
+        let pad_id = format!("{group_id}${PAD_NAME}");
 
         self.etherpad.delete_pad(&pad_id).await?;
 

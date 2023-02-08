@@ -104,5 +104,5 @@ pub async fn delete_asset(
 }
 
 pub fn asset_key(asset_id: &AssetId) -> String {
-    format!("assets/{}", asset_id)
+    format!("assets/{asset_id}")
 }

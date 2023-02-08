@@ -130,7 +130,7 @@ fn create_credentials<T: Rng + CryptoRng>(
 
     // We append 16 bytes as a base64 encoded string to the prefix `turn_random_for_privacy_` for usage as application data in our username
     let random_part: String = base64::encode(rng.gen::<[u8; 16]>().as_ref());
-    let username = format!("{}:turn_random_for_privacy_{}", ttl, random_part);
+    let username = format!("{ttl}:turn_random_for_privacy_{random_part}",);
     let password = base64::encode(hmac::sign(&key, username.as_bytes()).as_ref());
 
     IceServer::Turn(Turn {

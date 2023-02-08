@@ -90,7 +90,7 @@ mod test {
                 assert_eq!(title, None);
                 assert!(!enable_ready_check);
             }
-            unexpected => panic!("Expected start message, got: {:?}", unexpected),
+            unexpected => panic!("Expected start message, got: {unexpected:?}"),
         }
     }
 
@@ -115,7 +115,7 @@ mod test {
                 assert_eq!(title, Some("Testing the timer!".into()));
                 assert!(!enable_ready_check);
             }
-            unexpected => panic!("Expected start message, got: {:?}", unexpected),
+            unexpected => panic!("Expected start message, got: {unexpected:?}"),
         }
     }
 
@@ -132,7 +132,7 @@ mod test {
                 assert_eq!(reason, Some("test".into()));
                 assert_eq!(timer_id, TimerId(Uuid::nil()))
             }
-            unexpected => panic!("Expected stop message, got: {:?}", unexpected),
+            unexpected => panic!("Expected stop message, got: {unexpected:?}"),
         }
     }
 
@@ -149,7 +149,7 @@ mod test {
                 assert!(status);
                 assert_eq!(timer_id, TimerId(Uuid::nil()))
             }
-            unexpected => panic!("Expected ready message, got: {:?}", unexpected),
+            unexpected => panic!("Expected ready message, got: {unexpected:?}"),
         }
     }
 }

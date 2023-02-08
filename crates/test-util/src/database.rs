@@ -34,7 +34,7 @@ impl DatabaseContext {
 
         let db_name = std::env::var("DATABASE_NAME").unwrap_or_else(|_| "k3k_test".to_owned());
 
-        let postgres_url = format!("{}/postgres", base_url);
+        let postgres_url = format!("{base_url}/postgres");
         let mut conn =
             PgConnection::establish(&postgres_url).expect("Cannot connect to postgres database.");
 
@@ -42,12 +42,12 @@ impl DatabaseContext {
         drop_database(&mut conn, &db_name).expect("Database initialization cleanup failed");
 
         // Create a new database for the test
-        let query = diesel::sql_query(format!("CREATE DATABASE {}", db_name));
+        let query = diesel::sql_query(format!("CREATE DATABASE {db_name}"));
         query
             .execute(&mut conn)
-            .unwrap_or_else(|_| panic!("Could not create database {}", db_name));
+            .unwrap_or_else(|_| panic!("Could not create database {db_name}"));
 
-        let db_url = format!("{}/{}", base_url, db_name);
+        let db_url = format!("{base_url}/{db_name}");
 
         migrate_from_url(&db_url)
             .await
@@ -65,8 +65,8 @@ impl DatabaseContext {
 
     pub fn create_test_user(&self, n: u32, groups: Vec<String>) -> Result<User> {
         let new_user = NewUser {
-            oidc_sub: format!("oidc_sub{}", n),
-            email: format!("k3k_test_user{}@heinlein.de", n),
+            oidc_sub: format!("oidc_sub{n}"),
+            email: format!("k3k_test_user{n}@heinlein.de"),
             title: "".into(),
             firstname: "test".into(),
             lastname: "tester".into(),
@@ -120,10 +120,10 @@ impl Drop for DatabaseContext {
 
 /// Disconnect all users from the database with `db_name` and drop it.
 fn drop_database(conn: &mut PgConnection, db_name: &str) -> Result<()> {
-    let query = diesel::sql_query(format!("DROP DATABASE IF EXISTS {} WITH (FORCE)", db_name));
+    let query = diesel::sql_query(format!("DROP DATABASE IF EXISTS {db_name} WITH (FORCE)"));
     query
         .execute(conn)
-        .with_context(|| format!("Couldn't drop database {}", db_name))?;
+        .with_context(|| format!("Couldn't drop database {db_name}"))?;
 
     Ok(())
 }
