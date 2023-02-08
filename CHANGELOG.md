@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [unreleased]
+## [Unreleased]
 
 ### Fixed
 
@@ -16,10 +16,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - timer: add the `kind` field to distinguish between a `stopwatch` and `countdown` more clearly ([#316](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/316))
 - timer: add the `style` field to the `start` & `started` messages and let clients tag a timer with a custom style ([#316](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/316))
 
+## [0.1.0-rc.2] - 2023-01-30
+
+### Changed
+
+- updated dependencies
+
 ## [0.1.0-rc.1] - 2023-01-20
 
 ### Added
 
+- add license information
 - controller: allow overriding some build-time environment variables ([#137](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/137))
 - chat: add `last_seen_timestamp` fields [#242](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/242)
 - legal-vote: add option to automatically create a PDF asset when a vote has ended ([#259](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/259))
@@ -41,10 +48,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Removed
 
 - legal-vote: live updates for `roll_call` and `pseudonymous` votes, results are instead published with the `stopped` message ([#272](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/272))
-- automod module - will not be part of the community edition ([#257](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/257))
-- legal-vote module - will not be part of the community edition ([#257](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/257))
+- automod: will not be part of the community edition ([#257](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/257))
+- legal-vote: will not be part of the community edition ([#257](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/257))
 
-## [1.0.0-rc.10] - 2022-12-09
+## [0.0.0-internal-release.10] - 2022-12-09
 
 ### Added
 
@@ -55,7 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - recording: properly read participants consent when they join or update their state
 - recording: only delete the current recording state when the actual recorder leaves
 
-## [1.0.0-rc.9] - 2022-12-02
+## [0.0.0-internal-release.9] - 2022-12-02
 
 ### Added
 
@@ -82,7 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller: added the missing permission suffix `/assets` when giving access to a room
 - controller: fixed a bug where environment variables did not overwrite config values ([#263](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/263))
 
-## [1.0.0-rc.8] - 2022-11-10
+## [0.0.0-internal-release.8] - 2022-11-10
 
 ### Added
 
@@ -106,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - chat/ee-chat: redundant timestamp removed from outgoing chat messages
 
-## [1.0.0-rc.7] - 2022-10-27
+## [0.0.0-internal-release.7] - 2022-10-27
 
 ### Added
 
@@ -120,7 +127,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - controller: runner's websocket error messages straightened (`text` field renamed to `error`, values changed to slug style)
 
-## [1.0.0-rc.6] - 2022-10-12
+## [0.0.0-internal-release.6] - 2022-10-12
 
 ### Added
 
@@ -135,7 +142,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - trace: replace the setting `enable_opentelemetry` with `jaeger_agent_endpoint`
 - chat/ee-chat: increase maximum chat message size to 4096 bytes
 
-## [1.0.0-rc.5] - 2022-09-30
+## [0.0.0-internal-release.5] - 2022-09-30
 
 ### Added
 
@@ -156,7 +163,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller: fix pagination serialization ([#217](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/217))
 - janus-media: added target and type information to some error responses ([#219](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/219))
 
-## [1.0.0-rc.4] - 2022-08-29
+## [0.0.0-internal-release.4] - 2022-08-29
 
 ### Added
 
@@ -173,7 +180,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller: added the optional claim `nickname` to the login endpoint that will be used as the users `display_name` when set
 - janus-media: stopped forwarding RTP media packets while a client is muted
 
-## [1.0.0-rc.3] - 2022-07-20
+## [0.0.0-internal-release.3] - 2022-07-20
 
 ### Added
 
@@ -191,7 +198,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - updated dependency version of pin-project
 - changed the login endpoint to return a bad-request with `invalid_claims` when invalid user claims were provided
 
-## [1.0.0-rc.2] - 2022-06-22
+## [0.0.0-internal-release.2] - 2022-06-22
 
 ### Added
 
@@ -210,21 +217,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - update dependency versions of various controller crates
 
-## [1.0.0-rc.1] - 2022-06-14
+## [0.0.0-internal-release.1] - 2022-06-14
 
 ### Added
 
 - initial release candidate
 
-[unreleased]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v0.1.0-rc.1...main
-[0.1.0-rc.1]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v1.0.0-rc.10...v0.1.0-rc.1
-[1.0.0-rc.10]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v1.0.0-rc.9...v1.0.0-rc.10
-[1.0.0-rc.9]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v1.0.0-rc.8...v1.0.0-rc.9
-[1.0.0-rc.8]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v1.0.0-rc.7...v1.0.0-rc.8
-[1.0.0-rc.7]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v1.0.0-rc.6...v1.0.0-rc.7
-[1.0.0-rc.6]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v1.0.0-rc.5...v1.0.0-rc.6
-[1.0.0-rc.5]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v1.0.0-rc.4...v1.0.0-rc.5
-[1.0.0-rc.4]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v1.0.0-rc.3...v1.0.0-rc.4
-[1.0.0-rc.3]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v1.0.0-rc.2...v1.0.0-rc.3
-[1.0.0-rc.2]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v1.0.0-rc.1...v1.0.0-rc.2
-[1.0.0-rc.1]: https://git.opentalk.dev/opentalk/k3k-controller/-/commits/v1.0.0-rc.1
+[unreleased]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v0.1.0-rc.2...main
+[0.1.0-rc.2]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v0.1.0-rc.1...v0.1.0-rc.2
+[0.1.0-rc.1]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/8b6e62c700376aa82fab9eab07346207becf7c78...v0.1.0-rc.1
+
+[0.0.0-internal-release.10]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/8302382ac420eccc069ca891e0bd067ef6140754...8b6e62c700376aa82fab9eab07346207becf7c78
+[0.0.0-internal-release.9]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/446647a13f2e163f1be02cefbdaf04e201598444...8302382ac420eccc069ca891e0bd067ef6140754
+[0.0.0-internal-release.8]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/8cbc5ed8d23adc95fa3f8e128bbbe84b50977088...446647a13f2e163f1be02cefbdaf04e201598444
+[0.0.0-internal-release.7]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/daf5e7e8279bbe48af4240acf74ecbaf8119eb7a...8cbc5ed8d23adc95fa3f8e128bbbe84b50977088
+[0.0.0-internal-release.6]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/312226b387dea53679a85c48c095bce769be843b...daf5e7e8279bbe48af4240acf74ecbaf8119eb7a
+[0.0.0-internal-release.5]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/c3d4da97a1fb32c44956281cc70de6568b3e8045...312226b387dea53679a85c48c095bce769be843b
+[0.0.0-internal-release.4]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/248350563f6de3bd7dab82c2f183a9764fbe68ee...c3d4da97a1fb32c44956281cc70de6568b3e8045
+[0.0.0-internal-release.3]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/f001cf6e5a3f7d8e0da29cc9d1c6d1ad744a717f...248350563f6de3bd7dab82c2f183a9764fbe68ee
+[0.0.0-internal-release.2]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/b64afd058f6cfa16c67cbbad2f98cd0f2be3181d...f001cf6e5a3f7d8e0da29cc9d1c6d1ad744a717f
+[0.0.0-internal-release.1]: https://git.opentalk.dev/opentalk/k3k-controller/-/commits/b64afd058f6cfa16c67cbbad2f98cd0f2be3181d
