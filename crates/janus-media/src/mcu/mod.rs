@@ -439,6 +439,13 @@ impl McuPool {
 
         Ok(subscriber)
     }
+
+    pub fn participants_have_presenter_role(&self) -> bool {
+        self.shared_settings
+            .load()
+            .defaults
+            .participants_have_presenter_role
+    }
 }
 
 async fn global_reconnect_task(mcu_pool: Arc<McuPool>, mut receiver: mpsc::Receiver<Connection>) {

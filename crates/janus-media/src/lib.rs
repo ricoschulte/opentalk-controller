@@ -125,6 +125,10 @@ impl SignalingModule for Media {
         storage::set_state(ctx.redis_conn(), room, id, &state).await?;
         ctx.add_event_stream(ReceiverStream::new(janus_events));
 
+        if mcu.participants_have_presenter_role() {
+            storage::set_presenter(ctx.redis_conn(), room, id).await?;
+        }
+
         Ok(Some(Self {
             id,
             room,
