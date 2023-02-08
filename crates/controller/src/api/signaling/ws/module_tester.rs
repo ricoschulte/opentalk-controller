@@ -290,10 +290,7 @@ where
         self.runner_interfaces
             .get_mut(participant_id)
             .with_context(|| {
-                format!(
-                    "Participant {} does not exist in module tester",
-                    participant_id
-                )
+                format!("Participant {participant_id} does not exist in module tester",)
             })
     }
 
@@ -750,7 +747,7 @@ where
 
         self.rabbitmq_sender
             .send(rabbitmq_publish)
-            .map_err(|e| anyhow::Error::msg(format!("Unable to send rabbbitmq_publish, {}", e)))?;
+            .map_err(|e| anyhow::Error::msg(format!("Unable to send rabbbitmq_publish, {e}")))?;
         Ok(())
     }
 
@@ -1036,7 +1033,7 @@ impl<S, R> Interface<S, R> {
     fn send(&self, value: S) -> Result<()> {
         self.sender
             .send(value)
-            .map_err(|e| anyhow::Error::msg(format!("MockWs failed to send message, {}", e)))
+            .map_err(|e| anyhow::Error::msg(format!("MockWs failed to send message, {e}")))
     }
 
     async fn recv(&mut self) -> Option<R> {

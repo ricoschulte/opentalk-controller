@@ -80,8 +80,7 @@ mod time {
 
         Utc.timestamp_opt(seconds, 0).single().ok_or_else(|| {
             serde::de::Error::custom(format!(
-                "Failed to convert {} seconds to DateTime<Utc>",
-                seconds
+                "Failed to convert {seconds} seconds to DateTime<Utc>",
             ))
         })
     }

@@ -133,7 +133,7 @@ where
             if log::log_enabled!(log::Level::Error) {
                 log::error!("Crashed with error: {:?}", err);
             } else {
-                eprintln!("Crashed with error: {:?}", err);
+                eprintln!("Crashed with error: {err:?}");
             }
 
             trace::destroy().await;

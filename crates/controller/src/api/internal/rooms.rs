@@ -39,7 +39,7 @@ pub async fn delete(
     authz: Data<Authz>,
 ) -> Result<NoContent, ApiError> {
     let room_id = room_id.into_inner();
-    let room_path = format!("/rooms/{}", room_id);
+    let room_path = format!("/rooms/{room_id}");
 
     let db_clone = db.clone();
     let (mut linked_events, mut linked_legal_votes) =

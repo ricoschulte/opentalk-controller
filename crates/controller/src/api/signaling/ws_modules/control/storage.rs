@@ -146,7 +146,7 @@ pub async fn remove_attribute_key(
             attribute_name: name,
         })
         .await
-        .with_context(|| format!("Failed to remove participant attribute key, {}", name))
+        .with_context(|| format!("Failed to remove participant attribute key, {name}"))
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
@@ -165,7 +165,7 @@ pub async fn remove_attribute(
             participant,
         )
         .await
-        .with_context(|| format!("Failed to remove participant attribute key, {}", name))
+        .with_context(|| format!("Failed to remove participant attribute key, {name}"))
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn))]
@@ -189,7 +189,7 @@ where
             value,
         )
         .await
-        .with_context(|| format!("Failed to set attribute {}", name))?;
+        .with_context(|| format!("Failed to set attribute {name}"))?;
 
     Ok(())
 }
@@ -281,7 +281,7 @@ where
             participant,
         )
         .await
-        .with_context(|| format!("Failed to get attribute {}", name))?;
+        .with_context(|| format!("Failed to get attribute {name}"))?;
 
     Ok(value)
 }
@@ -311,7 +311,7 @@ where
             .arg(participants)
             .query_async(redis_conn)
             .await
-            .with_context(|| format!("Failed to get attribute '{}' for all participants ", name))
+            .with_context(|| format!("Failed to get attribute '{name}' for all participants "))
     }
 }
 

@@ -178,28 +178,27 @@ mod test {
 
     fn build_jwt_message(iat: u64, exp: u64) -> String {
         let header = base64::encode_config(
-            format!(r#"{{ "alg": "RS256", "typ": "JWT", "kid": "{}" }}"#, KID),
+            format!(r#"{{ "alg": "RS256", "typ": "JWT", "kid": "{KID}" }}"#),
             base64::URL_SAFE_NO_PAD,
         );
 
         let payload = format!(
             r#"{{
                 "sub": "admin",
-                "iat": {},
+                "iat": {iat},
                 "iss": "https://example.org/realms/Test",
-                "exp": {},
+                "exp": {exp},
                 "x_grp": ["/admin"],
                 "preferred_username": "admin",
                 "given_name": "the",
                 "family_name": "admin",
                 "email": "admin@mail.de"
                 }}"#,
-            iat, exp,
         );
 
         let payload = base64::encode_config(payload, base64::URL_SAFE_NO_PAD);
 
-        format!("{}.{}", header, payload)
+        format!("{header}.{payload}")
     }
 
     #[test]
@@ -240,7 +239,7 @@ mod test {
         let signature = base64::encode_config(signature.as_ref(), base64::URL_SAFE_NO_PAD);
 
         // complete JWT
-        let jwt_enc = format!("{}.{}", message, signature);
+        let jwt_enc = format!("{message}.{signature}");
 
         // Verify should success
         let claims =
@@ -270,7 +269,7 @@ mod test {
         let signature = base64::encode_config(signature.as_ref(), base64::URL_SAFE_NO_PAD);
 
         // complete JWT
-        let jwt_enc = format!("{}.{}", message, signature);
+        let jwt_enc = format!("{message}.{signature}");
 
         // Verify should success
         match super::verify::<UserClaims>(&jwks, &jwt_enc) {
@@ -301,7 +300,7 @@ mod test {
         let signature = base64::encode_config(signature.as_ref(), base64::URL_SAFE_NO_PAD);
 
         // complete JWT
-        let jwt_enc = format!("{}.{}", message, signature);
+        let jwt_enc = format!("{message}.{signature}");
 
         // Verify should success
         match super::verify::<UserClaims>(&jwks, &jwt_enc) {

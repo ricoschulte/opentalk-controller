@@ -222,7 +222,7 @@ async fn simple_countdown(duration: u64) {
         )
         .await
     {
-        panic!("Did not expect Ws message, but received: {:?}", anything);
+        panic!("Did not expect Ws message, but received: {anything:?}");
     }
 
     if let WsMessageOutgoing::Module(outgoing::Message::Stopped(Stopped {

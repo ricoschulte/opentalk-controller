@@ -499,7 +499,7 @@ fn collect_validation_errors(
             validator::ValidationErrorsKind::List(list) => {
                 let invalid_indexes = list.iter().map(|(idx, ..)| idx).take(15).join(", ");
 
-                let message = format!("Invalid values at index {}", invalid_indexes);
+                let message = format!("Invalid values at index {invalid_indexes}");
 
                 entries.push(ValidationErrorEntry {
                     field,

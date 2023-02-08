@@ -66,8 +66,7 @@ impl TryFrom<JanusMessage> for (PluginData, Option<Jsep>) {
             JanusMessage::Event(e) => Ok((e.plugindata, e.jsep)),
             JanusMessage::Success(Success::Plugin(e)) => Ok((e.plugindata, e.jsep)),
             _ => Err(error::Error::InvalidConversion(format!(
-                "TryFrom JanusMessage {:?} into (PluginData, Option<Jsep>)",
-                value
+                "TryFrom JanusMessage {value:?} into (PluginData, Option<Jsep>)",
             ))),
         }
     }

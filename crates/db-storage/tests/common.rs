@@ -24,7 +24,7 @@ pub fn make_user(
             id_token_exp: 0,
             display_name: display_name.into(),
             language: "".into(),
-            oidc_sub: format!("{}{}", firstname, lastname),
+            oidc_sub: format!("{firstname}{lastname}"),
             phone: None,
         },
         groups: vec![],

@@ -48,7 +48,7 @@ pub(crate) async fn fix_acl(settings: Settings, config: FixAclConfig) -> Result<
             "{}",
             errors
                 .iter()
-                .map(|e| format!("{:#} \n", e))
+                .map(|e| format!("{e:#} \n"))
                 .collect::<String>()
         ))
     }
@@ -163,12 +163,12 @@ async fn maybe_grant_access_to_user(
     let needs_addition = !authz
         .is_permissions_present(PolicyUser::from(user), res.clone(), access)
         .await
-        .with_context(|| format!("User: {}, Resource: {:?}", user, res))?;
+        .with_context(|| format!("User: {user}, Resource: {res:?}"))?;
     if needs_addition {
         return authz
             .grant_user_access(user, &[(&res, access)])
             .await
-            .with_context(|| format!("User: {}, Resource: {:?}", user, res));
+            .with_context(|| format!("User: {user}, Resource: {res:?}"));
     }
     Ok(())
 }

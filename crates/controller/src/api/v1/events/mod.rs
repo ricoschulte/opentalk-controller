@@ -95,7 +95,7 @@ impl<'de> Visitor<'de> for InstanceIdVisitor {
     type Value = InstanceId;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(formatter, "timestamp in '{}' format", UTC_DT_FORMAT)
+        write!(formatter, "timestamp in '{UTC_DT_FORMAT}' format")
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>

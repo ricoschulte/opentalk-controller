@@ -45,7 +45,7 @@ pub async fn get_room_chat_history(
     let messages = redis_conn
         .lrange(RoomChatHistory { room }, 0, -1)
         .await
-        .with_context(|| format!("Failed to get chat history: room={}", room))?;
+        .with_context(|| format!("Failed to get chat history: room={room}"))?;
 
     Ok(messages)
 }
@@ -59,7 +59,7 @@ pub async fn add_message_to_room_chat_history(
     redis_conn
         .lpush(RoomChatHistory { room }, message)
         .await
-        .with_context(|| format!("Failed to add message to room chat history, room={}", room))?;
+        .with_context(|| format!("Failed to add message to room chat history, room={room}"))?;
 
     Ok(())
 }
@@ -72,7 +72,7 @@ pub async fn delete_room_chat_history(
     redis_conn
         .del(RoomChatHistory { room })
         .await
-        .with_context(|| format!("Failed to delete room chat history, room={}", room))?;
+        .with_context(|| format!("Failed to delete room chat history, room={room}"))?;
 
     Ok(())
 }
@@ -552,7 +552,7 @@ pub async fn get_group_chat_history(
     redis_conn
         .lrange(RoomGroupChatHistory { room, group }, 0, -1)
         .await
-        .with_context(|| format!("Failed to get chat history, {}, group={}", room, group))
+        .with_context(|| format!("Failed to get chat history, {room}, group={group}"))
 }
 
 #[tracing::instrument(level = "debug", skip(redis_conn, message))]
@@ -566,10 +566,7 @@ pub async fn add_message_to_group_chat_history(
         .lpush(RoomGroupChatHistory { room, group }, message)
         .await
         .with_context(|| {
-            format!(
-                "Failed to add message to room chat history, {}, group={}",
-                room, group
-            )
+            format!("Failed to add message to room chat history, {room}, group={group}",)
         })
 }
 
@@ -582,10 +579,7 @@ pub async fn delete_group_chat_history(
     redis_conn
         .del(RoomGroupChatHistory { room, group })
         .await
-        .with_context(|| {
-            format!(
-                "Failed to delete room group chat history, {}, group={}",
-                room, group
-            )
-        })
+        .with_context(
+            || format!("Failed to delete room group chat history, {room}, group={group}",),
+        )
 }

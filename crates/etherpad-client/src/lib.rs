@@ -278,9 +278,9 @@ impl EtherpadClient {
     ) -> Result<impl Stream<Item = reqwest::Result<Bytes>> + std::marker::Unpin> {
         let url = self
             .base_url
-            .join(&format!("p/{}/export/pdf", readonly_pad_id))?;
+            .join(&format!("p/{readonly_pad_id}/export/pdf"))?;
 
-        let cookie_value = format!("sessionID={}; path=/; SameSite=None; Secure;", session_id);
+        let cookie_value = format!("sessionID={session_id}; path=/; SameSite=None; Secure;");
 
         let response = self
             .client

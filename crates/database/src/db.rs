@@ -83,10 +83,9 @@ impl Db {
                 let state = self.pool.state();
                 let msg = format!(
                     "Unable to get connection from connection pool.
-                                Error: {}
+                                Error: {e}
                                 Pool State:
-                                    {:?}",
-                    e, state
+                                    {state:?}",
                 );
                 log::error!("{}", &msg);
                 Err(DatabaseError::R2D2Error(msg))

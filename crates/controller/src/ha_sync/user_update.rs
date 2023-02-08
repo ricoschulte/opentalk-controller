@@ -13,7 +13,7 @@ pub const EXCHANGE: &str = "user-update";
 
 /// Helper function to generate topic for a update message
 pub fn routing_key(user_id: UserId) -> String {
-    format!("user.{}", user_id)
+    format!("user.{user_id}")
 }
 
 /// The message sent on an update event
