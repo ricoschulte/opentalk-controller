@@ -5,6 +5,7 @@
 use self::types::protocol::NewProtocol;
 use crate::rooms::RoomId;
 use crate::schema::legal_votes;
+use crate::tenants::TenantId;
 use crate::users::UserId;
 use chrono::{DateTime, Utc};
 use database::{DatabaseError, DbConnection, Paginate, Result};
@@ -36,6 +37,7 @@ pub struct LegalVote {
     pub created_at: DateTime<Utc>,
     pub room: Option<RoomId>,
     pub protocol: Protocol,
+    pub tenant_id: TenantId,
 }
 
 impl LegalVote {
@@ -151,17 +153,10 @@ pub struct NewLegalVote {
     pub created_by: UserId,
     pub protocol: NewProtocol,
     pub room: Option<RoomId>,
+    pub tenant_id: TenantId,
 }
 
 impl NewLegalVote {
-    pub fn new(created_by: UserId, room_id: RoomId) -> Self {
-        Self {
-            created_by,
-            protocol: NewProtocol::new(Vec::new()),
-            room: Some(room_id),
-        }
-    }
-
     /// Insert a [`NewLegalVote`] into the database and returns the created [`LegalVote`]
     ///
     /// Generates a [`LegalVoteId`] (uuid) for the entry in the database. In case the insert statement fails with an `UniqueViolation`,

@@ -17,6 +17,7 @@ use database::Db;
 use db_storage::events::EventId;
 use db_storage::groups::{get_or_create_groups_by_name, Group, GroupName};
 use db_storage::rooms::RoomId;
+use db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId, TenantId};
 use db_storage::users::User;
 use kustos::prelude::PoliciesBuilder;
 use lapin_pool::RabbitMqChannel;
@@ -78,15 +79,20 @@ pub async fn login(
         let settings = settings.load_full();
         let mut conn = db.get_conn()?;
 
-        let groups: Vec<GroupName> = take(&mut info.x_grp)
+        let tenant = get_or_create_tenant_by_oidc_id(
+            &mut conn,
+            &OidcTenantId::from(info.tenant_id.clone()),
+        )?;
+
+        let groups: Vec<(TenantId, GroupName)> = take(&mut info.x_grp)
             .into_iter()
-            .map(GroupName::from)
+            .map(|group| (tenant.id, GroupName::from(group)))
             .collect();
 
         let groups = get_or_create_groups_by_name(&mut conn, &groups)?;
 
         // Try to get the user by the `sub` field in the IdToken
-        let user = User::get_by_oidc_sub(&mut conn, &info.sub)?;
+        let user = User::get_by_oidc_sub(&mut conn, tenant.id, &info.sub)?;
 
         let login_result = match user {
             Some(user) => {
@@ -95,7 +101,7 @@ pub async fn login(
             }
             None => {
                 // No matching user, create a new one with inside the given tenants and groups
-                create_user::create_user(&settings, &mut conn, info, groups)?
+                create_user::create_user(&settings, &mut conn, info, tenant, groups)?
             }
         };
 

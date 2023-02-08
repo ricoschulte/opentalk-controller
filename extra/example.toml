@@ -33,7 +33,6 @@ url = "postgres://postgres:password123@localhost:5432/k3k"
 # Defaults to 10
 #min_idle_connections = 10
 
-
 [http]
 # The port to bind the HTTP Server to (defaults to 11311).
 port = 11311

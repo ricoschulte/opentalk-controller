@@ -21,6 +21,7 @@ use db_storage::events::{
     Event, EventException, EventExceptionKind, EventId, EventInviteStatus, NewEventException,
     UpdateEventException,
 };
+use db_storage::tenants::Tenant;
 use db_storage::users::User;
 use keycloak_admin::KeycloakAdminClient;
 use rrule::RRuleSet;
@@ -102,6 +103,7 @@ pub async fn get_event_instances(
     settings: SharedSettingsActix,
     db: Data<Db>,
     kc_admin_client: Data<KeycloakAdminClient>,
+    current_tenant: ReqData<Tenant>,
     current_user: ReqData<User>,
     event_id: Path<EventId>,
     query: Query<GetEventInstancesQuery>,
@@ -213,8 +215,12 @@ pub async fn get_event_instances(
 
     // Enrich the invitees for the first instance only and reuse them as all instances have the same invitees.
     let event_instances = if let Some(instance) = instances_data.instances.first() {
-        let enriched_invitees =
-            enrich_invitees_from_keycloak(kc_admin_client_ref, instance.invitees.clone()).await;
+        let enriched_invitees = enrich_invitees_from_keycloak(
+            kc_admin_client_ref,
+            &current_tenant,
+            instance.invitees.clone(),
+        )
+        .await;
 
         instances_data
             .instances
@@ -252,6 +258,7 @@ pub async fn get_event_instance(
     settings: SharedSettingsActix,
     db: Data<Db>,
     kc_admin_client: Data<KeycloakAdminClient>,
+    current_tenant: ReqData<Tenant>,
     current_user: ReqData<User>,
     path: Path<GetEventInstancePath>,
     query: Query<GetEventInstanceQuery>,
@@ -304,7 +311,12 @@ pub async fn get_event_instance(
     .await??;
 
     let event_instance = EventInstance {
-        invitees: enrich_invitees_from_keycloak(&kc_admin_client, event_instance.invitees).await,
+        invitees: enrich_invitees_from_keycloak(
+            &kc_admin_client,
+            &current_tenant,
+            event_instance.invitees,
+        )
+        .await,
         ..event_instance
     };
 
@@ -368,10 +380,12 @@ impl PatchEventInstanceBody {
 ///
 /// Returns the patched event instance
 #[patch("/events/{event_id}/instances/{instance_id}")]
+#[allow(clippy::too_many_arguments)]
 pub async fn patch_event_instance(
     settings: SharedSettingsActix,
     db: Data<Db>,
     kc_admin_client: Data<KeycloakAdminClient>,
+    current_tenant: ReqData<Tenant>,
     current_user: ReqData<User>,
     path: Path<PatchEventInstancePath>,
     query: Query<PatchEventInstanceQuery>,
@@ -507,7 +521,12 @@ pub async fn patch_event_instance(
     .await??;
 
     let event_instance = EventInstance {
-        invitees: enrich_invitees_from_keycloak(&kc_admin_client, event_instance.invitees).await,
+        invitees: enrich_invitees_from_keycloak(
+            &kc_admin_client,
+            &current_tenant,
+            event_instance.invitees,
+        )
+        .await,
         ..event_instance
     };
 

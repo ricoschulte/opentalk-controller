@@ -9,11 +9,12 @@ use controller_shared::settings::Settings;
 use database::DbConnection;
 use db_storage::events::email_invites::EventEmailInvite;
 use db_storage::groups::{insert_user_into_groups, Group};
+use db_storage::tenants::Tenant;
 use db_storage::users::NewUser;
 use diesel::Connection;
 
-/// Called when `POST /auth/login` receives an id-token with a new `sub` field combination. Creates a new user
-/// in the given tenant using the information extracted from the id-token claims.
+/// Called when `POST /auth/login` receives an id-token with a new `sub` + `tenant_id` field combination. Creates a new
+/// user in the given tenant using the information extracted from the id-token claims.
 /// Also inserts the user in the previously created groups. (Group membership is also taken from the id-token.)
 ///
 /// If any email-invites in the given tenant exist for the new user's email, they will be migrated to user-invites.
@@ -23,6 +24,7 @@ pub(super) fn create_user(
     settings: &Settings,
     conn: &mut DbConnection,
     info: IdTokenInfo,
+    tenant: Tenant,
     groups: Vec<Group>,
 ) -> database::Result<LoginResult> {
     let phone_number =
@@ -49,6 +51,7 @@ pub(super) fn create_user(
             // TODO: try to get user language from accept-language header
             language: settings.defaults.user_language.clone(),
             phone: phone_number,
+            tenant_id: tenant.id,
         }
         .insert(conn)?;
 

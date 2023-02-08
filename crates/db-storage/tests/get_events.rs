@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
+use crate::common::make_user;
 use chrono::{TimeZone as _, Utc};
 use chrono_tz::Tz;
 use database::DbConnection;
@@ -10,11 +11,10 @@ use k3k_db_storage::events::{
     TimeZone, UpdateEventInvite,
 };
 use k3k_db_storage::rooms::{NewRoom, RoomId};
+use k3k_db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId};
 use k3k_db_storage::users::UserId;
 use pretty_assertions::assert_eq;
 use serial_test::serial;
-
-use crate::common::make_user;
 
 mod common;
 
@@ -25,6 +25,8 @@ fn make_event(
     hour: Option<u32>,
     is_adhoc: bool,
 ) -> Event {
+    let tenant =
+        get_or_create_tenant_by_oidc_id(conn, &OidcTenantId::from("default".into())).unwrap();
     NewEvent {
         title: "Test Event".into(),
         description: "Test Event".into(),
@@ -41,6 +43,7 @@ fn make_event(
         is_recurring: Some(false),
         recurrence_pattern: None,
         is_adhoc,
+        tenant_id: tenant.id,
     }
     .insert(conn)
     .unwrap()
@@ -70,6 +73,7 @@ async fn test() {
         created_by: user.id,
         password: None,
         waiting_room: false,
+        tenant_id: user.tenant_id,
     }
     .insert(&mut conn)
     .unwrap();
@@ -97,7 +101,7 @@ async fn test() {
         // Get first two events 1, 2
         let first_two = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             None,
@@ -120,7 +124,7 @@ async fn test() {
         // Use that to get 3,4
         let next_two = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             None,
@@ -142,7 +146,7 @@ async fn test() {
 
         let next_two = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             None,
@@ -164,7 +168,7 @@ async fn test() {
 
         let next_two = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             None,
@@ -186,7 +190,7 @@ async fn test() {
         // Test time_min
         let only_event8 = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 5, 0, 0).unwrap()),
@@ -205,7 +209,7 @@ async fn test() {
         // Test time_max
         let every_event_except_event8 = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             None,
@@ -230,7 +234,7 @@ async fn test() {
         // Test both time_min + time_max
         let only_event_at_3h = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 3, 0, 0).unwrap()),
@@ -264,6 +268,7 @@ async fn get_events_invite_filter() {
         created_by: inviter.id,
         password: None,
         waiting_room: false,
+        tenant_id: inviter.tenant_id,
     }
     .insert(&mut conn)
     .unwrap();
@@ -276,7 +281,7 @@ async fn get_events_invite_filter() {
     // Check that the creator of the events gets created events when filtering by `Accepted` invite status
     let all_events = Event::get_all_for_user_paginated(
         &mut conn,
-        inviter.id,
+        &inviter,
         false,
         vec![EventInviteStatus::Accepted],
         None,
@@ -305,7 +310,7 @@ async fn get_events_invite_filter() {
     // Check that no events are returned when filtering for `Declined`
     let no_events = Event::get_all_for_user_paginated(
         &mut conn,
-        inviter.id,
+        &inviter,
         false,
         vec![EventInviteStatus::Declined],
         None,
@@ -362,7 +367,7 @@ async fn get_events_invite_filter() {
     // check `accepted` invites
     let accepted_events = Event::get_all_for_user_paginated(
         &mut conn,
-        invitee.id,
+        &invitee,
         false,
         vec![EventInviteStatus::Accepted],
         None,
@@ -382,7 +387,7 @@ async fn get_events_invite_filter() {
     // check `declined` invites
     let declined_events = Event::get_all_for_user_paginated(
         &mut conn,
-        invitee.id,
+        &invitee,
         false,
         vec![EventInviteStatus::Declined],
         None,
@@ -402,7 +407,7 @@ async fn get_events_invite_filter() {
     // check `tentative` invites
     let tentative_events = Event::get_all_for_user_paginated(
         &mut conn,
-        invitee.id,
+        &invitee,
         false,
         vec![EventInviteStatus::Tentative],
         None,
@@ -422,7 +427,7 @@ async fn get_events_invite_filter() {
     // check `pending` invites
     let pending_events = Event::get_all_for_user_paginated(
         &mut conn,
-        invitee.id,
+        &invitee,
         false,
         vec![EventInviteStatus::Pending],
         None,
@@ -442,7 +447,7 @@ async fn get_events_invite_filter() {
     // expect all events when no invite_status_filter is set
     let all_events = Event::get_all_for_user_paginated(
         &mut conn,
-        invitee.id,
+        &invitee,
         false,
         vec![],
         None,
@@ -484,6 +489,7 @@ async fn get_event_invites() {
         created_by: ferdinand.id,
         password: None,
         waiting_room: false,
+        tenant_id: ferdinand.tenant_id,
     }
     .insert(&mut conn)
     .unwrap();
@@ -559,6 +565,7 @@ async fn get_event_adhoc() {
         created_by: user.id,
         password: None,
         waiting_room: false,
+        tenant_id: user.tenant_id,
     }
     .insert(&mut conn)
     .unwrap();
@@ -571,7 +578,7 @@ async fn get_event_adhoc() {
 
     let all = Event::get_all_for_user_paginated(
         &mut conn,
-        user.id,
+        &user,
         false,
         vec![],
         None,
@@ -592,7 +599,7 @@ async fn get_event_adhoc() {
 
     let adhoc = Event::get_all_for_user_paginated(
         &mut conn,
-        user.id,
+        &user,
         false,
         vec![],
         None,
@@ -610,7 +617,7 @@ async fn get_event_adhoc() {
 
     let non_adhoc = Event::get_all_for_user_paginated(
         &mut conn,
-        user.id,
+        &user,
         false,
         vec![],
         None,
@@ -639,6 +646,7 @@ async fn get_event_time_independent() {
         created_by: user.id,
         password: None,
         waiting_room: false,
+        tenant_id: user.tenant_id,
     }
     .insert(&mut conn)
     .unwrap();
@@ -651,7 +659,7 @@ async fn get_event_time_independent() {
 
     let all = Event::get_all_for_user_paginated(
         &mut conn,
-        user.id,
+        &user,
         false,
         vec![],
         None,
@@ -674,7 +682,7 @@ async fn get_event_time_independent() {
 
     let time_independent = Event::get_all_for_user_paginated(
         &mut conn,
-        user.id,
+        &user,
         false,
         vec![],
         None,
@@ -692,7 +700,7 @@ async fn get_event_time_independent() {
 
     let time_dependent = Event::get_all_for_user_paginated(
         &mut conn,
-        user.id,
+        &user,
         false,
         vec![],
         None,
@@ -721,6 +729,7 @@ async fn get_event_min_max_time() {
         created_by: user.id,
         password: None,
         waiting_room: false,
+        tenant_id: user.tenant_id,
     }
     .insert(&mut conn)
     .unwrap();
@@ -741,6 +750,7 @@ async fn get_event_min_max_time() {
         is_recurring: Some(false),
         recurrence_pattern: None,
         is_adhoc: false,
+        tenant_id: user.tenant_id,
     }
     .insert(&mut conn)
     .unwrap();
@@ -761,6 +771,7 @@ async fn get_event_min_max_time() {
         is_recurring: Some(false),
         recurrence_pattern: None,
         is_adhoc: false,
+        tenant_id: user.tenant_id,
     }
     .insert(&mut conn)
     .unwrap();
@@ -769,7 +780,7 @@ async fn get_event_min_max_time() {
         // Query without any time restrictions
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             None,
@@ -790,7 +801,7 @@ async fn get_event_min_max_time() {
         // Query an open timeframe before the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             None,
@@ -808,7 +819,7 @@ async fn get_event_min_max_time() {
         // Query a closed timeframe before the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 8, 0, 0).unwrap()),
@@ -826,7 +837,7 @@ async fn get_event_min_max_time() {
         // Query an open timeframe after the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 12, 0, 0).unwrap()),
@@ -844,7 +855,7 @@ async fn get_event_min_max_time() {
         // Query an closed timeframe after the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 12, 0, 0).unwrap()),
@@ -862,7 +873,7 @@ async fn get_event_min_max_time() {
         // Query a timeframe ending at the start of the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             None,
@@ -881,7 +892,7 @@ async fn get_event_min_max_time() {
         // Query a timeframe starting at the end of the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 11, 0, 0).unwrap()),
@@ -900,7 +911,7 @@ async fn get_event_min_max_time() {
         // Query an open timeframe overlapping the first half of the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             None,
@@ -919,7 +930,7 @@ async fn get_event_min_max_time() {
         // Query a timeframe overlapping the first half of the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 9, 30, 0).unwrap()),
@@ -938,7 +949,7 @@ async fn get_event_min_max_time() {
         // Query an open timeframe overlapping the second half of the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 10, 30, 0).unwrap()),
@@ -957,7 +968,7 @@ async fn get_event_min_max_time() {
         // Query a timeframe overlapping the second half of the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 10, 30, 0).unwrap()),
@@ -976,7 +987,7 @@ async fn get_event_min_max_time() {
         // Query a timeframe fully inside the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 10, 20, 0).unwrap()),
@@ -995,7 +1006,7 @@ async fn get_event_min_max_time() {
         // Query a timeframe surrounding the event
         let events = Event::get_all_for_user_paginated(
             &mut conn,
-            user.id,
+            &user,
             false,
             vec![],
             Some(Utc.with_ymd_and_hms(2020, 1, 1, 9, 0, 0).unwrap()),

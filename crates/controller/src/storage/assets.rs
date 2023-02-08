@@ -8,7 +8,7 @@ use aws_sdk_s3::types::ByteStream;
 use bytes::Bytes;
 use database::Db;
 use db_storage::assets::{Asset, AssetId, NewAsset};
-use db_storage::rooms::RoomId;
+use db_storage::rooms::{Room, RoomId};
 use futures::Stream;
 use std::sync::Arc;
 use uuid::Uuid;
@@ -41,11 +41,14 @@ pub async fn save_asset(
     let block_result = crate::block(move || {
         let mut db_conn = db.get_conn()?;
 
+        let room = Room::get(&mut db_conn, room_id)?;
+
         NewAsset {
             id: asset_id,
             namespace,
             filename,
             kind,
+            tenant_id: room.tenant_id,
         }
         .insert_for_room(&mut db_conn, room_id)
     })

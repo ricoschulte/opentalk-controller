@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use database::DbConnection;
+use k3k_db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId};
 use k3k_db_storage::users::{NewUser, User};
 
 pub fn make_user(
@@ -11,6 +12,8 @@ pub fn make_user(
     lastname: &str,
     display_name: &str,
 ) -> User {
+    let tenant =
+        get_or_create_tenant_by_oidc_id(conn, &OidcTenantId::from("default".to_owned())).unwrap();
     NewUser {
         email: format!(
             "{}.{}@example.org",
@@ -25,6 +28,7 @@ pub fn make_user(
         language: "".into(),
         oidc_sub: format!("{firstname}{lastname}"),
         phone: None,
+        tenant_id: tenant.id,
     }
     .insert(conn)
     .unwrap()

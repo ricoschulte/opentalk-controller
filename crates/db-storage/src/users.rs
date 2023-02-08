@@ -5,6 +5,7 @@
 //! Contains the user specific database structs amd queries
 use super::groups::{Group, UserGroupRelation};
 use super::schema::{groups, users};
+use crate::tenants::TenantId;
 use crate::{levenshtein, lower, soundex};
 use database::{DbConnection, Paginate, Result};
 use diesel::prelude::*;
@@ -49,6 +50,7 @@ pub struct User {
     pub dashboard_theme: String,
     pub conference_theme: String,
     pub phone: Option<String>,
+    pub tenant_id: TenantId,
 }
 
 impl fmt::Debug for User {
@@ -74,13 +76,33 @@ impl User {
         Ok(user)
     }
 
+    /// Get a user with the given `id` inside a tenant
+    ///
+    /// If no user exists with `user_id` this returns an Error
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_filtered_by_tenant(
+        conn: &mut DbConnection,
+        tenant_id: TenantId,
+        user_id: UserId,
+    ) -> Result<User> {
+        let user = users::table
+            .filter(users::id.eq(user_id).and(users::tenant_id.eq(tenant_id)))
+            .get_result(conn)?;
+
+        Ok(user)
+    }
+
     /// Get a user with the given id
     ///
     /// Returns None if no user matches `email`
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_email(conn: &mut DbConnection, email: &str) -> Result<Option<User>> {
+    pub fn get_by_email(
+        conn: &mut DbConnection,
+        tenant_id: TenantId,
+        email: &str,
+    ) -> Result<Option<User>> {
         let user = users::table
-            .filter(users::email.eq(email))
+            .filter(users::tenant_id.eq(tenant_id).and(users::email.eq(email)))
             .get_result(conn)
             .optional()?;
 
@@ -89,9 +111,13 @@ impl User {
 
     /// Get one or more users with the given phone number
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_phone(conn: &mut DbConnection, phone: &str) -> Result<Vec<User>> {
+    pub fn get_by_phone(
+        conn: &mut DbConnection,
+        tenant_id: TenantId,
+        phone: &str,
+    ) -> Result<Vec<User>> {
         let users = users::table
-            .filter(users::phone.eq(phone))
+            .filter(users::tenant_id.eq(tenant_id).and(users::phone.eq(phone)))
             .get_results(conn)?;
 
         Ok(users)
@@ -160,13 +186,17 @@ impl User {
         Ok(users)
     }
 
-    /// Get user with the given sub
+    /// Get user with the given `sub` inside a tenant
     ///
     /// Returns None no user matched `sub`
     #[tracing::instrument(err, skip_all)]
-    pub fn get_by_oidc_sub(conn: &mut DbConnection, sub: &str) -> Result<Option<User>> {
+    pub fn get_by_oidc_sub(
+        conn: &mut DbConnection,
+        tenant_id: TenantId,
+        sub: &str,
+    ) -> Result<Option<User>> {
         let user = users::table
-            .filter(users::oidc_sub.eq(sub))
+            .filter(users::oidc_sub.eq(sub).and(users::tenant_id.eq(tenant_id)))
             .get_result(conn)
             .optional()?;
 
@@ -175,9 +205,17 @@ impl User {
 
     /// Get all users filtered by the given subs
     #[tracing::instrument(err, skip_all)]
-    pub fn get_all_by_oidc_subs(conn: &mut DbConnection, subs: &[&str]) -> Result<Vec<User>> {
+    pub fn get_all_by_oidc_subs(
+        conn: &mut DbConnection,
+        tenant_id: TenantId,
+        subs: &[&str],
+    ) -> Result<Vec<User>> {
         let users = users::table
-            .filter(users::oidc_sub.eq_any(subs))
+            .filter(
+                users::tenant_id
+                    .eq(tenant_id)
+                    .and(users::oidc_sub.eq_any(subs)),
+            )
             .load(conn)?;
 
         Ok(users)
@@ -187,7 +225,11 @@ impl User {
     ///
     /// This looks for similarities of the search_str in the display_name, first+lastname and email
     #[tracing::instrument(err, skip_all)]
-    pub fn find(conn: &mut DbConnection, search_str: &str) -> Result<Vec<User>> {
+    pub fn find(
+        conn: &mut DbConnection,
+        tenant_id: TenantId,
+        search_str: &str,
+    ) -> Result<Vec<User>> {
         // IMPORTANT: lowercase it to match the index of the db and
         // remove all existing % in name and to avoid manipulation of the LIKE query.
         let search_str = search_str.replace('%', "").trim().to_lowercase();
@@ -203,6 +245,7 @@ impl User {
         let lower_first_lastname = lower(users::firstname.concat(" ").concat(users::lastname));
 
         let matches = users::table
+            .filter(users::tenant_id.eq(tenant_id))
             .filter(
                 // First try LIKE query on display_name
                 lower_display_name.like(&like_query).or(
@@ -249,6 +292,7 @@ pub struct NewUser {
     pub language: String,
     pub display_name: String,
     pub phone: Option<String>,
+    pub tenant_id: TenantId,
 }
 
 impl NewUser {
@@ -275,6 +319,8 @@ pub struct UpdateUser<'a> {
     pub id_token_exp: Option<i64>,
     pub dashboard_theme: Option<&'a str>,
     pub conference_theme: Option<&'a str>,
+    // The tenant_id should never be updated!
+    //pub tenant_id: Option<TenantId>,
 }
 
 impl UpdateUser<'_> {

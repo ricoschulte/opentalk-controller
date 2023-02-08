@@ -22,6 +22,7 @@ use db_storage::events::{
 use db_storage::invites::NewInvite;
 use db_storage::rooms::Room;
 use db_storage::sip_configs::SipConfig;
+use db_storage::tenants::Tenant;
 use db_storage::users::{User, UserId};
 use diesel::Connection;
 use email_address::EmailAddress;
@@ -38,6 +39,7 @@ pub async fn get_invites_for_event(
     settings: SharedSettingsActix,
     db: Data<Db>,
     kc_admin_client: Data<KeycloakAdminClient>,
+    current_tenant: ReqData<Tenant>,
     event_id: Path<EventId>,
     pagination: Query<PagePaginationQuery>,
 ) -> DefaultApiResult<Vec<EventInvitee>> {
@@ -80,7 +82,7 @@ pub async fn get_invites_for_event(
     })
     .await??;
 
-    let invitees = enrich_invitees_from_keycloak(&kc_admin_client, invitees).await;
+    let invitees = enrich_invitees_from_keycloak(&kc_admin_client, &current_tenant, invitees).await;
 
     Ok(ApiResponse::new(invitees).with_page_pagination(per_page, page, invitees_total))
 }
@@ -111,6 +113,7 @@ pub async fn create_invite_to_event(
     db: Data<Db>,
     authz: Data<Authz>,
     kc_admin_client: Data<KeycloakAdminClient>,
+    current_tenant: ReqData<Tenant>,
     current_user: ReqData<User>,
     event_id: Path<EventId>,
     query: Query<PostEventInviteQuery>,
@@ -140,6 +143,7 @@ pub async fn create_invite_to_event(
                 db,
                 authz,
                 kc_admin_client,
+                current_tenant.into_inner(),
                 current_user.into_inner(),
                 event_id,
                 email,
@@ -166,7 +170,7 @@ async fn create_user_event_invite(
         let mut conn = db.get_conn()?;
 
         let (event, room, sip_config) = Event::get_with_room(&mut conn, event_id)?;
-        let invitee = User::get(&mut conn, invitee_id)?;
+        let invitee = User::get_filtered_by_tenant(&mut conn, event.tenant_id, invitee_id)?;
 
         if event.created_by == invitee_id {
             return Ok(Either::Right(NoContent));
@@ -224,6 +228,7 @@ async fn create_email_event_invite(
     db: Data<Db>,
     authz: Data<Authz>,
     kc_admin_client: Data<KeycloakAdminClient>,
+    current_tenant: Tenant,
     current_user: User,
     event_id: EventId,
     email: EmailAddress,
@@ -257,7 +262,8 @@ async fn create_email_event_invite(
 
             let (event, room, sip_config) = Event::get_with_room(&mut conn, event_id)?;
 
-            let invitee_user = User::get_by_email(&mut conn, email.as_ref())?;
+            let invitee_user =
+                User::get_by_email(&mut conn, current_user.tenant_id, email.as_ref())?;
 
             if let Some(invitee_user) = invitee_user {
                 if event.created_by == invitee_user.id {
@@ -333,6 +339,7 @@ async fn create_email_event_invite(
                 kc_admin_client,
                 mail_service,
                 send_email_notification,
+                current_tenant,
                 current_user,
                 event,
                 room,
@@ -354,6 +361,7 @@ async fn create_invite_to_non_matching_email(
     kc_admin_client: Data<KeycloakAdminClient>,
     mail_service: &MailService,
     send_email_notification: bool,
+    current_tenant: Tenant,
     current_user: User,
     event: Event,
     room: Room,
@@ -361,7 +369,7 @@ async fn create_invite_to_non_matching_email(
     email: EmailAddress,
 ) -> Result<Either<Created, NoContent>, ApiError> {
     let invitee_user = kc_admin_client
-        .get_user_for_email(email.as_ref())
+        .get_user_for_email(current_tenant.oidc_tenant_id.inner(), email.as_ref())
         .await
         .context("Failed to query user for email")?;
 

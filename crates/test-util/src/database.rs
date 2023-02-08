@@ -7,6 +7,7 @@ use database::Db;
 use db_storage::groups::{get_or_create_groups_by_name, insert_user_into_groups, GroupName};
 use db_storage::migrations::migrate_from_url;
 use db_storage::rooms::{NewRoom, Room, RoomId};
+use db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId, TenantId};
 use db_storage::users::{NewUser, User, UserId};
 use diesel::{Connection, PgConnection, RunQueryDsl};
 use std::sync::Arc;
@@ -66,6 +67,9 @@ impl DatabaseContext {
     pub fn create_test_user(&self, n: u32, groups: Vec<String>) -> Result<User> {
         let mut conn = self.db.get_conn()?;
 
+        let tenant =
+            get_or_create_tenant_by_oidc_id(&mut conn, &OidcTenantId::from("default".to_owned()))?;
+
         let user = NewUser {
             oidc_sub: format!("oidc_sub{n}"),
             email: format!("k3k_test_user{n}@heinlein.de"),
@@ -76,10 +80,14 @@ impl DatabaseContext {
             display_name: "test tester".into(),
             language: "en".into(),
             phone: None,
+            tenant_id: tenant.id,
         }
         .insert(&mut conn)?;
 
-        let groups: Vec<GroupName> = groups.into_iter().map(GroupName::from).collect();
+        let groups: Vec<(TenantId, GroupName)> = groups
+            .into_iter()
+            .map(|name| (tenant.id, GroupName::from(name)))
+            .collect();
         let groups = get_or_create_groups_by_name(&mut conn, &groups)?;
         insert_user_into_groups(&mut conn, &user, &groups)?;
 
@@ -92,13 +100,17 @@ impl DatabaseContext {
         created_by: UserId,
         waiting_room: bool,
     ) -> Result<Room> {
+        let mut conn = self.db.get_conn()?;
+
+        let tenant =
+            get_or_create_tenant_by_oidc_id(&mut conn, &OidcTenantId::from("default".to_owned()))?;
+
         let new_room = NewRoom {
             created_by,
             password: None,
             waiting_room,
+            tenant_id: tenant.id,
         };
-
-        let mut conn = self.db.get_conn()?;
 
         let room = new_room.insert(&mut conn)?;
 

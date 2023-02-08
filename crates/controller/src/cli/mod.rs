@@ -9,6 +9,7 @@ use controller_shared::settings::Settings;
 mod acl;
 mod fix_acl;
 mod reload;
+mod tenants;
 
 #[derive(Parser, Debug, Clone)]
 #[clap(name = "k3k-controller")]
@@ -53,6 +54,10 @@ enum SubCommand {
     /// Migrate the db. This is done automatically during start of the controller,
     /// but can be done without starting the controller using this command.
     MigrateDb,
+
+    /// Manage existing tenants
+    #[clap(subcommand)]
+    Tenants(tenants::Command),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -118,6 +123,9 @@ pub async fn parse_args() -> Result<Args> {
                     .await
                     .context("Failed to migrate database")?;
                 println!("{result:?}");
+            }
+            SubCommand::Tenants(command) => {
+                tenants::handle_command(settings, command)?;
             }
         }
     }

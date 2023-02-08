@@ -14,6 +14,7 @@ use actix_web::{HttpMessage, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use core::future::ready;
 use database::Db;
+use db_storage::tenants::{OidcTenantId, Tenant};
 use db_storage::users::User;
 use openidconnect::AccessToken;
 use std::future::{Future, Ready};
@@ -101,9 +102,11 @@ where
 
         Box::pin(
             async move {
-                let current_user = check_access_token(db, oidc_ctx, access_token).await?;
+                let (current_tenant, current_user) =
+                    check_access_token(db, oidc_ctx, access_token).await?;
                 req.extensions_mut()
                     .insert(kustos::actix_web::User::from(current_user.id.into_inner()));
+                req.extensions_mut().insert(current_tenant);
                 req.extensions_mut().insert(current_user);
                 service.call(req).await
             }
@@ -117,9 +120,9 @@ pub async fn check_access_token(
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     access_token: AccessToken,
-) -> Result<User, ApiError> {
-    let sub = match oidc_ctx.verify_access_token::<UserClaims>(&access_token) {
-        Ok(claims) => claims.sub,
+) -> Result<(Tenant, User), ApiError> {
+    let (oidc_tenant_id, sub) = match oidc_ctx.verify_access_token::<UserClaims>(&access_token) {
+        Ok(claims) => (claims.tenant_id, claims.sub),
         Err(e) => {
             log::error!("Invalid access token, {}", e);
             return Err(ApiError::unauthorized()
@@ -127,11 +130,18 @@ pub async fn check_access_token(
         }
     };
 
-    let current_user = crate::block(move || {
+    let (current_tenant, current_user) = crate::block(move || {
         let mut conn = db.get_conn()?;
 
-        match User::get_by_oidc_sub(&mut conn, &sub)? {
-            Some(user) => Ok(user),
+        let tenant = Tenant::get_by_oidc_id(&mut conn, OidcTenantId::from(oidc_tenant_id))?
+            .ok_or_else(|| {
+                ApiError::unauthorized()
+                    .with_code("unknown_tenant_id")
+                    .with_message("Unknown tenant_id in access token. Please login first!")
+            })?;
+
+        match User::get_by_oidc_sub(&mut conn, tenant.id, &sub)? {
+            Some(user) => Ok((tenant, user)),
             None => Err(ApiError::unauthorized()
                 .with_code("unknown_sub")
                 .with_message("Unknown subject in access token. Please login first!")),
@@ -155,7 +165,7 @@ pub async fn check_access_token(
     };
 
     if info.active {
-        Ok(current_user)
+        Ok((current_tenant, current_user))
     } else {
         Err(ApiError::unauthorized()
             .with_www_authenticate(AuthenticationError::AccessTokenInactive))

@@ -7,6 +7,7 @@ use crate::schema::{
     event_exceptions, event_favorites, event_invites, events, rooms, sip_configs, users,
 };
 use crate::sip_configs::SipConfig;
+use crate::tenants::TenantId;
 use crate::users::{User, UserId};
 use crate::utils::HasUsers;
 use chrono::{DateTime, Utc};
@@ -97,6 +98,8 @@ pub struct Event {
     pub recurrence_pattern: Option<String>,
 
     pub is_adhoc: bool,
+
+    pub tenant_id: TenantId,
 }
 
 impl Event {
@@ -213,7 +216,7 @@ impl Event {
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn get_all_for_user_paginated(
         conn: &mut DbConnection,
-        user_id: UserId,
+        user: &User,
         only_favorites: bool,
         invite_status_filter: Vec<EventInviteStatus>,
         time_min: Option<DateTime<Utc>>,
@@ -235,20 +238,20 @@ impl Event {
         // Filter applied to all events which validates that the event is either created by
         // the given user or a invite to the event exists for the user
         let event_related_to_user_id = events::created_by
-            .eq(user_id)
-            .or(event_invites::invitee.eq(user_id));
+            .eq(user.id)
+            .or(event_invites::invitee.eq(user.id));
 
         // Create query which select events and joins into the room of the event
         let mut query = events::table
             .left_join(
                 event_invites::table.on(event_invites::event_id
                     .eq(events::id)
-                    .and(event_invites::invitee.eq(user_id))),
+                    .and(event_invites::invitee.eq(user.id))),
             )
             .left_join(
                 event_favorites::table.on(event_favorites::event_id
                     .eq(events::id)
-                    .and(event_favorites::user_id.eq(user_id))),
+                    .and(event_favorites::user_id.eq(user.id))),
             )
             .inner_join(rooms::table)
             .left_join(sip_configs::table.on(rooms::id.eq(sip_configs::room)))
@@ -259,14 +262,13 @@ impl Event {
                 sip_configs::all_columns.nullable(),
                 event_favorites::user_id.nullable().is_not_null(),
             ))
+            .filter(events::tenant_id.eq(user.tenant_id))
             .filter(event_related_to_user_id)
             .order_by(events::starts_at.nullable().asc().nulls_first())
             .then_order_by(events::created_at.asc())
             .then_order_by(events::id)
             .limit(limit)
             .into_boxed::<Pg>();
-
-        // TODO(r.floren): Write tests for this cursor behavior
 
         // Tuples/Composite types are ordered by lexical ordering
         if let Some(cursor) = cursor {
@@ -433,6 +435,7 @@ pub struct NewEvent {
     pub is_recurring: Option<bool>,
     pub recurrence_pattern: Option<String>,
     pub is_adhoc: bool,
+    pub tenant_id: TenantId,
 }
 
 impl NewEvent {

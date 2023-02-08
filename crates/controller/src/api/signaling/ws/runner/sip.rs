@@ -8,6 +8,7 @@ use crate::api::util::parse_phone_number;
 use crate::prelude::*;
 use controller_shared::settings;
 use database::Db;
+use db_storage::tenants::TenantId;
 use db_storage::users::User;
 use phonenumber::PhoneNumber;
 use std::{convert::TryFrom, sync::Arc};
@@ -20,10 +21,11 @@ use std::{convert::TryFrom, sync::Arc};
 pub async fn display_name(
     db: &Arc<Db>,
     settings: &settings::CallIn,
+    tenant_id: TenantId,
     phone_number: String,
 ) -> String {
     if let Some(parsed_number) = parse_phone_number(&phone_number, settings.default_country_code) {
-        let display_name = try_map_to_user_display_name(db, &parsed_number).await;
+        let display_name = try_map_to_user_display_name(db, tenant_id, &parsed_number).await;
 
         return display_name.unwrap_or_else(|| {
             parsed_number
@@ -42,7 +44,11 @@ pub async fn display_name(
 /// users have the provided phone number configured.
 ///
 /// Returns [`None`] the phone number is invalid or cannot be parsed
-async fn try_map_to_user_display_name(db: &Arc<Db>, phone_number: &PhoneNumber) -> Option<String> {
+async fn try_map_to_user_display_name(
+    db: &Arc<Db>,
+    tenant_id: TenantId,
+    phone_number: &PhoneNumber,
+) -> Option<String> {
     let phone_e164 = phone_number
         .format()
         .mode(phonenumber::Mode::E164)
@@ -52,7 +58,7 @@ async fn try_map_to_user_display_name(db: &Arc<Db>, phone_number: &PhoneNumber) 
     let result = crate::block(move || {
         let mut conn = db.get_conn()?;
 
-        User::get_by_phone(&mut conn, &phone_e164)
+        User::get_by_phone(&mut conn, tenant_id, &phone_e164)
     })
     .await;
 

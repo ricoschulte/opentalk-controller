@@ -6,6 +6,7 @@
 use crate::diesel::RunQueryDsl;
 use crate::schema::rooms;
 use crate::schema::users;
+use crate::tenants::TenantId;
 use crate::users::{User, UserId};
 use chrono::{DateTime, Utc};
 use database::DbConnection;
@@ -30,6 +31,7 @@ pub struct Room {
     pub created_at: DateTime<Utc>,
     pub password: Option<String>,
     pub waiting_room: bool,
+    pub tenant_id: TenantId,
 }
 
 impl Room {
@@ -130,6 +132,7 @@ pub struct NewRoom {
     pub created_by: UserId,
     pub password: Option<String>,
     pub waiting_room: bool,
+    pub tenant_id: TenantId,
 }
 
 impl NewRoom {

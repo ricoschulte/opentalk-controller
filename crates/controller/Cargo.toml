@@ -133,6 +133,9 @@ regex = "1.5"
 
 rrule = "0.7"
 
+### CLI
+tabled = "0.10"
+
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util", features = ["database"] }
 pretty_assertions = "1.3"

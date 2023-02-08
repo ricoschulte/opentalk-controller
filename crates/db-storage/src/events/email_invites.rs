@@ -61,6 +61,7 @@ impl EventEmailInvite {
                 event_email_invites::table
                     .filter(event_email_invites::email.eq(&user.email))
                     .inner_join(events::table)
+                    .filter(events::tenant_id.eq(user.tenant_id))
                     .select((event_email_invites::all_columns, events::room))
                     .load(conn)?;
 

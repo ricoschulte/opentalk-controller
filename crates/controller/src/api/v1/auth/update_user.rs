@@ -11,7 +11,7 @@ use db_storage::groups::{insert_user_into_groups, remove_user_from_groups, Group
 use db_storage::users::{UpdateUser, User};
 use diesel::Connection;
 
-/// Called when the `POST /auth/login` endpoint received an id-token with a `sub` that maps to
+/// Called when the `POST /auth/login` endpoint received an id-token with a `sub`+`tenant_id` combination that maps to
 /// an existing user. Resets the expiry time of the id-token for the user. Also updates all fields in the database that
 /// have changed since the last login.
 ///
@@ -73,6 +73,7 @@ fn create_changeset<'a>(
         dashboard_theme: _,
         conference_theme: _,
         phone,
+        tenant_id: _,
     } = user;
 
     let mut changeset = UpdateUser {

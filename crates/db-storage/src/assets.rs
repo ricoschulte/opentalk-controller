@@ -5,6 +5,7 @@
 use crate::rooms::RoomId;
 use crate::schema::assets;
 use crate::schema::room_assets;
+use crate::tenants::TenantId;
 use chrono::{DateTime, Utc};
 use database::DbConnection;
 use database::Paginate;
@@ -30,6 +31,7 @@ pub struct Asset {
     pub namespace: Option<String>,
     pub kind: String,
     pub filename: String,
+    pub tenant_id: TenantId,
 }
 
 impl Asset {
@@ -157,6 +159,7 @@ pub struct NewAsset {
     pub namespace: Option<String>,
     pub kind: String,
     pub filename: String,
+    pub tenant_id: TenantId,
 }
 
 impl NewAsset {
