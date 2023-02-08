@@ -10,7 +10,7 @@ use k3k_db_storage::events::{
     TimeZone, UpdateEventInvite,
 };
 use k3k_db_storage::rooms::{NewRoom, RoomId};
-use k3k_db_storage::users::{NewUser, NewUserWithGroups, UserId};
+use k3k_db_storage::users::UserId;
 use pretty_assertions::assert_eq;
 use serial_test::serial;
 
@@ -64,22 +64,7 @@ async fn test() {
 
     let mut conn = db_ctx.db.get_conn().unwrap();
 
-    let (user, _) = NewUserWithGroups {
-        new_user: NewUser {
-            email: "test@example.org".into(),
-            title: "".into(),
-            firstname: "Test".into(),
-            lastname: "Tester".into(),
-            id_token_exp: 0,
-            language: "".into(),
-            display_name: "Test Tester".into(),
-            oidc_sub: "testtestersoidcsub".into(),
-            phone: None,
-        },
-        groups: vec![],
-    }
-    .insert(&mut conn)
-    .unwrap();
+    let user = make_user(&mut conn, "Test", "Tester", "Test Tester");
 
     let room = NewRoom {
         created_by: user.id,
@@ -568,22 +553,7 @@ async fn get_event_adhoc() {
 
     let mut conn = db_ctx.db.get_conn().unwrap();
 
-    let (user, _) = NewUserWithGroups {
-        new_user: NewUser {
-            email: "test@example.org".into(),
-            title: "".into(),
-            firstname: "Test".into(),
-            lastname: "Tester".into(),
-            id_token_exp: 0,
-            language: "".into(),
-            display_name: "Test Tester".into(),
-            oidc_sub: "testtestersoidcsub".into(),
-            phone: None,
-        },
-        groups: vec![],
-    }
-    .insert(&mut conn)
-    .unwrap();
+    let user = make_user(&mut conn, "Test", "Tester", "Test Tester");
 
     let room = NewRoom {
         created_by: user.id,
@@ -663,22 +633,7 @@ async fn get_event_time_independent() {
 
     let mut conn = db_ctx.db.get_conn().unwrap();
 
-    let (user, _) = NewUserWithGroups {
-        new_user: NewUser {
-            email: "test@example.org".into(),
-            title: "".into(),
-            firstname: "Test".into(),
-            lastname: "Tester".into(),
-            id_token_exp: 0,
-            language: "".into(),
-            display_name: "Test Tester".into(),
-            oidc_sub: "testtestersoidcsub".into(),
-            phone: None,
-        },
-        groups: vec![],
-    }
-    .insert(&mut conn)
-    .unwrap();
+    let user = make_user(&mut conn, "Test", "Tester", "Test Tester");
 
     let room = NewRoom {
         created_by: user.id,
@@ -760,22 +715,7 @@ async fn get_event_min_max_time() {
 
     let mut conn = db_ctx.db.get_conn().unwrap();
 
-    let (user, _) = NewUserWithGroups {
-        new_user: NewUser {
-            email: "test@example.org".into(),
-            title: "".into(),
-            firstname: "Test".into(),
-            lastname: "Tester".into(),
-            id_token_exp: 0,
-            language: "".into(),
-            display_name: "Test Tester".into(),
-            oidc_sub: "testtestersoidcsub".into(),
-            phone: None,
-        },
-        groups: vec![],
-    }
-    .insert(&mut conn)
-    .unwrap();
+    let user = make_user(&mut conn, "Test", "Tester", "Test Tester");
 
     let room = NewRoom {
         created_by: user.id,

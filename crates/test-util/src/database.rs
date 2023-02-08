@@ -4,10 +4,10 @@
 
 use anyhow::{Context, Result};
 use database::Db;
-use db_storage::groups::GroupName;
+use db_storage::groups::{get_or_create_groups_by_name, insert_user_into_groups, GroupName};
 use db_storage::migrations::migrate_from_url;
 use db_storage::rooms::{NewRoom, Room, RoomId};
-use db_storage::users::{NewUser, NewUserWithGroups, User, UserId};
+use db_storage::users::{NewUser, User, UserId};
 use diesel::{Connection, PgConnection, RunQueryDsl};
 use std::sync::Arc;
 
@@ -64,7 +64,9 @@ impl DatabaseContext {
     }
 
     pub fn create_test_user(&self, n: u32, groups: Vec<String>) -> Result<User> {
-        let new_user = NewUser {
+        let mut conn = self.db.get_conn()?;
+
+        let user = NewUser {
             oidc_sub: format!("oidc_sub{n}"),
             email: format!("k3k_test_user{n}@heinlein.de"),
             title: "".into(),
@@ -74,16 +76,14 @@ impl DatabaseContext {
             display_name: "test tester".into(),
             language: "en".into(),
             phone: None,
-        };
+        }
+        .insert(&mut conn)?;
 
-        let new_user_with_groups = NewUserWithGroups {
-            new_user,
-            groups: groups.into_iter().map(GroupName::from).collect(),
-        };
-        let mut conn = self.db.get_conn()?;
-        let user = new_user_with_groups.insert(&mut conn)?;
+        let groups: Vec<GroupName> = groups.into_iter().map(GroupName::from).collect();
+        let groups = get_or_create_groups_by_name(&mut conn, &groups)?;
+        insert_user_into_groups(&mut conn, &user, &groups)?;
 
-        Ok(user.0)
+        Ok(user)
     }
 
     pub fn create_test_room(

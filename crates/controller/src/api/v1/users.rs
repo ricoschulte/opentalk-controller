@@ -162,9 +162,9 @@ pub async fn patch_me(
             id_token_exp: None,
         };
 
-        let updated_info = changeset.apply(&mut conn, current_user.id, None)?;
+        let user = changeset.apply(&mut conn, current_user.id)?;
 
-        Ok(updated_info.user)
+        Ok(user)
     })
     .await??;
 

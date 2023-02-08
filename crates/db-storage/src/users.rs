@@ -4,13 +4,13 @@
 
 //! Contains the user specific database structs amd queries
 use super::groups::{Group, UserGroupRelation};
-use super::schema::{groups, user_groups, users};
-use crate::groups::{GroupId, GroupName, NewGroup, NewUserGroupRelation};
+use super::schema::{groups, users};
 use crate::{levenshtein, lower, soundex};
-use database::{DatabaseError, DbConnection, Paginate, Result};
+use database::{DbConnection, Paginate, Result};
+use diesel::prelude::*;
 use diesel::{
-    BelongingToDsl, BoolExpressionMethods, Connection, ExpressionMethods, GroupedBy, Identifiable,
-    Insertable, OptionalExtension, QueryDsl, Queryable, RunQueryDsl, TextExpressionMethods,
+    BelongingToDsl, BoolExpressionMethods, ExpressionMethods, GroupedBy, Identifiable, Insertable,
+    OptionalExtension, QueryDsl, Queryable, RunQueryDsl, TextExpressionMethods,
 };
 use kustos::subject::PolicyUser;
 use std::fmt;
@@ -62,7 +62,7 @@ impl fmt::Debug for User {
 }
 
 impl User {
-    /// Get a user with the given id
+    /// Get a user with the given `id`
     ///
     /// If no user exists with `user_id` this returns an Error
     #[tracing::instrument(err, skip_all)]
@@ -251,28 +251,11 @@ pub struct NewUser {
     pub phone: Option<String>,
 }
 
-pub struct NewUserWithGroups {
-    pub new_user: NewUser,
-    pub groups: Vec<GroupName>,
-}
-
-impl NewUserWithGroups {
-    /// Inserts a new user
-    ///
-    /// Returns the inserted users with the respective GroupIds
-    #[tracing::instrument(err, skip_all)]
-    pub fn insert(self, conn: &mut DbConnection) -> Result<(User, Vec<GroupId>)> {
-        conn.transaction::<_, DatabaseError, _>(|conn| {
-            let user: User = diesel::insert_into(users::table)
-                .values(self.new_user)
-                .get_result(conn)?;
-
-            let groups = get_ids_for_group_names(conn, &self.groups)?;
-            let group_ids = groups.iter().map(|(id, _)| *id).collect();
-            insert_user_into_user_groups(conn, &user, &groups)?;
-
-            Ok((user, group_ids))
-        })
+impl NewUser {
+    pub fn insert(self, conn: &mut DbConnection) -> Result<User> {
+        let query = self.insert_into(users::table);
+        let user = query.get_result(conn)?;
+        Ok(user)
     }
 }
 
@@ -294,131 +277,10 @@ pub struct UpdateUser<'a> {
     pub conference_theme: Option<&'a str>,
 }
 
-/// Ok type of [`UpdateUser::apply`]
-pub struct UserUpdatedInfo {
-    /// The user after the modification
-    pub user: User,
-
-    /// True the user's groups changed.
-    /// Relevant for permission related state
-    pub groups_changed: bool,
-
-    pub groups_added: Vec<GroupId>,
-    pub groups_removed: Vec<GroupId>,
-}
-
 impl UpdateUser<'_> {
-    #[tracing::instrument(err, skip_all)]
-    pub fn apply(
-        self,
-        conn: &mut DbConnection,
-        user_id: UserId,
-        groups: Option<&[GroupName]>,
-    ) -> Result<UserUpdatedInfo> {
-        conn.transaction::<UserUpdatedInfo, DatabaseError, _>(move |conn| {
-            let query = diesel::update(users::table.filter(users::id.eq(user_id))).set(self);
-            let user: User = query.get_result(conn)?;
-
-            // modify groups if parameter exists
-            if let Some(groups) = groups {
-                let groups = get_ids_for_group_names(conn, groups)?;
-
-                let curr_groups = Group::get_all_for_user(conn, user.id)?;
-
-                let added = groups
-                    .iter()
-                    .filter(|(_, name)| !curr_groups.iter().any(|curr_grp| curr_grp.name == *name))
-                    .map(|(id, _)| *id)
-                    .collect::<Vec<_>>();
-
-                let removed = curr_groups
-                    .iter()
-                    .filter(|curr| !groups.iter().any(|(_, name)| name == &curr.name))
-                    .map(|grp| grp.id)
-                    .collect::<Vec<_>>();
-
-                let groups_changed = !added.is_empty() || !removed.is_empty();
-
-                if groups_changed {
-                    // Remove user from user_groups table
-                    let target = user_groups::table.filter(user_groups::user_id.eq(user.id));
-                    diesel::delete(target).execute(conn).map_err(|e| {
-                        log::error!("Failed to remove user's groups from user_groups, {}", e);
-                        DatabaseError::from(e)
-                    })?;
-
-                    insert_user_into_user_groups(conn, &user, &groups)?
-                }
-
-                Ok(UserUpdatedInfo {
-                    user,
-                    groups_changed,
-                    groups_added: added,
-                    groups_removed: removed,
-                })
-            } else {
-                Ok(UserUpdatedInfo {
-                    user,
-                    groups_changed: false,
-                    groups_added: vec![],
-                    groups_removed: vec![],
-                })
-            }
-        })
+    pub fn apply(self, conn: &mut DbConnection, user_id: UserId) -> Result<User> {
+        let query = diesel::update(users::table.filter(users::id.eq(user_id))).set(self);
+        let user: User = query.get_result(conn)?;
+        Ok(user)
     }
-}
-
-// Returns ids of groups
-// If the group is currently not stored, create a new group and returns the ID along the already present ones.
-// Does not preserve the order of groups passed to the function
-fn get_ids_for_group_names(
-    conn: &mut DbConnection,
-    groups: &[GroupName],
-) -> Result<Vec<(GroupId, GroupName)>> {
-    let present_groups: Vec<(GroupId, GroupName)> = groups::table
-        .select((groups::id, groups::name))
-        .filter(groups::name.eq_any(groups))
-        .load(conn)?;
-
-    let new_groups: Vec<NewGroup> = groups
-        .iter()
-        .filter(|wanted| !present_groups.iter().any(|(_, name)| name == *wanted))
-        .map(|name| NewGroup { name })
-        .collect();
-
-    let new_groups: Vec<(GroupId, GroupName)> = diesel::insert_into(groups::table)
-        .values(&new_groups)
-        .returning((groups::id, groups::name))
-        .load(conn)?;
-
-    Ok(present_groups
-        .into_iter()
-        .chain(new_groups.into_iter())
-        .collect())
-}
-
-#[tracing::instrument(err, skip_all)]
-fn insert_user_into_user_groups(
-    conn: &mut DbConnection,
-    user: &User,
-    groups: &[(GroupId, GroupName)],
-) -> Result<()> {
-    let new_user_groups = groups
-        .iter()
-        .map(|(id, _)| NewUserGroupRelation {
-            user_id: user.id,
-            group_id: *id,
-        })
-        .collect::<Vec<_>>();
-
-    diesel::insert_into(user_groups::table)
-        .values(new_user_groups)
-        .on_conflict_do_nothing()
-        .execute(conn)
-        .map_err(|e| {
-            log::error!("Failed to insert user_groups, {}", e);
-            DatabaseError::from(e)
-        })?;
-
-    Ok(())
 }
