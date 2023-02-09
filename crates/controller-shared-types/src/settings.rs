@@ -132,8 +132,6 @@ pub struct Keycloak {
 pub struct Http {
     #[serde(default = "default_http_port")]
     pub port: u16,
-    #[serde(default = "internal_http_port")]
-    pub internal_port: u16,
     #[serde(default)]
     pub cors: HttpCors,
     #[serde(default)]
@@ -144,7 +142,6 @@ impl Default for Http {
     fn default() -> Self {
         Self {
             port: default_http_port(),
-            internal_port: internal_http_port(),
             cors: HttpCors::default(),
             tls: None,
         }
@@ -153,10 +150,6 @@ impl Default for Http {
 
 const fn default_http_port() -> u16 {
     11311
-}
-
-const fn internal_http_port() -> u16 {
-    8844
 }
 
 #[derive(Debug, Clone, Deserialize)]
