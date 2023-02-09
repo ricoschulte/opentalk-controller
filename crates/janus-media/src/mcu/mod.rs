@@ -85,7 +85,7 @@ pub struct McuPool {
     // and removes clients of vanished  janus instances
     clients: RwLock<HashSet<McuClient>>,
 
-    shared_settings: SharedSettings,
+    pub shared_settings: SharedSettings,
 
     mcu_config: RwLock<settings::JanusMcuConfig>,
 
@@ -441,13 +441,6 @@ impl McuPool {
         };
 
         Ok(subscriber)
-    }
-
-    pub fn participants_have_presenter_role(&self) -> bool {
-        self.shared_settings
-            .load()
-            .defaults
-            .participants_have_presenter_role
     }
 }
 
