@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - controller: enable accepted participants to skip waiting room when joining or returning from a breakout room ([#303](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/303))
 
+### Added
+
+- controller: announce available modules in `join_success` message ([#308](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/308))
+
 ### Fixed
 
 - protocol: fixed a bug where the etherpad pad was deleted when any user left the room ([#319](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/319))

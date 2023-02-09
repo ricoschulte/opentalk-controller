@@ -595,6 +595,7 @@ where
                     role: self.role,
                     display_name: join.display_name,
                     avatar_url,
+                    modules: vec![M::NAMESPACE],
                     module_data,
                     participants,
                 };
