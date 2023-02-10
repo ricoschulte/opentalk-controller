@@ -61,8 +61,6 @@ mod api;
 #[cfg(doc)]
 pub mod api;
 
-mod internal_api;
-
 mod acl;
 mod cli;
 mod ha_sync;
@@ -309,33 +307,10 @@ impl Controller {
 
     /// Runs the controller until a fatal error occurred or a shutdown is requested (e.g. SIGTERM).
     pub async fn run(self) -> Result<()> {
-        // Start internal HTTP Server
-        let int_http_server = {
-            let db = Arc::downgrade(&self.db);
-            let storage = Arc::downgrade(&self.storage);
-            let oidc_ctx = Arc::downgrade(&self.oidc);
-            let shutdown = self.shutdown.clone();
-
-            HttpServer::new(move || {
-                // Unwraps cannot panic. Server gets stopped before dropping the Arc.
-                let db = Data::from(db.upgrade().unwrap());
-                let storage = Data::from(storage.upgrade().unwrap());
-                let oidc_ctx = Data::from(oidc_ctx.upgrade().unwrap());
-
-                App::new()
-                    .wrap(TracingLogger::<ReducedSpanBuilder>::new())
-                    .app_data(db)
-                    .app_data(storage)
-                    .app_data(oidc_ctx)
-                    .app_data(Data::new(shutdown.clone()))
-                    .service(internal_api::introspect::post)
-            })
-        };
-
         let signaling_modules = Arc::new(self.signaling);
 
-        // Start external HTTP Server
-        let ext_http_server = {
+        // Start HTTP Server
+        let http_server = {
             let cors = self.startup_settings.http.cors.clone();
 
             let rabbitmq_pool = Data::from(self.rabbitmq_pool.clone());
@@ -429,54 +404,29 @@ impl Controller {
             })
         };
 
-        let ext_address = (Ipv6Addr::UNSPECIFIED, self.startup_settings.http.port);
-        let int_address = (
-            Ipv6Addr::UNSPECIFIED,
-            self.startup_settings.http.internal_port,
-        );
+        let address = (Ipv6Addr::UNSPECIFIED, self.startup_settings.http.port);
 
-        let (ext_http_server, int_http_server) = if let Some(tls) = &self.startup_settings.http.tls
-        {
+        let http_server = if let Some(tls) = &self.startup_settings.http.tls {
             let config = setup_rustls(tls).context("Failed to setup TLS context")?;
 
-            (
-                ext_http_server.bind_rustls(ext_address, config.clone()),
-                int_http_server.bind_rustls(int_address, config),
-            )
+            http_server.bind_rustls(address, config)
         } else {
-            (
-                ext_http_server.bind(ext_address),
-                int_http_server.bind(int_address),
-            )
+            http_server.bind(address)
         };
 
-        let ext_http_server = ext_http_server.with_context(|| {
-            format!(
-                "Failed to bind external server to {}:{}",
-                ext_address.0, ext_address.1
-            )
-        })?;
-
-        let int_http_server = int_http_server.with_context(|| {
-            format!(
-                "Failed to bind internal server to {}:{}",
-                int_address.0, int_address.1
-            )
+        let http_server = http_server.with_context(|| {
+            format!("Failed to bind http server to {}:{}", address.0, address.1)
         })?;
 
         log::info!("Startup finished");
 
-        let ext_server = ext_http_server.disable_signals().run();
-        let int_server = int_http_server.disable_signals().run();
-
-        let ext_server_handle = ext_server.handle();
-        let int_server_handle = int_server.handle();
+        let http_server = http_server.disable_signals().run();
+        let http_server_handle = http_server.handle();
 
         let mut reload_signal =
             signal(SignalKind::hangup()).context("Failed to register SIGHUP signal handler")?;
 
-        actix_rt::spawn(ext_server);
-        actix_rt::spawn(int_server);
+        actix_rt::spawn(http_server);
 
         // Wait for either SIGTERM or SIGHUP and handle them accordingly
         loop {
@@ -504,9 +454,8 @@ impl Controller {
         // Send shutdown signals to all tasks within our application
         let _ = self.shutdown.send(());
 
-        // then stop HTTP servers
-        ext_server_handle.stop(true).await;
-        int_server_handle.stop(true).await;
+        // then stop HTTP server
+        http_server_handle.stop(true).await;
 
         // Check in a 1 second interval for 10 seconds if all tasks have exited
         // by inspecting the receiver count of the broadcast-channel
