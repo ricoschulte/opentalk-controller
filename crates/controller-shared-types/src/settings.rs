@@ -371,6 +371,8 @@ pub struct CallIn {
 pub struct Defaults {
     #[serde(default = "default_user_language")]
     pub user_language: String,
+    #[serde(default)]
+    pub participants_have_presenter_role: bool,
 }
 
 fn default_user_language() -> String {
@@ -420,13 +422,22 @@ mod test {
         // Set environment variables to overwrite default config file
         let env_db_url = "postgres://envtest:password@localhost:5432/opentalk".to_string();
         let env_http_port: u16 = 8000;
+        let participants_have_presenter_role = true;
         env::set_var("K3K_CTRL_DATABASE__URL", &env_db_url);
         env::set_var("K3K_CTRL_HTTP__PORT", env_http_port.to_string());
+        env::set_var(
+            "K3K_CTRL_DEFAULTS__PARTICIPANTS_HAVE_PRESENTER_ROLE",
+            participants_have_presenter_role.to_string(),
+        );
 
         let settings = Settings::load("../../extra/example.toml")?;
 
         assert_eq!(settings.database.url, env_db_url);
         assert_eq!(settings.http.port, env_http_port);
+        assert_eq!(
+            settings.defaults.participants_have_presenter_role,
+            participants_have_presenter_role
+        );
 
         Ok(())
     }

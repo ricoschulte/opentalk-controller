@@ -9,6 +9,7 @@
 //! Handles media related messages and manages their respective forwarding to janus-gateway via rabbitmq.
 use anyhow::{bail, Context, Result};
 use controller::prelude::*;
+use controller::settings::SharedSettings;
 use controller::Controller;
 use controller_shared::ParticipantId;
 use focus::FocusDetection;
@@ -124,6 +125,10 @@ impl SignalingModule for Media {
 
         storage::set_state(ctx.redis_conn(), room, id, &state).await?;
         ctx.add_event_stream(ReceiverStream::new(janus_events));
+
+        if participants_have_presenter_role(mcu.shared_settings.clone()) {
+            storage::set_presenter(ctx.redis_conn(), room, id).await?;
+        }
 
         Ok(Some(Self {
             id,
@@ -899,4 +904,11 @@ pub async fn register(controller: &mut Controller) -> Result<()> {
     controller.signaling.add_module::<Media>(mcu_pool);
 
     Ok(())
+}
+
+pub fn participants_have_presenter_role(shared_settings: SharedSettings) -> bool {
+    shared_settings
+        .load()
+        .defaults
+        .participants_have_presenter_role
 }

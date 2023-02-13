@@ -85,7 +85,7 @@ pub struct McuPool {
     // and removes clients of vanished  janus instances
     clients: RwLock<HashSet<McuClient>>,
 
-    shared_settings: SharedSettings,
+    pub shared_settings: SharedSettings,
 
     mcu_config: RwLock<settings::JanusMcuConfig>,
 

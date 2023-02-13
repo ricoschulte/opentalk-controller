@@ -165,6 +165,8 @@ secret_key = "minioadmin"
 #[defaults]
 # Default language of a new user
 #user_language = "en-US"
+# Default presenter role for all users (defaults to false if not set)
+#participants_have_presenter_role = true
 
 # Settings for endpoints
 #[endpoints]
