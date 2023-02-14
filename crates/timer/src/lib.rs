@@ -127,6 +127,18 @@ impl SignalingModule for Timer {
                     ready_check_enabled: timer.ready_check_enabled,
                 });
 
+                if let outgoing::Kind::Countdown { ends_at } = timer.kind {
+                    ctx.add_event_stream(once(
+                        sleep(
+                            ends_at
+                                .signed_duration_since(Utc::now())
+                                .to_std()
+                                .unwrap_or_default(),
+                        )
+                        .map(move |_| ExpiredEvent { timer_id: timer.id }),
+                    ));
+                }
+
                 for (participant_id, status) in participants {
                     let ready_status =
                         storage::ready_status::get(ctx.redis_conn(), self.room_id, *participant_id)
@@ -136,15 +148,6 @@ impl SignalingModule for Timer {
                 }
             }
             Event::Leaving => {
-                let timer = storage::timer::get(ctx.redis_conn(), self.room_id).await?;
-
-                if let Some(timer) = timer {
-                    if timer.created_by == self.participant_id {
-                        self.stop_current_timer(&mut ctx, StopKind::CreatorLeft, None)
-                            .await?;
-                    }
-                }
-
                 storage::ready_status::delete(ctx.redis_conn(), self.room_id, self.participant_id)
                     .await?;
             }
@@ -244,18 +247,6 @@ impl Timer {
                     return Ok(());
                 }
 
-                if let outgoing::Kind::Countdown { ends_at } = kind {
-                    ctx.add_event_stream(once(
-                        sleep(
-                            ends_at
-                                .signed_duration_since(Utc::now())
-                                .to_std()
-                                .unwrap_or_default(),
-                        )
-                        .map(move |_| ExpiredEvent { timer_id }),
-                    ));
-                }
-
                 let started = outgoing::Started {
                     timer_id,
                     started_at,
@@ -333,6 +324,20 @@ impl Timer {
     ) -> Result<()> {
         match event {
             rabbitmq::Event::Start(started) => {
+                if let outgoing::Kind::Countdown { ends_at } = started.kind {
+                    ctx.add_event_stream(once(
+                        sleep(
+                            ends_at
+                                .signed_duration_since(Utc::now())
+                                .to_std()
+                                .unwrap_or_default(),
+                        )
+                        .map(move |_| ExpiredEvent {
+                            timer_id: started.timer_id,
+                        }),
+                    ));
+                }
+
                 ctx.ws_send(outgoing::Message::Started(started));
             }
             rabbitmq::Event::Stop(stopped) => {

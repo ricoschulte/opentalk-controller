@@ -72,8 +72,6 @@ pub enum StopKind {
     ByModerator(ParticipantId),
     /// The timers duration has expired
     Expired,
-    /// The creator of the timer has left the room
-    CreatorLeft,
 }
 
 /// Update the ready status
@@ -193,22 +191,6 @@ mod test {
             "message": "stopped",
             "timer_id": "00000000-0000-0000-0000-000000000000",
             "kind": "expired",
-        });
-    }
-
-    #[test]
-    fn creator_left() {
-        let stopped = Message::Stopped(Stopped {
-            timer_id: TimerId(Uuid::nil()),
-            kind: StopKind::CreatorLeft,
-            reason: None,
-        });
-
-        assert_eq_json!(stopped,
-        {
-            "message": "stopped",
-            "timer_id": "00000000-0000-0000-0000-000000000000",
-            "kind": "creator_left",
         });
     }
 
