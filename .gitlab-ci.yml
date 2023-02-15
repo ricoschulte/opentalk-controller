@@ -68,6 +68,17 @@ lint:yaml:
     - pacman -Syy --noconfirm yamllint
   script: yamllint .
 
+lint:openapi:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE == 'schedule'
+  stage: lint
+  image:
+    name: redocly/openapi-cli
+    entrypoint: ['']
+  script:
+    - /usr/local/bin/openapi lint api/controller/frontend_api.yaml
+
 lint:licensing:
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
