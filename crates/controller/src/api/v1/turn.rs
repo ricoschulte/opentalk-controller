@@ -177,7 +177,7 @@ fn rr_servers<T: Rng + CryptoRng>(
 }
 
 /// Checks for a valid access_token similar to the OIDC Middleware, but also allows invite_tokens as a valid bearer token.
-pub async fn check_access_token_or_invite(
+async fn check_access_token_or_invite(
     req: &HttpRequest,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
@@ -194,7 +194,7 @@ pub async fn check_access_token_or_invite(
         check_access_token(db.clone(), oidc_ctx, AccessToken::new(access_token.clone())).await;
 
     match current_user {
-        Ok(user) => Ok(Either::Left(user)),
+        Ok((_, user)) => Ok(Either::Left(user)),
         Err(e) => {
             // return early if we got a non-auth error
             if e.status_code() != StatusCode::UNAUTHORIZED {

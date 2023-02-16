@@ -5,7 +5,7 @@
 use super::{Event, EventId, NewEventInvite};
 use crate::rooms::RoomId;
 use crate::schema::{event_email_invites, event_invites, events};
-use crate::users::UserId;
+use crate::users::{User, UserId};
 use chrono::{DateTime, Utc};
 use database::{DbConnection, Paginate, Result};
 use diesel::prelude::*;
@@ -54,14 +54,14 @@ pub struct EventEmailInvite {
 impl EventEmailInvite {
     pub fn migrate_to_user_invites(
         conn: &mut DbConnection,
-        user_id: UserId,
-        email: &str,
+        user: &User,
     ) -> Result<Vec<(EventId, RoomId)>> {
         conn.transaction(|conn| {
             let email_invites_with_room: Vec<(EventEmailInvite, RoomId)> =
                 event_email_invites::table
-                    .filter(event_email_invites::email.eq(email))
+                    .filter(event_email_invites::email.eq(&user.email))
                     .inner_join(events::table)
+                    .filter(events::tenant_id.eq(user.tenant_id))
                     .select((event_email_invites::all_columns, events::room))
                     .load(conn)?;
 
@@ -78,7 +78,7 @@ impl EventEmailInvite {
                 .into_iter()
                 .map(|(email_invite, _)| NewEventInvite {
                     event_id: email_invite.event_id,
-                    invitee: user_id,
+                    invitee: user.id,
                     created_by: email_invite.created_by,
                     created_at: Some(email_invite.created_at),
                 })

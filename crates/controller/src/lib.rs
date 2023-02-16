@@ -38,7 +38,6 @@ use anyhow::{anyhow, Context, Result};
 use arc_swap::ArcSwap;
 use breakout::BreakoutRooms;
 use database::Db;
-use db_storage::groups::{GroupName, NewGroup};
 use keycloak_admin::KeycloakAdminClient;
 use lapin_pool::{RabbitMqChannel, RabbitMqPool};
 use moderation::ModerationModule;
@@ -343,17 +342,7 @@ impl Controller {
             .await?;
 
             log::info!("Making sure the default permissions are set");
-            // This gets the groupId (uuid) from the DB for the respective Group, and then uses
-            // kustos to assign this group to the administrator role.
-            let mut conn = self.db.get_conn()?;
-            let admin_group = NewGroup {
-                name: &GroupName::from("/OpenTalk_Administrator".into()),
-            }
-            .insert_or_get(&mut conn)?;
-            // Drop early to avoid holding a single connection from the pool for the whole runtime
-            drop(conn);
-
-            check_or_create_kustos_default_permissions(&authz, vec![admin_group]).await?;
+            check_or_create_kustos_default_permissions(&authz).await?;
 
             let authz_middleware = authz.actix_web_middleware(true).await?;
 

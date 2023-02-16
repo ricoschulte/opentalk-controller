@@ -16,46 +16,46 @@ async fn test() {
     let mut conn = db_ctx.db.get_conn().unwrap();
 
     // generate some random users with some made up names
-    make_user(&mut conn, "Aileen", "Strange", "Spectre");
+    let tenant_id = make_user(&mut conn, "Aileen", "Strange", "Spectre").tenant_id;
     make_user(&mut conn, "Laura", "Rutherford", "Jakiro");
     make_user(&mut conn, "Cheryl", "Lazarus", "Kaolin");
 
-    let users = User::find(&mut conn, "La").unwrap();
+    let users = User::find(&mut conn, tenant_id, "La").unwrap();
     assert_eq!(users.len(), 2);
     assert_eq!(users[0].firstname, "Cheryl");
     assert_eq!(users[1].firstname, "Laura");
 
-    let users = User::find(&mut conn, "Ru").unwrap();
+    let users = User::find(&mut conn, tenant_id, "Ru").unwrap();
     assert_eq!(users.len(), 2);
     assert_eq!(users[0].firstname, "Laura");
     assert_eq!(users[1].firstname, "Cheryl");
 
     // Try the levenshtein/soundex matching with worse input each time
-    let users = User::find(&mut conn, "Cheril Lazarus").unwrap();
+    let users = User::find(&mut conn, tenant_id, "Cheril Lazarus").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Cheryl");
 
-    let users = User::find(&mut conn, "Cheril Lasarus").unwrap();
+    let users = User::find(&mut conn, tenant_id, "Cheril Lasarus").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Cheryl");
 
-    let users = User::find(&mut conn, "Cherill Lasarus").unwrap();
+    let users = User::find(&mut conn, tenant_id, "Cherill Lasarus").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Cheryl");
 
-    let users = User::find(&mut conn, "Cherill Lasaruz").unwrap();
+    let users = User::find(&mut conn, tenant_id, "Cherill Lasaruz").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Cheryl");
 
-    let users = User::find(&mut conn, "Spectre").unwrap();
+    let users = User::find(&mut conn, tenant_id, "Spectre").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Aileen");
 
-    let users = User::find(&mut conn, "Spektre").unwrap();
+    let users = User::find(&mut conn, tenant_id, "Spektre").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Aileen");
 
-    let users = User::find(&mut conn, "Schpecktre").unwrap();
+    let users = User::find(&mut conn, tenant_id, "Schpecktre").unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].firstname, "Aileen");
 }

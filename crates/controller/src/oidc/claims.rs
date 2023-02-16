@@ -53,6 +53,8 @@ pub struct UserClaims {
     pub given_name: String,
     /// The users lastname
     pub family_name: String,
+    /// Tenant ID of the user
+    pub tenant_id: String,
     /// Groups the user belongs to.
     /// This is a custom field not specified by the OIDC Standard
     pub x_grp: Vec<String>,

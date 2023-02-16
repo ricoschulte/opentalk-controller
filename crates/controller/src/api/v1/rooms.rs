@@ -130,6 +130,7 @@ pub async fn new(
             created_by: current_user_id,
             password: room_parameters.password,
             waiting_room: room_parameters.waiting_room,
+            tenant_id: current_user.tenant_id,
         };
 
         let room = new_room.insert(&mut conn)?;

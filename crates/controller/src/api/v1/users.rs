@@ -14,6 +14,7 @@ use actix_web::{get, patch, Either};
 use anyhow::Context;
 use controller_shared::settings::Settings;
 use database::Db;
+use db_storage::tenants::Tenant;
 use db_storage::users::{UpdateUser, User, UserId};
 use keycloak_admin::KeycloakAdminClient;
 use serde::{Deserialize, Serialize};
@@ -162,9 +163,9 @@ pub async fn patch_me(
             id_token_exp: None,
         };
 
-        let updated_info = changeset.apply(&mut conn, current_user.id, None)?;
+        let user = changeset.apply(&mut conn, current_user.id)?;
 
-        Ok(updated_info.user)
+        Ok(user)
     })
     .await??;
 
@@ -196,6 +197,7 @@ pub async fn get_me(
 pub async fn get_user(
     settings: SharedSettingsActix,
     db: Data<Db>,
+    current_user: ReqData<User>,
     user_id: Path<UserId>,
 ) -> Result<Json<PublicUserProfile>, ApiError> {
     let settings = settings.load_full();
@@ -203,7 +205,7 @@ pub async fn get_user(
     let user = crate::block(move || {
         let mut conn = db.get_conn()?;
 
-        User::get(&mut conn, user_id.into_inner())
+        User::get_filtered_by_tenant(&mut conn, current_user.tenant_id, user_id.into_inner())
     })
     .await??;
 
@@ -240,6 +242,7 @@ pub async fn find(
     settings: SharedSettingsActix,
     kc_admin_client: Data<KeycloakAdminClient>,
     db: Data<Db>,
+    current_tenant: ReqData<Tenant>,
     query: Query<FindQuery>,
 ) -> Result<Json<Vec<UserFindResponseItem>>, ApiError> {
     let settings = settings.load_full();
@@ -256,7 +259,7 @@ pub async fn find(
 
     let found_users = if settings.endpoints.users_find_use_kc {
         let mut found_kc_users = kc_admin_client
-            .search_user(&query.q)
+            .search_user(current_tenant.oidc_tenant_id.inner(), &query.q)
             .await
             .context("Failed to search for user in keycloak")?;
 
@@ -268,7 +271,7 @@ pub async fn find(
                 .map(|kc_user| kc_user.id.as_str())
                 .collect();
 
-            let users = User::get_all_by_oidc_subs(&mut conn, &kc_subs)?;
+            let users = User::get_all_by_oidc_subs(&mut conn, current_tenant.id, &kc_subs)?;
 
             found_kc_users.retain(|kc_user| !users.iter().any(|user| user.oidc_sub == kc_user.id));
 
@@ -297,7 +300,7 @@ pub async fn find(
         let found_users = crate::block(move || {
             let mut conn = db.get_conn()?;
 
-            User::find(&mut conn, &query.q)
+            User::find(&mut conn, current_tenant.id, &query.q)
         })
         .await??;
 

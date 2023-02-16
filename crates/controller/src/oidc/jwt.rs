@@ -192,7 +192,8 @@ mod test {
                 "preferred_username": "admin",
                 "given_name": "the",
                 "family_name": "admin",
-                "email": "admin@mail.de"
+                "email": "admin@mail.de",
+                "tenant_id": "customer-123"
                 }}"#,
         );
 

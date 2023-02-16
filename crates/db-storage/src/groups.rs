@@ -1,16 +1,13 @@
 // SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
 //
 // SPDX-License-Identifier: EUPL-1.2
-use core::convert::Infallible;
-use core::str::FromStr;
-
 use super::schema::{groups, user_groups};
 use super::users::{User, UserId};
+use crate::tenants::TenantId;
+use core::convert::Infallible;
+use core::str::FromStr;
 use database::{DbConnection, Result};
-use diesel::{
-    Connection, ExpressionMethods, Identifiable, Insertable, OptionalExtension, QueryDsl,
-    Queryable, RunQueryDsl,
-};
+use diesel::prelude::*;
 use kustos::subject::PolicyGroup;
 
 diesel_newtype! {
@@ -48,6 +45,7 @@ pub struct Group {
     pub id: GroupId,
     pub id_serial: SerialGroupId,
     pub name: GroupName,
+    pub tenant_id: TenantId,
 }
 
 impl Group {
@@ -68,6 +66,7 @@ impl Group {
 #[diesel(table_name = groups)]
 pub struct NewGroup<'a> {
     pub name: &'a GroupName,
+    pub tenant_id: TenantId,
 }
 
 impl NewGroup<'_> {
@@ -109,4 +108,89 @@ pub struct NewUserGroupRelation {
 pub struct UserGroupRelation {
     pub user_id: UserId,
     pub group_id: GroupId,
+}
+
+/// Get or create groups in the database by their name and tenant_id
+/// If the group is currently not stored, create a new group and returns the ID along the already present ones.
+/// Does not preserve the order of groups passed to the function
+pub fn get_or_create_groups_by_name(
+    conn: &mut DbConnection,
+    groups: &[(TenantId, GroupName)],
+) -> Result<Vec<Group>> {
+    let mut query = groups::table.select(groups::all_columns).into_boxed();
+
+    for (tenant_id, group_name) in groups {
+        query = query.or_filter(
+            groups::tenant_id
+                .eq(tenant_id)
+                .and(groups::name.eq(group_name)),
+        );
+    }
+
+    let mut present_groups: Vec<Group> = query.load(conn)?;
+
+    // Create a `NewGroup` for every group that the previous query didn't return
+    let new_groups: Vec<NewGroup> = groups
+        .iter()
+        .filter(|(wanted_tenant_id, wanted_group_name)| {
+            !present_groups.iter().any(|present_group| {
+                present_group.tenant_id == *wanted_tenant_id
+                    && present_group.name == *wanted_group_name
+            })
+        })
+        .map(|&(tenant_id, ref name)| NewGroup { name, tenant_id })
+        .collect();
+
+    if !new_groups.is_empty() {
+        // Insert new groups and return them
+        let new_groups: Vec<Group> = diesel::insert_into(groups::table)
+            .values(&new_groups)
+            .returning(groups::all_columns)
+            .load(conn)?;
+
+        present_groups.extend(new_groups);
+    }
+
+    Ok(present_groups)
+}
+
+#[tracing::instrument(err, skip_all)]
+pub fn insert_user_into_groups(
+    conn: &mut DbConnection,
+    user: &User,
+    groups: &[Group],
+) -> Result<()> {
+    let new_user_groups = groups
+        .iter()
+        .map(|group| NewUserGroupRelation {
+            user_id: user.id,
+            group_id: group.id,
+        })
+        .collect::<Vec<_>>();
+
+    diesel::insert_into(user_groups::table)
+        .values(new_user_groups)
+        .on_conflict_do_nothing()
+        .execute(conn)?;
+
+    Ok(())
+}
+
+#[tracing::instrument(err, skip_all)]
+pub fn remove_user_from_groups(
+    conn: &mut DbConnection,
+    user: &User,
+    groups: &[Group],
+) -> Result<()> {
+    let group_ids: Vec<GroupId> = groups.iter().map(|group| group.id).collect();
+
+    diesel::delete(user_groups::table)
+        .filter(
+            user_groups::user_id
+                .eq(user.id)
+                .and(user_groups::group_id.eq_any(group_ids)),
+        )
+        .execute(conn)?;
+
+    Ok(())
 }

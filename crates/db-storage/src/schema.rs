@@ -8,6 +8,7 @@ table! {
         namespace -> Nullable<Varchar>,
         kind -> Varchar,
         filename -> Varchar,
+        tenant_id -> Uuid,
     }
 }
 
@@ -103,6 +104,7 @@ table! {
         is_recurring -> Nullable<Bool>,
         recurrence_pattern -> Nullable<Varchar>,
         is_adhoc -> Bool,
+        tenant_id -> Uuid,
     }
 }
 
@@ -113,6 +115,7 @@ table! {
         id -> Uuid,
         id_serial -> Int8,
         name -> Text,
+        tenant_id -> Uuid,
     }
 }
 
@@ -142,6 +145,7 @@ table! {
         created_at -> Timestamptz,
         room -> Nullable<Uuid>,
         protocol -> Jsonb,
+        tenant_id -> Uuid,
     }
 }
 
@@ -175,6 +179,7 @@ table! {
         created_at -> Timestamptz,
         password -> Nullable<Varchar>,
         waiting_room -> Bool,
+        tenant_id -> Uuid,
     }
 }
 
@@ -187,6 +192,17 @@ table! {
         sip_id -> Varchar,
         password -> Varchar,
         enable_lobby -> Bool,
+    }
+}
+
+table! {
+    use crate::sql_types::*;
+
+    tenants (id) {
+        id -> Uuid,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        oidc_tenant_id -> Text,
     }
 }
 
@@ -216,9 +232,11 @@ table! {
         dashboard_theme -> Varchar,
         conference_theme -> Varchar,
         phone -> Nullable<Varchar>,
+        tenant_id -> Uuid,
     }
 }
 
+joinable!(assets -> tenants (tenant_id));
 joinable!(event_email_invites -> events (event_id));
 joinable!(event_email_invites -> users (created_by));
 joinable!(event_exceptions -> events (event_id));
@@ -227,15 +245,20 @@ joinable!(event_favorites -> events (event_id));
 joinable!(event_favorites -> users (user_id));
 joinable!(event_invites -> events (event_id));
 joinable!(events -> rooms (room));
+joinable!(events -> tenants (tenant_id));
+joinable!(groups -> tenants (tenant_id));
 joinable!(invites -> rooms (room));
 joinable!(legal_votes -> rooms (room));
+joinable!(legal_votes -> tenants (tenant_id));
 joinable!(legal_votes -> users (created_by));
 joinable!(room_assets -> assets (asset_id));
 joinable!(room_assets -> rooms (room_id));
+joinable!(rooms -> tenants (tenant_id));
 joinable!(rooms -> users (created_by));
 joinable!(sip_configs -> rooms (room));
 joinable!(user_groups -> groups (group_id));
 joinable!(user_groups -> users (user_id));
+joinable!(users -> tenants (tenant_id));
 
 allow_tables_to_appear_in_same_query!(
     assets,
@@ -252,6 +275,7 @@ allow_tables_to_appear_in_same_query!(
     room_assets,
     rooms,
     sip_configs,
+    tenants,
     user_groups,
     users,
 );
