@@ -999,6 +999,13 @@ impl Runner {
                         )
                         .await;
 
+                        moderation::storage::waiting_room_accepted_remove(
+                            &mut self.redis_conn,
+                            self.room_id.room_id(),
+                            self.id,
+                        )
+                        .await?;
+
                         self.join_room(timestamp, control_data).await?
                     }
                     // not in correct state, reset it
