@@ -50,7 +50,7 @@ parking_lot = "0.12"
 actix-web = { version = "4" }
 
 ### Opentelementry metrics
-opentelemetry = { version = "0.17", default-features = false, features = [
+opentelemetry = { version = "0.18", default-features = false, features = [
     "metrics",
 ] }
 

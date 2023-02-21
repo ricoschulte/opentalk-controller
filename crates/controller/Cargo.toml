@@ -28,18 +28,16 @@ tracing-subscriber = { version = "0.3", features = [
     "parking_lot",
     "env-filter",
 ] }
-tracing-opentelemetry = "0.17"
-opentelemetry = { version = "0.17", default-features = false, features = [
+tracing-opentelemetry = "0.18"
+opentelemetry = { version = "0.18", default-features = false, features = [
     "trace",
     "rt-tokio-current-thread",
     "metrics",
 ] }
-opentelemetry-jaeger = { version = "0.16", features = [
-    "rt-tokio-current-thread",
-] }
-opentelemetry-prometheus = "0.10"
+opentelemetry-otlp = "0.11"
+opentelemetry-prometheus = "0.11"
 prometheus = "0.13"
-tracing-actix-web = { version = "0.6" }
+tracing-actix-web = { version = "0.7" }
 
 ### Config
 config = { version = "0.13.3", default-features = false, features = ["toml"] }
