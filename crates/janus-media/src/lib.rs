@@ -126,7 +126,7 @@ impl SignalingModule for Media {
         storage::set_state(ctx.redis_conn(), room, id, &state).await?;
         ctx.add_event_stream(ReceiverStream::new(janus_events));
 
-        if participants_have_presenter_role(mcu.shared_settings.clone()) {
+        if !screen_share_requires_permission(&mcu.shared_settings) {
             storage::set_presenter(ctx.redis_conn(), room, id).await?;
         }
 
@@ -906,9 +906,9 @@ pub async fn register(controller: &mut Controller) -> Result<()> {
     Ok(())
 }
 
-pub fn participants_have_presenter_role(shared_settings: SharedSettings) -> bool {
+pub fn screen_share_requires_permission(shared_settings: &SharedSettings) -> bool {
     shared_settings
         .load()
         .defaults
-        .participants_have_presenter_role
+        .screen_share_requires_permission
 }
