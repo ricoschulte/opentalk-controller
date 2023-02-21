@@ -45,6 +45,7 @@ pub fn init(settings: &Logging) -> Result<()> {
                     KeyValue::new("service.name", settings.service_name.clone()),
                 ])))
                 .install_batch(opentelemetry::runtime::TokioCurrentThread)?;
+
         let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
         // Initialize the global logging with telemetry
