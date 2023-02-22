@@ -168,7 +168,7 @@ skip = [
     { name = "sha1", version = "=0.6.1" },
     { name = "spin", version = "=0.5.2" },
     { name = "time", version = "=0.1.45" },
-    { name = "wasi", version = "=0.10.0+wasi-snapshot-preview1" },
+    { name = "wasi", version = "=0.10.0" },
 ]
 # Similarly to `skip` allows you to skip certain crates during duplicate
 # detection. Unlike skip, it also includes the entire tree of transitive
