@@ -1,0 +1,2579 @@
+---
+openapi: 3.1.0
+info:
+  title: K3K Controller Frontend API
+  description: Specifies the endpoints and structure of the K3K Controller Frontend API
+  version: '1'
+  license:
+    name: EUPL-1.2
+security:
+  # Globally apply bearer authentication
+  - BearerAuth: []
+servers:
+  - url: /v1
+tags:
+  - name: rooms
+    description: Endpoints related to room functionality
+  - name: invites
+    description: Endpoints related to invite code functionality
+  - name: signaling
+    description: Endpoints related to signaling functionality
+  - name: users
+    description: Endpoints related to user functionality
+  - name: auth
+    description: Endpoints related to authentication
+  - name: sip
+    description: Endpoints related to sip configuration
+
+paths:
+  /auth/login:
+    post:
+      summary: The login endpoint
+      description: |
+        Attempt to authenticate with a provided ID token. The ID token can be received from an OIDC Provider and
+        contains information about the requesting user as well as an expiration timestamp. When a valid token with
+        an unknown user is provided, a new user will be created.
+
+        Returns a list of the users permissions on success.
+      tags: [auth]
+      operationId: auth_login
+      # Disable bearer authentication for Login
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+      responses:
+        200:
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        401:
+          description: The provided ID-Token is invalid.
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      summary: Get the configured OIDC provider.
+      tags: [auth]
+      operationId: get_auth_providers
+      security: []
+      responses:
+        200:
+          description: Successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OidcProvider'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /rooms:
+    get:
+      summary: Get a list of accessible rooms
+      description: Get a list of all rooms that are accessible by the requesting user.
+      tags: [rooms]
+      operationId: get_rooms
+      responses:
+        200:
+          description: Successful
+          headers:
+            Link:
+              $ref: '#/components/headers/pageLink'
+          content:
+            application/json:
+              schema:
+                description: A JSON Array of accessible rooms
+                type: array
+                items:
+                  $ref: '#/components/schemas/Room'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      summary: Create a new room
+      description: >
+        Create a new room from the provided PostRoomsBody.
+      tags: [rooms]
+      operationId: post_rooms
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostRoomsBody'
+      responses:
+        201:
+          description: Successfully created a new room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        400:
+          description: Could not create a new room due to wrong syntax or bad values, for example, an invalid owner id.
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /rooms/{room_id}:
+    patch:
+      summary: Patch a room
+      description: >
+        Patches a room with the provided PatchRoomsBody.
+      tags: [rooms]
+      operationId: patch_room
+      parameters:
+        - in: path
+          description: The id of the room to be modified.
+          name: room_id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchRoomsBody'
+      responses:
+        200:
+          description: Successfully modified room
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        400:
+          description: >
+            Could not modify the specified room due to wrong syntax or bad values,
+            for example, an invalid owner id.
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          description: The requesting user does not have permissions to modify the specified room.
+        404:
+          description: The specified room could not be found
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      summary: Get a room
+      description: Get a room by id.
+      tags: [rooms]
+      operationId: get_room
+      parameters:
+        - in: path
+          description: Id of the requested room
+          name: room_id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        200:
+          description: Successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Room'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          description: The specified room could not be found
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /rooms/{uuid}/start:
+    post:
+      summary: Start a signaling session
+      description: >
+        Returns a ticket to be used with the /signaling endpoint.
+        When joining a room, the ticket
+        must be provided as a `Sec-WebSocket-Protocol` header field when starting the WebSocket
+        connection.
+        When the requested room has a password set, the requester has to provide the correct password
+        through the requests body. When the room has no password set,
+        the provided password will be ignored.
+      tags: [rooms, signaling]
+      operationId: signaling_start
+      parameters:
+        - in: path
+          description: The UUID of the requested room
+          name: uuid
+          schema:
+            type: string
+            format: uuid
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoomStart'
+      responses:
+        200:
+          description: Includes the information needed to connect to the signaling endpoint in the response body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomStartSuccess'
+        401:
+          description: >
+            Either: The provided AccessToken is expired or the provided ID- or Access-Token is invalid.
+            The WWW-Authenticate header will contain a error-description 'session expired' to distinguish
+            between an invalid and an expired token.
+
+            Or: The provided password was incorrect, in which case the body contains more information.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomStartError'
+        404:
+          description: The specified room could not be found
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /rooms/{uuid}/start_invited:
+    post:
+      summary: Start a signaling session
+      description: >
+        Returns a ticket to be used with the /signaling endpoint.
+        When joining a room, the ticket
+        must be provided as a `Sec-WebSocket-Protocol` header field when starting the WebSocket
+        connection.
+        When the requested room has a password set, the requester has to provide the correct password
+        through the requests body. When the room has no password set,
+        the provided password will be ignored.
+      tags: [rooms, signaling, invites]
+      operationId: signaling_start_invited
+      security: []
+      parameters:
+        - in: path
+          description: The UUID of the requested room
+          name: uuid
+          schema:
+            type: string
+            format: uuid
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitedRoomStart'
+      responses:
+        200:
+          description: Includes the information needed to connect to the signaling endpoint in the response body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomStartSuccess'
+        401:
+          description: >
+            Either: The provided AccessToken is expired or the provided ID- or Access-Token is invalid.
+            The WWW-Authenticate header will contain a error-description 'session expired' to distinguish
+            between an invalid and an expired token.
+
+            Or: The provided password was incorrect, in which case the body contains more information.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomStartError'
+        404:
+          description: The specified room could not be found
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /rooms/{room_uuid}/invites:
+    get:
+      summary: Get all invites
+      description: Gets all invites the user has access to.
+      tags: [rooms, invites]
+      operationId: get_all_invites
+      parameters:
+        - in: path
+          description: The UUID of the requested room
+          name: room_uuid
+          schema:
+            type: string
+            format: uuid
+          required: true
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Page'
+      responses:
+        200:
+          description: A list of all invites for a given room
+          content:
+            application/json:
+              schema:
+                description: A JSON Array of InviteCode
+                type: array
+                items:
+                  $ref: '#/components/schemas/InviteCode'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    post:
+      summary: Create a new invite
+      description: >
+        Create a new invite from the provided object. On success, the controller will create a new
+        Invite and return the InviteCode object. Returns `404 Not Found` when the user has no
+        access to the room.
+      tags: [rooms, invites]
+      operationId: create_invite
+      parameters:
+        - in: path
+          description: The UUID of the requested room
+          name: room_uuid
+          schema:
+            type: string
+            format: uuid
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewInviteCode'
+      responses:
+        200:
+          description: Successfully created a new invite
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteCode'
+        400:
+          description: >
+            Could not create a new invite due to wrong syntax or bad values,
+            for example, an invalid owner id.
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /rooms/{room_uuid}/invites/{invite_code}:
+    get:
+      summary: Get an invite
+      description: Get the invite for the given room_id and invite_code.
+      tags: [rooms, invites]
+      operationId: get_invite
+      parameters:
+        - in: path
+          description: The UUID of the requested room
+          name: room_uuid
+          schema:
+            type: string
+            format: uuid
+          required: true
+        - in: path
+          description: The invite_code
+          name: invite_code
+          schema:
+            type: string
+          required: true
+      responses:
+        200:
+          description: Includes the information needed to connect to the signaling endpoint in the response body.
+          content:
+            application/json:
+              schema:
+                description: A JSON Array of InviteCode
+                type: array
+                items:
+                  $ref: '#/components/schemas/InviteCode'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      summary: Update an invite code
+      description: >
+        Update an invite from the provided object. On success, the controller will return the updated InviteCode object.
+      tags: [rooms, invites]
+      operationId: put_invite
+      parameters:
+        - in: path
+          description: The UUID of the requested room
+          name: room_uuid
+          schema:
+            type: string
+            format: uuid
+          required: true
+        - in: path
+          description: The invite_code
+          name: invite_code
+          schema:
+            type: string
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateInviteCode'
+      responses:
+        200:
+          description: Successfully updated the invite
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteCode'
+        400:
+          description: >
+            Could not create a new invite due to wrong syntax or bad values,
+            for example, an invalid owner id.
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Delete an invite code
+      description: >
+        Delete the respective invite. On success, the controller will return 200 OK.
+      tags: [rooms, invites]
+      operationId: delete_invite
+      parameters:
+        - in: path
+          description: The UUID of the requested room
+          name: room_uuid
+          schema:
+            type: string
+            format: uuid
+          required: true
+        - in: path
+          description: The invite_code
+          name: invite_code
+          schema:
+            type: string
+          required: true
+      responses:
+        204:
+          description: Successfully updated the invite
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /invite/verify:
+    post:
+      summary: Verify an invite code
+      description: Verifies the invite and returns the room_url for this invite_code
+      tags: [invites]
+      operationId: verify_invite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InviteVerifyBody'
+      responses:
+        201:
+          description: The invite is valid and the associated room is the following.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InviteCodeVerified'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /rooms/{uuid}/sip:
+    get:
+      summary: Get the rooms SIP config
+      description: Returns the SIP config of this room.
+      tags: [rooms, sip]
+      operationId: get_sip
+      parameters:
+        - in: path
+          description: The UUID of the requested room
+          name: uuid
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        200:
+          description: Contains the rooms SIP config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SipConfig'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          description: The specified room could not be found or this room has no SIP config configured
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    put:
+      summary: Create or modify the rooms SIP config
+      description: >
+        When the room has no sip config configured, a new one is created based on the provided request
+        body and a 201 CREATED response is returned. When the room already has a sip config, the config
+        will be modified and a 200 OK response is returned.
+      tags: [rooms, sip]
+      operationId: put_sip
+      parameters:
+        - in: path
+          description: The UUID of the requested room
+          name: uuid
+          schema:
+            type: string
+            format: uuid
+          required: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PutSipConfig'
+      responses:
+        200:
+          description: The specified SIP config was modified based on the request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SipConfig'
+        201:
+          description: A new SIP config has been created based on the request body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SipConfig'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          description: The specified room could not be found
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Delete a rooms sip config
+      description: >
+        Deletes the rooms sip config and thus disables participants from joining via SIP.
+      tags: [rooms, sip]
+      operationId: delete_sip
+      parameters:
+        - in: path
+          description: The UUID of the requested room
+          name: uuid
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        204:
+          description: Successfully deleted the specified sip config
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          description: The specified room could not be found
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /rooms/{room_id}/assets:
+    get:
+      summary: Get assets for a room
+      description: Gets all assets that are available in a room.
+      tags: [rooms, assets]
+      operationId: get_all_assets
+      parameters:
+        - in: path
+          description: The id of the requested room
+          name: room_id
+          schema:
+            type: string
+            format: uuid
+          required: true
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Page'
+      responses:
+        200:
+          description: A list of all assets for a given room
+          content:
+            application/json:
+              schema:
+                description: A JSON Array of AssetResource
+                type: array
+                items:
+                  $ref: '#/components/schemas/AssetResource'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /rooms/{room_id}/assets/{asset_id}:
+    get:
+      summary: Get an asset
+      description: Get the asset for the given `room_id` and `asset_id`.
+      tags: [rooms, asset]
+      operationId: get_asset
+      parameters:
+        - in: path
+          description: The id of the requested room
+          name: room_id
+          schema:
+            type: string
+            format: uuid
+          required: true
+        - in: path
+          description: The id of the requested asset
+          name: asset_id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        200:
+          description: The raw binary data representing the asset
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Delete an asset
+      description: >
+        Delete the respective asset.
+      tags: [rooms, assets]
+      operationId: delete_asset
+      parameters:
+        - in: path
+          description: The id of the requested room
+          name: room_id
+          schema:
+            type: string
+            format: uuid
+          required: true
+        - in: path
+          description: The id of the requested asset
+          name: asset_id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        204:
+          description: Successfully deleted the asset
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /users:
+    get:
+      summary: Get all users
+      description: Returns a list of all users visible to the authenticated user, as PublicUserProfile.
+      tags: [users]
+      operationId: get_users
+      responses:
+        200:
+          description: Successful
+          headers:
+            Link:
+              $ref: '#/components/headers/pageLink'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicUserProfileCollection'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /users/me:
+    patch:
+      summary: Patch the current users settings
+      description: Patch the current users settings with a PatchUserBody object. Returns the updated user profile
+      tags: [users]
+      operationId: patch_users_me
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchUserBody'
+      responses:
+        200:
+          description: Successfully updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserProfile'
+        400:
+          description: Could not patch user due to wrong syntax or bad values
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      summary: Get the current users profile
+      tags: [users]
+      operationId: get_users_me
+      responses:
+        200:
+          description: Successfully fetched user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrivateUserProfile'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /users/{id}:
+    get:
+      summary: Get user details
+      description: Get the user details of a specific user as PublicUserProfile object.
+      tags: [users]
+      operationId: get_user
+      parameters:
+        - in: path
+          description: The identifier of the user
+          name: id
+          schema:
+            type: integer
+            format: int64
+          required: true
+      responses:
+        200:
+          description: Successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicUserProfile'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /users/find:
+    get:
+      summary: Find users
+      description: Used to query users. Can be used in autocomplete fields.
+      tags: [users]
+      operationId: find_user
+      parameters:
+        - in: query
+          name: q
+          description: The query string (currently matches name and email)
+          schema:
+            type: string
+      responses:
+        200:
+          description: List of PublicUserProfile matching the query string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserFindResponseItemCollection'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /users/me/event_favorites/{event_id}:
+    put:
+      summary: Favorite an event
+      description: Add the event to the current user's favorite list
+      tags: [users, events]
+      operationId: add_event_favorite
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+      responses:
+        201:
+          description: The event was added to the favorite list
+        204:
+          description: The event was already in the favorite list
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Unfavorite an event
+      description: remove the event from the current user's favorite list
+      tags: [users, events]
+      operationId: delete_event_favorite
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+      responses:
+        204:
+          description: The event was removed from the favorite list
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+  /turn:
+    get:
+      summary: Get a TURN server and corresponding credentials
+      description: Get a Turn server and corresponding credentials, if none are configured return 500
+      tags: [turn, stun]
+      operationId: get_turn
+      security:
+        - BearerAuth: []
+        - InviteCode: []
+      responses:
+        200:
+          description: Successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StunTurnCredentials'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /signaling:
+    get:
+      summary: Room Signaling Websocket
+      description: The room signaling websocket. See asyncapi specs for details.
+      tags: [signaling]
+      operationId: signaling_websocket
+      parameters:
+        - in: header
+          name: Sec-WebSocket-Protocol
+          required: true
+          schema:
+            $ref: '#/components/schemas/SignalingProtocolHeader'
+          example: k3k-signaling-json-v1.0, ticket#eyJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aDAuY29tLy
+        - in: header
+          name: Connection
+          required: true
+          schema:
+            type: string
+            enum:
+              - Upgrade
+          example: Upgrade
+        - in: header
+          name: Upgrade
+          required: true
+          schema:
+            type: string
+            enum:
+              - websocket
+          example: websocket
+      responses:
+        200:
+          description: Successful
+        400:
+          $ref: '#/components/responses/BadRequest'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /events:
+    post:
+      summary: Create a new event
+      description: |
+        Create a new event
+      tags: [events]
+      operationId: new_event
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PostEventsBody'
+      responses:
+        201:
+          description: Successfully created a new event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      summary: Get events
+      description: >
+        Get events in a specified time range.
+        Recurring events that are possible to be inside the time range will also be returned.
+        Also included are the exceptions for recurring events, in this case the id will be an instance id and the
+        recurring_event_id is set.
+      tags: [events]
+      operationId: get_events
+      parameters:
+        - $ref: '#/components/parameters/timeMin'
+        - $ref: '#/components/parameters/timeMax'
+        - $ref: '#/components/parameters/inviteesMax'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/pageCursor'
+          name: after
+        - in: query
+          name: favorites
+          description: Only include favorite events
+          schema:
+            type: boolean
+        - in: query
+          name: adhoc
+          description: |
+            If present, either only adhoc or non-adhoc events are returned,
+            depending on the flag value. If absent, all events are returned
+            regardless their adhoc flag.
+          schema:
+            type: boolean
+        - in: query
+          name: time_independent
+          description: |
+            If present, either only time-independent or time-dependent
+            events are returned, depending on the flag value. If absent,
+            all events are returned regardless their time dependency.
+          schema:
+            type: boolean
+      responses:
+        200:
+          description: Successfully fetched all event for the authorized user
+          headers:
+            Link:
+              $ref: '#/components/headers/cursorLink'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventOrExceptionCollection'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /events/{event_id}:
+    get:
+      summary: Get event resource
+      description: Get the Event resource for the given id
+      tags: [events]
+      operationId: get_event
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+        - $ref: '#/components/parameters/inviteesMax'
+      responses:
+        200:
+          description: Successfully fetched the event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    patch:
+      summary: Update an event or a single event occurrence
+      description: |
+        Update fields on an event.
+        If you change the recurrence pattern of an recurring event, all exceptions to this recurring event are
+        invalidated and deleted.
+      tags: [events]
+      operationId: patch_event
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+        - $ref: '#/components/parameters/inviteesMax'
+        - $ref: '#/components/parameters/suppressEmailNotification'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchEvent'
+      responses:
+        200:
+          description: Successfully updated the event. Returns the updated event.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Delete an event
+      description: |
+        Delete an event
+      tags: [events]
+      operationId: delete_event
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+        - $ref: '#/components/parameters/suppressEmailNotification'
+      responses:
+        204:
+          description: Successfully deleted the event.
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /events/{event_id}/instances:
+    get:
+      summary: Get instances of the specified event
+      description: |
+        Get the RRULE based instances for the specific event.
+        If the event has no RRULE set, the single shot event instance will be returned
+      tags: [events]
+      operationId: get_event_instances
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+        - $ref: '#/components/parameters/timeMin'
+        - $ref: '#/components/parameters/timeMax'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/pageCursor'
+        - $ref: '#/components/parameters/inviteesMax'
+      responses:
+        200:
+          description: Successfully fetched all instances for the given event id
+          headers:
+            Link:
+              $ref: '#/components/headers/cursorLink'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventInstanceCollection'
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /events/{event_id}/instances/{instance_id}:
+    get:
+      summary: Get a single event instance
+      description: |
+        Get an event instance.
+      tags: [events]
+      operationId: get_event_instance
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+        - $ref: '#/components/parameters/eventInstanceId'
+        - $ref: '#/components/parameters/inviteesMax'
+      responses:
+        200:
+          description: Returns the patched instance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventInstance'
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+    patch:
+      summary: Update a single event instance
+      description: |
+        Update fields on an event instance.
+      tags: [events]
+      operationId: patch_event_instance
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+        - $ref: '#/components/parameters/eventInstanceId'
+        - $ref: '#/components/parameters/inviteesMax'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchEventInstance'
+      responses:
+        200:
+          description: Successfully patched the instance. Returns the patched instance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventInstance'
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /events/{event_id}/invites:
+    post:
+      summary: Create an invite to an event
+      description: Invite a user to an event
+      tags: [events, event_invites]
+      operationId: create_event_invites
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+        - $ref: '#/components/parameters/suppressEmailNotification'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              properties:
+                invitee:
+                  type: string
+                  description: ID of the user to be invited
+      responses:
+        201:
+          description: Successfully invited user
+        204:
+          description: User was already invited
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    get:
+      summary: Get invitees of the specified event
+      description: |
+        Returns a list of user profiles and their invite acceptance status
+      tags: [events, event_invites]
+      operationId: get_event_invites
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/Page'
+      responses:
+        200:
+          description: Successfully fetched invitees for the given event id
+          headers:
+            Link:
+              $ref: '#/components/headers/cursorLink'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventInviteeCollection'
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /events/{event_id}/invites/{user_id}:
+    delete:
+      summary: Delete invite to an event
+      description: |
+        Delete/retract an invite to an event for a specified user
+      tags: [events, event_invites]
+      operationId: delete_event_invite
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+        - $ref: '#/components/parameters/userId'
+      responses:
+        204:
+          description: The invite was successfully deleted
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /events/{event_id}/invite:
+    patch:
+      summary: Accept an event invite
+      description: |
+        Accept an event invite for the current user to the specified event
+      tags: [events, event_invites]
+      operationId: accept_event_invite
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+      responses:
+        204:
+          description: Successfully accepted the invite
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+    delete:
+      summary: Decline an event invite
+      description: |
+        Decline an event invite for the current user to the specified event
+      tags: [events, event_invites]
+      operationId: decline_event_invite
+      parameters:
+        - $ref: '#/components/parameters/eventId'
+      responses:
+        204:
+          description: Successfully declined the invite
+        404:
+          $ref: '#/components/responses/NotFound'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /users/me/pending_invites:
+    get:
+      summary: Information about pending invites
+      description: |
+        Returns information about pending invites for the current user
+      tags: [events, event_invites]
+      operationId: event_invites_pending
+      responses:
+        200:
+          description: Success
+          content:
+            application/json:
+              schema:
+                description: Information about pending invites for the current user
+                additionalProperties: false
+                required:
+                  - total_pending_invites
+                properties:
+                  total_pending_invites:
+                    type: number
+                    description: The total number of pending invites for the current user
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /services/call_in/start:
+    post:
+      summary: Starts a signaling session given a room id and pin
+      description: >
+        Takes call-in id and pin and returns a ticket for the `/signaling` endpoint. Behaves similar to the
+        `/rooms/{room_id}/start` endpoint.
+
+        This endpoint is provided for call-in gateways to start a room connection for Call-In users. The user
+        has to provide the credentials (id and pin) via DTMF (the number pad).
+      tags: [services, signaling, call_in]
+      operationId: start_sip
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallInStart'
+      responses:
+        200:
+          description: Includes the information needed to connect to the signaling endpoint in the response body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomStartSuccess'
+        400:
+          description: The provided request body contains wrong syntax or bad values.
+        401:
+          description: >
+            `id` and `pin` are not valid for any room. The error code is set to `invalid_credentials`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoomStartError'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    InviteCode:
+      type: http
+      scheme: bearer
+      bearerFormat: InviteCode
+  # -------------- Common responses --------------
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BasicError'
+
+    Unauthorized:
+      description: >
+        The provided AccessToken is expired or the provided ID- or Access-Token is invalid. The WWW-Authenticate
+        header will contain a error-description 'session expired' to distinguish between an invalid and an
+        expired token
+    InsufficientPermission:
+      description: The requesting user has insufficient permissions
+    BadRequest:
+      description: Bad Request
+    ValidationFailed:
+      description: The provided JSON object does not follow the specified field constraints
+    InternalServerError:
+      description: An internal server error occurred.
+
+  parameters:
+    PerPage:
+      name: per_page
+      description: Results per page (max 100)
+      in: query
+      schema:
+        type: integer
+        default: 30
+    Page:
+      name: page
+      description: Page number of the results to fetch.
+      in: query
+      schema:
+        type: integer
+        default: 1
+    pageCursor:
+      name: cursor
+      description: Page cursor. Needs to be handled opaque
+      in: query
+      schema:
+        type: string
+    timeMin:
+      in: query
+      name: time_min
+      description: Lower bound of the time range (as a RFC3339 UTC timestamp)
+      schema:
+        type: string
+        format: date-time
+    timeMax:
+      in: query
+      name: time_max
+      description: Upper bound of the time range (as a RFC3339 UTC timestamp)
+      schema:
+        type: string
+        format: date-time
+    inviteesMax:
+      in: query
+      name: invitees_max
+      description: maximum number of invitees sent with an event
+      schema:
+        type: integer
+        default: 0
+    userId:
+      in: path
+      name: user_id
+      description: |
+        Id of an user
+      example:
+        - 87f81f6f-35c5-4481-81ff-ec10c7e9d8b1
+      schema:
+        type: string
+      required: true
+    eventId:
+      in: path
+      name: event_id
+      description: |
+        The id of the event.
+      example:
+        - 87f81f6f-35c5-4481-81ff-ec10c7e9d8b1
+      schema:
+        type: string
+      required: true
+    eventInstanceId:
+      in: path
+      name: instance_id
+      description: |
+        Opaque id of an event instance
+      example:
+        - 20220215T180000Z
+      schema:
+        type: string
+      required: true
+    eventInviteId:
+      in: path
+      name: invite_id
+      description: |
+        The id of the invite to an event event.
+      schema:
+        type: string
+      required: true
+      examples:
+        InviteId:
+          value: 87f81f6f-35c5-4481-81ff-ec10c7e9d8b1
+          summary: Invite Id
+    suppressEmailNotification:
+      name: suppress_email_notification
+      in: query
+      description: >
+          Suppress notification emails.
+          Note that not sending emails will lead to external calendars
+          getting out of sync with the actual event.
+      schema:
+        type: boolean
+
+  headers:
+    pageLink:
+      example:
+        <https://api.example.org/resource?page=2>; rel='next', <https://api.example.org/resource?page=5>;
+        rel='last'
+      schema:
+        type: string
+    cursorLink:
+      example: <https://api.example.org/resource?after=url-encoded-next-page-token>; rel='next'
+      schema:
+        type: string
+
+  schemas:
+    BasicError:
+      title: Basic Error
+      description: Basic Error
+      type: object
+      properties:
+        message:
+          type: string
+        documentation_url:
+          type: string
+        status:
+          type: string
+
+    ValidationErrorSimple:
+      title: Validation Error Simple
+      description: Validation Error Simple
+      type: object
+      required:
+        - message
+        - documentation_url
+      properties:
+        message:
+          type: string
+        documentation_url:
+          type: string
+        errors:
+          type: array
+          items:
+            type: string
+
+    SignalingProtocolHeader:
+      anyOf:
+        - type: string
+          enum: [k3k-signaling-json-v$MAJOR.$MINOR]
+          description: >
+            This informs the API that you want to talk using Protocol specified in this document.
+            The version part MUST be a valid MAJOR.MINOR release of this specification.
+
+            The server will respond with the same version as part of the WebSocket sub-protocol negotiation.
+        - type: string
+          enum: [ticket#<..>]
+          description: >
+            Used to authenticate this websocket.
+            You can obtain a ticket from the [`/rooms/{roomid}/start`] endpoint.
+            The server checks the ticket to be valid. These normally have a short lifetime.
+            Always get a fresh one when opening the WebSocket.
+
+            For example,
+            ticket#eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2V4YW1wbGUuYXV0aDAuY29tLy
+
+    # -------------- Auth definitions --------------
+    Login:
+      type: object
+      additionalProperties: false
+      required:
+        - id_token
+      properties:
+        id_token:
+          type: string
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - permissions
+      properties:
+        permissions:
+          type: array
+          items:
+            type: string
+
+    OidcProvider:
+      description: Contains information about the configured OIDC provider
+      type: object
+      additionalProperties: false
+      required:
+        - oidc
+      properties:
+        oidc:
+          type: object
+          additionalProperties: false
+          required:
+            - name
+            - url
+          properties:
+            name:
+              type: string
+            url:
+              type: string
+              format: url
+
+    # -------------- Room definitions --------------
+    Room:
+      description: The complete room object, accessible to the owner and other users with elevated permissions
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - created_by
+        - created_at
+        - password
+      properties:
+        id:
+          description: The room identifier
+          type: string
+          format: uuid
+        created_by:
+          description: User id of the creator
+          type: string
+          format: uuid
+        created_at:
+          description: Timestamp of the rooms creation
+          type: string
+          format: datetime
+        password:
+          description: Room's password
+          type: string
+          format: password
+        waiting_room:
+          description: Waiting room enabled flag
+          type: boolean
+
+    PostRoomsBody:
+      description: Body of the POST /rooms endpoint
+      type: object
+      additionalProperties: false
+      required:
+        - password
+        - enable_sip
+      properties:
+        password:
+          description: The room password
+          type: string
+          maxLength: 255
+        enable_sip:
+          description: When enabled, a new sip configuration is generated for the roomRescheduleEvent
+          type: boolean
+        waiting_room:
+          description: |
+            Indicates whether the meeting room should have the waiting room enabled.
+            If absent, the waiting room will be disabled.
+          type: boolean
+
+    PatchRoomsBody:
+      description: Body of the PATCH /rooms endpoint
+      type: object
+      additionalProperties: false
+      properties:
+        password:
+          description: The password of this room
+          type: string
+          maxLength: 255
+        waiting_room:
+          description: |
+            Indicates whether the meeting room should have the waiting room enabled.
+          type: boolean
+
+    RoomStart:
+      description: Arguments for the room start endpoint
+      type: object
+      additionalProperties: false
+      required:
+        - password
+      properties:
+        password:
+          description: The room password
+          type: string
+          maxLength: 128
+        breakout_room:
+          description: ID of the breakout room
+          type: integer
+
+    RoomStartSuccess:
+      description: Arguments for the room start endpoint
+      type: object
+      additionalProperties: false
+      required:
+        - ticket
+      properties:
+        ticket:
+          description: The ticket to be used in the [`Sec-WebSocket-Protocol`] header field
+          type: string
+    RoomStartError:
+      description: Contains the error reason for the room start endpoint
+      type: object
+      additionalProperties: false
+      required:
+        - error
+      properties:
+        error:
+          description: The error type
+          type: string
+          enum: [wrong_room_password, invalid_credentials]
+
+    # -------------- SIP definitions --------------
+    SipConfig:
+      description: A rooms SIP configuration used for phone call ins
+      type: object
+      additionalProperties: false
+      required:
+        - room
+        - sip_id
+        - password
+        - lobby
+      properties:
+        room:
+          description: The room id of this SIP config
+          type: string
+          format: uuid
+        sip_id:
+          description: Unique numeric string with 10 characters to identify the room
+          type: string
+          maxLength: 10
+        password:
+          description: Numeric string with 10 characters to secure room access
+          type: string
+          maxLength: 10
+        lobby:
+          description: Enable/Disable a lobby for users that join through SIP
+          type: boolean
+
+    PutSipConfig:
+      description: Parameters to create or modify a SIP config
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        password:
+          description: >
+            Numeric string with 10 characters to secure room access.
+            Is automatically generated when not set on creation.
+          type: string
+          maxLength: 10
+        lobby:
+          description: >
+            Enable/Disable a lobby for users that join through SIP.
+            Defaults to `false` when not set on creation.
+          type: boolean
+
+    CallInStart:
+      description: Request body for the POST `/services/call_in/start` endpoint
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - pin
+      properties:
+        id:
+          description: >
+            Unique numeric string with 10 characters to identify the room
+          type: string
+          maxLength: 10
+        pin:
+          description: >
+            Numeric string with 10 characters to secure room access
+          type: string
+          maxLength: 10
+
+    # -------------- InviteCode Definitions --------------
+    InvitedRoomStart:
+      description: Arguments for the room start endpoint
+      type: object
+      additionalProperties: false
+      required:
+        - password
+        - invite_code
+      properties:
+        password:
+          description: The room password
+          type: string
+          maxLength: 128
+        breakout_room:
+          description: ID of the breakout room
+          type: integer
+        invite_code:
+          description: The invite_code
+          type: string
+          maxLength: 128
+
+    InviteCode:
+      description: The complete invite object.
+      type: object
+      additionalProperties: false
+      required:
+        - invite_code
+        - created
+        - created_by
+        - updated
+        - updated_by
+        - room_id
+        - active
+      properties:
+        invite_code:
+          description: The invite code
+          type: string
+        created:
+          description: Invite created at
+          type: string
+          format: date-time
+        created_by:
+          allOf:
+            - description: Invite created by
+            - $ref: '#/components/schemas/PublicUserProfile'
+        updated:
+          description: Invite last updated at
+          type: string
+          format: date-time,
+        updated_by:
+          allOf:
+            - description: Invite last updated by
+            - $ref: '#/components/schemas/PublicUserProfile'
+        room:
+          description: The room id for this invite.
+          type: string
+          format: uuid
+        active:
+          description: State of this invite
+          type: boolean
+        expiration:
+          description: Expiration date of this invite, or null if no expiration is set
+          type: string
+          format: date-time
+
+    NewInviteCode:
+      description: Contains properties that have to be provided when creating an invite
+      type: object
+      additionalProperties: false
+      properties:
+        expiration:
+          description: Expiration date of this invite, or null if no expiration is set
+          type: string
+          format: date-time
+
+    UpdateInviteCode:
+      description: Contains properties of an invite code that can be updated
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        expiration:
+          description: Expiration date of this invite, or null if no expiration is set
+          type: string
+          format: date-time
+
+    InviteVerifyBody:
+      description: Provides the invite_code to verify
+      type: object
+      additionalProperties: false
+      required:
+        - invite_code
+      properties:
+        invite_code:
+          description: The invites invite_code
+          type: string
+
+    InviteCodeVerified:
+      description: Contains the room id of this invite.
+      type: object
+      additionalProperties: false
+      required:
+        - room_id
+      properties:
+        room_id:
+          description: The room id of this invite
+          type: string
+          format: uuid
+
+    # -------------- User definitions --------------
+    PublicUserProfile:
+      description: User information accessible to all other users
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - email
+        - title
+        - firstname
+        - lastname
+        - display_name
+        - avatar_url
+      properties:
+        id:
+          description: The user identifier
+          type: string
+          format: uuid
+        email:
+          description: The users email address
+          type: string
+          format: email
+        title:
+          description: The users title (eg. Dr. or Prof.)
+          type: string
+        firstname:
+          type: string
+        lastname:
+          type: string
+        display_name:
+          description: Custom display name of the user
+          type: string
+        avatar_url:
+          description: URL to an image of the users avatar
+          type: string
+
+    PublicUserProfileCollection:
+      description: Collection of PublicUserProfiles
+      type: array
+      items:
+        $ref: '#/components/schemas/PublicUserProfile'
+
+    PrivateUserProfile:
+      description: User information only accessible to its owner
+      allOf:
+        - $ref: '#/components/schemas/PublicUserProfile'
+        - type: object
+          additionalProperties: false
+          required:
+            - id
+            - email
+            - title
+            - firstname
+            - lastname
+            - display_name
+            - avatar_url
+            - dashboard_theme
+            - conference_theme
+            - language
+          properties:
+            dashboard_theme:
+              description: The users dashboard UI theme name
+              type: string
+            conference_theme:
+              description: The users conference UI theme name
+              type: string
+            language:
+              description: The users preferred language as specified in RFC 5646
+              type: string
+
+    UserFindResponseItem:
+      description: User information accessible to all other users
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - email
+        - firstname
+        - lastname
+        - avatar_url
+      properties:
+        kind:
+          description: The kind of the user (registered, unregistered)
+          type: string
+        id:
+          description: The user identifier, required if kind = registered
+          type: string
+          format: uuid
+        email:
+          description: The users email address
+          type: string
+          format: email
+        title:
+          description: The users title (eg. Dr. or Prof.)
+          type: string
+        firstname:
+          type: string
+        lastname:
+          type: string
+        display_name:
+          description: Custom display name of the user
+          type: string
+        avatar_url:
+          description: URL to an image of the users avatar
+          type: string
+
+    UserFindResponseItemCollection:
+      description: Collection of UserFindResponseItems
+      type: array
+      items:
+        $ref: '#/components/schemas/UserFindResponseItem'
+
+    EventInviteeProfile:
+      description: User information accessible to all other users
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+        - email
+        - avatar_url
+      properties:
+        kind:
+          description: The kind of the user (registered, unregistered, email)
+          type: string
+        id:
+          description: The user identifier, required if kind = registered
+          type: string
+          format: uuid
+        email:
+          description: The users email address
+          type: string
+          format: email
+        title:
+          description: The users title (eg. Dr. or Prof.)
+          type: string
+        firstname:
+          description: Required if kind = registered, unregistered
+          type: string
+        lastname:
+          description: Required if kind = registered, unregistered
+          type: string
+        display_name:
+          description: Custom display name of the user
+          type: string
+        avatar_url:
+          description: URL to an image of the users avatar
+          type: string
+
+    PatchUserBody:
+      description: Has to be provided in order to modify the current users settings.
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          description: The users display name
+          type: string
+          maxLength: 255
+        display_name:
+          description: Display name of the user
+          type: string
+          maxLength: 255
+        language:
+          description: The users preferred language as specified in RFC 5646
+          type: string
+          maxLength: 35
+        dashboard_theme:
+          description: The users dashboard UI theme name
+          type: string
+          maxLength: 128
+        conference_theme:
+          description: The users conference UI theme name
+          type: string
+          maxLength: 128
+
+    # -------------- Turn Definitions --------------
+    StunTurnCredentials:
+      description: Stun or Turn servers to be used for establishing a connection to the WebRTC media backend.
+      type: array
+      items:
+        oneOf:
+          - $ref: '#/components/schemas/TurnCredentials'
+          - $ref: '#/components/schemas/StunCredentials'
+
+    StunCredentials:
+      description: STUN server to be used to identify own IP
+      type: object
+      required:
+        - uris
+      additionalProperties: false
+      properties:
+        uris:
+          type: array
+          items:
+            type: string
+            description: >
+              STUN URI, starting with stun(s)://
+
+    # Follows
+    # https://datatracker.ietf.org/doc/html/draft-uberti-behave-turn-rest-00
+    TurnCredentials:
+      description: TURN server and credentials to establish a connection via this TURN server
+      type: object
+      required:
+        - username
+        - password
+        - ttl
+        - uris
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          # TODO
+          # https://datatracker.ietf.org/doc/html/draft-uberti-behave-turn-rest-00#section-6
+          # says to use opaque user_ids, we can follow the spec and
+          # accept a user_id in the request that can be randomly generated
+          # by the client.
+          description: >
+            The username valid for accessing this TURN server, colon
+            delimited expiration timestamp (UNIX timestamp) and the
+            oidc-uuid of the authenticated user.
+        password:
+          type: string
+          description: >
+            HMAC(username, shared_long_term_secret) where username it
+            the value from this responses username field, and
+            shared_long_term_secret is the secret only known by this
+            TURN server and this API server.
+        ttl:
+          type: string
+          description: Expiration of this username password combination.
+        uris:
+          type: array
+          items:
+            type: string
+            description: >
+              TURN URI, starting with turn(s):// MUST follow rfc7065
+
+    # -------------- Asset definitions --------------
+    AssetResource:
+      description: The complete asset resource.
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - filename
+        - created_at
+      properties:
+        id:
+          description: The asset ID
+          type: string
+          format: uuid
+        filename:
+          description: The file name of the asset
+          type: string
+        namespace:
+          description: Namespace of the module responsible for asset
+          type: string
+        created_at:
+          description: Asset created at
+          type: string
+          format: date-time
+
+    PostEventsBody:
+      description: New Event parameter
+      type: object
+      required:
+        - title
+        - description
+        - is_time_independent
+      additionalProperties: false
+      properties:
+        title:
+          type: string
+          description: Title of the event
+          maxLength: 255
+        description:
+          type: string
+          description: Description of the event
+          maxLength: 4096
+        password:
+          type: string
+          description: Password of the room in which the event will take place
+          minLength: 1
+          maxLength: 255
+        is_adhoc:
+          type: boolean
+          description: Marks this event as adhoc
+        waiting_room:
+          type: boolean
+          description: |
+            Indicates whether the meeting room should have the waiting room enabled.
+            If absent, the waiting room will be disabled.
+        is_time_independent:
+          type: boolean
+          description: Marks the event as time independent. No time/schedule related fields will be set.
+        is_all_day:
+          type: boolean
+          description: Marks this event as an event that has no start time / end time but only start and end date
+        starts_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: Start time of the event. For all-day events the time-part must be zero (00:00).
+        ends_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: |
+            End time of the event. For recurring events this is the first instance's end time.
+            If the duration is unknown, this SHOULD equal starts_at.
+            For all-day events the time-part must be zero (00:00).
+        recurrence_pattern:
+          $ref: '#/components/schemas/RecurrencePattern'
+      # Currently this is only supported in spec but not in e.g. redoc-cli
+      # See https://github.com/Redocly/redoc/pull/1939
+      # FIXME: If this lands, mabye we should expand the usage of this to further fasten the interface definition
+      if:
+        properties:
+          is_time_independent:
+            const: false
+      then:
+        required:
+          - is_all_day
+          - starts_at
+          - ends_at
+
+    Event:
+      description: Event resource
+      type: object
+      required:
+        - id
+        - created_by
+        - created_at
+        - updated_by
+        - updated_at
+        - title
+        - description
+        - room
+        - is_time_independent
+        - is_adhoc
+        - type
+        - status
+        - invite_status
+        - is_favorite
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Id identifying a single event or a recurring event.
+          readOnly: true
+        created_by:
+          $ref: '#/components/schemas/PublicUserProfile'
+        created_at:
+          type: string
+          format: date-time
+          description: Creation time of the event (RFC3339 timestamp)
+          readOnly: true
+        updated_by:
+          $ref: '#/components/schemas/PublicUserProfile'
+        updated_at:
+          type: string
+          format: date-time
+          description: Last modification time of the event (RFC3339 timestamp)
+          readOnly: true
+        title:
+          type: string
+          description: Title of the event
+        description:
+          type: string
+          description: Description of the event
+        room:
+          $ref: '#/components/schemas/EventRoomInfo'
+        invitees_truncated:
+          type: boolean
+          description: |
+            Whether this message includes all the invitees.
+            This number of invitees shown can be changed using the respective query parameter.
+        invitees:
+          $ref: '#/components/schemas/EventInviteeCollection'
+        is_time_independent:
+          type: boolean
+          description: >
+            Marks the event as time independent. No time/schedule related fields will be set.
+        is_all_day:
+          type: boolean
+          description: Marks this event as an event that has no start time / end time but only start and end date
+        starts_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: Start time of the event. This is used to match exceptions.
+        ends_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: >
+            End time of the event. For recurring events this is the first instance's end time.
+            ends_at - starts_at is the duration of a single event or an instance.
+            If the duration is unknown, this equals starts_at.
+        recurrence_pattern:
+          $ref: '#/components/schemas/RecurrencePattern'
+        is_adhoc:
+          type: boolean
+          description: Marks this event as adhoc
+        type:
+          type: string
+          enum: [single, recurring]
+          readOnly: true
+          description: |
+            Type of event.
+            `single` a single event
+            `recurring` event describes recurring series of events
+        status:
+          type: string
+          enum: [cancelled, ok]
+        invite_status:
+          type: string
+          enum: [pending, accepted, tentative, declined]
+          description: Invite status of the logged in user for this event. This is purely informal.
+        is_favorite:
+          type: boolean
+          description: Is the event in the current user's favorites list.
+      if:
+        properties:
+          is_time_independent:
+            const: false
+      then:
+        required:
+          - is_all_day
+          - starts_at
+          - ends_at
+
+    EventException:
+      description: Event instance exception
+      type: object
+      required:
+        - id
+        - recurring_event_id
+        - instance_id
+        - created_by
+        - created_at
+        - updated_by
+        - updated_at
+        - original_starts_at
+        - type
+        - status
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: >
+            Id identifying a recurring event exception. Composite of recurring_event_id and instance_id.
+            Handle as opaque identifier.
+          readOnly: true
+        recurring_event_id:
+          type: string
+          format: uuid
+          description: Id of the recurring event this exceptions belongs to
+          readOnly: true
+        instance_id:
+          type: string
+          format: ISO8601 (%Y%M%DT%h%m%sZ)
+          description: ISO8601 (%Y%M%DT%h%m%sZ) formatted `original_starts_at.datetime`
+        created_by:
+          $ref: '#/components/schemas/PublicUserProfile'
+        created_at:
+          type: string
+          format: date-time
+          description: Creation time of the event (RFC3339 timestamp)
+          readOnly: true
+        updated_by:
+          $ref: '#/components/schemas/PublicUserProfile'
+        updated_at:
+          type: string
+          format: date-time
+          description: Last modification time of the event (RFC3339 timestamp)
+          readOnly: true
+        title:
+          type: string
+          description: Optional override of the title
+        description:
+          type: string
+          description: Optional override of the description
+        is_all_day:
+          type: boolean
+          description: Marks this event as an event that has no start time / end time but only start and end date
+        starts_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: Optional override start time
+        ends_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: Optional override end time
+        original_starts_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          readOnly: true
+          description: The starts_at value of the instance this exception targets
+        type:
+          type: string
+          enum: [exception]
+          readOnly: true
+          description: Type discriminator. Always `exception` for exceptions.
+        status:
+          type: string
+          enum: [cancelled, ok]
+
+    EventInstance:
+      description: Event instance
+      type: object
+      required:
+        - id
+        - recurring_event_id
+        - instance_id
+        - created_by
+        - created_at
+        - updated_by
+        - updated_at
+        - title
+        - description
+        - room
+        - invitees_truncated
+        - invitees
+        - is_all_day
+        - starts_at
+        - ends_at
+        - type
+        - status
+        - invite_status
+        - is_favorite
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: >
+            Id identifying a recurring event instance.
+            Composite of recurring_event_id and instance_id. Handle as opaque identifier.
+          readOnly: true
+        recurring_event_id:
+          type: string
+          format: uuid
+          description: Id identifying a recurring event. Present when the id is describing a recurring event instance.
+          readOnly: true
+        instance_id:
+          type: string
+          format: ISO8601 (%Y%M%DT%h%m%sZ)
+          description: ISO8601 (%Y%M%DT%h%m%sZ) formatted `starts_at` in the `starts_at.timezone``
+        created_by:
+          $ref: '#/components/schemas/PublicUserProfile'
+        created_at:
+          type: string
+          format: date-time
+          description: Creation time of the event (RFC3339 timestamp)
+          readOnly: true
+        updated_by:
+          $ref: '#/components/schemas/PublicUserProfile'
+        updated_at:
+          type: string
+          format: date-time
+          description: Last modification time of the event (RFC3339 timestamp)
+          readOnly: true
+        title:
+          type: string
+          description: Title of the instance
+        description:
+          type: string
+          description: Description of the instance
+        room:
+          $ref: '#/components/schemas/EventRoomInfo'
+        invitees_truncated:
+          type: boolean
+          description: |
+            Whether this message includes all the invitees.
+            This number of invitees shown can be changed using the respective query parameter.
+        invitees:
+          $ref: '#/components/schemas/EventInviteeCollection'
+        is_all_day:
+          type: boolean
+          description: Marks this event as an event that has no start time / end time but only start and end date
+        starts_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: Start time of the instance.
+        ends_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: End time of the instance.
+        type:
+          type: string
+          enum: [instance]
+          readOnly: true
+          description: |
+            Type of event instance.
+            `instance` event instance returned from instances endpoint
+        status:
+          type: string
+          enum: [cancelled, ok]
+        invite_status:
+          type: string
+          enum: [pending, accepted, tentative, declined]
+          description: Invite status of the logged in user for this event. This is purely informal.
+        is_favorite:
+          type: boolean
+          description: Is the event in the current user's favorites list.
+
+    EventRoomInfo:
+      description: Information about the room a event takes place in
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          readOnly: true
+          description: ID of the room the event takes place in
+        password:
+          type: string
+          readOnly: true
+          description: Password of the room.
+        sip_tel:
+          type: string
+          readOnly: true
+          description: A string containing a phone number which can be used to call into the room
+        sip_uri:
+          type: string
+          readOnly: true
+          description: SIP uri which can be used to call into the room with a SIP client
+        sip_id:
+          type: string
+          readOnly: true
+          description: numeric Password to enter on the phone number-pad when calling into the conference
+        sip_password:
+          type: string
+          readOnly: true
+          description: numeric Password to enter on the phone number-pad when calling into the conference
+
+    EventOrExceptionCollection:
+      description: Collection of Events
+      type: array
+      items:
+        oneOf:
+          - $ref: '#/components/schemas/Event'
+          - $ref: '#/components/schemas/EventException'
+
+    EventInstanceCollection:
+      description: Collection of Events
+      type: array
+      items:
+        $ref: '#/components/schemas/EventInstance'
+
+    PatchEvent:
+      description: Event patch request body
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          description: Title of the event
+          maxLength: 255
+        description:
+          type: string
+          description: Description of the event
+          maxLength: 4096
+        password:
+          type: string
+          description: Password of the room the event uses
+          minLength: 1
+          maxLength: 255
+        is_adhoc:
+          type: boolean
+          description: Marks the event as adhoc
+        waiting_room:
+          type: boolean
+          description: >
+            Indicates whether the meeting room should have the waiting room enabled.
+        is_time_independent:
+          type: boolean
+          description: >
+            Marks the event as time independent. No time/schedule related fields will be set.
+        is_all_day:
+          type: boolean
+          description: Marks this event as an event that has no start time / end time but only start and end date
+        starts_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: Start time of the event. This is used to match exceptions.
+        ends_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: |
+            End time of the event. For recurring events this is the first instance's end time.
+            ends_at - starts_at is the duration of a single event or an instance.
+            If the duration is unknown, this equals starts_at.
+        recurrence_pattern:
+          $ref: '#/components/schemas/RecurrencePattern'
+
+    PatchEventInstance:
+      description: Event instance patch request body
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        title:
+          type: string
+          description: Title of the event
+          maxLength: 255
+        description:
+          type: string
+          description: Description of the event
+          maxLength: 4096
+        is_all_day:
+          type: boolean
+          description: Marks this event as an event that has no start time / end time but only start and end date
+        starts_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: Start time of the event. This is used to match exceptions.
+        ends_at:
+          $ref: '#/components/schemas/DateTimeTZ'
+          description: |
+            End time of the event. For recurring events this is the first instance's end time.
+            ends_at - starts_at is the duration of a single event or an instance.
+            If the duration is unknown, this equals starts_at.
+        status:
+          type: string
+          enum: [cancelled, ok]
+
+    EventInviteeCollection:
+      type: array
+      items:
+        $ref: '#/components/schemas/EventInvitee'
+
+    EventInvitee:
+      description: Information about an invitee to an event
+      additionalProperties: false
+      required:
+        - profile
+        - status
+      properties:
+        profile:
+          $ref: '#/components/schemas/EventInviteeProfile'
+        status:
+          type: string
+          enum: [accepted, tentative, pending, declined]
+          description: |
+            Event invite accept status
+
+    RecurrencePattern:
+      type: array
+      description: |
+        List of recurrence rules which describe the occurrences of the event.
+        To get all event instances resolved use the the `GET /events/{event_id}/instances` endpoint.
+        Changing this field will always remove all exceptions for the event.
+
+        Allowed are `RRULE`, `RDATE`, `EXRULE` and `EXDATE`.
+
+        The `DTSTART` and `DTEND` attributes are not allowed as their information is stored
+        in the `starts_at` and `ends_at` fields.
+      maxItems: 4
+      items:
+        $ref: '#/components/schemas/RecurrenceRule'
+
+    RecurrenceRule:
+      type: string
+      format: RFC 5545 recurrence attribute
+      description: Must be either a RRULE, RDATE, EXRULE or EXDATE attribute
+      maxLength: 1024
+
+    DateTimeTZ:
+      type: object
+      required:
+        - datetime
+        - timezone
+      additionalProperties: false
+      properties:
+        datetime:
+          type: string
+          format: date-time
+          description: UTC datetime
+        timezone:
+          type: string
+          format: timezone
+          description: IANA timezone string (e.g. 'Europe/Berlin') in which `datetime` was created
