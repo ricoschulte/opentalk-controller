@@ -157,6 +157,15 @@ pub struct NewLegalVote {
 }
 
 impl NewLegalVote {
+    pub fn new(created_by: UserId, room_id: RoomId, tenant_id: TenantId) -> Self {
+        Self {
+            created_by,
+            protocol: NewProtocol::new(Vec::new()),
+            room: Some(room_id),
+            tenant_id,
+        }
+    }
+
     /// Insert a [`NewLegalVote`] into the database and returns the created [`LegalVote`]
     ///
     /// Generates a [`LegalVoteId`] (uuid) for the entry in the database. In case the insert statement fails with an `UniqueViolation`,
