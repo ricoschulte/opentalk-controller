@@ -41,6 +41,7 @@ pub mod legal_votes;
 pub mod migrations;
 pub mod rooms;
 pub mod sip_configs;
+pub mod tariffs;
 pub mod tenants;
 pub mod users;
 pub mod utils;

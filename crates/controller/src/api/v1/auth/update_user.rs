@@ -8,6 +8,7 @@ use crate::oidc::IdTokenInfo;
 use controller_shared::settings::Settings;
 use database::DbConnection;
 use db_storage::groups::{insert_user_into_groups, remove_user_from_groups, Group};
+use db_storage::tariffs::Tariff;
 use db_storage::users::{UpdateUser, User};
 use diesel::Connection;
 
@@ -25,8 +26,9 @@ pub(super) fn update_user(
     user: User,
     info: IdTokenInfo,
     groups: Vec<Group>,
+    tariff: Tariff,
 ) -> database::Result<LoginResult> {
-    let changeset = create_changeset(settings, &user, &info);
+    let changeset = create_changeset(settings, &user, &info, tariff);
 
     let user = changeset.apply(conn, user.id)?;
 
@@ -58,6 +60,7 @@ fn create_changeset<'a>(
     settings: &Settings,
     user: &User,
     token_info: &'a IdTokenInfo,
+    tariff: Tariff,
 ) -> UpdateUser<'a> {
     let User {
         id: _,
@@ -74,6 +77,7 @@ fn create_changeset<'a>(
         conference_theme: _,
         phone,
         tenant_id: _,
+        tariff_id,
     } = user;
 
     let mut changeset = UpdateUser {
@@ -106,6 +110,10 @@ fn create_changeset<'a>(
 
     if phone != &token_phone {
         changeset.phone = Some(token_phone)
+    }
+
+    if tariff_id != &tariff.id {
+        changeset.tariff_id = Some(tariff.id)
     }
 
     changeset

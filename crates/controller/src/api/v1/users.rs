@@ -161,6 +161,7 @@ pub async fn patch_me(
             dashboard_theme: patch.dashboard_theme.as_deref(),
             conference_theme: patch.conference_theme.as_deref(),
             id_token_exp: None,
+            tariff_id: None,
         };
 
         let user = changeset.apply(&mut conn, current_user.id)?;

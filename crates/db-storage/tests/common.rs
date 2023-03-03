@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use database::DbConnection;
+use k3k_db_storage::tariffs::Tariff;
 use k3k_db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId};
 use k3k_db_storage::users::{NewUser, User};
 
@@ -14,6 +15,8 @@ pub fn make_user(
 ) -> User {
     let tenant =
         get_or_create_tenant_by_oidc_id(conn, &OidcTenantId::from("default".to_owned())).unwrap();
+    let tariff = Tariff::get_by_name(conn, "OpenTalkDefaultTariff").unwrap();
+
     NewUser {
         email: format!(
             "{}.{}@example.org",
@@ -29,6 +32,7 @@ pub fn make_user(
         oidc_sub: format!("{firstname}{lastname}"),
         phone: None,
         tenant_id: tenant.id,
+        tariff_id: tariff.id,
     }
     .insert(conn)
     .unwrap()

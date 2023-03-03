@@ -193,7 +193,8 @@ mod test {
                 "given_name": "the",
                 "family_name": "admin",
                 "email": "admin@mail.de",
-                "tenant_id": "customer-123"
+                "tenant_id": "customer-123",
+                "tariff_id": "standard"
                 }}"#,
         );
 

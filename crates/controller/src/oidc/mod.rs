@@ -103,6 +103,7 @@ impl OidcContext {
             phone_number: claims.phone_number,
             display_name: claims.nickname,
             tenant_id: claims.tenant_id,
+            tariff_id: claims.tariff_id,
         })
     }
 
@@ -133,4 +134,5 @@ pub struct IdTokenInfo {
     pub phone_number: Option<String>,
     pub display_name: Option<String>,
     pub tenant_id: String,
+    pub tariff_id: String,
 }
