@@ -12,13 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller/db-storage: add initial tariff support. Requires JWT claims to include a `tariff_id`.
 - controller: enable accepted participants to skip waiting room when joining or returning from a breakout room ([#303](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/303))
 - controller: announce available modules in `join_success` message ([#308](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/308))
-- controller: add config to grant all participants the presenter role by default ([#318](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/318))
 - controller: invite verify response contains a `password_required` flag ([#329](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/329))
-
-### Fixed
-
-- protocol: fixed a bug where the etherpad pad was deleted when any user left the room ([#319](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/319))
-- signaling: fixed a bug which caused rooms to never be destroyed if a participant was joining from the waiting-room ([#321](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/321))
 
 ### Changed
 
@@ -28,13 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - timer: distribute timer handling over all participant runners, allowing timers to finish if the moderator has left ([#210](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/210))
 - controller: authenticated users can join meetings without a password ([#335](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/335))
 
-## [0.1.0-rc.2] - 2023-01-30
-
-### Changed
-
-- updated dependencies
-
-## [0.1.0-rc.1] - 2023-01-20
+## [0.1.0] - 2023-03-01
 
 ### Added
 
@@ -43,12 +31,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - chat: add `last_seen_timestamp` fields [#242](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/242)
 - legal-vote: add option to automatically create a PDF asset when a vote has ended ([#259](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/259))
 - legal-vote: add new `live_roll_call` vote kind which sends out live updates while the vote is running ([#285](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/285))
+- controller: add config to grant all participants the presenter role by default ([#318](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/318))
 
 ### Fixed
 
 - protocol: fixed the `createAuthorIfNotExistsFor` API call that always returned the same author id due to a typo in the query
 - janus-media: fixed a permission check for screen-share media session updates
 - protocol: fixed a bug where joining participants got write access by default ([#306](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/306))
+- protocol: fixed a bug where the etherpad pad was deleted when any user left the room ([#319](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/319))
+- signaling: fixed a bug which caused rooms to never be destroyed if a participant was joining from the waiting-room ([#321](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/321))
 
 ### Changed
 
@@ -56,6 +47,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - protocol: read/write access level information is now sent to every participant [#299](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/299)
 - chat/ee-chat: merged ee-chat into chat ([#265](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/265))
 - legal-vote: votes are now token-based, allowing for `pseudonymous` votings where only the tokens, not the participants are published ([#271](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/271))
+- updated dependencies
 
 ### Removed
 
@@ -235,9 +227,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - initial release candidate
 
-[unreleased]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v0.1.0-rc.2...main
-[0.1.0-rc.2]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v0.1.0-rc.1...v0.1.0-rc.2
-[0.1.0-rc.1]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/8b6e62c700376aa82fab9eab07346207becf7c78...v0.1.0-rc.1
+[unreleased]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v0.1.0...main
+[0.1.0]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/8b6e62c700376aa82fab9eab07346207becf7c78...v0.1.0
+
 
 [0.0.0-internal-release.10]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/8302382ac420eccc069ca891e0bd067ef6140754...8b6e62c700376aa82fab9eab07346207becf7c78
 [0.0.0-internal-release.9]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/446647a13f2e163f1be02cefbdaf04e201598444...8302382ac420eccc069ca891e0bd067ef6140754
