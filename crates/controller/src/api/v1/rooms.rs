@@ -13,6 +13,7 @@ use super::users::PublicUserProfile;
 use crate::api::signaling::prelude::*;
 use crate::api::signaling::resumption::ResumptionToken;
 use crate::api::signaling::ticket::{start_or_continue_signaling_session, TicketToken};
+use crate::api::v1::tariffs::TariffResource;
 use crate::api::v1::{ApiResponse, PagePaginationQuery};
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
@@ -269,6 +270,27 @@ pub async fn get(
     Ok(Json(room_resource))
 }
 
+#[get("/rooms/{room_id}/tariff")]
+pub async fn get_room_tariff(
+    db: Data<Db>,
+    modules: Data<SignalingModules>,
+    room_id: Path<RoomId>,
+) -> Result<Json<TariffResource>, ApiError> {
+    let room_id = room_id.into_inner();
+
+    let tariff = crate::block(move || {
+        let mut conn = db.get_conn()?;
+
+        let room = Room::get(&mut conn, room_id)?;
+        room.get_tariff(&mut conn)
+    })
+    .await??;
+
+    let response = TariffResource::from_tariff(tariff, &modules.get_module_names());
+
+    Ok(Json(response))
+}
+
 /// The JSON body expected when making a *POST /rooms/{room_id}/start*
 #[derive(Debug, Deserialize)]
 pub struct StartRequest {
@@ -484,6 +506,10 @@ where
                 [AccessMethod::Post],
             )
             .add_resource(
+                room_id.resource_id().with_suffix("/tariff"),
+                [AccessMethod::Get],
+            )
+            .add_resource(
                 room_id.resource_id().with_suffix("/assets"),
                 [AccessMethod::Get],
             )
@@ -523,5 +549,6 @@ pub(crate) fn associated_resource_ids(room_id: RoomId) -> impl IntoIterator<Item
         ResourceId::from(format!("/room/{room_id}/invites")),
         ResourceId::from(format!("/room/{room_id}/invites/*")),
         ResourceId::from(format!("/room/{room_id}/start")),
+        ResourceId::from(format!("/room/{room_id}/tariff")),
     ]
 }

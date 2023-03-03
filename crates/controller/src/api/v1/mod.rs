@@ -37,6 +37,7 @@ pub mod response;
 pub mod rooms;
 pub mod services;
 pub mod sip_configs;
+pub mod tariffs;
 pub mod turn;
 pub mod users;
 mod util;

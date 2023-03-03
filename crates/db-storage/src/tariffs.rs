@@ -19,6 +19,12 @@ diesel_newtype! {
     ExternalTariffId(String) => diesel::sql_types::Text
 }
 
+impl TariffId {
+    pub const fn nil() -> Self {
+        Self::from(uuid::Uuid::nil())
+    }
+}
+
 #[derive(
     Debug, Clone, Queryable, Identifiable, Serialize, Deserialize, ToRedisArgs, FromRedisValue,
 )]

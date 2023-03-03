@@ -18,6 +18,7 @@ use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlDa
 use crate::api::signaling::prelude::{BreakoutRoomId, InitContext, ModuleContext};
 use crate::api::signaling::ws_modules::control::ParticipationKind;
 use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
+use crate::api::v1::tariffs::TariffResource;
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
 use crate::storage::ObjectStorage;
@@ -27,11 +28,12 @@ use anyhow::{bail, Context, Result};
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
+use db_storage::tariffs::TariffId;
 use db_storage::users::{User, UserId};
 use futures::stream::SelectAll;
 use kustos::Authz;
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::marker::PhantomData;
 use std::panic;
 use std::sync::Arc;
@@ -595,7 +597,13 @@ where
                     role: self.role,
                     display_name: join.display_name,
                     avatar_url,
-                    modules: vec![M::NAMESPACE],
+                    tariff: TariffResource {
+                        id: TariffId::nil(),
+                        name: "test".into(),
+                        quotas: Default::default(),
+                        enabled_modules: HashSet::from([M::NAMESPACE.into()]),
+                    }
+                    .into(),
                     module_data,
                     participants,
                 };

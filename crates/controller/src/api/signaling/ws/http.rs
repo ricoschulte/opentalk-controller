@@ -43,6 +43,10 @@ impl SignalingModules {
             params,
         }));
     }
+
+    pub fn get_module_names(&self) -> Vec<&'static str> {
+        self.0.iter().map(|m| m.namespace()).collect()
+    }
 }
 
 pub struct SignalingProtocols(&'static [&'static str]);
