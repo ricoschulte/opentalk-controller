@@ -9,6 +9,7 @@ use controller_shared::settings::Settings;
 use database::DbConnection;
 use db_storage::events::email_invites::EventEmailInvite;
 use db_storage::groups::{insert_user_into_groups, Group};
+use db_storage::tariffs::Tariff;
 use db_storage::tenants::Tenant;
 use db_storage::users::NewUser;
 use diesel::Connection;
@@ -26,6 +27,7 @@ pub(super) fn create_user(
     info: IdTokenInfo,
     tenant: Tenant,
     groups: Vec<Group>,
+    tariff: Tariff,
 ) -> database::Result<LoginResult> {
     let phone_number =
         if let Some((call_in, phone_number)) = settings.call_in.as_ref().zip(info.phone_number) {
@@ -52,6 +54,7 @@ pub(super) fn create_user(
             language: settings.defaults.user_language.clone(),
             phone: phone_number,
             tenant_id: tenant.id,
+            tariff_id: tariff.id,
         }
         .insert(conn)?;
 

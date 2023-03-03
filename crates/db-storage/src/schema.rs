@@ -111,6 +111,15 @@ table! {
 table! {
     use crate::sql_types::*;
 
+    external_tariffs (external_id) {
+        external_id -> Text,
+        tariff_id -> Uuid,
+    }
+}
+
+table! {
+    use crate::sql_types::*;
+
     groups (id) {
         id -> Uuid,
         id_serial -> Int8,
@@ -198,6 +207,19 @@ table! {
 table! {
     use crate::sql_types::*;
 
+    tariffs (id) {
+        id -> Uuid,
+        name -> Text,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+        quotas -> Jsonb,
+        disabled_modules -> Array<Text>,
+    }
+}
+
+table! {
+    use crate::sql_types::*;
+
     tenants (id) {
         id -> Uuid,
         created_at -> Timestamptz,
@@ -233,6 +255,7 @@ table! {
         conference_theme -> Varchar,
         phone -> Nullable<Varchar>,
         tenant_id -> Uuid,
+        tariff_id -> Uuid,
     }
 }
 
@@ -246,6 +269,7 @@ joinable!(event_favorites -> users (user_id));
 joinable!(event_invites -> events (event_id));
 joinable!(events -> rooms (room));
 joinable!(events -> tenants (tenant_id));
+joinable!(external_tariffs -> tariffs (tariff_id));
 joinable!(groups -> tenants (tenant_id));
 joinable!(invites -> rooms (room));
 joinable!(legal_votes -> rooms (room));
@@ -258,6 +282,7 @@ joinable!(rooms -> users (created_by));
 joinable!(sip_configs -> rooms (room));
 joinable!(user_groups -> groups (group_id));
 joinable!(user_groups -> users (user_id));
+joinable!(users -> tariffs (tariff_id));
 joinable!(users -> tenants (tenant_id));
 
 allow_tables_to_appear_in_same_query!(
@@ -268,6 +293,7 @@ allow_tables_to_appear_in_same_query!(
     event_favorites,
     event_invites,
     events,
+    external_tariffs,
     groups,
     invites,
     legal_votes,
@@ -275,6 +301,7 @@ allow_tables_to_appear_in_same_query!(
     room_assets,
     rooms,
     sip_configs,
+    tariffs,
     tenants,
     user_groups,
     users,

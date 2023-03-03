@@ -5,6 +5,7 @@
 //! Contains the user specific database structs amd queries
 use super::groups::{Group, UserGroupRelation};
 use super::schema::{groups, users};
+use crate::tariffs::TariffId;
 use crate::tenants::TenantId;
 use crate::{levenshtein, lower, soundex};
 use database::{DbConnection, Paginate, Result};
@@ -51,6 +52,7 @@ pub struct User {
     pub conference_theme: String,
     pub phone: Option<String>,
     pub tenant_id: TenantId,
+    pub tariff_id: TariffId,
 }
 
 impl fmt::Debug for User {
@@ -293,6 +295,7 @@ pub struct NewUser {
     pub display_name: String,
     pub phone: Option<String>,
     pub tenant_id: TenantId,
+    pub tariff_id: TariffId,
 }
 
 impl NewUser {
@@ -321,6 +324,7 @@ pub struct UpdateUser<'a> {
     pub conference_theme: Option<&'a str>,
     // The tenant_id should never be updated!
     //pub tenant_id: Option<TenantId>,
+    pub tariff_id: Option<TariffId>,
 }
 
 impl UpdateUser<'_> {

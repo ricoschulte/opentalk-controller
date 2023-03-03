@@ -7,6 +7,7 @@ use database::Db;
 use db_storage::groups::{get_or_create_groups_by_name, insert_user_into_groups, GroupName};
 use db_storage::migrations::migrate_from_url;
 use db_storage::rooms::{NewRoom, Room, RoomId};
+use db_storage::tariffs::Tariff;
 use db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId, TenantId};
 use db_storage::users::{NewUser, User, UserId};
 use diesel::{Connection, PgConnection, RunQueryDsl};
@@ -67,12 +68,15 @@ impl DatabaseContext {
     pub fn create_test_user(&self, n: u32, groups: Vec<String>) -> Result<User> {
         let mut conn = self.db.get_conn()?;
 
-        let tenant =
-            get_or_create_tenant_by_oidc_id(&mut conn, &OidcTenantId::from("default".to_owned()))?;
+        let tenant = get_or_create_tenant_by_oidc_id(
+            &mut conn,
+            &OidcTenantId::from("OpenTalkDefaultTenant".to_owned()),
+        )?;
+        let tariff = Tariff::get_by_name(&mut conn, "OpenTalkDefaultTariff").unwrap();
 
         let user = NewUser {
             oidc_sub: format!("oidc_sub{n}"),
-            email: format!("k3k_test_user{n}@heinlein.de"),
+            email: format!("k3k_test_user{n}@example.org"),
             title: "".into(),
             firstname: "test".into(),
             lastname: "tester".into(),
@@ -81,6 +85,7 @@ impl DatabaseContext {
             language: "en".into(),
             phone: None,
             tenant_id: tenant.id,
+            tariff_id: tariff.id,
         }
         .insert(&mut conn)?;
 
