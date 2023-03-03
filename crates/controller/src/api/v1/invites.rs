@@ -280,6 +280,7 @@ pub struct VerifyBody {
 #[derive(Debug, Serialize)]
 pub struct CodeVerified {
     room_id: RoomId,
+    password_required: bool,
 }
 
 /// API Endpoint *POST /invite/verify*
@@ -295,10 +296,13 @@ pub async fn verify_invite_code(
 
     data.validate()?;
 
-    let invite = crate::block(move || -> database::Result<_> {
+    let (invite, room) = crate::block(move || -> database::Result<_> {
         let mut conn = db.get_conn()?;
 
-        Invite::get(&mut conn, data.invite_code)
+        let invite = Invite::get(&mut conn, data.invite_code)?;
+        let room = Room::get(&mut conn, invite.room)?;
+
+        Ok((invite, room))
     })
     .await??;
 
@@ -311,6 +315,7 @@ pub async fn verify_invite_code(
         }
         Ok(ApiResponse::new(CodeVerified {
             room_id: invite.room,
+            password_required: room.password.is_some(),
         }))
     } else {
         // TODO(r.floren) Do we want to return something else here?

@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller: enable accepted participants to skip waiting room when joining or returning from a breakout room ([#303](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/303))
 - controller: announce available modules in `join_success` message ([#308](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/308))
 - controller: add config to grant all participants the presenter role by default ([#318](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/318))
+- controller: invite verify response contains a `password_required` flag ([#329](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/329))
 
 ### Fixed
 

@@ -1800,11 +1800,15 @@ components:
       additionalProperties: false
       required:
         - room_id
+        - password_required
       properties:
         room_id:
           description: The room id of this invite
           type: string
           format: uuid
+        password_required:
+          description: Flag indicating whether the room requires a password
+          type: boolean
 
     # -------------- User definitions --------------
     PublicUserProfile:
