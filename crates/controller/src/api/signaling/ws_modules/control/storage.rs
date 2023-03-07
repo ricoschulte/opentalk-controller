@@ -6,6 +6,8 @@ use crate::api::signaling::{SignalingRoomId, Timestamp};
 use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
 use controller_shared::ParticipantId;
+use db_storage::rooms::RoomId;
+use db_storage::tariffs::Tariff;
 use r3dlock::Mutex;
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use redis_args::ToRedisArgs;
@@ -34,6 +36,24 @@ pub struct RoomLock {
 struct RoomParticipantAttributes<'s> {
     room: SignalingRoomId,
     attribute_name: &'s str,
+}
+
+/// The total count of all participants in the room, also considers participants in breakout rooms and the waiting room
+///
+/// Notice that this key only contains the [`RoomId`] as it applies to all breakout rooms as well
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:participant-count")]
+pub struct RoomParticipantCount {
+    room_id: RoomId,
+}
+
+/// The configured [`Tariff`] for the room
+///
+/// Notice that this key only contains the [`RoomId`] as it applies to all breakout rooms as well
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room_id}:tariff")]
+pub struct RoomTariff {
+    room_id: RoomId,
 }
 
 /// The room's mutex
@@ -413,4 +433,82 @@ pub async fn get_skip_waiting_room(
 ) -> Result<bool> {
     let value: Option<bool> = redis_conn.get(SkipWaitingRoom { participant }).await?;
     Ok(value.unwrap_or_default())
+}
+
+/// Try to the set active tariff for the room. If the tariff is already set return the current one.
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn try_init_tariff(
+    redis_conn: &mut RedisConnection,
+    room_id: RoomId,
+    tariff: Tariff,
+) -> Result<Tariff> {
+    let (_, tariff): (bool, Tariff) = redis::pipe()
+        .atomic()
+        .set_nx(RoomTariff { room_id }, tariff)
+        .get(RoomTariff { room_id })
+        .query_async(redis_conn)
+        .await
+        .context("Failed to SET NX & GET room tariff")?;
+
+    Ok(tariff)
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn get_tariff(redis_conn: &mut RedisConnection, room_id: RoomId) -> Result<Tariff> {
+    redis_conn
+        .get(RoomTariff { room_id })
+        .await
+        .context("Failed to get room tariff")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn delete_tariff(redis_conn: &mut RedisConnection, room_id: RoomId) -> Result<()> {
+    redis_conn
+        .del(RoomTariff { room_id })
+        .await
+        .context("Failed to delete room tariff")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn increment_participant_count(
+    redis_conn: &mut RedisConnection,
+    room_id: RoomId,
+) -> Result<isize> {
+    redis_conn
+        .incr(RoomParticipantCount { room_id }, 1)
+        .await
+        .context("Failed to increment room participant count")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn decrement_participant_count(
+    redis_conn: &mut RedisConnection,
+    room_id: RoomId,
+) -> Result<isize> {
+    redis_conn
+        .decr(RoomParticipantCount { room_id }, 1)
+        .await
+        .context("Failed to decrement room participant count")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn get_participant_count(
+    redis_conn: &mut RedisConnection,
+    room_id: RoomId,
+) -> Result<Option<isize>> {
+    redis_conn
+        .get(RoomParticipantCount { room_id })
+        .await
+        .context("Failed to get room participant count")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn delete_participant_count(
+    redis_conn: &mut RedisConnection,
+    room_id: RoomId,
+) -> Result<()> {
+    redis_conn
+        .del(RoomParticipantCount { room_id })
+        .await
+        .context("Failed to delete room participant count key")
 }

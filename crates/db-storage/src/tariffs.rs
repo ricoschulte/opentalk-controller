@@ -2,12 +2,15 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::schema::{external_tariffs, tariffs};
+use crate::schema::{external_tariffs, tariffs, users};
+use crate::users::UserId;
 use crate::utils::Jsonb;
 use chrono::{DateTime, Utc};
 use core::fmt::Debug;
 use database::{DbConnection, Result};
 use diesel::prelude::*;
+use redis_args::{FromRedisValue, ToRedisArgs};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 diesel_newtype! {
@@ -16,7 +19,11 @@ diesel_newtype! {
     ExternalTariffId(String) => diesel::sql_types::Text
 }
 
-#[derive(Debug, Clone, Queryable, Identifiable)]
+#[derive(
+    Debug, Clone, Queryable, Identifiable, Serialize, Deserialize, ToRedisArgs, FromRedisValue,
+)]
+#[to_redis_args(serde)]
+#[from_redis_value(serde)]
 pub struct Tariff {
     pub id: TariffId,
     pub name: String,
@@ -44,6 +51,17 @@ impl Tariff {
     pub fn get_by_external_id(conn: &mut DbConnection, id: &ExternalTariffId) -> Result<Self> {
         let query = external_tariffs::table
             .filter(external_tariffs::external_id.eq(id))
+            .inner_join(tariffs::table)
+            .select(tariffs::all_columns);
+
+        let tariff = query.get_result(conn)?;
+
+        Ok(tariff)
+    }
+
+    pub fn get_by_user_id(conn: &mut DbConnection, id: &UserId) -> Result<Self> {
+        let query = users::table
+            .filter(users::id.eq(id))
             .inner_join(tariffs::table)
             .select(tariffs::all_columns);
 

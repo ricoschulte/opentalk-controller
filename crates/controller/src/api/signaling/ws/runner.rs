@@ -12,6 +12,7 @@ use super::{
 };
 use crate::api;
 use crate::api::signaling::metrics::SignalingMetrics;
+use crate::api::signaling::prelude::control::outgoing::JoinBlockedReason;
 use crate::api::signaling::prelude::*;
 use crate::api::signaling::resumption::{ResumptionTokenKeepAlive, ResumptionTokenUsed};
 use crate::api::signaling::ws::actor::WsCommand;
@@ -34,6 +35,7 @@ use controller_shared::settings::SharedSettings;
 use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
+use db_storage::tariffs::Tariff;
 use db_storage::users::{User, UserId};
 use futures::stream::SelectAll;
 use itertools::Itertools;
@@ -46,6 +48,7 @@ use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::mem::replace;
+use std::ops::ControlFlow;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc};
@@ -653,6 +656,21 @@ impl Runner {
                 false
             };
 
+            match storage::decrement_participant_count(&mut self.redis_conn, self.room.id).await {
+                Ok(remaining_participant_count) => {
+                    if remaining_participant_count == 0 {
+                        if let Err(e) = self.cleanup_redis_for_global_room().await {
+                            log::error!("failed to mark participant as left, {:?}", e);
+                            encountered_error = true;
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("failed to decrement participant count, {:?}", e);
+                    encountered_error = true;
+                }
+            }
+
             let ctx = DestroyContext {
                 redis_conn: &mut self.redis_conn,
                 destroy_room,
@@ -661,7 +679,7 @@ impl Runner {
             self.modules.destroy(ctx).await;
 
             if destroy_room {
-                if let Err(e) = self.cleanup_redis().await {
+                if let Err(e) = self.cleanup_redis_keys_for_current_room().await {
                     log::error!("Failed to remove all control attributes, {}", e);
                     encountered_error = true;
                 }
@@ -759,8 +777,9 @@ impl Runner {
         }
     }
 
-    /// Remove all room and control module related data from redis  
-    async fn cleanup_redis(&mut self) -> Result<()> {
+    /// Remove all room and control module related data from redis for the current 'local' room/breakout-room. Does not
+    /// touch any keys that contain 'global' data that is used across all 'sub'-rooms (main & breakout rooms).
+    async fn cleanup_redis_keys_for_current_room(&mut self) -> Result<()> {
         storage::remove_participant_set(&mut self.redis_conn, self.room_id).await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "display_name").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "role").await?;
@@ -772,6 +791,13 @@ impl Runner {
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "kind").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "user_id").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "avatar_url").await
+    }
+
+    /// Remove all room and control module related redis keys that are used across all 'sub'-rooms. This must only be
+    /// called once the main and all breakout rooms are empty.
+    async fn cleanup_redis_for_global_room(&mut self) -> Result<()> {
+        storage::delete_participant_count(&mut self.redis_conn, self.room.id).await?;
+        storage::delete_tariff(&mut self.redis_conn, self.room.id).await
     }
 
     /// Runs the runner until the peer closes its websocket connection or a fatal error occurres.
@@ -1019,7 +1045,7 @@ impl Runner {
                     self.join_waiting_room(timestamp, control_data).await?;
                 } else {
                     // Waiting room is not enabled; join the room directly
-                    self.join_room(timestamp, control_data).await?;
+                    self.join_room(timestamp, control_data, false).await?;
                 }
             }
             incoming::Message::EnterRoom => {
@@ -1050,7 +1076,7 @@ impl Runner {
                         )
                         .await?;
 
-                        self.join_room(timestamp, control_data).await?
+                        self.join_room(timestamp, control_data, true).await?
                     }
                     // not in correct state, reset it
                     state => {
@@ -1179,29 +1205,60 @@ impl Runner {
         Ok(())
     }
 
+    /// Enforces the given tariff.
+    ///
+    /// Requires the room lock to be taken before calling
+    async fn enforce_tariff(&mut self, tariff: Tariff) -> Result<ControlFlow<JoinBlockedReason>> {
+        let tariff =
+            control::storage::try_init_tariff(&mut self.redis_conn, self.room.id, tariff).await?;
+
+        if let Some(participant_limit) = tariff.quotas.0.get("room_participant_limit") {
+            if let Some(count) =
+                control::storage::get_participant_count(&mut self.redis_conn, self.room.id).await?
+            {
+                if count >= *participant_limit as isize {
+                    return Ok(ControlFlow::Break(
+                        JoinBlockedReason::ParticipantLimitReached,
+                    ));
+                }
+            }
+        }
+
+        control::storage::increment_participant_count(&mut self.redis_conn, self.room.id).await?;
+
+        Ok(ControlFlow::Continue(()))
+    }
+
     async fn join_waiting_room(
         &mut self,
         timestamp: Timestamp,
         control_data: ControlData,
     ) -> Result<()> {
-        self.state = RunnerState::Waiting {
-            accepted: false,
-            control_data,
-        };
+        let db = self.db.clone();
+        let creator_id = self.room.created_by;
 
-        self.ws
-            .send(Message::Text(
-                NamespacedOutgoing {
-                    namespace: moderation::NAMESPACE,
-                    timestamp,
-                    payload: moderation::outgoing::Message::InWaitingRoom,
-                }
-                .to_json(),
-            ))
-            .await;
+        let tariff = crate::block(move || Tariff::get_by_user_id(&mut db.get_conn()?, &creator_id))
+            .await??;
 
         let mut lock = storage::room_mutex(self.room_id);
         let guard = lock.lock(&mut self.redis_conn).await?;
+
+        match self.enforce_tariff(tariff).await {
+            Ok(ControlFlow::Continue(())) => { /* continue */ }
+            Ok(ControlFlow::Break(reason)) => {
+                guard.unlock(&mut self.redis_conn).await?;
+
+                self.ws_send_control(Timestamp::now(), outgoing::Message::JoinBlocked(reason))
+                    .await;
+
+                return Ok(());
+            }
+            Err(e) => {
+                guard.unlock(&mut self.redis_conn).await?;
+
+                return Err(e);
+            }
+        };
 
         let res = moderation::storage::waiting_room_add(
             &mut self.redis_conn,
@@ -1219,6 +1276,22 @@ impl Runner {
             bail!("participant-id is already taken inside waiting-room set");
         }
 
+        self.state = RunnerState::Waiting {
+            accepted: false,
+            control_data,
+        };
+
+        self.ws
+            .send(Message::Text(
+                NamespacedOutgoing {
+                    namespace: moderation::NAMESPACE,
+                    timestamp,
+                    payload: moderation::outgoing::Message::InWaitingRoom,
+                }
+                .to_json(),
+            ))
+            .await;
+
         self.rabbitmq_publish(
             timestamp,
             Some(breakout::rabbitmq::global_exchange_name(self.room_id.room_id()).as_str()),
@@ -1234,10 +1307,47 @@ impl Runner {
         Ok(())
     }
 
-    async fn join_room(&mut self, timestamp: Timestamp, control_data: ControlData) -> Result<()> {
+    async fn join_room(
+        &mut self,
+        timestamp: Timestamp,
+        control_data: ControlData,
+        joining_from_waiting_room: bool,
+    ) -> Result<()> {
         let mut lock = storage::room_mutex(self.room_id);
 
-        let guard = lock.lock(&mut self.redis_conn).await?;
+        // If we haven't joined the waiting room yet, fetch, set and enforce the tariff for the room.
+        // When in waiting-room this logic was already executed in `join_waiting_room`.
+        let guard = if !joining_from_waiting_room {
+            let db = self.db.clone();
+            let creator_id = self.room.created_by;
+
+            let tariff =
+                crate::block(move || Tariff::get_by_user_id(&mut db.get_conn()?, &creator_id))
+                    .await??;
+
+            let guard = lock.lock(&mut self.redis_conn).await?;
+
+            match self.enforce_tariff(tariff).await {
+                Ok(ControlFlow::Continue(())) => { /* continue */ }
+                Ok(ControlFlow::Break(reason)) => {
+                    guard.unlock(&mut self.redis_conn).await?;
+
+                    self.ws_send_control(Timestamp::now(), outgoing::Message::JoinBlocked(reason))
+                        .await;
+
+                    return Ok(());
+                }
+                Err(e) => {
+                    guard.unlock(&mut self.redis_conn).await?;
+
+                    return Err(e);
+                }
+            };
+
+            guard
+        } else {
+            lock.lock(&mut self.redis_conn).await?
+        };
 
         let res = self.join_room_locked().await;
 
