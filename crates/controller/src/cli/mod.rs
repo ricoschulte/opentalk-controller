@@ -9,6 +9,7 @@ use controller_shared::settings::Settings;
 mod acl;
 mod fix_acl;
 mod reload;
+mod tariffs;
 mod tenants;
 
 #[derive(Parser, Debug, Clone)]
@@ -58,6 +59,10 @@ enum SubCommand {
     /// Manage existing tenants
     #[clap(subcommand)]
     Tenants(tenants::Command),
+
+    /// Manage tariffs
+    #[clap(subcommand)]
+    Tariffs(tariffs::Command),
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -126,6 +131,9 @@ pub async fn parse_args() -> Result<Args> {
             }
             SubCommand::Tenants(command) => {
                 tenants::handle_command(settings, command)?;
+            }
+            SubCommand::Tariffs(command) => {
+                tariffs::handle_command(settings, command)?;
             }
         }
     }
