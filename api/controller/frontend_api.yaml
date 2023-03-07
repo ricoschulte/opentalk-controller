@@ -1600,13 +1600,7 @@ components:
       description: Arguments for the room start endpoint
       type: object
       additionalProperties: false
-      required:
-        - password
       properties:
-        password:
-          description: The room password
-          type: string
-          maxLength: 128
         breakout_room:
           description: ID of the breakout room
           type: integer
