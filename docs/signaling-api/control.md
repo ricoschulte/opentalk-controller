@@ -183,6 +183,7 @@ Received after joining the room. Can be triggered bei either calling [Join](#joi
 | `display_name` | `string`        | yes    | Your display_name in this session                            |
 | `avatar_url`   | `string`        | no     | url to your avatar image if logged                           |
 | `role`         | `enum`          | yes    | either `"guest"`, `"user"` or `"moderator"`                  |
+| `closes_at`    | `string`        | no     | the point in time the room closes           |
 | `tariff`       | `Tariff`        | yes    | tariff information, including `quotas` and `enabled_modules` |
 | `participants` | `Participant[]` | yes    | list of participants in the room                             |
 
@@ -195,6 +196,7 @@ Received after joining the room. Can be triggered bei either calling [Join](#joi
   "display_name": "My Display Name",
   "avatar_url":"https://example.org/",
   "role": "moderator",
+  "closes_at": "2023-03-10T16:52:54Z",
   "tariff": {
     "id": "00000000-0000-0000-0000-000000000000",
     "name": "OpenTalkDefaultTariff",
@@ -310,6 +312,16 @@ Received when a participant left the room.
     "id": "00000000-0000-0000-0000-000000000000"
 }
 ```
+
+### TimeLimitQuotaElapsed
+
+Received when the quota's time limit has elapsed.
+
+#### Fields
+
+| Field     | Type   | Always | Description                               |
+| ----------| ------ | ------ | ----------------------------------------- |
+| `message` | `enum` | yes    | Is `"time_limit_quota_elapsed"`           |
 
 ### RoleUpdated
 

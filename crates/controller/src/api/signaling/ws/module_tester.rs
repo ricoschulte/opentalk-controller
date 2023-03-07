@@ -594,9 +594,10 @@ where
 
                 let join_success = control::outgoing::JoinSuccess {
                     id: self.participant_id,
-                    role: self.role,
                     display_name: join.display_name,
                     avatar_url,
+                    role: self.role,
+                    closes_at: None,
                     tariff: TariffResource {
                         id: TariffId::nil(),
                         name: "test".into(),

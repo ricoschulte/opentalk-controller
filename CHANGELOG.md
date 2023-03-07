@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller: invite verify response contains a `password_required` flag ([#329](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/329))
 - controller: add `participant_limit` quota to restrict the maximum amount of participants in a room ([#332](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/332))
 - controller: add `enabled_modules` ([#334](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/334)), `tariff` as part of `JoinSuccess` message, API endpoints for `users/me/tariff` and `rooms/{room_id}/tariff` ([#331](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/331))
+- controller: add `time_limit` quota to restrict the duration of a meeting ([#333](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/333))
 
 ### Changed
 

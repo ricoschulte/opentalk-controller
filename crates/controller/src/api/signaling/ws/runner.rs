@@ -39,6 +39,7 @@ use db_storage::rooms::Room;
 use db_storage::tariffs::Tariff;
 use db_storage::users::{User, UserId};
 use futures::stream::SelectAll;
+use futures::Future;
 use itertools::Itertools;
 use kustos::Authz;
 use lapin::message::DeliveryResult;
@@ -48,8 +49,10 @@ use lapin_pool::RabbitMqChannel;
 use serde_json::Value;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::future;
 use std::mem::replace;
 use std::ops::ControlFlow;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc};
@@ -344,6 +347,7 @@ impl Builder {
             shutdown_sig,
             exit: false,
             settings,
+            time_limit_future: Box::pin(future::pending()),
         })
     }
 }
@@ -417,6 +421,8 @@ pub struct Runner {
 
     /// Shared settings of the running program
     settings: SharedSettings,
+
+    time_limit_future: Pin<Box<dyn Future<Output = ()>>>,
 }
 
 impl Drop for Runner {
@@ -781,6 +787,7 @@ impl Runner {
     /// Remove all room and control module related data from redis for the current 'local' room/breakout-room. Does not
     /// touch any keys that contain 'global' data that is used across all 'sub'-rooms (main & breakout rooms).
     async fn cleanup_redis_keys_for_current_room(&mut self) -> Result<()> {
+        storage::remove_room_closes_at(&mut self.redis_conn, self.room_id).await?;
         storage::remove_participant_set(&mut self.redis_conn, self.room_id).await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "display_name").await?;
         storage::remove_attribute_key(&mut self.redis_conn, self.room_id, "role").await?;
@@ -865,6 +872,11 @@ impl Runner {
                         SKIP_WAITING_ROOM_KEY_EXPIRY,
                     )
                     .await;
+                }
+                _ = &mut self.time_limit_future => {
+                    self.ws_send_control(Timestamp::now(), outgoing::Message::TimeLimitQuotaElapsed).await;
+                    self.ws.close(CloseCode::Normal).await;
+                    break;
                 }
                 _ = self.shutdown_sig.recv() => {
                     self.ws.close(CloseCode::Away).await;
@@ -1394,13 +1406,17 @@ impl Runner {
             .await;
 
         let available_modules = self.modules.get_module_names();
+        let closes_at =
+            control::storage::get_room_closes_at(&mut self.redis_conn, self.room_id).await?;
+
         self.ws_send_control(
             timestamp,
             outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
                 id: self.id,
-                role: self.role,
                 display_name: control_data.display_name.clone(),
                 avatar_url: control_data.avatar_url.clone(),
+                role: self.role,
+                closes_at,
                 tariff: TariffResource::from_tariff(tariff, &available_modules).into(),
                 module_data,
                 participants,
@@ -1424,8 +1440,10 @@ impl Runner {
             control::storage::participant_set_exists(&mut self.redis_conn, self.room_id).await?;
 
         if !participant_set_exists {
+            self.set_room_time_limit().await?;
             self.metrics.increment_created_rooms_count();
         }
+        self.activate_room_time_limit().await?;
 
         let participants = storage::get_all_participants(&mut self.redis_conn, self.room_id)
             .await
@@ -1443,6 +1461,46 @@ impl Runner {
         }
 
         Ok(participants)
+    }
+
+    async fn set_room_time_limit(&mut self) -> Result<(), anyhow::Error> {
+        let tariff = storage::get_tariff(&mut self.redis_conn, self.room.id).await?;
+
+        let quotas = tariff.quotas.0;
+        let remaining_seconds = quotas
+            .get("room_time_limit_secs")
+            .map(|time_limit| *time_limit as i64);
+
+        if let Some(remaining_seconds) = remaining_seconds {
+            let closes_at =
+                Timestamp::now().checked_add_signed(chrono::Duration::seconds(remaining_seconds));
+
+            if let Some(closes_at) = closes_at {
+                control::storage::set_room_closes_at(
+                    &mut self.redis_conn,
+                    self.room_id,
+                    closes_at.into(),
+                )
+                .await?;
+            } else {
+                log::error!("DateTime overflow for closes_at");
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn activate_room_time_limit(&mut self) -> Result<(), anyhow::Error> {
+        let closes_at =
+            control::storage::get_room_closes_at(&mut self.redis_conn, self.room_id).await?;
+
+        if let Some(closes_at) = closes_at {
+            let remaining_seconds = (*closes_at - *Timestamp::now()).num_seconds();
+            let future = tokio::time::sleep(Duration::from_secs(remaining_seconds.max(0) as u64));
+            self.time_limit_future = Box::pin(future);
+        }
+
+        Ok(())
     }
 
     async fn set_control_attributes(
