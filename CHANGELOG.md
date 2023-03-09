@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - timer: add the `style` field to the `start` & `started` messages and let clients tag a timer with a custom style ([#316](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/316))
 - controller: add support for multi tenancy [#286](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/286)
 - timer: distribute timer handling over all participant runners, allowing timers to finish if the moderator has left ([#210](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/210))
+- controller: authenticated users can join meetings without a password ([#335](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/335))
 
 ## [0.1.0-rc.2] - 2023-01-30
 

@@ -272,7 +272,6 @@ pub async fn get(
 /// The JSON body expected when making a *POST /rooms/{room_id}/start*
 #[derive(Debug, Deserialize)]
 pub struct StartRequest {
-    password: Option<String>,
     breakout_room: Option<BreakoutRoomId>,
     resumption: Option<ResumptionToken>,
 }
@@ -348,16 +347,6 @@ pub async fn start(
         Room::get(&mut conn, room_id)
     })
     .await??;
-
-    if let Some(password) = &room.password {
-        if let Some(pw) = &request.password {
-            if pw != password {
-                return Err(StartRoomError::WrongRoomPassword.into());
-            }
-        } else {
-            return Err(StartRoomError::WrongRoomPassword.into());
-        }
-    }
 
     let mut redis_conn = (**redis_conn).clone();
 
