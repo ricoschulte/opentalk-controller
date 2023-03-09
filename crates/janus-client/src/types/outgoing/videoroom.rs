@@ -216,6 +216,9 @@ pub struct VideoRoomPluginConfigureSubscriber {
     pub audio_active_packets: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub audio_level_average: Option<u64>,
+    /// Force ICE restart
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restart: Option<bool>,
 }
 
 impl PluginRequest for VideoRoomPluginConfigureSubscriber {
@@ -247,6 +250,7 @@ impl VideoRoomPluginConfigureSubscriber {
             spatial_layer: None,
             audio_active_packets: None,
             audio_level_average: None,
+            restart: None,
         }
     }
 
@@ -330,6 +334,10 @@ impl VideoRoomPluginConfigureSubscriberBuilder {
             audio_level_average: audio_level,
             ..self.0
         })
+    }
+
+    pub fn restart(self, restart: Option<bool>) -> Self {
+        Self(VideoRoomPluginConfigureSubscriber { restart, ..self.0 })
     }
 
     pub fn build(self) -> VideoRoomPluginConfigureSubscriber {
