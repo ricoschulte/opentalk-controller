@@ -11,6 +11,8 @@ use std::collections::HashMap;
 #[serde(tag = "message", rename_all = "snake_case")]
 pub enum Message {
     JoinSuccess(JoinSuccess),
+    /// Joining the room failed
+    JoinBlocked(JoinBlockedReason),
     /// State change of this participant
     Update(Participant),
     /// A participant that joined the room
@@ -42,6 +44,12 @@ pub struct JoinSuccess {
     pub module_data: HashMap<&'static str, serde_json::Value>,
 
     pub participants: Vec<Participant>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum JoinBlockedReason {
+    ParticipantLimitReached,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]

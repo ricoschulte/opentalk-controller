@@ -29,7 +29,7 @@ Must be the first message to be sent when the websocket connection is establishe
 
 ### EnterRoom
 
-Can only be sent while in the waiting room and after being accepted by an moderator.
+Can only be sent while in the waiting room and after being accepted by a moderator.
 
 See [InWaitingRoom](moderation#inwaitingroom)
 
@@ -209,6 +209,26 @@ Received after joining the room. Can be triggered bei either calling [Join](#joi
       }
     }
   ]
+}
+```
+
+### JoinBlocked
+
+If a tariff is configured for a room, an issued [Join](#join) action may result in this event.
+
+#### Fields
+
+| Field     | Type   | Always | Description                      |
+| --------- | ------ | ------ | -------------------------------- |
+| `message` | `enum` | yes    | Is `"join_blocked"`               |
+| `reason`  | `enum` | yes    | Is `"participant_limit_reached"` |
+
+##### Example
+
+```json
+{
+    "message": "join_blocked",
+    "reason": "participant_limit_reached"
 }
 ```
 
