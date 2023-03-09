@@ -327,6 +327,14 @@ impl SignalingModule for Media {
                     ));
                 }
             }
+            Event::WsMessage(incoming::Message::Resubscribe(target)) => {
+                if let Err(e) = self.handle_sdp_re_request_offer(&mut ctx, target).await {
+                    log::error!("Failed to handle resubscribe {:?}, {:?}", target, e);
+                    ctx.ws_send(outgoing::Message::Error(
+                        outgoing::Error::InvalidRequestOffer(target.into()),
+                    ));
+                }
+            }
             Event::WsMessage(incoming::Message::Configure(configure)) => {
                 let target = configure.target;
                 if let Err(e) = self.handle_configure(configure).await {
@@ -849,6 +857,37 @@ impl Media {
                 bail!("Expected McuResponse::SdpOffer(..) got {:?}", response)
             }
         }
+
+        Ok(())
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, ctx))]
+    async fn handle_sdp_re_request_offer(
+        &mut self,
+        ctx: &mut ModuleContext<'_, Self>,
+        target: incoming::Target,
+    ) -> Result<()> {
+        let media_session_type = target.media_session_type;
+        let target = target.target;
+
+        if self.id == target {
+            bail!("Cannot re-request offer for self");
+        }
+
+        let subscriber = self
+            .media
+            .get_subscriber(target, media_session_type)
+            .context("No subscriber for target found")?;
+
+        let sdp_offer = subscriber.restart().await?;
+
+        ctx.ws_send(outgoing::Message::SdpOffer(outgoing::Sdp {
+            sdp: sdp_offer,
+            source: outgoing::Source {
+                source: target,
+                media_session_type,
+            },
+        }));
 
         Ok(())
     }
