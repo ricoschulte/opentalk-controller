@@ -4,7 +4,7 @@
 
 FROM debian:bullseye-slim
 
-RUN apt-get update && apt-get install -y libpq5 ca-certificates
+RUN apt-get update && apt-get install -y libpq5 ca-certificates protobuf-compiler
 
 WORKDIR /controller
 
