@@ -10,8 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - controller/db-storage: add initial tariff support. Requires JWT claims to include a `tariff_id`.
-- controller: enable accepted participants to skip waiting room when joining or returning from a breakout room ([#303](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/303))
-- controller: announce available modules in `join_success` message ([#308](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/308))
 - controller: invite verify response contains a `password_required` flag ([#329](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/329))
 - controller: add `participant_limit` quota to restrict the maximum amount of participants in a room ([#332](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/332))
 - controller: add `enabled_modules` ([#334](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/334)), `tariff` as part of `JoinSuccess` message, API endpoints for `users/me/tariff` and `rooms/{room_id}/tariff` ([#331](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/331))
@@ -19,11 +17,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- controller: authenticated users can join meetings without a password ([#335](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/335))
+
+## [0.2.0] - 2023-03-13
+
+### Added
+
+- controller: enable accepted participants to skip waiting room when joining or returning from a breakout room ([#303](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/303))
+- controller: announce available modules in `join_success` message ([#308](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/308))
+
+### Changed
+
 - timer: add the `kind` field to distinguish between a `stopwatch` and `countdown` more clearly ([#316](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/316))
 - timer: add the `style` field to the `start` & `started` messages and let clients tag a timer with a custom style ([#316](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/316))
 - controller: add support for multi tenancy [#286](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/286)
 - timer: distribute timer handling over all participant runners, allowing timers to finish if the moderator has left ([#210](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/210))
-- controller: authenticated users can join meetings without a password ([#335](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/335))
 
 ## [0.1.0] - 2023-03-01
 
@@ -230,7 +238,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - initial release candidate
 
-[unreleased]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v0.1.0...main
+[Unreleased]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/v0.2.0...main
+
+[0.2.0]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/97c85ca10d136652bc1656792dcf1a539ea4e7a5...v0.2.0
+
 [0.1.0]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/8b6e62c700376aa82fab9eab07346207becf7c78...v0.1.0
 
 
