@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.0-rc.1]
+## [0.2.0] - 2023-03-13
 
 ### Added
 
@@ -224,10 +224,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - initial release candidate
 
-[0.2.0-rc.1]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/97c85ca10d136652bc1656792dcf1a539ea4e7a5...v0.2.0-rc.1
+[0.2.0]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/97c85ca10d136652bc1656792dcf1a539ea4e7a5...v0.2.0-rc.1
 
 [0.1.0]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/8b6e62c700376aa82fab9eab07346207becf7c78...v0.1.0
-
 
 [0.0.0-internal-release.10]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/8302382ac420eccc069ca891e0bd067ef6140754...8b6e62c700376aa82fab9eab07346207becf7c78
 [0.0.0-internal-release.9]: https://git.opentalk.dev/opentalk/k3k-controller/-/compare/446647a13f2e163f1be02cefbdaf04e201598444...8302382ac420eccc069ca891e0bd067ef6140754
