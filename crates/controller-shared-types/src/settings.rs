@@ -82,6 +82,12 @@ pub struct Settings {
 
     pub minio: MinIO,
 
+    #[serde(default)]
+    pub tenants: Tenants,
+
+    #[serde(default)]
+    pub tariffs: Tariffs,
+
     #[serde(flatten)]
     pub extensions: HashMap<String, config::Value>,
 }
@@ -390,6 +396,48 @@ pub struct MinIO {
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct Metrics {
     pub allowlist: Vec<cidr::IpInet>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TenantAssignment {
+    Static { static_tenant_id: String },
+    ByExternalTenantId,
+}
+
+impl Default for TenantAssignment {
+    fn default() -> Self {
+        Self::Static {
+            static_tenant_id: String::from("OpenTalkDefaultTenant"),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+pub struct Tenants {
+    #[serde(default)]
+    pub assignment: TenantAssignment,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TariffAssignment {
+    Static { static_tariff_name: String },
+    ByExternalTariffId,
+}
+
+impl Default for TariffAssignment {
+    fn default() -> Self {
+        Self::Static {
+            static_tariff_name: String::from("OpenTalkDefaultTariff"),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+pub struct Tariffs {
+    #[serde(default)]
+    pub assignment: TariffAssignment,
 }
 
 #[cfg(test)]

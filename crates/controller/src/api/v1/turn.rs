@@ -78,7 +78,7 @@ pub async fn get(
     let stun_servers = &settings.stun;
 
     // This is a omniauth endpoint. AccessTokens and InviteCodes are allowed as Bearer tokens
-    match check_access_token_or_invite(&req, db, oidc_ctx).await? {
+    match check_access_token_or_invite(&settings, &req, db, oidc_ctx).await? {
         Either::Right(invite) => {
             log::trace!(
                 "Generating new turn credentials for invite {} and servers {:?}",
@@ -177,6 +177,7 @@ fn rr_servers<T: Rng + CryptoRng>(
 
 /// Checks for a valid access_token similar to the OIDC Middleware, but also allows invite_tokens as a valid bearer token.
 async fn check_access_token_or_invite(
+    settings: &Settings,
     req: &HttpRequest,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
@@ -189,8 +190,13 @@ async fn check_access_token_or_invite(
     })?;
 
     let access_token = auth.into_scheme().token().to_string();
-    let current_user =
-        check_access_token(db.clone(), oidc_ctx, AccessToken::new(access_token.clone())).await;
+    let current_user = check_access_token(
+        settings,
+        db.clone(),
+        oidc_ctx,
+        AccessToken::new(access_token.clone()),
+    )
+    .await;
 
     match current_user {
         Ok((_, user)) => Ok(Either::Left(user)),

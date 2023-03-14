@@ -133,6 +133,6 @@ pub struct IdTokenInfo {
     pub x_grp: Vec<String>,
     pub phone_number: Option<String>,
     pub display_name: Option<String>,
-    pub tenant_id: String,
-    pub tariff_id: String,
+    pub tenant_id: Option<String>,
+    pub tariff_id: Option<String>,
 }
