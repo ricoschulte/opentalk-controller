@@ -6,6 +6,7 @@
 use crate::diesel::RunQueryDsl;
 use crate::schema::rooms;
 use crate::schema::users;
+use crate::tariffs::Tariff;
 use crate::tenants::TenantId;
 use crate::users::{User, UserId};
 use chrono::{DateTime, Utc};
@@ -105,6 +106,13 @@ impl Room {
         let rooms_with_total = query.load_and_count(conn)?;
 
         Ok(rooms_with_total)
+    }
+
+    /// Get the room's tariff
+    #[tracing::instrument(err, skip_all)]
+    pub fn get_tariff(&self, conn: &mut DbConnection) -> Result<Tariff> {
+        let user = User::get(conn, self.created_by)?;
+        Tariff::get(conn, user.tariff_id)
     }
 
     /// Delete a room using the given id

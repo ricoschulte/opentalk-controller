@@ -176,15 +176,15 @@ Received after joining the room. Can be triggered bei either calling [Join](#joi
 
 #### Fields
 
-| Field          | Type            | Always | Description                                 |
-| -------------- | --------------- | ------ | ------------------------------------------- |
-| `message`      | `enum`          | yes    | Is `"join_success"`                         |
-| `id`           | `string`        | yes    | Your participant-id in this session         |
-| `display_name` | `string`        | yes    | Your display_name in this session           |
-| `avatar_url`   | `string`        | no     | url to your avatar image if logged          |
-| `role`         | `enum`          | yes    | either `"guest"`, `"user"` or `"moderator"` |
-| `modules`      | `string[]`      | yes    | list of available modules                   |
-| `participants` | `Participant[]` | yes    | list of participants in the room            |
+| Field          | Type            | Always | Description                                                  |
+| -------------- | --------------- | ------ | ------------------------------------------------------------ |
+| `message`      | `enum`          | yes    | Is `"join_success"`                                          |
+| `id`           | `string`        | yes    | Your participant-id in this session                          |
+| `display_name` | `string`        | yes    | Your display_name in this session                            |
+| `avatar_url`   | `string`        | no     | url to your avatar image if logged                           |
+| `role`         | `enum`          | yes    | either `"guest"`, `"user"` or `"moderator"`                  |
+| `tariff`       | `Tariff`        | yes    | tariff information, including `quotas` and `enabled_modules` |
+| `participants` | `Participant[]` | yes    | list of participants in the room                             |
 
 ##### Example
 
@@ -195,7 +195,12 @@ Received after joining the room. Can be triggered bei either calling [Join](#joi
   "display_name": "My Display Name",
   "avatar_url":"https://example.org/",
   "role": "moderator",
-  "modules":["chat","breakout","moderation","media","polls","timer"],
+  "tariff": {
+    "id": "00000000-0000-0000-0000-000000000000",
+    "name": "OpenTalkDefaultTariff",
+    "quotas": {},
+    "enabled_modules": ["chat","breakout","moderation","media","polls","timer"]
+  },
   "participants": [
     {
       "id": "00000000-0000-0000-0000-000000000000",

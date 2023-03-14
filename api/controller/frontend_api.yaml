@@ -186,7 +186,36 @@ paths:
         500:
           $ref: '#/components/responses/InternalServerError'
 
-  /rooms/{uuid}/start:
+  /rooms/{room_id}/tariff:
+    get:
+      summary: Get a room's tariff information
+      description: >
+        Returns a description of the tariff of the given room.
+      tags: [rooms, tariff]
+      operationId: get_room_tariff
+      parameters:
+        - in: path
+          description: The ID of the requested room
+          name: room_id
+          schema:
+            type: string
+            format: uuid
+          required: true
+      responses:
+        200:
+          description: Includes the tariff information in the response body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tariff'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        404:
+          description: The specified room could not be found
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /rooms/{room_id}/start:
     post:
       summary: Start a signaling session
       description: >
@@ -201,8 +230,8 @@ paths:
       operationId: signaling_start
       parameters:
         - in: path
-          description: The UUID of the requested room
-          name: uuid
+          description: The ID of the requested room
+          name: room_id
           schema:
             type: string
             format: uuid
@@ -236,7 +265,7 @@ paths:
         500:
           $ref: '#/components/responses/InternalServerError'
 
-  /rooms/{uuid}/start_invited:
+  /rooms/{room_id}/start_invited:
     post:
       summary: Start a signaling session
       description: >
@@ -252,8 +281,8 @@ paths:
       security: []
       parameters:
         - in: path
-          description: The UUID of the requested room
-          name: uuid
+          description: The ID of the requested room
+          name: room_id
           schema:
             type: string
             format: uuid
@@ -287,7 +316,7 @@ paths:
         500:
           $ref: '#/components/responses/InternalServerError'
 
-  /rooms/{room_uuid}/invites:
+  /rooms/{room_id}/invites:
     get:
       summary: Get all invites
       description: Gets all invites the user has access to.
@@ -295,8 +324,8 @@ paths:
       operationId: get_all_invites
       parameters:
         - in: path
-          description: The UUID of the requested room
-          name: room_uuid
+          description: The ID of the requested room
+          name: room_id
           schema:
             type: string
             format: uuid
@@ -329,8 +358,8 @@ paths:
       operationId: create_invite
       parameters:
         - in: path
-          description: The UUID of the requested room
-          name: room_uuid
+          description: The ID of the requested room
+          name: room_id
           schema:
             type: string
             format: uuid
@@ -359,7 +388,7 @@ paths:
         500:
           $ref: '#/components/responses/InternalServerError'
 
-  /rooms/{room_uuid}/invites/{invite_code}:
+  /rooms/{room_id}/invites/{invite_code}:
     get:
       summary: Get an invite
       description: Get the invite for the given room_id and invite_code.
@@ -367,8 +396,8 @@ paths:
       operationId: get_invite
       parameters:
         - in: path
-          description: The UUID of the requested room
-          name: room_uuid
+          description: The ID of the requested room
+          name: room_id
           schema:
             type: string
             format: uuid
@@ -403,8 +432,8 @@ paths:
       operationId: put_invite
       parameters:
         - in: path
-          description: The UUID of the requested room
-          name: room_uuid
+          description: The ID of the requested room
+          name: room_id
           schema:
             type: string
             format: uuid
@@ -446,8 +475,8 @@ paths:
       operationId: delete_invite
       parameters:
         - in: path
-          description: The UUID of the requested room
-          name: room_uuid
+          description: The ID of the requested room
+          name: room_id
           schema:
             type: string
             format: uuid
@@ -494,7 +523,7 @@ paths:
         500:
           $ref: '#/components/responses/InternalServerError'
 
-  /rooms/{uuid}/sip:
+  /rooms/{room_id}/sip:
     get:
       summary: Get the rooms SIP config
       description: Returns the SIP config of this room.
@@ -502,8 +531,8 @@ paths:
       operationId: get_sip
       parameters:
         - in: path
-          description: The UUID of the requested room
-          name: uuid
+          description: The ID of the requested room
+          name: room_id
           schema:
             type: string
             format: uuid
@@ -531,8 +560,8 @@ paths:
       operationId: put_sip
       parameters:
         - in: path
-          description: The UUID of the requested room
-          name: uuid
+          description: The ID of the requested room
+          name: room_id
           schema:
             type: string
             format: uuid
@@ -570,8 +599,8 @@ paths:
       operationId: delete_sip
       parameters:
         - in: path
-          description: The UUID of the requested room
-          name: uuid
+          description: The ID of the requested room
+          name: room_id
           schema:
             type: string
             format: uuid
@@ -594,7 +623,7 @@ paths:
       operationId: get_all_assets
       parameters:
         - in: path
-          description: The id of the requested room
+          description: The ID of the requested room
           name: room_id
           schema:
             type: string
@@ -627,14 +656,14 @@ paths:
       operationId: get_asset
       parameters:
         - in: path
-          description: The id of the requested room
+          description: The ID of the requested room
           name: room_id
           schema:
             type: string
             format: uuid
           required: true
         - in: path
-          description: The id of the requested asset
+          description: The ID of the requested asset
           name: asset_id
           schema:
             type: string
@@ -662,14 +691,14 @@ paths:
       operationId: delete_asset
       parameters:
         - in: path
-          description: The id of the requested room
+          description: The ID of the requested room
           name: room_id
           schema:
             type: string
             format: uuid
           required: true
         - in: path
-          description: The id of the requested asset
+          description: The ID of the requested asset
           name: asset_id
           schema:
             type: string
@@ -741,6 +770,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PrivateUserProfile'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /users/me/tariff:
+    get:
+      summary: Get the current user's tariff information
+      description: >
+        Returns a description of the tariff of the current user.
+      tags: [users, tariff]
+      operationId: get_me_tariff
+      responses:
+        200:
+          description: Includes the tariff information in the response body.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tariff'
         401:
           $ref: '#/components/responses/Unauthorized'
         500:
@@ -1626,6 +1674,37 @@ components:
           description: The error type
           type: string
           enum: [wrong_room_password, invalid_credentials]
+
+    # -------------- Tariff definitions --------------
+    Tariff:
+      description: Tariff information
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - quotas
+        - enabled_modules
+      properties:
+        id:
+          description: The tariff identifier
+          type: string
+          format: uuid
+        name:
+          description: The name of the tariff
+          type: string
+          format: uuid
+        quotas:
+          description: The quotas of the tariff
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+            maximum: 4294967295
+        enabled_modules:
+          description: The enabled modules for the tariff
+          type: array
+          items: string
 
     # -------------- SIP definitions --------------
     SipConfig:

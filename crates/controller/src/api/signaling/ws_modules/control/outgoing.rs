@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use crate::api::signaling::Role;
+use crate::api::v1::tariffs::TariffResource;
 use controller_shared::ParticipantId;
 use serde::Serialize;
 use std::collections::HashMap;
@@ -38,7 +39,7 @@ pub struct JoinSuccess {
 
     pub role: Role,
 
-    pub modules: Vec<&'static str>,
+    pub tariff: Box<TariffResource>,
 
     #[serde(flatten)]
     pub module_data: HashMap<&'static str, serde_json::Value>,
@@ -90,8 +91,48 @@ pub struct Participant {
 #[cfg(test)]
 mod test {
     use super::*;
+    use db_storage::tariffs::{Tariff, TariffId};
     use pretty_assertions::assert_eq;
     use serde_json::json;
+
+    fn participant_tariff() -> TariffResource {
+        TariffResource {
+            id: TariffId::nil(),
+            name: "test".into(),
+            quotas: Default::default(),
+            enabled_modules: Default::default(),
+        }
+    }
+
+    #[test]
+    fn tariff_to_participant_tariff() {
+        let tariff = Tariff {
+            id: TariffId::nil(),
+            name: "test".into(),
+            created_at: Default::default(),
+            updated_at: Default::default(),
+            quotas: Default::default(),
+            disabled_modules: vec![
+                "whiteboard".to_string(),
+                "timer".to_string(),
+                "media".to_string(),
+                "polls".to_string(),
+            ],
+        };
+        let available_modules = vec!["chat", "media", "polls", "whiteboard", "timer"];
+
+        let expected = json!({
+            "id": "00000000-0000-0000-0000-000000000000",
+            "name": "test",
+            "quotas": {},
+            "enabled_modules": ["chat"],
+        });
+
+        let actual =
+            serde_json::to_value(TariffResource::from_tariff(tariff, &available_modules)).unwrap();
+
+        assert_eq!(actual, expected);
+    }
 
     #[test]
     fn join_success() {
@@ -101,7 +142,7 @@ mod test {
             "display_name": "name",
             "avatar_url": "http://url",
             "role": "user",
-            "modules": [],
+            "tariff": serde_json::to_value(participant_tariff()).unwrap(),
             "participants": [],
         });
 
@@ -110,7 +151,7 @@ mod test {
             role: Role::User,
             display_name: "name".into(),
             avatar_url: Some("http://url".into()),
-            modules: vec![],
+            tariff: participant_tariff().into(),
             module_data: Default::default(),
             participants: vec![],
         }))
@@ -126,7 +167,7 @@ mod test {
             "id": "00000000-0000-0000-0000-000000000000",
             "display_name": "name",
             "role": "guest",
-            "modules": [],
+            "tariff": serde_json::to_value(participant_tariff()).unwrap(),
             "participants": [],
         });
 
@@ -135,7 +176,7 @@ mod test {
             display_name: "name".into(),
             avatar_url: None,
             role: Role::Guest,
-            modules: vec![],
+            tariff: participant_tariff().into(),
             module_data: Default::default(),
             participants: vec![],
         }))

@@ -8,12 +8,15 @@
 //! structs are defined in the Database crate [`db_storage`] for database operations.
 
 use super::response::{ApiError, NoContent};
+use crate::api::signaling::prelude::SignalingModules;
+use crate::api::v1::tariffs::TariffResource;
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{get, patch, Either};
 use anyhow::Context;
 use controller_shared::settings::Settings;
 use database::Db;
+use db_storage::tariffs::Tariff;
 use db_storage::tenants::Tenant;
 use db_storage::users::{UpdateUser, User, UserId};
 use keycloak_admin::KeycloakAdminClient;
@@ -189,6 +192,28 @@ pub async fn get_me(
     let user_profile = PrivateUserProfile::from_db(&settings, current_user);
 
     Ok(Json(user_profile))
+}
+
+/// API Endpoint *GET /users/me/tariff*
+///
+/// Returns the [`TariffResource`] of the requesting user.
+#[get("/users/me/tariff")]
+pub async fn get_me_tariff(
+    db: Data<Db>,
+    modules: Data<SignalingModules>,
+    current_user: ReqData<User>,
+) -> Result<Json<TariffResource>, ApiError> {
+    let current_user = current_user.into_inner();
+    let tariff = crate::block(move || {
+        let mut conn = db.get_conn()?;
+
+        Tariff::get(&mut conn, current_user.tariff_id)
+    })
+    .await??;
+
+    let response = TariffResource::from_tariff(tariff, &modules.get_module_names());
+
+    Ok(Json(response))
 }
 
 /// API Endpoint *GET /users/{user_id}*

@@ -23,6 +23,7 @@ use crate::api::signaling::ws_modules::control::{
     incoming, outgoing, rabbitmq, storage, ControlData, ParticipationKind, NAMESPACE,
 };
 use crate::api::signaling::{Role, SignalingRoomId};
+use crate::api::v1::tariffs::TariffResource;
 use crate::ha_sync::user_update;
 use crate::redis_wrapper::RedisConnection;
 use crate::storage::ObjectStorage;
@@ -1208,7 +1209,10 @@ impl Runner {
     /// Enforces the given tariff.
     ///
     /// Requires the room lock to be taken before calling
-    async fn enforce_tariff(&mut self, tariff: Tariff) -> Result<ControlFlow<JoinBlockedReason>> {
+    async fn enforce_tariff(
+        &mut self,
+        tariff: Tariff,
+    ) -> Result<ControlFlow<JoinBlockedReason, Tariff>> {
         let tariff =
             control::storage::try_init_tariff(&mut self.redis_conn, self.room.id, tariff).await?;
 
@@ -1226,7 +1230,7 @@ impl Runner {
 
         control::storage::increment_participant_count(&mut self.redis_conn, self.room.id).await?;
 
-        Ok(ControlFlow::Continue(()))
+        Ok(ControlFlow::Continue(tariff))
     }
 
     async fn join_waiting_room(
@@ -1244,7 +1248,7 @@ impl Runner {
         let guard = lock.lock(&mut self.redis_conn).await?;
 
         match self.enforce_tariff(tariff).await {
-            Ok(ControlFlow::Continue(())) => { /* continue */ }
+            Ok(ControlFlow::Continue(_)) => { /* continue */ }
             Ok(ControlFlow::Break(reason)) => {
                 guard.unlock(&mut self.redis_conn).await?;
 
@@ -1317,18 +1321,20 @@ impl Runner {
 
         // If we haven't joined the waiting room yet, fetch, set and enforce the tariff for the room.
         // When in waiting-room this logic was already executed in `join_waiting_room`.
-        let guard = if !joining_from_waiting_room {
+        let (guard, tariff) = if !joining_from_waiting_room {
             let db = self.db.clone();
             let creator_id = self.room.created_by;
 
-            let tariff =
+            let mut tariff =
                 crate::block(move || Tariff::get_by_user_id(&mut db.get_conn()?, &creator_id))
                     .await??;
 
             let guard = lock.lock(&mut self.redis_conn).await?;
 
-            match self.enforce_tariff(tariff).await {
-                Ok(ControlFlow::Continue(())) => { /* continue */ }
+            match self.enforce_tariff(tariff.clone()).await {
+                Ok(ControlFlow::Continue(enforced_tariff)) => {
+                    tariff = enforced_tariff;
+                }
                 Ok(ControlFlow::Break(reason)) => {
                     guard.unlock(&mut self.redis_conn).await?;
 
@@ -1344,9 +1350,10 @@ impl Runner {
                 }
             };
 
-            guard
+            (guard, tariff)
         } else {
-            lock.lock(&mut self.redis_conn).await?
+            let tariff = control::storage::get_tariff(&mut self.redis_conn, self.room.id).await?;
+            (lock.lock(&mut self.redis_conn).await?, tariff)
         };
 
         let res = self.join_room_locked().await;
@@ -1386,6 +1393,7 @@ impl Runner {
             )
             .await;
 
+        let available_modules = self.modules.get_module_names();
         self.ws_send_control(
             timestamp,
             outgoing::Message::JoinSuccess(outgoing::JoinSuccess {
@@ -1393,7 +1401,7 @@ impl Runner {
                 role: self.role,
                 display_name: control_data.display_name.clone(),
                 avatar_url: control_data.avatar_url.clone(),
-                modules: self.modules.get_module_names(),
+                tariff: TariffResource::from_tariff(tariff, &available_modules).into(),
                 module_data,
                 participants,
             }),

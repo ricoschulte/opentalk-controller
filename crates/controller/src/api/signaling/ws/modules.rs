@@ -389,6 +389,8 @@ pub trait ModuleBuilder: Send + Sync {
     async fn build(&self, builder: &mut Builder) -> Result<()>;
 
     fn clone_boxed(&self) -> Box<dyn ModuleBuilder>;
+
+    fn namespace(&self) -> &'static str;
 }
 
 pub struct ModuleBuilderImpl<M>
@@ -433,6 +435,10 @@ where
             m: self.m,
             params: self.params.clone(),
         })
+    }
+
+    fn namespace(&self) -> &'static str {
+        M::NAMESPACE
     }
 }
 
