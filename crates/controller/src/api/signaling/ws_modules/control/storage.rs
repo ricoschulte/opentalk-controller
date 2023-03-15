@@ -56,6 +56,13 @@ pub struct RoomTariff {
     room_id: RoomId,
 }
 
+/// The point in time the room closes.
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:closes_at")]
+struct RoomClosesAt {
+    room: SignalingRoomId,
+}
+
 /// The room's mutex
 ///
 /// Must be taken when joining and leaving the room.
@@ -511,4 +518,39 @@ pub async fn delete_participant_count(
         .del(RoomParticipantCount { room_id })
         .await
         .context("Failed to delete room participant count key")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn set_room_closes_at(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+    timestamp: Timestamp,
+) -> Result<()> {
+    redis_conn
+        .set(RoomClosesAt { room }, timestamp)
+        .await
+        .context("Failed to SET the point in time the room closes")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn get_room_closes_at(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+) -> Result<Option<Timestamp>> {
+    let key = RoomClosesAt { room };
+    redis_conn
+        .get(&key)
+        .await
+        .context("Failed to GET the point in time the room closes")
+}
+
+#[tracing::instrument(level = "debug", skip(redis_conn))]
+pub async fn remove_room_closes_at(
+    redis_conn: &mut RedisConnection,
+    room: SignalingRoomId,
+) -> Result<()> {
+    redis_conn
+        .del(RoomClosesAt { room })
+        .await
+        .context("Failed to DEL the point in time the room closes")
 }

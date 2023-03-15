@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::api::signaling::Role;
+use crate::api::signaling::{Role, Timestamp};
 use crate::api::v1::tariffs::TariffResource;
 use controller_shared::ParticipantId;
 use serde::Serialize;
@@ -20,6 +20,8 @@ pub enum Message {
     Joined(Participant),
     /// This participant left the room
     Left(AssociatedParticipant),
+    /// The quota's time limit has elapsed
+    TimeLimitQuotaElapsed,
 
     RoleUpdated {
         new_role: Role,
@@ -38,6 +40,9 @@ pub struct JoinSuccess {
     pub avatar_url: Option<String>,
 
     pub role: Role,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub closes_at: Option<Timestamp>,
 
     pub tariff: Box<TariffResource>,
 
@@ -90,7 +95,10 @@ pub struct Participant {
 
 #[cfg(test)]
 mod test {
+    use std::str::FromStr;
+
     use super::*;
+    use chrono::DateTime;
     use db_storage::tariffs::{Tariff, TariffId};
     use pretty_assertions::assert_eq;
     use serde_json::json;
@@ -142,15 +150,21 @@ mod test {
             "display_name": "name",
             "avatar_url": "http://url",
             "role": "user",
+            "closes_at":"2021-06-24T14:00:11.873753715Z",
             "tariff": serde_json::to_value(participant_tariff()).unwrap(),
             "participants": [],
         });
 
         let produced = serde_json::to_value(&Message::JoinSuccess(JoinSuccess {
             id: ParticipantId::nil(),
-            role: Role::User,
             display_name: "name".into(),
             avatar_url: Some("http://url".into()),
+            role: Role::User,
+            closes_at: Some(
+                DateTime::from_str("2021-06-24T14:00:11.873753715Z")
+                    .unwrap()
+                    .into(),
+            ),
             tariff: participant_tariff().into(),
             module_data: Default::default(),
             participants: vec![],
@@ -176,6 +190,7 @@ mod test {
             display_name: "name".into(),
             avatar_url: None,
             role: Role::Guest,
+            closes_at: None,
             tariff: participant_tariff().into(),
             module_data: Default::default(),
             participants: vec![],
