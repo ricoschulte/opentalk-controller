@@ -8,6 +8,8 @@ use actix_web::{Error, HttpMessage};
 use anyhow::Result;
 use controller_shared::settings::Logging;
 use opentelemetry::global;
+use opentelemetry::sdk::{trace, Resource};
+use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
@@ -31,15 +33,18 @@ pub fn init(settings: &Logging) -> Result<()> {
     let registry = Registry::default().with(filter).with(fmt);
 
     // If opentelemetry is enabled install that layer
-    if let Some(endpoint) = &settings.jaeger_agent_endpoint {
+    if let Some(endpoint) = &settings.otlp_tracing_endpoint {
         let otlp_exporter = opentelemetry_otlp::new_exporter()
             .tonic()
             .with_endpoint(endpoint);
-        let tracer = opentelemetry_otlp::new_pipeline()
-            .tracing()
-            .with_exporter(otlp_exporter)
-            .install_batch(opentelemetry::runtime::TokioCurrentThread)?;
-
+        let tracer =
+            opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(otlp_exporter)
+                .with_trace_config(trace::config().with_resource(Resource::new(vec![
+                    KeyValue::new("service.name", settings.service_name.clone()),
+                ])))
+                .install_batch(opentelemetry::runtime::TokioCurrentThread)?;
         let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
         // Initialize the global logging with telemetry
