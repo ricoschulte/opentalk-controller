@@ -12,9 +12,10 @@ use crate::metrics::EndpointMetrics;
 use anyhow::{Context, Result};
 use controller_shared::settings::{Settings, SharedSettings};
 use db_storage::{events::Event, rooms::Room, sip_configs::SipConfig, users::User};
-use lapin_pool::RabbitMqChannel;
+use lapin_pool::{RabbitMqChannel, RabbitMqPool};
 use mail_worker_proto::*;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub struct RegisteredMailRecipient {
     pub email: String,
@@ -80,25 +81,43 @@ fn to_event(
 pub struct MailService {
     settings: SharedSettings,
     metrics: Arc<EndpointMetrics>,
-    rabbit_mq_channel: Arc<RabbitMqChannel>,
+    rabbitmq_pool: Arc<RabbitMqPool>,
+    rabbitmq_channel: Arc<Mutex<RabbitMqChannel>>,
 }
 
 impl MailService {
     pub fn new(
         settings: SharedSettings,
         metrics: Arc<EndpointMetrics>,
-        rabbit_mq_channel: Arc<RabbitMqChannel>,
+        rabbitmq_pool: Arc<RabbitMqPool>,
+        rabbitmq_channel: RabbitMqChannel,
     ) -> Self {
         Self {
             settings,
             metrics,
-            rabbit_mq_channel,
+            rabbitmq_pool,
+            rabbitmq_channel: Arc::new(Mutex::new(rabbitmq_channel)),
         }
     }
 
     async fn send_to_rabbitmq(&self, mail_task: MailTask) -> Result<()> {
         if let Some(queue_name) = &self.settings.load().rabbit_mq.mail_task_queue {
-            self.rabbit_mq_channel
+            let channel = {
+                let mut channel = self.rabbitmq_channel.lock().await;
+
+                if !channel.status().connected() {
+                    // Check if channel is healthy - try to reconnect if it isn't
+                    *channel = self
+                        .rabbitmq_pool
+                        .create_channel()
+                        .await
+                        .context("Failed to get a rabbitmq_channel replacement")?;
+                }
+
+                channel.clone()
+            };
+
+            channel
                 .basic_publish(
                     "",
                     queue_name,

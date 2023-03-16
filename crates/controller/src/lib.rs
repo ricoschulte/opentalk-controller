@@ -39,7 +39,7 @@ use arc_swap::ArcSwap;
 use breakout::BreakoutRooms;
 use database::Db;
 use keycloak_admin::KeycloakAdminClient;
-use lapin_pool::{RabbitMqChannel, RabbitMqPool};
+use lapin_pool::RabbitMqPool;
 use moderation::ModerationModule;
 use oidc::OidcContext;
 use prelude::*;
@@ -62,7 +62,6 @@ pub mod api;
 
 mod acl;
 mod cli;
-mod ha_sync;
 mod metrics;
 mod oidc;
 mod redis_wrapper;
@@ -162,9 +161,6 @@ pub struct Controller {
     /// RabbitMQ connection pool, can be used to create connections and channels
     pub rabbitmq_pool: Arc<RabbitMqPool>,
 
-    /// General purpose rabbitmq channel
-    pub rabbitmq_channel: Arc<RabbitMqChannel>,
-
     /// Cloneable redis connection manager, can be used to write/read to the controller's redis.
     pub redis: RedisConnection,
 
@@ -233,17 +229,6 @@ impl Controller {
             settings.rabbit_mq.min_connections,
             settings.rabbit_mq.max_channels_per_connection,
         );
-        // create a general purpose rabbitmq channel for endpoints
-        let rabbitmq_channel = Arc::new(
-            rabbitmq_pool
-                .create_channel()
-                .await
-                .context("Could not create rabbitmq channel")?,
-        );
-
-        ha_sync::init(&rabbitmq_channel)
-            .await
-            .context("Failed to init ha_sync")?;
 
         // Connect to postgres
         let mut db = Db::connect(&settings.database).context("Failed to connect to database")?;
@@ -295,7 +280,6 @@ impl Controller {
             oidc,
             kc_admin_client,
             rabbitmq_pool,
-            rabbitmq_channel,
             redis: redis_conn,
             shutdown,
             reload,
@@ -313,7 +297,6 @@ impl Controller {
             let cors = self.startup_settings.http.cors.clone();
 
             let rabbitmq_pool = Data::from(self.rabbitmq_pool.clone());
-            let rabbitmq_channel = Data::from(self.rabbitmq_channel.clone());
             let signaling_modules = Arc::downgrade(&signaling_modules);
             let signaling_metrics = Data::from(self.metrics.signaling.clone());
             let db = Arc::downgrade(&self.db);
@@ -329,7 +312,8 @@ impl Controller {
             let mail_service = Data::new(MailService::new(
                 self.shared_settings.clone(),
                 self.metrics.endpoint.clone(),
-                self.rabbitmq_channel,
+                self.rabbitmq_pool.clone(),
+                self.rabbitmq_pool.create_channel().await?,
             ));
 
             // TODO(r.floren) what to do with the handle
@@ -380,7 +364,6 @@ impl Controller {
                     .app_data(redis)
                     .app_data(Data::new(shutdown.clone()))
                     .app_data(rabbitmq_pool.clone())
-                    .app_data(rabbitmq_channel.clone())
                     .app_data(signaling_modules)
                     .app_data(SignalingProtocols::data())
                     .app_data(signaling_metrics.clone())

@@ -7,7 +7,6 @@ use super::events::EventPoliciesBuilderExt;
 use super::rooms::RoomsPoliciesBuilderExt;
 use crate::api::v1::response::error::AuthenticationError;
 use crate::api::v1::response::ApiError;
-use crate::ha_sync::user_update;
 use crate::oidc::{OidcContext, VerifyError};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json};
@@ -21,7 +20,6 @@ use db_storage::tariffs::{ExternalTariffId, Tariff};
 use db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId, TenantId};
 use db_storage::users::User;
 use kustos::prelude::PoliciesBuilder;
-use lapin_pool::RabbitMqChannel;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -52,7 +50,6 @@ pub async fn login(
     settings: SharedSettingsActix,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
-    rabbitmq_channel: Data<RabbitMqChannel>,
     body: Json<Login>,
     authz: Data<kustos::Authz>,
 ) -> Result<Json<LoginResponse>, ApiError> {
@@ -118,22 +115,6 @@ pub async fn login(
         Ok(login_result)
     })
     .await??;
-
-    if let LoginResult::UserUpdated {
-        user,
-        groups_removed_from,
-        ..
-    } = &db_result
-    {
-        // The user was updated.
-        let message = user_update::Message {
-            groups: !groups_removed_from.is_empty(),
-        };
-
-        if let Err(e) = message.send_via(&rabbitmq_channel, user.id).await {
-            log::error!("Failed to send user-update message {:?}", e);
-        }
-    }
 
     update_core_user_permissions(authz.as_ref(), db_result).await?;
 

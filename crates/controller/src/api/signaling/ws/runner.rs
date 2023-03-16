@@ -24,7 +24,6 @@ use crate::api::signaling::ws_modules::control::{
 };
 use crate::api::signaling::{Role, SignalingRoomId};
 use crate::api::v1::tariffs::TariffResource;
-use crate::ha_sync::user_update;
 use crate::redis_wrapper::RedisConnection;
 use crate::storage::ObjectStorage;
 use actix::Addr;
@@ -274,16 +273,6 @@ impl Builder {
 
             // Binding outside the loop since the routing key contains the user-id
             // and thus should not appear in the logs
-            self.rabbitmq_channel
-                .queue_bind(
-                    queue.name().as_str(),
-                    user_update::EXCHANGE,
-                    &user_update::routing_key(user.id),
-                    Default::default(),
-                    Default::default(),
-                )
-                .await?;
-
             self.rabbitmq_channel
                 .queue_bind(
                     queue.name().as_str(),
@@ -1628,23 +1617,6 @@ impl Runner {
                     }
                     Err(NoSuchModuleError(())) => log::warn!("Got invalid rabbit-mq message"),
                 }
-            }
-        } else if matches!(self.participant, api::Participant::User(ref user)
-            if delivery.routing_key.as_str() == user_update::routing_key(user.id)
-        ) {
-            let user_update::Message { groups } = match serde_json::from_slice(&delivery.data) {
-                Ok(message) => message,
-                Err(e) => {
-                    log::error!("Failed to parse user_update message, {}", e);
-                    return;
-                }
-            };
-
-            if groups {
-                // TODO groups have changed, inspect permissions
-                // Workaround since this is an edge-case: kill runner
-                log::debug!("User groups changed, exiting");
-                self.exit = true;
             }
         } else {
             log::error!(
