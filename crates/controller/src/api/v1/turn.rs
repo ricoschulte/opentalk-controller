@@ -168,7 +168,6 @@ fn rr_servers<T: Rng + CryptoRng>(
         // When we have more than two configured TURN servers, draw two and return the credentials for the drawn ones.
         _ => servers
             .choose_multiple(rng, 2)
-            .into_iter()
             .map(|server| {
                 create_credentials(rng, &server.pre_shared_key, expires, &server.uris)
             })
