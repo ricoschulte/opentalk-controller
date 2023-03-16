@@ -1056,8 +1056,30 @@ impl JanusSubscriber {
                 log::debug!("Configure subscriber got Event: {:?}", configured_event);
                 Ok(())
             }
+
             Err(e) => bail!("Failed to configure subscriber, {}", e),
         }
+    }
+
+    /// Restart the webrtc session and return a new SDP Offer
+    pub async fn restart(&self) -> Result<String> {
+        let configure_request = VideoRoomPluginConfigureSubscriber::builder()
+            .restart(Some(true))
+            .build();
+
+        let (_event, jsep) = self
+            .handle
+            .send(configure_request)
+            .await
+            .context("Failed to restart subscriber")?;
+
+        let jsep = jsep.context("Missing jsep in response when restarting subscriber")?;
+
+        if let JsepType::Answer = jsep.kind() {
+            bail!("Expected SDP offer, got answer when restarting subscriber")
+        }
+
+        Ok(jsep.sdp())
     }
 
     async fn run(

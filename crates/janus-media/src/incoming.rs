@@ -49,6 +49,10 @@ pub enum Message {
     #[serde(rename = "subscribe")]
     Subscribe(TargetSubscribe),
 
+    /// Restart an existing subscription
+    #[serde(rename = "resubscribe")]
+    Resubscribe(Target),
+
     /// Grant the presenter role for a set of participants
     #[serde(rename = "grant_presenter_role")]
     GrantPresenterRole(ParticipantSelection),
