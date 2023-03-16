@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- lapin-pool: consider connection status when picking connections for new channels & reap disconnected connections
 - controller: authenticated users can join meetings without a password ([#335](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/335))
 
 ## [0.2.0] - 2023-03-13
