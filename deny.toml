@@ -45,6 +45,12 @@ notice = "deny"
 # output a note when they are encountered.
 ignore = [
     "RUSTSEC-2020-0071",
+
+    # opentelemtry-otlp update needed
+    "RUSTSEC-2023-0018",
+
+    # Windows only
+    "RUSTSEC-2021-0145",
 ]
 # Threshold for security vulnerabilities, any vulnerability with a CVSS score
 # lower than the range specified will be ignored. Note that ignored advisories
@@ -162,7 +168,7 @@ skip = [
     { name = "itertools", version = "=0.9" },
     { name = "nom", version = "=5.1.2" },
     { name = "num-bigint", version = "=0.4.3" },
-    { name = "ordered-float", version = "=1.1.1" },
+    { name = "sha1", version = "=0.6.1" },
     { name = "spin", version = "=0.5.2" },
     { name = "time", version = "=0.1.45" },
     { name = "wasi", version = "=0.10.0" },
