@@ -6,7 +6,7 @@ FROM rust:slim AS Builder
 
 WORKDIR /controller
 
-RUN apt-get update && apt-get install -y libpq-dev
+RUN apt-get update && apt-get install -y libpq-dev protobuf-compiler
 
 COPY ./crates/chat/Cargo.toml ./crates/chat/Cargo.toml
 COPY ./crates/community-modules/Cargo.toml ./crates/community-modules/Cargo.toml
