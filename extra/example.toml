@@ -14,7 +14,7 @@
 #   "lapin=WARN",
 #]
 
-# Specify an optional otlp tracing endpoint to export traces to
+# Specify an optional OTLP tracing endpoint to export traces to
 #otlp_tracing_endpoint = "http://localhost:4317"
 
 # Service name when using opentelemetry
