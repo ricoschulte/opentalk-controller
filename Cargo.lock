@@ -2503,6 +2503,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "k3k-types"
+version = "0.0.0-dev"
+dependencies = [
+ "diesel",
+ "k3k-redis-args",
+ "kustos",
+ "rand",
+ "redis",
+ "serde",
+ "uuid",
+ "validator",
+]
+
+[[package]]
 name = "k3k-whiteboard"
 version = "0.0.0-dev"
 dependencies = [
