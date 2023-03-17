@@ -13,7 +13,7 @@ use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-diesel_newtype! {
+types::diesel_newtype! {
     #[derive(Copy)]
     TariffId(uuid::Uuid) => diesel::sql_types::Uuid,
     ExternalTariffId(String) => diesel::sql_types::Text

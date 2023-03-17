@@ -10,7 +10,7 @@ use database::{DbConnection, Result};
 use diesel::prelude::*;
 use kustos::subject::PolicyGroup;
 
-diesel_newtype! {
+types::diesel_newtype! {
     #[derive(Copy, redis_args::ToRedisArgs, redis_args::FromRedisValue)]
     #[to_redis_args(serde)]
     #[from_redis_value(serde)]

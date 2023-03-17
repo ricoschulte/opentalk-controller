@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::str::{from_utf8, FromStr};
 
-diesel_newtype! {
+types::diesel_newtype! {
     #[derive(Copy)] EventId(uuid::Uuid) => diesel::sql_types::Uuid, "/events/",
     #[derive(Copy)] EventSerialId(i64) => diesel::sql_types::BigInt,
 

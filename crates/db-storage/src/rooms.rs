@@ -16,7 +16,7 @@ use diesel::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel::{Identifiable, Queryable};
 
-diesel_newtype! {
+types::diesel_newtype! {
     #[derive(Copy)] RoomId(uuid::Uuid) => diesel::sql_types::Uuid, "/rooms/",
     #[derive(Copy)] SerialRoomId(i64) => diesel::sql_types::BigInt
 }

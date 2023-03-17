@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use self::types::protocol::NewProtocol;
+use self::types::protocol::{NewProtocol, Protocol};
 use crate::rooms::RoomId;
 use crate::schema::legal_votes;
 use crate::tenants::TenantId;
@@ -12,11 +12,10 @@ use database::{DatabaseError, DbConnection, Paginate, Result};
 use diesel::prelude::*;
 use diesel::result::DatabaseErrorKind;
 use diesel::{ExpressionMethods, Identifiable, QueryDsl, Queryable, RunQueryDsl};
-use types::protocol::Protocol;
 
 pub mod types;
 
-diesel_newtype! {
+::types::diesel_newtype! {
     #[derive(Copy, redis_args::ToRedisArgs, redis_args::FromRedisValue)]
     #[to_redis_args(serde)]
     #[from_redis_value(serde)]

@@ -16,6 +16,7 @@ publish = false
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
 database = { path = "../database", package = "k3k-database" }
 kustos = { path = "../kustos" }
+types = { path = "../types", package = "k3k-types", features = ["backend"] }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }

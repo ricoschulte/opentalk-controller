@@ -18,7 +18,7 @@ use diesel::RunQueryDsl;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel::{Identifiable, Queryable};
 
-diesel_newtype! {
+types::diesel_newtype! {
     #[derive(Copy)] AssetId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid"
 }
 

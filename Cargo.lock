@@ -2380,6 +2380,7 @@ dependencies = [
  "k3k-database",
  "k3k-redis-args",
  "k3k-test-util",
+ "k3k-types",
  "kustos",
  "log",
  "pretty_assertions",

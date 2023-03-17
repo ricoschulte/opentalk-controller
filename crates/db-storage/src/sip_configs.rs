@@ -15,7 +15,7 @@ use validator::{Validate, ValidationError, ValidationErrors};
 /// The set of numbers used to generate [`SipId`] & [`SipPassword`]
 const NUMERIC: [char; 10] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
-diesel_newtype! {
+types::diesel_newtype! {
     NumericId(String) => diesel::sql_types::Text,
     SipId(NumericId) => diesel::sql_types::Text,
     SipPassword(NumericId) => diesel::sql_types::Text

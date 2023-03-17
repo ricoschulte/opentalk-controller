@@ -17,7 +17,7 @@ use diesel::{
 use kustos::subject::PolicyUser;
 use std::fmt;
 
-diesel_newtype! {
+types::diesel_newtype! {
     #[derive(Copy)]
     SerialUserId(i64) => diesel::sql_types::BigInt,
 

@@ -94,3 +94,5 @@
     unused_results,
     while_true
 )]
+
+mod macros;
