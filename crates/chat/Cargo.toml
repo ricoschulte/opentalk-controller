@@ -16,11 +16,11 @@ controller-shared = { path = "../controller-shared-types", package = "k3k-contro
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 database = { path = "../database", package = "k3k-database" }
 serde = { version = "1", features = ["derive"] }
-redis = "0.21"
+redis = "0.22"
 redis-args = { path = "../redis-args", package = "k3k-redis-args" }
 
 [dev-dependencies]
 pretty_assertions = "1.3"
-serial_test = "0.7"
+serial_test = "1"
 test-util = { path = "../test-util", package = "k3k-test-util", features = ["controller"]}
-actix-rt = "2.2"
+actix-rt = "2.8"
