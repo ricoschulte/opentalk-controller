@@ -5,9 +5,9 @@
 use super::super::{CancelReason, FinalResults, Parameters, VoteOption};
 use crate::{legal_votes::types::Token, users::UserId};
 use chrono::{DateTime, Utc};
-use controller_shared::ParticipantId;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
+use types::core::ParticipantId;
 
 /// A legal vote protocol entry
 ///

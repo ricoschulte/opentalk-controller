@@ -5,7 +5,6 @@
 use crate::api::signaling::{SignalingRoomId, Timestamp};
 use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
-use controller_shared::ParticipantId;
 use db_storage::tariffs::Tariff;
 use r3dlock::Mutex;
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
@@ -13,7 +12,7 @@ use redis_args::ToRedisArgs;
 use std::convert::identity;
 use std::fmt::Debug;
 use std::time::Duration;
-use types::core::RoomId;
+use types::core::{ParticipantId, RoomId};
 
 /// Describes a set of participants inside a room.
 /// This MUST always be locked before accessing it

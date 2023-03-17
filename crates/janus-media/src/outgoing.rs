@@ -5,9 +5,9 @@
 use crate::incoming::Target;
 use crate::mcu::{self, MediaSessionKey, MediaSessionType};
 use crate::rabbitmq;
-use controller_shared::ParticipantId;
 use janus_client::TrickleCandidate;
 use serde::Serialize;
+use types::core::ParticipantId;
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "message")]

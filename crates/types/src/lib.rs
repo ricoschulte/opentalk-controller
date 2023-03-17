@@ -98,3 +98,20 @@
 mod macros;
 
 pub mod core;
+
+mod imports {
+    #[cfg(feature = "diesel")]
+    pub use diesel::{deserialize::FromSqlRow, expression::AsExpression};
+
+    #[cfg(feature = "redis")]
+    pub use {
+        redis::{FromRedisValue, RedisResult, ToRedisArgs},
+        redis_args::{FromRedisValue, ToRedisArgs},
+    };
+
+    #[cfg(feature = "serde")]
+    pub use {
+        serde::{Deserialize, Deserializer, Serialize, Serializer},
+        validator::{Validate, ValidationError, ValidationErrors},
+    };
+}

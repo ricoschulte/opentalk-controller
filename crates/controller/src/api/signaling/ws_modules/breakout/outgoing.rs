@@ -38,10 +38,10 @@ mod test {
     use crate::api::signaling::{prelude::control::ParticipationKind, Role, Timestamp};
 
     use super::*;
-    use controller_shared::ParticipantId;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use test_util::assert_eq_json;
+    use types::core::ParticipantId;
     use uuid::Uuid;
 
     #[test]

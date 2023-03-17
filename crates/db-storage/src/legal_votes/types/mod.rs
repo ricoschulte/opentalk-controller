@@ -4,9 +4,9 @@
 
 use super::LegalVoteId;
 use chrono::{DateTime, Utc};
-use controller_shared::ParticipantId;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
+use types::core::ParticipantId;
 use validator::Validate;
 
 pub mod protocol;
@@ -175,9 +175,9 @@ pub enum CancelReason {
 mod test {
     use super::*;
     use chrono::TimeZone;
-    use controller_shared::ParticipantId;
     use serde_json::json;
     use test_util::assert_eq_json;
+    use types::core::ParticipantId;
     use uuid::Uuid;
 
     #[test]
@@ -193,7 +193,10 @@ mod test {
                 kind: VoteKind::RollCall,
                 subtitle: Some("A subtitle".into()),
                 topic: Some("Yes or No?".into()),
-                allowed_participants: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
+                allowed_participants: vec![
+                    ParticipantId::from_u128(1),
+                    ParticipantId::from_u128(2),
+                ],
                 enable_abstain: false,
                 auto_close: false,
                 duration: Some(5u64),
@@ -238,7 +241,10 @@ mod test {
                 kind: VoteKind::RollCall,
                 subtitle: None,
                 topic: None,
-                allowed_participants: vec![ParticipantId::new_test(1), ParticipantId::new_test(2)],
+                allowed_participants: vec![
+                    ParticipantId::from_u128(1),
+                    ParticipantId::from_u128(2),
+                ],
                 enable_abstain: false,
                 auto_close: false,
                 duration: None,

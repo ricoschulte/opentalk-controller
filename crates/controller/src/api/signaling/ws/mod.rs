@@ -13,7 +13,6 @@ use crate::storage::ObjectStorage;
 use actix_http::ws::CloseCode;
 use anyhow::Result;
 use bytestring::ByteString;
-use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
 use db_storage::users::User;
@@ -28,6 +27,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio_stream::Stream;
+use types::core::ParticipantId;
 
 mod actor;
 mod echo;

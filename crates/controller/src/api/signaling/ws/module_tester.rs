@@ -25,7 +25,6 @@ use crate::storage::ObjectStorage;
 use actix_http::ws::CloseCode;
 use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
-use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
 use db_storage::tariffs::TariffId;
@@ -44,6 +43,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task;
 use tokio::time::timeout;
 use tokio_stream::StreamExt;
+use types::core::ParticipantId;
 
 /// A module tester that simulates a runner environment for provided module.
 ///

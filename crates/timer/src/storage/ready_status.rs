@@ -4,10 +4,10 @@
 
 use anyhow::{Context, Result};
 use controller::prelude::*;
-use controller_shared::ParticipantId;
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
+use types::core::ParticipantId;
 
 /// A key to track the participants ready status
 #[derive(ToRedisArgs)]

@@ -4,9 +4,9 @@
 
 use crate::api::signaling::{Role, Timestamp};
 use crate::api::v1::tariffs::TariffResource;
-use controller_shared::ParticipantId;
 use serde::Serialize;
 use std::collections::HashMap;
+use types::core::ParticipantId;
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "message", rename_all = "snake_case")]

@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
+use types::core::ParticipantId;
 
 use crate::incoming::ParticipantSelection;
 

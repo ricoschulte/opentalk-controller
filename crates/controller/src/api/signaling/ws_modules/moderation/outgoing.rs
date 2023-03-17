@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use crate::api::signaling::prelude::*;
-use controller_shared::ParticipantId;
 use serde::Serialize;
+use types::core::ParticipantId;
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "message", rename_all = "snake_case")]

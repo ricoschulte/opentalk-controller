@@ -6,14 +6,13 @@ use crate::{MessageId, Scope};
 
 use anyhow::{Context, Result};
 use controller::prelude::*;
-use controller_shared::ParticipantId;
 use db_storage::groups::{GroupId, GroupName};
 use r3dlock::{Mutex, MutexGuard};
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use types::core::RoomId;
+use types::core::{ParticipantId, RoomId};
 
 /// Message type stores in redis
 ///
@@ -271,8 +270,8 @@ mod test {
 
     pub const ROOM: SignalingRoomId = SignalingRoomId::new_test(RoomId::from(uuid::Uuid::nil()));
     pub const SELF: ParticipantId = ParticipantId::nil();
-    pub const BOB: ParticipantId = ParticipantId::new_test(0xdeadbeef);
-    pub const ALICE: ParticipantId = ParticipantId::new_test(0xbadcafe);
+    pub const BOB: ParticipantId = ParticipantId::from_u128(0xdeadbeef);
+    pub const ALICE: ParticipantId = ParticipantId::from_u128(0xbadcafe);
 
     async fn setup() -> RedisConnection {
         let redis_url =

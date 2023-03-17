@@ -11,7 +11,6 @@
 use anyhow::{Context, Result};
 use control::rabbitmq;
 use controller::prelude::*;
-use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::groups::{Group, GroupId, GroupName};
 use db_storage::users::UserId;
@@ -24,6 +23,7 @@ use std::fmt;
 use std::str::{from_utf8, FromStr};
 use std::sync::Arc;
 use storage::StoredMessage;
+use types::core::ParticipantId;
 
 pub mod incoming;
 pub mod outgoing;

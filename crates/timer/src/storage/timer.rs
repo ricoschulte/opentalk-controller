@@ -6,10 +6,10 @@ use crate::outgoing;
 use crate::TimerId;
 use anyhow::{Context, Result};
 use controller::prelude::*;
-use controller_shared::ParticipantId;
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
+use types::core::ParticipantId;
 
 /// The timer key holds a serialized [`Timer`].
 #[derive(ToRedisArgs)]

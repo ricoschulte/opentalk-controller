@@ -13,7 +13,6 @@ use crate::api::signaling::Role;
 use crate::redis_wrapper::RedisConnection;
 use actix_http::ws::{CloseCode, Message};
 use anyhow::{Context, Result};
-use controller_shared::ParticipantId;
 use futures::stream::SelectAll;
 use serde_json::Value;
 use std::any::Any;
@@ -22,6 +21,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio_stream::{Stream, StreamExt};
+use types::core::ParticipantId;
 
 pub type AnyStream = Pin<Box<dyn Stream<Item = (&'static str, Box<dyn Any + 'static>)>>>;
 

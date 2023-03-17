@@ -18,6 +18,7 @@ controller-shared = { path = "../controller-shared-types", package = "k3k-contro
 serde = { version = "1", features = ["derive"] }
 redis = "0.22"
 redis-args = { path = "../redis-args", package = "k3k-redis-args" }
+types = { path = "../types", package = "k3k-types", features = ["backend"] }
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util", features = ["controller"] }

@@ -32,7 +32,6 @@ use actix_web_actors::ws;
 use anyhow::{bail, Context, Result};
 use chrono::TimeZone;
 use controller_shared::settings::SharedSettings;
-use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
 use db_storage::tariffs::Tariff;
@@ -57,6 +56,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{interval, sleep};
 use tokio_stream::StreamExt;
+use types::core::ParticipantId;
 use uuid::Uuid;
 
 mod sip;

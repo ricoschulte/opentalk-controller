@@ -19,6 +19,7 @@ db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 serde = { version = "1", features = ["derive"] }
 redis = "0.22"
 redis-args = { path = "../redis-args", package = "k3k-redis-args" }
+types = { path = "../types", package = "k3k-types", features = ["backend"] }
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util", features = ["database"] }

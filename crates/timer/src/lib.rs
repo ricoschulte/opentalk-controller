@@ -17,7 +17,6 @@ use controller::prelude::Timestamp;
 use controller::prelude::{
     async_trait, control, InitContext, ModuleContext, Role, SignalingModule, SignalingRoomId,
 };
-use controller_shared::ParticipantId;
 use outgoing::StopKind;
 use redis_args::ToRedisArgs;
 use serde::Deserialize;
@@ -26,6 +25,7 @@ use std::fmt;
 use std::str::from_utf8;
 use std::str::FromStr;
 use storage::ready_status::ReadyStatus;
+use types::core::ParticipantId;
 
 pub mod incoming;
 pub mod outgoing;

@@ -11,7 +11,6 @@ use crate::prelude::*;
 use actix_http::ws::CloseCode;
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
-use controller_shared::ParticipantId;
 use futures::FutureExt;
 use redis_args::ToRedisArgs;
 use serde::{Deserialize, Serialize};
@@ -19,7 +18,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
-use types::core::RoomId;
+use types::core::{ParticipantId, RoomId};
 use uuid::Uuid;
 
 pub mod incoming;

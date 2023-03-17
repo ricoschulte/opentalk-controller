@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use controller_shared::ParticipantId;
 use serde::Deserialize;
+use types::core::ParticipantId;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "action")]
@@ -40,8 +40,8 @@ mod test {
         if let Message::SelectWriter(ParticipantSelection { participant_ids }) =
             serde_json::from_str(json_str).unwrap()
         {
-            assert_eq!(participant_ids[0], ParticipantId::new_test(0));
-            assert_eq!(participant_ids[1], ParticipantId::new_test(1));
+            assert_eq!(participant_ids[0], ParticipantId::from_u128(0));
+            assert_eq!(participant_ids[1], ParticipantId::from_u128(1));
         } else {
             panic!("expected SelectWriter variant");
         }
@@ -59,8 +59,8 @@ mod test {
         if let Message::DeselectWriter(ParticipantSelection { participant_ids }) =
             serde_json::from_str(json_str).unwrap()
         {
-            assert_eq!(participant_ids[0], ParticipantId::new_test(0));
-            assert_eq!(participant_ids[1], ParticipantId::new_test(1));
+            assert_eq!(participant_ids[0], ParticipantId::from_u128(0));
+            assert_eq!(participant_ids[1], ParticipantId::from_u128(1));
         } else {
             panic!("expected SelectWriter variant");
         }

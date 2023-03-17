@@ -4,9 +4,9 @@
 
 use crate::mcu::MediaSessionType;
 use crate::MediaSessionState;
-use controller_shared::ParticipantId;
 use janus_client::TrickleCandidate;
 use serde::{Deserialize, Serialize};
+use types::core::ParticipantId;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "action")]
@@ -283,9 +283,9 @@ mod test {
             assert_eq!(
                 targets,
                 [
-                    ParticipantId::new_test(0),
-                    ParticipantId::new_test(1),
-                    ParticipantId::new_test(2)
+                    ParticipantId::from_u128(0),
+                    ParticipantId::from_u128(1),
+                    ParticipantId::from_u128(2)
                 ]
             );
             assert!(!force);
