@@ -2406,6 +2406,7 @@ dependencies = [
  "k3k-controller-shared",
  "k3k-redis-args",
  "k3k-test-util",
+ "lapin-pool",
  "pin-project-lite",
  "pretty_assertions",
  "redis",
