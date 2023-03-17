@@ -8,12 +8,12 @@ use anyhow::{Context, Result};
 use controller::prelude::*;
 use controller_shared::ParticipantId;
 use db_storage::groups::{GroupId, GroupName};
-use db_storage::rooms::RoomId;
 use r3dlock::{Mutex, MutexGuard};
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use types::core::RoomId;
 
 /// Message type stores in redis
 ///
@@ -262,11 +262,11 @@ pub async fn delete_last_seen_timestamp_global(
 mod test {
     use super::*;
     use chrono::{DateTime, Utc};
-    use db_storage::rooms::RoomId;
     use redis::aio::ConnectionManager;
     use redis::ToRedisArgs;
     use serial_test::serial;
     use std::time::{Duration, SystemTime};
+    use types::core::RoomId;
     use uuid::uuid;
 
     pub const ROOM: SignalingRoomId = SignalingRoomId::new_test(RoomId::from(uuid::Uuid::nil()));

@@ -6,12 +6,12 @@ use super::resumption::{ResumptionData, ResumptionToken};
 use crate::{api::v1::response::ApiError, prelude::*};
 use anyhow::Context;
 use controller_shared::ParticipantId;
-use db_storage::rooms::RoomId;
 use db_storage::users::UserId;
 use rand::Rng;
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
+use types::core::RoomId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TicketToken(String);

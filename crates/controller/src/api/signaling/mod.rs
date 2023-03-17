@@ -4,11 +4,11 @@
 
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use chrono::TimeZone;
-use db_storage::rooms::RoomId;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::Deref;
+use types::core::RoomId;
 
 pub(crate) mod metrics;
 pub(crate) mod resumption;

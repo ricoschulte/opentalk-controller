@@ -12,9 +12,9 @@ use actix_web::error::Result;
 use actix_web::post;
 use actix_web::web::{Data, Json};
 use database::Db;
-use db_storage::rooms::RoomId;
 use db_storage::sip_configs::{SipConfig, SipId, SipPassword};
 use serde::{Deserialize, Serialize};
+use types::core::RoomId;
 use validator::Validate;
 
 pub const REQUIRED_CALL_IN_ROLE: &str = "opentalk-call-in";

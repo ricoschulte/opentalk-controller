@@ -6,9 +6,10 @@ use crate::{api::signaling::prelude::*, redis_wrapper::RedisConnection};
 use actix_http::ws::CloseCode;
 use anyhow::Result;
 use controller_shared::ParticipantId;
-use db_storage::{rooms::RoomId, users::UserId};
+use db_storage::users::UserId;
 use serde::Serialize;
 use std::collections::HashMap;
+use types::core::RoomId;
 
 pub mod incoming;
 pub mod outgoing;

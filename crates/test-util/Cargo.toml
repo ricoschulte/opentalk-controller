@@ -29,6 +29,7 @@ controller-shared = { path = "../controller-shared-types", package = "k3k-contro
 kustos = { path = "../kustos", package = "kustos", optional = true }
 database = { path = "../database", package = "k3k-database", optional = true }
 db-storage = { path = "../db-storage", package = "k3k-db-storage", optional = true }
+types = { path = "../types", package = "k3k-types", features = ["backend"] }
 
 [features]
 controller = ["database", "dep:controller", "dep:controller-shared", "dep:kustos"]

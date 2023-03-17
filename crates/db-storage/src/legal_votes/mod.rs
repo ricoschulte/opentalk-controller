@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use self::types::protocol::{NewProtocol, Protocol};
-use crate::rooms::RoomId;
 use crate::schema::legal_votes;
 use crate::tenants::TenantId;
 use crate::users::UserId;
+use ::types::core::RoomId;
 use chrono::{DateTime, Utc};
 use database::{DatabaseError, DbConnection, Paginate, Result};
 use diesel::prelude::*;

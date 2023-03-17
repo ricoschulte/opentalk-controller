@@ -14,13 +14,13 @@ use super::ws_modules::breakout::BreakoutRoomId;
 use crate::{api::Participant, redis_wrapper::RedisConnection};
 use anyhow::{bail, Context, Result};
 use controller_shared::ParticipantId;
-use db_storage::rooms::RoomId;
 use db_storage::users::UserId;
 use rand::Rng;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use tokio::time::sleep_until;
+use types::core::RoomId;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResumptionToken(String);

@@ -6,9 +6,9 @@ use super::response::error::ApiError;
 use actix_web::web::{Data, Json, Path};
 use actix_web::{delete, get, put, HttpResponse};
 use database::Db;
-use db_storage::rooms::RoomId;
 use db_storage::sip_configs::{NewSipConfig, SipConfig, SipId, SipPassword, UpdateSipConfig};
 use serde::{Deserialize, Serialize};
+use types::core::RoomId;
 use validator::{Validate, ValidationError};
 
 /// The sip config returned by the API endpoints

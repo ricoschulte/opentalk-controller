@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::rooms::RoomId;
 use crate::schema::{invites, users};
 use crate::users::{User, UserId};
 use chrono::{DateTime, Utc};
@@ -12,6 +11,7 @@ use diesel::{
     RunQueryDsl,
 };
 use std::collections::{HashMap, HashSet};
+use types::core::RoomId;
 
 types::diesel_newtype! {
     #[derive(Copy)] InviteCodeId(uuid::Uuid) => diesel::sql_types::Uuid,

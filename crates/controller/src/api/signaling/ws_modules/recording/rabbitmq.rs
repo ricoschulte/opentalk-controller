@@ -4,8 +4,8 @@
 
 use super::RecordingId;
 use crate::api::signaling::prelude::*;
-use db_storage::rooms::RoomId;
 use serde::{Deserialize, Serialize};
+use types::core::RoomId;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Message {

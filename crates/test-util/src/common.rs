@@ -8,13 +8,13 @@ use anyhow::{Context, Result};
 use control::outgoing::Message;
 use controller::prelude::*;
 use controller_shared::ParticipantId;
-use db_storage::rooms::RoomId;
 use db_storage::users::User;
 use kustos::Authz;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
+use types::core::RoomId;
 use uuid::Uuid;
 
 #[derive(Debug)]

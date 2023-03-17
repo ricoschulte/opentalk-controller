@@ -6,10 +6,10 @@ use super::storage::BreakoutConfig;
 use super::{AssocParticipantInOtherRoom, ParticipantInOtherRoom};
 use crate::api::signaling::BreakoutRoomId;
 use controller_shared::ParticipantId;
-use db_storage::rooms::RoomId;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::SystemTime;
+use types::core::RoomId;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

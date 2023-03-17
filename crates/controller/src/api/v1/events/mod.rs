@@ -30,7 +30,7 @@ use db_storage::events::{
     EventInvite, EventInviteStatus, NewEvent, TimeZone, UpdateEvent,
 };
 use db_storage::invites::Invite;
-use db_storage::rooms::{NewRoom, Room, RoomId, UpdateRoom};
+use db_storage::rooms::{NewRoom, Room, UpdateRoom};
 use db_storage::sip_configs::{NewSipConfig, SipConfig};
 use db_storage::tenants::Tenant;
 use db_storage::users::User;
@@ -41,6 +41,7 @@ use kustos::{Authz, Resource, ResourceId};
 use rrule::{Frequency, RRuleSet};
 use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
+use types::core::RoomId;
 use validator::{Validate, ValidationError};
 
 pub mod favorites;
@@ -2139,10 +2140,10 @@ async fn enrich_from_keycloak(
 mod tests {
     use super::*;
     use db_storage::events::TimeZone;
-    use db_storage::rooms::RoomId;
     use db_storage::users::UserId;
     use std::time::SystemTime;
     use test_util::assert_eq_json;
+    use types::core::RoomId;
     use uuid::Uuid;
 
     #[test]

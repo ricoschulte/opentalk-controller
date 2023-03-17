@@ -671,10 +671,10 @@ mod tests {
 
     use super::*;
     use db_storage::events::TimeZone;
-    use db_storage::rooms::RoomId;
     use db_storage::users::UserId;
     use std::time::SystemTime;
     use test_util::assert_eq_json;
+    use types::core::RoomId;
     use uuid::Uuid;
 
     #[test]

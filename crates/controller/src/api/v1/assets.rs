@@ -11,8 +11,8 @@ use actix_web::{delete, get, HttpResponse};
 use chrono::{DateTime, Utc};
 use database::Db;
 use db_storage::assets::{Asset, AssetId};
-use db_storage::rooms::RoomId;
 use serde::Serialize;
+use types::core::RoomId;
 
 #[derive(Debug, Serialize)]
 pub struct AssetResource {
