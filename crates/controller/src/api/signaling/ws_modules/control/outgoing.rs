@@ -99,9 +99,10 @@ mod test {
 
     use super::*;
     use chrono::DateTime;
-    use db_storage::tariffs::{Tariff, TariffId};
+    use db_storage::tariffs::Tariff;
     use pretty_assertions::assert_eq;
     use serde_json::json;
+    use types::core::TariffId;
 
     fn participant_tariff() -> TariffResource {
         TariffResource {

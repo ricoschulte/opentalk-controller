@@ -12,17 +12,10 @@ use diesel::prelude::*;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use types::core::TariffId;
 
 types::diesel_newtype! {
-    #[derive(Copy)]
-    TariffId(uuid::Uuid) => diesel::sql_types::Uuid,
     ExternalTariffId(String) => diesel::sql_types::Text
-}
-
-impl TariffId {
-    pub const fn nil() -> Self {
-        Self::from(uuid::Uuid::nil())
-    }
 }
 
 #[derive(

@@ -27,7 +27,6 @@ use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
 use database::Db;
 use db_storage::rooms::Room;
-use db_storage::tariffs::TariffId;
 use db_storage::users::{User, UserId};
 use futures::stream::SelectAll;
 use kustos::Authz;
@@ -43,7 +42,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task;
 use tokio::time::timeout;
 use tokio_stream::StreamExt;
-use types::core::{ParticipantId, Timestamp};
+use types::core::{ParticipantId, TariffId, Timestamp};
 
 /// A module tester that simulates a runner environment for provided module.
 ///
