@@ -16,11 +16,7 @@ use diesel::JoinOnDsl;
 use diesel::RunQueryDsl;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel::{Identifiable, Queryable};
-use types::core::RoomId;
-
-types::diesel_newtype! {
-    #[derive(Copy)] AssetId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid"
-}
+use types::core::{AssetId, RoomId};
 
 /// Diesel resource struct
 #[derive(Debug, Clone, Queryable, Identifiable)]
