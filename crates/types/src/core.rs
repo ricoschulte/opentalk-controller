@@ -9,6 +9,8 @@
 
 mod participant_id;
 mod room_id;
+mod timestamp;
 
 pub use participant_id::ParticipantId;
 pub use room_id::RoomId;
+pub use timestamp::Timestamp;

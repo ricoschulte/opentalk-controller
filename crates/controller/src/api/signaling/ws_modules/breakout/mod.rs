@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
-use types::core::{ParticipantId, RoomId};
+use types::core::{ParticipantId, RoomId, Timestamp};
 use uuid::Uuid;
 
 pub mod incoming;

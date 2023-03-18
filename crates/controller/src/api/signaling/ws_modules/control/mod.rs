@@ -9,7 +9,7 @@ use crate::prelude::*;
 use anyhow::Result;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
-use types::core::ParticipantId;
+use types::core::{ParticipantId, Timestamp};
 
 pub mod incoming;
 pub mod outgoing;

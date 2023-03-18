@@ -3,11 +3,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
-use chrono::TimeZone;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use std::ops::Deref;
 use types::core::RoomId;
 
 pub(crate) mod metrics;
@@ -26,7 +24,7 @@ pub mod prelude {
         SignalingProtocols,
     };
     pub use super::ws_modules::{breakout, control, moderation, recording};
-    pub use super::{Role, SignalingRoomId, Timestamp};
+    pub use super::{Role, SignalingRoomId};
     pub use breakout::BreakoutRoomId;
 }
 
@@ -71,58 +69,5 @@ impl fmt::Display for SignalingRoomId {
         } else {
             self.0.fmt(f)
         }
-    }
-}
-
-/// A UTC DateTime wrapper that implements ToRedisArgs and FromRedisValue.
-///
-/// The values are stores as unix timestamps in redis.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Timestamp(chrono::DateTime<chrono::Utc>);
-
-impl Timestamp {
-    fn unix_epoch() -> Self {
-        Self(chrono::DateTime::from(std::time::UNIX_EPOCH))
-    }
-
-    fn now() -> Timestamp {
-        Timestamp(chrono::Utc::now())
-    }
-}
-
-impl From<chrono::DateTime<chrono::Utc>> for Timestamp {
-    fn from(value: chrono::DateTime<chrono::Utc>) -> Self {
-        Timestamp(value)
-    }
-}
-
-impl redis::ToRedisArgs for Timestamp {
-    fn write_redis_args<W>(&self, out: &mut W)
-    where
-        W: ?Sized + redis::RedisWrite,
-    {
-        self.0.timestamp().write_redis_args(out)
-    }
-
-    fn describe_numeric_behavior(&self) -> redis::NumericBehavior {
-        redis::NumericBehavior::NumberIsInteger
-    }
-}
-
-impl redis::FromRedisValue for Timestamp {
-    fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Timestamp> {
-        let timestamp = chrono::Utc
-            .timestamp_opt(i64::from_redis_value(v)?, 0)
-            .latest()
-            .unwrap();
-        Ok(Timestamp(timestamp))
-    }
-}
-
-impl Deref for Timestamp {
-    type Target = chrono::DateTime<chrono::Utc>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
     }
 }

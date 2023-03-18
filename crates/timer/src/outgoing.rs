@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use crate::TimerId;
-use controller::prelude::Timestamp;
 use serde::{Deserialize, Serialize};
-use types::core::ParticipantId;
+use types::core::{ParticipantId, Timestamp};
 
 /// Outgoing websocket messages
 #[derive(Debug, Serialize, PartialEq, Eq)]

@@ -17,7 +17,7 @@ use crate::api::signaling::prelude::control::incoming::Join;
 use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlData, NAMESPACE};
 use crate::api::signaling::prelude::{BreakoutRoomId, InitContext, ModuleContext};
 use crate::api::signaling::ws_modules::control::ParticipationKind;
-use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
+use crate::api::signaling::{Role, SignalingRoomId};
 use crate::api::v1::tariffs::TariffResource;
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
@@ -43,7 +43,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task;
 use tokio::time::timeout;
 use tokio_stream::StreamExt;
-use types::core::ParticipantId;
+use types::core::{ParticipantId, Timestamp};
 
 /// A module tester that simulates a runner environment for provided module.
 ///

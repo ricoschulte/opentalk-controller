@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use crate::Scope;
-use controller::prelude::Timestamp;
 use serde::Deserialize;
+use types::core::Timestamp;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]

@@ -12,7 +12,7 @@ use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use types::core::{ParticipantId, RoomId};
+use types::core::{ParticipantId, RoomId, Timestamp};
 
 /// Message type stores in redis
 ///

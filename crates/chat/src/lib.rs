@@ -23,7 +23,7 @@ use std::fmt;
 use std::str::{from_utf8, FromStr};
 use std::sync::Arc;
 use storage::StoredMessage;
-use types::core::ParticipantId;
+use types::core::{ParticipantId, Timestamp};
 
 pub mod incoming;
 pub mod outgoing;

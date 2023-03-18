@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::api::signaling::{Role, Timestamp};
+use crate::api::signaling::Role;
 use crate::api::v1::tariffs::TariffResource;
 use serde::Serialize;
 use std::collections::HashMap;
-use types::core::ParticipantId;
+use types::core::{ParticipantId, Timestamp};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "message", rename_all = "snake_case")]

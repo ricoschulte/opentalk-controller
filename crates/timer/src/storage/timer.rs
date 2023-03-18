@@ -9,7 +9,7 @@ use controller::prelude::*;
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
-use types::core::ParticipantId;
+use types::core::{ParticipantId, Timestamp};
 
 /// The timer key holds a serialized [`Timer`].
 #[derive(ToRedisArgs)]

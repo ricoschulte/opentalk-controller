@@ -2439,6 +2439,7 @@ dependencies = [
  "k3k-controller-core",
  "k3k-redis-args",
  "k3k-test-util",
+ "k3k-types",
  "pretty_assertions",
  "redis",
  "serde",
@@ -2513,6 +2514,7 @@ dependencies = [
 name = "k3k-types"
 version = "0.0.0-dev"
 dependencies = [
+ "chrono",
  "diesel",
  "k3k-redis-args",
  "kustos",
@@ -2537,6 +2539,7 @@ dependencies = [
  "k3k-database",
  "k3k-db-storage",
  "k3k-redis-args",
+ "k3k-types",
  "percent-encoding",
  "rand",
  "redis",

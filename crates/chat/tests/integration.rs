@@ -10,6 +10,7 @@ use pretty_assertions::assert_eq;
 use serde_json::json;
 use serial_test::serial;
 use test_util::{TestContext, ROOM_ID, USER_1, USER_2};
+use types::core::Timestamp;
 
 #[actix_rt::test]
 #[serial]
