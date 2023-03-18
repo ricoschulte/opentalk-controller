@@ -26,8 +26,8 @@ use chrono_tz::Tz;
 use controller_shared::settings::Settings;
 use database::{Db, DbConnection};
 use db_storage::events::{
-    email_invites::EventEmailInvite, Event, EventException, EventExceptionKind, EventId,
-    EventInvite, EventInviteStatus, NewEvent, TimeZone, UpdateEvent,
+    email_invites::EventEmailInvite, Event, EventException, EventExceptionKind, EventInvite,
+    EventInviteStatus, NewEvent, TimeZone, UpdateEvent,
 };
 use db_storage::invites::Invite;
 use db_storage::rooms::{NewRoom, Room, UpdateRoom};
@@ -41,7 +41,7 @@ use kustos::{Authz, Resource, ResourceId};
 use rrule::{Frequency, RRuleSet};
 use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
-use types::core::RoomId;
+use types::core::{EventId, RoomId};
 use validator::{Validate, ValidationError};
 
 pub mod favorites;

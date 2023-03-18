@@ -18,7 +18,7 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use database::Db;
 use db_storage::events::{
-    Event, EventException, EventExceptionKind, EventId, EventInviteStatus, NewEventException,
+    Event, EventException, EventExceptionKind, EventInviteStatus, NewEventException,
     UpdateEventException,
 };
 use db_storage::tenants::Tenant;
@@ -26,6 +26,7 @@ use db_storage::users::User;
 use keycloak_admin::KeycloakAdminClient;
 use rrule::RRuleSet;
 use serde::{Deserialize, Serialize};
+use types::core::EventId;
 use validator::Validate;
 
 /// Event instance resource

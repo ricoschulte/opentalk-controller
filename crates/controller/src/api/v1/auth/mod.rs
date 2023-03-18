@@ -13,7 +13,6 @@ use actix_web::web::{Data, Json};
 use actix_web::{get, post};
 use core::mem::take;
 use database::{Db, OptionalExt};
-use db_storage::events::EventId;
 use db_storage::groups::{get_or_create_groups_by_name, Group};
 use db_storage::tariffs::{ExternalTariffId, Tariff};
 use db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId, TenantId};
@@ -21,7 +20,7 @@ use db_storage::users::User;
 use kustos::prelude::PoliciesBuilder;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use types::core::{GroupName, RoomId};
+use types::core::{EventId, GroupName, RoomId};
 
 mod create_user;
 mod update_user;

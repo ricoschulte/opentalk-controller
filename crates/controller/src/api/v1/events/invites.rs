@@ -16,8 +16,7 @@ use anyhow::Context;
 use database::Db;
 use db_storage::events::email_invites::{EventEmailInvite, NewEventEmailInvite};
 use db_storage::events::{
-    Event, EventFavorite, EventId, EventInvite, EventInviteStatus, NewEventInvite,
-    UpdateEventInvite,
+    Event, EventFavorite, EventInvite, EventInviteStatus, NewEventInvite, UpdateEventInvite,
 };
 use db_storage::invites::NewInvite;
 use db_storage::rooms::Room;
@@ -30,6 +29,7 @@ use keycloak_admin::KeycloakAdminClient;
 use kustos::policies_builder::PoliciesBuilder;
 use kustos::Authz;
 use serde::{Deserialize, Serialize};
+use types::core::EventId;
 
 /// API Endpoint `GET /events/{event_id}/invites`
 ///
