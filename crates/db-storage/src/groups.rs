@@ -4,11 +4,10 @@
 use super::schema::{groups, user_groups};
 use super::users::{User, UserId};
 use crate::tenants::TenantId;
-use core::convert::Infallible;
-use core::str::FromStr;
 use database::{DbConnection, Result};
 use diesel::prelude::*;
 use kustos::subject::PolicyGroup;
+use types::core::GroupName;
 
 types::diesel_newtype! {
     #[derive(Copy, redis_args::ToRedisArgs, redis_args::FromRedisValue)]
@@ -17,20 +16,7 @@ types::diesel_newtype! {
     GroupId(uuid::Uuid) => diesel::sql_types::Uuid,
 
     #[derive(Copy)]
-    SerialGroupId(i64) => diesel::sql_types::BigInt,
-
-    #[derive(redis_args::ToRedisArgs, redis_args::FromRedisValue)]
-    #[to_redis_args(fmt = "{0}")]
-    #[from_redis_value(FromStr)]
-    GroupName(String) => diesel::sql_types::Text
-}
-
-impl FromStr for GroupName {
-    type Err = Infallible;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(Self::from(s.into()))
-    }
+    SerialGroupId(i64) => diesel::sql_types::BigInt
 }
 
 impl From<GroupId> for PolicyGroup {

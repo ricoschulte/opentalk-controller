@@ -31,10 +31,9 @@ pub struct SendMessage {
 mod test {
     use super::*;
     use controller::prelude::serde_json;
-    use db_storage::groups::GroupName;
     use pretty_assertions::assert_eq;
     use serde_json::json;
-    use types::core::ParticipantId;
+    use types::core::{GroupName, ParticipantId};
 
     #[test]
     fn user_private_message() {

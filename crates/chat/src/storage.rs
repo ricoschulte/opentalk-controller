@@ -6,13 +6,13 @@ use crate::{MessageId, Scope};
 
 use anyhow::{Context, Result};
 use controller::prelude::*;
-use db_storage::groups::{GroupId, GroupName};
+use db_storage::groups::GroupId;
 use r3dlock::{Mutex, MutexGuard};
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use types::core::{ParticipantId, RoomId, Timestamp};
+use types::core::{GroupName, ParticipantId, RoomId, Timestamp};
 
 /// Message type stores in redis
 ///
