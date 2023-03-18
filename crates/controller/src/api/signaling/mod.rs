@@ -2,11 +2,10 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use types::core::RoomId;
+use types::core::{BreakoutRoomId, RoomId};
 
 pub(crate) mod metrics;
 pub(crate) mod resumption;
@@ -25,7 +24,6 @@ pub mod prelude {
     };
     pub use super::ws_modules::{breakout, control, moderation, recording};
     pub use super::{Role, SignalingRoomId};
-    pub use breakout::BreakoutRoomId;
 }
 
 /// Role of the participant inside a room

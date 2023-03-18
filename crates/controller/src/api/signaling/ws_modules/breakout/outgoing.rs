@@ -42,7 +42,6 @@ mod test {
     use serde_json::json;
     use test_util::assert_eq_json;
     use types::core::{ParticipantId, Timestamp};
-    use uuid::Uuid;
 
     #[test]
     fn started() {
@@ -59,11 +58,11 @@ mod test {
         let produced = serde_json::to_value(&Message::Started(Started {
             rooms: vec![
                 BreakoutRoom {
-                    id: BreakoutRoomId(Uuid::from_u128(0)),
+                    id: BreakoutRoomId::from_u128(0),
                     name: "Room 1".into(),
                 },
                 BreakoutRoom {
-                    id: BreakoutRoomId(Uuid::from_u128(1)),
+                    id: BreakoutRoomId::from_u128(1),
                     name: "Room 2".into(),
                 },
             ],

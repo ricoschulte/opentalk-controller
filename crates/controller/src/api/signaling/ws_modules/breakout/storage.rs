@@ -11,7 +11,7 @@ use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::time::{Duration, SystemTime};
-use types::core::RoomId;
+use types::core::{BreakoutRoomId, RoomId};
 
 /// Typed key to a set which contains all breakout-room ids
 #[derive(ToRedisArgs)]

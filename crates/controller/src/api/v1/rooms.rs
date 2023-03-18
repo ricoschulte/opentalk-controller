@@ -30,7 +30,7 @@ use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
 use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use types::core::RoomId;
+use types::core::{BreakoutRoomId, RoomId};
 use validator::Validate;
 
 /// A Room

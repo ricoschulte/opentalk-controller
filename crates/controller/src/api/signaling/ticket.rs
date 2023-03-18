@@ -10,7 +10,7 @@ use rand::Rng;
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
-use types::core::{ParticipantId, RoomId};
+use types::core::{BreakoutRoomId, ParticipantId, RoomId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TicketToken(String);

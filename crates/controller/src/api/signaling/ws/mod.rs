@@ -4,7 +4,6 @@
 
 use super::metrics::SignalingMetrics;
 use super::prelude::*;
-use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::ControlData;
 use crate::api::signaling::{Role, SignalingRoomId};
 use crate::api::Participant;
@@ -27,7 +26,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio_stream::Stream;
-use types::core::{ParticipantId, Timestamp};
+use types::core::{BreakoutRoomId, ParticipantId, Timestamp};
 
 mod actor;
 mod echo;

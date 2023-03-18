@@ -12,37 +12,16 @@ use actix_http::ws::CloseCode;
 use anyhow::{bail, Result};
 use chrono::{DateTime, Utc};
 use futures::FutureExt;
-use redis_args::ToRedisArgs;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::fmt;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
-use types::core::{ParticipantId, RoomId, Timestamp};
-use uuid::Uuid;
+use types::core::{BreakoutRoomId, ParticipantId, RoomId, Timestamp};
 
 pub mod incoming;
 pub mod outgoing;
 pub mod rabbitmq;
 pub mod storage;
-
-#[derive(
-    Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, ToRedisArgs,
-)]
-#[to_redis_args(fmt = "{}")]
-pub struct BreakoutRoomId(Uuid);
-
-impl BreakoutRoomId {
-    pub const fn nil() -> Self {
-        Self(Uuid::nil())
-    }
-}
-
-impl fmt::Display for BreakoutRoomId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
-    }
-}
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct ParticipantInOtherRoom {
@@ -334,7 +313,7 @@ impl BreakoutRooms {
                 let mut assignments = HashMap::new();
 
                 for room_param in start.rooms {
-                    let id = BreakoutRoomId(Uuid::new_v4());
+                    let id = BreakoutRoomId::generate();
 
                     for assigned_participant_id in room_param.assignments {
                         assignments.insert(assigned_participant_id, id);

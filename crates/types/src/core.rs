@@ -8,6 +8,7 @@
 //! and typically used by other types in this crate.
 
 mod asset_id;
+mod breakout_room_id;
 mod group_name;
 mod participant_id;
 mod room_id;
@@ -15,6 +16,7 @@ mod tariff_id;
 mod timestamp;
 
 pub use asset_id::AssetId;
+pub use breakout_room_id::BreakoutRoomId;
 pub use group_name::GroupName;
 pub use participant_id::ParticipantId;
 pub use room_id::RoomId;
