@@ -16,7 +16,7 @@ controller-shared = { path = "../controller-shared-types", package = "k3k-contro
 serde = { version = "1", features = ["derive"] }
 janus-client = { path = "../janus-client" }
 pin-project-lite = "0.2"
-redis = "0.21"
+redis = "0.22"
 redis-args = { path = "../redis-args", package = "k3k-redis-args" }
 lapin-pool = { path = "../lapin-pool" }
 

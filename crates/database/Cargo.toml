@@ -14,7 +14,7 @@ publish = false
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
 
 ### ORM and Database connector
-diesel = { version = "^2.0.0", features = [
+diesel = { version = "^2.0.3", features = [
     "postgres",
     "uuid",
     "r2d2",

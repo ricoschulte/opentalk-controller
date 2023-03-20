@@ -17,7 +17,7 @@ controller = { path = "../controller", package = "k3k-controller-core" }
 database = { path = "../database", package = "k3k-database" }
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 serde = { version = "1", features = ["derive"] }
-redis = "0.21"
+redis = "0.22"
 redis-args = { path = "../redis-args", package = "k3k-redis-args" }
 
 [dev-dependencies]
