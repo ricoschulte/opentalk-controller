@@ -133,8 +133,6 @@ pub struct Http {
     #[serde(default = "default_http_port")]
     pub port: u16,
     #[serde(default)]
-    pub cors: HttpCors,
-    #[serde(default)]
     pub tls: Option<HttpTls>,
 }
 
@@ -142,7 +140,6 @@ impl Default for Http {
     fn default() -> Self {
         Self {
             port: default_http_port(),
-            cors: HttpCors::default(),
             tls: None,
         }
     }
@@ -156,13 +153,6 @@ const fn default_http_port() -> u16 {
 pub struct HttpTls {
     pub certificate: PathBuf,
     pub private_key: PathBuf,
-}
-
-/// Settings for CORS (Cross Origin Resource Sharing)
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct HttpCors {
-    #[serde(default)]
-    pub allowed_origin: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

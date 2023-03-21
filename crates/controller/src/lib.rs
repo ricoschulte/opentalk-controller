@@ -31,7 +31,6 @@ use crate::services::MailService;
 use crate::settings::{Settings, SharedSettings};
 use crate::trace::ReducedSpanBuilder;
 use actix_cors::Cors;
-use actix_web::http::header;
 use actix_web::web::Data;
 use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{anyhow, Context, Result};
@@ -294,8 +293,6 @@ impl Controller {
 
         // Start HTTP Server
         let http_server = {
-            let cors = self.startup_settings.http.cors.clone();
-
             let rabbitmq_pool = Data::from(self.rabbitmq_pool.clone());
             let signaling_modules = Arc::downgrade(&signaling_modules);
             let signaling_metrics = Data::from(self.metrics.signaling.clone());
@@ -333,7 +330,7 @@ impl Controller {
             let metrics = Data::new(self.metrics);
 
             HttpServer::new(move || {
-                let cors = setup_cors(&cors);
+                let cors = setup_cors();
 
                 // Unwraps cannot panic. Server gets stopped before dropping the Arc.
                 let db = Data::from(db.upgrade().unwrap());
@@ -537,16 +534,24 @@ fn internal_scope(db: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
     )
 }
 
-fn setup_cors(settings: &settings::HttpCors) -> Cors {
-    let mut cors = Cors::default();
+fn setup_cors() -> Cors {
+    use actix_web::http::header::*;
+    use actix_web::http::Method;
 
-    for origin in &settings.allowed_origin {
-        cors = cors.allowed_origin(origin)
-    }
-
-    cors.allowed_header(header::CONTENT_TYPE)
-        .allowed_header(header::AUTHORIZATION)
-        .allow_any_method()
+    // Use a permissive CORS configuration.
+    // The HTTP API is using Bearer tokens for authentication, which are handled by the application and not the browser.
+    Cors::default()
+        .allow_any_origin()
+        .send_wildcard()
+        .allowed_header(CONTENT_TYPE)
+        .allowed_header(AUTHORIZATION)
+        .allowed_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+        ])
 }
 
 fn setup_rustls(tls: &settings::HttpTls) -> Result<rustls::ServerConfig> {
