@@ -125,6 +125,10 @@ pub struct UserParameters {
     pub duration: Option<u64>,
     /// A PDF document will be created when the vote is over
     pub create_pdf: bool,
+    /// An optional timezone, defaults to UTC.
+    /// Format as standardized by IANA, e.g."CET" or "Europe/Vienna".
+    /// See: https://www.iana.org/time-zones
+    pub timezone: Option<chrono_tz::Tz>,
 }
 
 /// Final vote results
@@ -201,6 +205,7 @@ mod test {
                 auto_close: false,
                 duration: Some(5u64),
                 create_pdf: true,
+                timezone: Some(chrono_tz::CET),
             },
         };
 
@@ -223,7 +228,8 @@ mod test {
                 "enable_abstain": false,
                 "auto_close": false,
                 "duration": 5,
-                "create_pdf": true
+                "create_pdf": true,
+                "timezone": "CET",
             }
         );
     }
@@ -249,6 +255,7 @@ mod test {
                 auto_close: false,
                 duration: None,
                 create_pdf: true,
+                timezone: None,
             },
         };
 
@@ -271,6 +278,7 @@ mod test {
                 "auto_close": false,
                 "duration": null,
                 "create_pdf": true,
+                "timezone": null,
             }
         );
     }
@@ -292,6 +300,7 @@ mod test {
             "auto_close": false,
             "duration": 60,
             "create_pdf": true,
+            "timezone": "CET",
         });
 
         let params: Parameters = serde_json::from_value(json).unwrap();
@@ -313,6 +322,7 @@ mod test {
                     auto_close,
                     duration,
                     create_pdf,
+                    timezone,
                 },
         } = params;
 
@@ -334,24 +344,21 @@ mod test {
         assert!(!auto_close);
         assert_eq!(Some(60), duration);
         assert!(create_pdf);
+        assert_eq!(chrono_tz::CET, timezone.unwrap());
     }
 
     #[test]
-    fn deserialize_user_parameters_without_optional_fields() {
+    fn deserialize_parameters_without_optional_fields() {
         let json = json!({
             "initiator_id": "00000000-0000-0000-0000-000000000000",
             "legal_vote_id": "00000000-0000-0000-0000-000000000000",
             "start_time": "1970-01-01T00:00:00Z",
             "max_votes": 2,
-            "kind": "roll_call",
             "name": "Vote Test",
             "kind": "roll_call",
-            "subtitle": null,
-            "topic": null,
             "allowed_participants": ["00000000-0000-0000-0000-000000000000"],
             "enable_abstain": false,
             "auto_close": false,
-            "duration": null,
             "create_pdf": true
         });
 
@@ -374,6 +381,7 @@ mod test {
                     auto_close,
                     duration,
                     create_pdf,
+                    timezone,
                 },
         } = params;
 
@@ -395,5 +403,6 @@ mod test {
         assert!(!auto_close);
         assert_eq!(None, duration);
         assert!(create_pdf);
+        assert_eq!(None, timezone);
     }
 }
