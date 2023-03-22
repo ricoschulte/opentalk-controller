@@ -11,6 +11,7 @@ use crate::oidc::{OidcContext, VerifyError};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
+use controller_shared::settings::{TariffAssignment, TenantAssignment};
 use core::mem::take;
 use database::{Db, OptionalExt};
 use db_storage::groups::{get_or_create_groups_by_name, Group};
@@ -76,19 +77,39 @@ pub async fn login(
         let settings = settings.load_full();
         let mut conn = db.get_conn()?;
 
-        let tariff =
-            Tariff::get_by_external_id(&mut conn, &ExternalTariffId::from(info.tariff_id.clone()))
-                .optional()?
-                .ok_or_else(|| {
-                    ApiError::internal()
-                        .with_code("invalid_tariff_id")
-                        .with_message("JWT contained unknown tariff_id")
+        // Get tariff depending on the configured assignment
+        let tariff = match &settings.tariffs.assignment {
+            TariffAssignment::Static { static_tariff_name } => {
+                Tariff::get_by_name(&mut conn, static_tariff_name)?
+            }
+            TariffAssignment::ByExternalTariffId => {
+                let external_tariff_id = info.tariff_id.clone().ok_or_else(|| {
+                    ApiError::bad_request()
+                        .with_code("invalid_claims")
+                        .with_message("tariff_id missing in id_token claims")
                 })?;
 
-        let tenant = get_or_create_tenant_by_oidc_id(
-            &mut conn,
-            &OidcTenantId::from(info.tenant_id.clone()),
-        )?;
+                Tariff::get_by_external_id(&mut conn, &ExternalTariffId::from(external_tariff_id))
+                    .optional()?
+                    .ok_or_else(|| {
+                        ApiError::internal()
+                            .with_code("invalid_tariff_id")
+                            .with_message("JWT contained unknown tariff_id")
+                    })?
+            }
+        };
+
+        // Get the tenant_id depending on the configured assignment
+        let tenant_id = match &settings.tenants.assignment {
+            TenantAssignment::Static { static_tenant_id } => static_tenant_id.clone(),
+            TenantAssignment::ByExternalTenantId => info.tenant_id.clone().ok_or_else(|| {
+                ApiError::bad_request()
+                    .with_code("invalid_claims")
+                    .with_message("tenant_id missing in id_token claims")
+            })?,
+        };
+
+        let tenant = get_or_create_tenant_by_oidc_id(&mut conn, &OidcTenantId::from(tenant_id))?;
 
         let groups: Vec<(TenantId, GroupName)> = take(&mut info.x_grp)
             .into_iter()

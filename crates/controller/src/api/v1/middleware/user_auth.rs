@@ -12,6 +12,7 @@ use actix_web::http::header::Header;
 use actix_web::web::Data;
 use actix_web::{HttpMessage, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
+use controller_shared::settings::{Settings, SharedSettings, TenantAssignment};
 use core::future::ready;
 use database::Db;
 use db_storage::tenants::{OidcTenantId, Tenant};
@@ -27,6 +28,7 @@ use tracing_futures::Instrument;
 ///
 /// Transforms into [`OidcAuthMiddleware`]
 pub struct OidcAuth {
+    pub settings: SharedSettings,
     pub db: Data<Db>,
     pub oidc_ctx: Data<OidcContext>,
 }
@@ -45,6 +47,7 @@ where
     fn new_transform(&self, service: S) -> Self::Future {
         ready(Ok(OidcAuthMiddleware {
             service: Rc::new(service),
+            settings: self.settings.clone(),
             db: self.db.clone(),
             oidc_ctx: self.oidc_ctx.clone(),
         }))
@@ -57,6 +60,7 @@ where
 /// token and provide the associated user as [`ReqData`](actix_web::web::ReqData) for the subsequent services.
 pub struct OidcAuthMiddleware<S> {
     service: Rc<S>,
+    settings: SharedSettings,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
 }
@@ -78,6 +82,7 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let service = self.service.clone();
+        let settings = self.settings.clone();
         let db = self.db.clone();
         let oidc_ctx = self.oidc_ctx.clone();
 
@@ -102,8 +107,9 @@ where
 
         Box::pin(
             async move {
+                let settings = settings.load_full();
                 let (current_tenant, current_user) =
-                    check_access_token(db, oidc_ctx, access_token).await?;
+                    check_access_token(&settings, db, oidc_ctx, access_token).await?;
                 req.extensions_mut()
                     .insert(kustos::actix_web::User::from(current_user.id.into_inner()));
                 req.extensions_mut().insert(current_tenant);
@@ -117,12 +123,25 @@ where
 
 #[tracing::instrument(skip_all)]
 pub async fn check_access_token(
+    settings: &Settings,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     access_token: AccessToken,
 ) -> Result<(Tenant, User), ApiError> {
     let (oidc_tenant_id, sub) = match oidc_ctx.verify_access_token::<UserClaims>(&access_token) {
-        Ok(claims) => (claims.tenant_id, claims.sub),
+        Ok(claims) => {
+            // Get the tenant_id depending on the configured assignment
+            let tenant_id = match &settings.tenants.assignment {
+                TenantAssignment::Static { static_tenant_id } => static_tenant_id.clone(),
+                TenantAssignment::ByExternalTenantId => claims.tenant_id.ok_or_else(|| {
+                    log::error!("Invalid access token, missing tenant_id");
+                    ApiError::unauthorized()
+                        .with_www_authenticate(AuthenticationError::InvalidAccessToken)
+                })?,
+            };
+
+            (tenant_id, claims.sub)
+        }
         Err(e) => {
             log::error!("Invalid access token, {}", e);
             return Err(ApiError::unauthorized()

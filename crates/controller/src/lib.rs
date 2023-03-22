@@ -293,6 +293,7 @@ impl Controller {
 
         // Start HTTP Server
         let http_server = {
+            let settings = self.shared_settings.clone();
             let rabbitmq_pool = Data::from(self.rabbitmq_pool.clone());
             let signaling_modules = Arc::downgrade(&signaling_modules);
             let signaling_metrics = Data::from(self.metrics.signaling.clone());
@@ -368,8 +369,13 @@ impl Controller {
                     .app_data(mail_service)
                     .service(api::signaling::ws_service)
                     .service(metrics::metrics)
-                    .service(v1_scope(db.clone(), oidc_ctx.clone(), acl))
-                    .service(internal_scope(db, oidc_ctx))
+                    .service(v1_scope(
+                        settings.clone(),
+                        db.clone(),
+                        oidc_ctx.clone(),
+                        acl,
+                    ))
+                    .service(internal_scope(settings.clone(), db, oidc_ctx))
             })
         };
 
@@ -457,6 +463,7 @@ impl Controller {
 }
 
 fn v1_scope(
+    settings: SharedSettings,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     acl: kustos::actix_web::KustosService,
@@ -480,7 +487,11 @@ fn v1_scope(
             // empty scope to differentiate between auth endpoints
             web::scope("")
                 .wrap(acl)
-                .wrap(api::v1::middleware::user_auth::OidcAuth { db, oidc_ctx })
+                .wrap(api::v1::middleware::user_auth::OidcAuth {
+                    settings,
+                    db,
+                    oidc_ctx,
+                })
                 .service(api::v1::users::find)
                 .service(api::v1::users::patch_me)
                 .service(api::v1::users::get_me)
@@ -525,11 +536,15 @@ fn v1_scope(
         )
 }
 
-fn internal_scope(db: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
+fn internal_scope(settings: SharedSettings, db: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
     // internal apis
     web::scope("/internal").service(
         web::scope("")
-            .wrap(api::v1::middleware::user_auth::OidcAuth { db, oidc_ctx })
+            .wrap(api::v1::middleware::user_auth::OidcAuth {
+                settings,
+                db,
+                oidc_ctx,
+            })
             .service(api::internal::rooms::delete),
     )
 }
