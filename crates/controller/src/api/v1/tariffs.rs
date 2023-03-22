@@ -4,8 +4,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use db_storage::tariffs::{Tariff, TariffId};
+use db_storage::tariffs::Tariff;
 use serde::Serialize;
+use types::core::TariffId;
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 pub struct TariffResource {

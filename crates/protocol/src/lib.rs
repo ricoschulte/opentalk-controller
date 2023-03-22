@@ -10,7 +10,6 @@ use controller::prelude::control::storage::{get_all_participants, get_attribute}
 use controller::prelude::*;
 use controller::storage::assets::save_asset;
 use controller::storage::ObjectStorage;
-use controller_shared::ParticipantId;
 use database::Db;
 use etherpad_client::EtherpadClient;
 use futures::TryStreamExt;
@@ -20,6 +19,7 @@ use rabbitmq::GenerateUrl;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use types::core::ParticipantId;
 
 pub mod incoming;
 pub mod outgoing;

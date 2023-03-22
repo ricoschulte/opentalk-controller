@@ -4,12 +4,12 @@
 
 use chrono::{DateTime, Utc};
 use controller::prelude::*;
-use db_storage::groups::GroupName;
 use k3k_chat::{incoming, Chat, Scope};
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use serial_test::serial;
 use test_util::{TestContext, ROOM_ID, USER_1, USER_2};
+use types::core::{GroupName, Timestamp};
 
 #[actix_rt::test]
 #[serial]

@@ -19,6 +19,7 @@ pin-project-lite = "0.2"
 redis = "0.22"
 redis-args = { path = "../redis-args", package = "k3k-redis-args" }
 lapin-pool = { path = "../lapin-pool" }
+types = { path = "../types", package = "k3k-types", features = ["backend"] }
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util", features = ["database"] }

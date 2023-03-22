@@ -5,9 +5,9 @@
 use crate::SessionInfo;
 use anyhow::{Context, Result};
 use controller::prelude::*;
-use controller_shared::ParticipantId;
 use redis::AsyncCommands;
 use redis_args::ToRedisArgs;
+use types::core::ParticipantId;
 
 /// Contains the [`SessionInfo`] of the a participant.
 #[derive(ToRedisArgs)]

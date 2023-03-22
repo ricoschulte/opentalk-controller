@@ -34,7 +34,7 @@ use tokio_stream::StreamExt;
 
 mod types;
 
-pub use types::*;
+pub use self::types::*;
 
 /// Redis key of the publisher => McuId/JanusRoomId mapping
 ///

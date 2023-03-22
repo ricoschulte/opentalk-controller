@@ -6,12 +6,12 @@ use super::BreakoutRoom;
 use crate::prelude::*;
 use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
-use db_storage::rooms::RoomId;
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::time::{Duration, SystemTime};
+use types::core::{BreakoutRoomId, RoomId};
 
 /// Typed key to a set which contains all breakout-room ids
 #[derive(ToRedisArgs)]

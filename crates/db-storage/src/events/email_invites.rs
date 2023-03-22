@@ -2,14 +2,14 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use super::{Event, EventId, NewEventInvite};
-use crate::rooms::RoomId;
+use super::{Event, NewEventInvite};
 use crate::schema::{event_email_invites, event_invites, events};
 use crate::users::{User, UserId};
 use chrono::{DateTime, Utc};
 use database::{DbConnection, Paginate, Result};
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl, Queryable, RunQueryDsl};
+use types::core::{EventId, RoomId};
 
 #[derive(Insertable)]
 #[diesel(table_name = event_email_invites)]

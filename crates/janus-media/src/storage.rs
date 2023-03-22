@@ -5,9 +5,9 @@
 use super::State;
 use anyhow::{Context, Result};
 use controller::prelude::*;
-use controller_shared::ParticipantId;
 use redis::AsyncCommands;
 use redis_args::ToRedisArgs;
+use types::core::ParticipantId;
 
 /// Data related to a module inside a participant
 // TODO can this be removed?

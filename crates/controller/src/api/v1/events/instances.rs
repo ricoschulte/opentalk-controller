@@ -18,7 +18,7 @@ use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use database::Db;
 use db_storage::events::{
-    Event, EventException, EventExceptionKind, EventId, EventInviteStatus, NewEventException,
+    Event, EventException, EventExceptionKind, EventInviteStatus, NewEventException,
     UpdateEventException,
 };
 use db_storage::tenants::Tenant;
@@ -26,6 +26,7 @@ use db_storage::users::User;
 use keycloak_admin::KeycloakAdminClient;
 use rrule::RRuleSet;
 use serde::{Deserialize, Serialize};
+use types::core::EventId;
 use validator::Validate;
 
 /// Event instance resource
@@ -671,10 +672,10 @@ mod tests {
 
     use super::*;
     use db_storage::events::TimeZone;
-    use db_storage::rooms::RoomId;
     use db_storage::users::UserId;
     use std::time::SystemTime;
     use test_util::assert_eq_json;
+    use types::core::RoomId;
     use uuid::Uuid;
 
     #[test]

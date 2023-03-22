@@ -6,9 +6,10 @@ use crate::api::v1::response::{ApiError, Created, NoContent};
 use actix_web::web::{Data, Path, ReqData};
 use actix_web::{delete, put, Either};
 use database::Db;
-use db_storage::events::{Event, EventFavorite, EventId, NewEventFavorite};
+use db_storage::events::{Event, EventFavorite, NewEventFavorite};
 use db_storage::users::User;
 use diesel::Connection;
+use types::core::EventId;
 
 /// API Endpoint *PUT /users/me/event_favorites/{event_id}*
 ///

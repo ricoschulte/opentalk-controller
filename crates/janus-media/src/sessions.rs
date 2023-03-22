@@ -8,10 +8,10 @@ use crate::mcu::{
 use crate::MediaSessionState;
 use anyhow::{ensure, Result};
 use controller::prelude::*;
-use controller_shared::ParticipantId;
 use std::collections::HashMap;
 use std::future::Future;
 use tokio::sync::mpsc;
+use types::core::ParticipantId;
 
 pub struct MediaSessions {
     id: ParticipantId,

@@ -7,10 +7,11 @@ use anyhow::{Context, Result};
 use aws_sdk_s3::types::ByteStream;
 use bytes::Bytes;
 use database::Db;
-use db_storage::assets::{Asset, AssetId, NewAsset};
-use db_storage::rooms::{Room, RoomId};
+use db_storage::assets::{Asset, NewAsset};
+use db_storage::rooms::Room;
 use futures::Stream;
 use std::sync::Arc;
+use types::core::{AssetId, RoomId};
 use uuid::Uuid;
 
 /// Save an asset in the long term storage

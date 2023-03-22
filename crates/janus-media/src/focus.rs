@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use controller_shared::ParticipantId;
 use std::collections::VecDeque;
+use types::core::ParticipantId;
 
 #[derive(Default)]
 pub struct FocusDetection {

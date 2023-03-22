@@ -18,6 +18,7 @@ database = { path = "../database", package = "k3k-database" }
 serde = { version = "1", features = ["derive"] }
 redis = "0.22"
 redis-args = { path = "../redis-args", package = "k3k-redis-args" }
+types = { path = "../types", package = "k3k-types", features = ["backend"] }
 
 [dev-dependencies]
 pretty_assertions = "1.3"

@@ -18,6 +18,7 @@ db-storage = { path = "../db-storage", package = "k3k-db-storage" }
 mail-worker-proto = { path = "../mail-worker-protocol", package = "k3k-mail-worker-protocol", features = [
     "client",
 ] }
+types = { path = "../types", package = "k3k-types", features = ["backend"] }
 
 ### Logging utilities
 log = { version = "0.4", features = ["serde"] }

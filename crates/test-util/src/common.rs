@@ -7,14 +7,13 @@ use crate::redis;
 use anyhow::{Context, Result};
 use control::outgoing::Message;
 use controller::prelude::*;
-use controller_shared::ParticipantId;
-use db_storage::rooms::RoomId;
 use db_storage::users::User;
 use kustos::Authz;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
+use types::core::{ParticipantId, RoomId};
 use uuid::Uuid;
 
 #[derive(Debug)]
@@ -28,13 +27,13 @@ pub const ROOM_ID: RoomId = RoomId::from(Uuid::from_u128(2000));
 
 pub const USER_1: TestUser = TestUser {
     n: 1,
-    participant_id: ParticipantId::new_test(1),
+    participant_id: ParticipantId::from_u128(1),
     name: "user1",
 };
 
 pub const USER_2: TestUser = TestUser {
     n: 2,
-    participant_id: ParticipantId::new_test(2),
+    participant_id: ParticipantId::from_u128(2),
     name: "user2",
 };
 

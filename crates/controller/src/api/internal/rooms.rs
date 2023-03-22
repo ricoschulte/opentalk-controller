@@ -13,11 +13,12 @@ use database::{DatabaseError, Db};
 use db_storage::assets::Asset;
 use db_storage::events::Event;
 use db_storage::legal_votes::LegalVote;
-use db_storage::rooms::{Room, RoomId};
+use db_storage::rooms::Room;
 use db_storage::sip_configs::SipConfig;
 use db_storage::users::User;
 use diesel::Connection;
 use kustos::prelude::*;
+use types::core::RoomId;
 
 /// API Endpoint *DELETE /rooms/{room_id}*
 ///

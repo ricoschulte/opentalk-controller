@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::rooms::RoomId;
 use crate::schema::assets;
 use crate::schema::room_assets;
 use crate::tenants::TenantId;
@@ -17,10 +16,7 @@ use diesel::JoinOnDsl;
 use diesel::RunQueryDsl;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel::{Identifiable, Queryable};
-
-diesel_newtype! {
-    #[derive(Copy)] AssetId(uuid::Uuid) => diesel::sql_types::Uuid, "diesel::sql_types::Uuid"
-}
+use types::core::{AssetId, RoomId};
 
 /// Diesel resource struct
 #[derive(Debug, Clone, Queryable, Identifiable)]

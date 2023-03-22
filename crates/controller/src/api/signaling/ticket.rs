@@ -5,13 +5,12 @@
 use super::resumption::{ResumptionData, ResumptionToken};
 use crate::{api::v1::response::ApiError, prelude::*};
 use anyhow::Context;
-use controller_shared::ParticipantId;
-use db_storage::rooms::RoomId;
 use db_storage::users::UserId;
 use rand::Rng;
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
+use types::core::{BreakoutRoomId, ParticipantId, RoomId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TicketToken(String);
@@ -68,11 +67,11 @@ pub async fn start_or_continue_signaling_session(
             id
         } else {
             // invalid resumption token, generate new id
-            ParticipantId::new()
+            ParticipantId::generate()
         }
     } else {
         // No resumption token, generate new id
-        ParticipantId::new()
+        ParticipantId::generate()
     };
 
     let ticket = TicketToken::generate();

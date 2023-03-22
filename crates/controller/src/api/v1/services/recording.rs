@@ -18,9 +18,10 @@ use actix_web::web::Payload;
 use actix_web::web::Query;
 use actix_web::web::{Data, Json};
 use database::Db;
-use db_storage::rooms::{Room, RoomId};
+use db_storage::rooms::Room;
 use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
+use types::core::RoomId;
 
 const REQUIRED_RECORDING_ROLE: &str = "opentalk-recorder";
 
