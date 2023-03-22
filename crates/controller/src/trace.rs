@@ -37,15 +37,14 @@ pub fn init(settings: &Logging) -> Result<()> {
         let otlp_exporter = opentelemetry_otlp::new_exporter()
             .tonic()
             .with_endpoint(endpoint);
-        let tracer =
-            opentelemetry_otlp::new_pipeline()
-                .tracing()
-                .with_exporter(otlp_exporter)
-                .with_trace_config(trace::config().with_resource(Resource::new(vec![
-                    KeyValue::new("service.name", settings.service_name.clone()),
-                ])))
-                .install_batch(opentelemetry::runtime::TokioCurrentThread)?;
-
+        let tracer = opentelemetry_otlp::new_pipeline()
+            .tracing()
+            .with_exporter(otlp_exporter)
+            .with_trace_config(trace::config().with_resource(Resource::new(vec![
+                KeyValue::new("service.name", settings.service_name.clone()),
+                KeyValue::new("service.version", env!("VERGEN_GIT_SEMVER")),
+            ])))
+            .install_batch(opentelemetry::runtime::TokioCurrentThread)?;
         let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
         // Initialize the global logging with telemetry
