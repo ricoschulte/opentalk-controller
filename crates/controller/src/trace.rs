@@ -16,6 +16,7 @@ use tracing_actix_web::{RequestId, RootSpanBuilder};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Registry};
+use uuid::Uuid;
 
 pub fn init(settings: &Logging) -> Result<()> {
     // Layer which acts as filter of traces and spans.
@@ -41,9 +42,22 @@ pub fn init(settings: &Logging) -> Result<()> {
             .tracing()
             .with_exporter(otlp_exporter)
             .with_trace_config(trace::config().with_resource(Resource::new(vec![
-                KeyValue::new("service.name", settings.service_name.clone()),
-                KeyValue::new("service.version", env!("VERGEN_GIT_SEMVER")),
-            ])))
+                    KeyValue::new("service.name", settings.service_name.clone()),
+                    KeyValue::new("service.namespace", settings.service_namespace.clone()),
+                    KeyValue::new(
+                        "service.instance.id",
+                        settings
+                            .service_instance_id
+                            .clone()
+                            .unwrap_or_else(|| Uuid::new_v4().to_string())
+                    ),
+                    KeyValue::new(
+                        "service.version",
+                        option_env!("VERGEN_GIT_SEMVER")
+                            .or(option_env!("VERGEN_BUILD_SEMVER"))
+                            .unwrap_or("unknown"),
+                    ),
+                ])))
             .install_batch(opentelemetry::runtime::TokioCurrentThread)?;
         let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 

@@ -19,6 +19,10 @@
 
 # Service name when using opentelemetry
 #service_name = "k3k-controller"
+# Service namespace when using opentelemetry
+#service_namespace = "opentalk"
+# Service instance id when using opentelemetry. A random UUID will be generated at runtime if not set here.
+#service_instance_id = "627cc493-f310-47de-96bd-71410b7dec09"
 
 [database]
 # URL used to connect to a postgres.
