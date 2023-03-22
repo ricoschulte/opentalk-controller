@@ -36,8 +36,6 @@ url = "postgres://postgres:password123@localhost:5432/k3k"
 [http]
 # The port to bind the HTTP Server to (defaults to 11311).
 port = 11311
-# URLs that requests are allowed from. Leave empty to allow all.
-cors.allowed_origin = ["https://localhost:8080"]
 
 # Settings for the keycloak which is the user provider
 # and allows authentication via OIDC
