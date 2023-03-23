@@ -14,6 +14,7 @@ mod group_name;
 mod participant_id;
 mod room_id;
 mod tariff_id;
+mod time_zone;
 mod timestamp;
 
 pub use asset_id::AssetId;
@@ -23,4 +24,5 @@ pub use group_name::GroupName;
 pub use participant_id::ParticipantId;
 pub use room_id::RoomId;
 pub use tariff_id::TariffId;
+pub use time_zone::TimeZone;
 pub use timestamp::Timestamp;

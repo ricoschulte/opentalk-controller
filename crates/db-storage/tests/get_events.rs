@@ -7,7 +7,7 @@ use chrono::{TimeZone as _, Utc};
 use chrono_tz::Tz;
 use database::DbConnection;
 use k3k_db_storage::events::{
-    Event, EventInvite, EventInviteStatus, GetEventsCursor, NewEvent, NewEventInvite, TimeZone,
+    Event, EventInvite, EventInviteStatus, GetEventsCursor, NewEvent, NewEventInvite,
     UpdateEventInvite,
 };
 use k3k_db_storage::rooms::NewRoom;
@@ -15,7 +15,7 @@ use k3k_db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId};
 use k3k_db_storage::users::UserId;
 use pretty_assertions::assert_eq;
 use serial_test::serial;
-use types::core::{EventId, RoomId};
+use types::core::{EventId, RoomId, TimeZone};
 
 mod common;
 
@@ -37,9 +37,9 @@ fn make_event(
         is_time_independent: hour.is_none(),
         is_all_day: Some(false),
         starts_at: hour.map(|h| Tz::UTC.with_ymd_and_hms(2020, 1, 1, h, 0, 0).unwrap()),
-        starts_at_tz: hour.map(|_| TimeZone(Tz::UTC)),
+        starts_at_tz: hour.map(|_| TimeZone::from(Tz::UTC)),
         ends_at: hour.map(|h| Tz::UTC.with_ymd_and_hms(2020, 1, 1, h, 0, 0).unwrap()),
-        ends_at_tz: hour.map(|_| TimeZone(Tz::UTC)),
+        ends_at_tz: hour.map(|_| TimeZone::from(Tz::UTC)),
         duration_secs: hour.map(|_| 0),
         is_recurring: Some(false),
         recurrence_pattern: None,
@@ -765,9 +765,9 @@ async fn get_event_min_max_time() {
         is_time_independent: false,
         is_all_day: Some(false),
         starts_at: Some(Tz::UTC.with_ymd_and_hms(2020, 1, 1, 10, 0, 0).unwrap()),
-        starts_at_tz: Some(TimeZone(Tz::UTC)),
+        starts_at_tz: Some(TimeZone::from(Tz::UTC)),
         ends_at: Some(Tz::UTC.with_ymd_and_hms(2020, 1, 1, 11, 0, 0).unwrap()),
-        ends_at_tz: Some(TimeZone(Tz::UTC)),
+        ends_at_tz: Some(TimeZone::from(Tz::UTC)),
         duration_secs: Some(3600),
         is_recurring: Some(false),
         recurrence_pattern: None,

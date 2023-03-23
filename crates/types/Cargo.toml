@@ -11,6 +11,8 @@ publish = false
 
 [dependencies]
 chrono = "0.4"
+chrono-tz = { version = "0.6" }
+derive_more = "0.99"
 diesel = { version = "2", features = ["postgres", "uuid"], optional = true }
 kustos = { path = "../kustos", optional = true }
 rand = { version = "0.8.5", optional = true }
@@ -32,4 +34,5 @@ serde = [
   "dep:serde",
   "dep:validator",
   "chrono/serde",
+  "chrono-tz/serde",
 ]

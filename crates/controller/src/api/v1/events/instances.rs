@@ -627,10 +627,10 @@ fn build_rruleset(event: &Event) -> Result<RRuleSet, ApiError> {
         .as_ref()
         .ok_or_else(ApiError::internal)?;
     let starts_at = event.starts_at.ok_or_else(ApiError::internal)?;
-    let starts_at_tz = event.starts_at_tz.ok_or_else(ApiError::internal)?.0;
+    let starts_at_tz = event.starts_at_tz.ok_or_else(ApiError::internal)?;
 
     let starts_at = starts_at
-        .with_timezone(&starts_at_tz)
+        .with_timezone(starts_at_tz.as_ref())
         .naive_local()
         .format(LOCAL_DT_FORMAT);
 
@@ -649,7 +649,7 @@ fn verify_recurrence_date(
 ) -> Result<RRuleSet, ApiError> {
     let rruleset = build_rruleset(event)?;
 
-    let requested_dt = requested_dt.with_timezone(&event.starts_at_tz.unwrap().0);
+    let requested_dt = requested_dt.with_timezone(event.starts_at_tz.unwrap().as_ref());
 
     // Find date in recurrence, if it does not exist this will return a 404
     // And if it finds it it will break the loop
@@ -671,11 +671,10 @@ mod tests {
     use crate::api::v1::events::EventInviteeProfile;
 
     use super::*;
-    use db_storage::events::TimeZone;
     use db_storage::users::UserId;
     use std::time::SystemTime;
     use test_util::assert_eq_json;
-    use types::core::RoomId;
+    use types::core::{RoomId, TimeZone};
     use uuid::Uuid;
 
     #[test]
@@ -720,11 +719,11 @@ mod tests {
             is_all_day: false,
             starts_at: DateTimeTz {
                 datetime: unix_epoch,
-                timezone: TimeZone(Tz::Europe__Berlin),
+                timezone: TimeZone::from(Tz::Europe__Berlin),
             },
             ends_at: DateTimeTz {
                 datetime: unix_epoch,
-                timezone: TimeZone(Tz::Europe__Berlin),
+                timezone: TimeZone::from(Tz::Europe__Berlin),
             },
             type_: EventType::Instance,
             status: EventStatus::Ok,

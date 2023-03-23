@@ -2472,6 +2472,7 @@ version = "0.0.0-dev"
 dependencies = [
  "chrono",
  "k3k-db-storage",
+ "k3k-types",
  "keycloak-admin",
  "pretty_assertions",
  "serde",
@@ -2563,6 +2564,8 @@ name = "k3k-types"
 version = "0.0.0-dev"
 dependencies = [
  "chrono",
+ "chrono-tz",
+ "derive_more",
  "diesel",
  "k3k-redis-args",
  "kustos",

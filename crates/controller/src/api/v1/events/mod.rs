@@ -27,7 +27,7 @@ use controller_shared::settings::Settings;
 use database::{Db, DbConnection};
 use db_storage::events::{
     email_invites::EventEmailInvite, Event, EventException, EventExceptionKind, EventInvite,
-    EventInviteStatus, NewEvent, TimeZone, UpdateEvent,
+    EventInviteStatus, NewEvent, UpdateEvent,
 };
 use db_storage::invites::Invite;
 use db_storage::rooms::{NewRoom, Room, UpdateRoom};
@@ -41,7 +41,7 @@ use kustos::{Authz, Resource, ResourceId};
 use rrule::{Frequency, RRuleSet};
 use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
-use types::core::{EventId, RoomId};
+use types::core::{EventId, RoomId, TimeZone};
 use validator::{Validate, ValidationError};
 
 pub mod favorites;
@@ -158,7 +158,7 @@ impl DateTimeTz {
 
     /// Combine the inner UTC time with the inner timezone
     fn to_datetime_tz(self) -> DateTime<Tz> {
-        self.datetime.with_timezone(&self.timezone.0)
+        self.datetime.with_timezone(self.timezone.as_ref())
     }
 }
 
@@ -1955,7 +1955,7 @@ fn parse_event_dt_params(
     }
 
     if let Some(recurrence_pattern) = &recurrence_pattern {
-        let starts_at_tz = starts_at.timezone.0;
+        let starts_at_tz = starts_at.timezone;
         let starts_at_fmt = starts_at.datetime.format(LOCAL_DT_FORMAT);
 
         let rrule_set =
@@ -2016,7 +2016,7 @@ fn parse_event_dt_params(
                 .datetime
                 .with_year(ends_at_dt.year() + 100)
                 .unwrap_or(DateTime::<Utc>::MAX_UTC)
-                .with_timezone(&ends_at.timezone.0)
+                .with_timezone(ends_at.timezone.as_ref())
         };
 
         Ok((
@@ -2139,11 +2139,10 @@ async fn enrich_from_keycloak(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use db_storage::events::TimeZone;
     use db_storage::users::UserId;
     use std::time::SystemTime;
     use test_util::assert_eq_json;
-    use types::core::RoomId;
+    use types::core::{RoomId, TimeZone};
     use uuid::Uuid;
 
     #[test]
@@ -2186,11 +2185,11 @@ mod tests {
             is_all_day: Some(false),
             starts_at: Some(DateTimeTz {
                 datetime: unix_epoch,
-                timezone: TimeZone(Tz::Europe__Berlin),
+                timezone: TimeZone::from(Tz::Europe__Berlin),
             }),
             ends_at: Some(DateTimeTz {
                 datetime: unix_epoch,
-                timezone: TimeZone(Tz::Europe__Berlin),
+                timezone: TimeZone::from(Tz::Europe__Berlin),
             }),
             recurrence_pattern: vec![],
             type_: EventType::Single,
@@ -2397,15 +2396,15 @@ mod tests {
             is_all_day: Some(false),
             starts_at: Some(DateTimeTz {
                 datetime: unix_epoch,
-                timezone: TimeZone(Tz::Europe__Berlin),
+                timezone: TimeZone::from(Tz::Europe__Berlin),
             }),
             ends_at: Some(DateTimeTz {
                 datetime: unix_epoch,
-                timezone: TimeZone(Tz::Europe__Berlin),
+                timezone: TimeZone::from(Tz::Europe__Berlin),
             }),
             original_starts_at: DateTimeTz {
                 datetime: unix_epoch,
-                timezone: TimeZone(Tz::Europe__Berlin),
+                timezone: TimeZone::from(Tz::Europe__Berlin),
             },
             type_: EventType::Exception,
             status: EventStatus::Ok,
