@@ -12,7 +12,7 @@ use anyhow::{Context, Result};
 use control::rabbitmq;
 use controller::prelude::*;
 use database::Db;
-use db_storage::groups::{Group, GroupId};
+use db_storage::groups::Group;
 use db_storage::users::UserId;
 use outgoing::{ChatDisabled, ChatEnabled, HistoryCleared, MessageSent};
 use r3dlock::Mutex;
@@ -23,7 +23,7 @@ use std::fmt;
 use std::str::{from_utf8, FromStr};
 use std::sync::Arc;
 use storage::StoredMessage;
-use types::core::{GroupName, ParticipantId, Timestamp};
+use types::core::{GroupId, GroupName, ParticipantId, Timestamp};
 
 pub mod incoming;
 pub mod outgoing;

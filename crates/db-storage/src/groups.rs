@@ -6,23 +6,11 @@ use super::users::{User, UserId};
 use crate::tenants::TenantId;
 use database::{DbConnection, Result};
 use diesel::prelude::*;
-use kustos::subject::PolicyGroup;
-use types::core::GroupName;
+use types::core::{GroupId, GroupName};
 
 types::diesel_newtype! {
-    #[derive(Copy, redis_args::ToRedisArgs, redis_args::FromRedisValue)]
-    #[to_redis_args(serde)]
-    #[from_redis_value(serde)]
-    GroupId(uuid::Uuid) => diesel::sql_types::Uuid,
-
     #[derive(Copy)]
     SerialGroupId(i64) => diesel::sql_types::BigInt
-}
-
-impl From<GroupId> for PolicyGroup {
-    fn from(group_id: GroupId) -> Self {
-        Self::from(group_id.to_string())
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Queryable, Insertable, Identifiable)]
