@@ -14,8 +14,8 @@
 #   "lapin=WARN",
 #]
 
-# Specify an optional jaeger agent endpoint to export traces to
-#jaeger_agent_endpoint = "localhost:6831"
+# Specify an optional OTLP tracing endpoint to export traces to
+#otlp_tracing_endpoint = "http://localhost:4317"
 
 # Service name when using opentelemetry
 #service_name = "k3k-controller"

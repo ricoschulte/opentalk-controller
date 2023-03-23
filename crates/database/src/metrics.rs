@@ -11,8 +11,8 @@ use diesel::query_builder::{Query, QueryFragment, QueryId};
 use diesel::r2d2::{ConnectionManager, PooledConnection};
 use diesel::result::{ConnectionResult, QueryResult};
 use diesel::PgConnection;
-use opentelemetry::metrics::{Counter, ValueRecorder};
-use opentelemetry::Key;
+use opentelemetry::metrics::{Counter, Histogram};
+use opentelemetry::{Context, Key};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -21,10 +21,10 @@ type Parent = PooledConnection<ConnectionManager<PgConnection>>;
 const ERROR_KEY: Key = Key::from_static_str("error");
 
 pub struct DatabaseMetrics {
-    pub sql_execution_time: ValueRecorder<f64>,
+    pub sql_execution_time: Histogram<f64>,
     pub sql_error: Counter<u64>,
-    pub dbpool_connections: ValueRecorder<u64>,
-    pub dbpool_connections_idle: ValueRecorder<u64>,
+    pub dbpool_connections: Histogram<u64>,
+    pub dbpool_connections_idle: Histogram<u64>,
 }
 
 pub struct MetricsConnection<Conn> {
@@ -42,15 +42,17 @@ impl<Conn> MetricsConnection<Conn> {
 
             match f(&mut self.conn) {
                 res @ (Ok(_) | Err(diesel::result::Error::NotFound)) => {
-                    metrics
-                        .sql_execution_time
-                        .record(start.elapsed().as_secs_f64(), &[]);
+                    metrics.sql_execution_time.record(
+                        &Context::current(),
+                        start.elapsed().as_secs_f64(),
+                        &[],
+                    );
 
                     res
                 }
                 Err(e) => {
                     let labels = &[ERROR_KEY.string(get_metrics_label_for_error(&e))];
-                    metrics.sql_error.add(1, labels);
+                    metrics.sql_error.add(&Context::current(), 1, labels);
 
                     Err(e)
                 }

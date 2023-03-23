@@ -167,7 +167,7 @@ pub struct Logging {
     pub default_directives: Vec<String>,
 
     #[serde(default)]
-    pub jaeger_agent_endpoint: Option<String>,
+    pub otlp_tracing_endpoint: Option<String>,
 
     #[serde(default = "default_service_name")]
     pub service_name: String,
@@ -177,7 +177,7 @@ impl Default for Logging {
     fn default() -> Self {
         Self {
             default_directives: default_directives(),
-            jaeger_agent_endpoint: None,
+            otlp_tracing_endpoint: None,
             service_name: default_service_name(),
         }
     }

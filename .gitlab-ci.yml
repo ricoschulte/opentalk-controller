@@ -165,7 +165,7 @@ build:
       - target/release/k3k-controller
     expire_in: 1 week
   before_script:
-    - apt-get update && apt-get install -y libpq-dev musl-tools
+    - apt-get update && apt-get install -y libpq-dev musl-tools protobuf-compiler
   script:
     - cargo build --release --locked --workspace
 

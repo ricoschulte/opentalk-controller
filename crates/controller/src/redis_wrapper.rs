@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use opentelemetry::metrics::ValueRecorder;
-use opentelemetry::Key;
+use opentelemetry::metrics::Histogram;
+use opentelemetry::{Context, Key};
 use redis::aio::ConnectionLike;
 use redis::{Arg, RedisFuture};
 use std::sync::Arc;
@@ -12,7 +12,7 @@ use std::time::Instant;
 const COMMAND_KEY: Key = Key::from_static_str("command");
 
 pub struct RedisMetrics {
-    pub(crate) command_execution_time: ValueRecorder<f64>,
+    pub(crate) command_execution_time: Histogram<f64>,
 }
 
 #[derive(Clone)]
@@ -52,9 +52,11 @@ impl ConnectionLike for RedisConnection {
                         COMMAND_KEY.string("UNKNOWN")
                     };
 
-                    metrics
-                        .command_execution_time
-                        .record(start.elapsed().as_secs_f64(), &[command]);
+                    metrics.command_execution_time.record(
+                        &Context::current(),
+                        start.elapsed().as_secs_f64(),
+                        &[command],
+                    );
                 }
 
                 res
@@ -82,6 +84,7 @@ impl ConnectionLike for RedisConnection {
 
                 if res.is_ok() {
                     metrics.command_execution_time.record(
+                        &Context::current(),
                         start.elapsed().as_secs_f64(),
                         &[COMMAND_KEY.string("MULTI")],
                     );

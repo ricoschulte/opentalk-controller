@@ -8,6 +8,9 @@ use actix_web::{Error, HttpMessage};
 use anyhow::Result;
 use controller_shared::settings::Logging;
 use opentelemetry::global;
+use opentelemetry::sdk::{trace, Resource};
+use opentelemetry::KeyValue;
+use opentelemetry_otlp::WithExportConfig;
 use tracing::Span;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
 use tracing_subscriber::layer::SubscriberExt;
@@ -30,16 +33,18 @@ pub fn init(settings: &Logging) -> Result<()> {
     let registry = Registry::default().with(filter).with(fmt);
 
     // If opentelemetry is enabled install that layer
-    if let Some(endpoint) = &settings.jaeger_agent_endpoint {
-        global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
-
-        let tracer = opentelemetry_jaeger::new_pipeline()
-            .with_service_name(settings.service_name.clone())
-            .with_agent_endpoint(endpoint)
-            // We encountered a size limitation for our spans. Setting this to 1.000.000 for now
-            .with_max_packet_size(1_000_000)
-            .install_batch(opentelemetry::runtime::TokioCurrentThread)?;
-
+    if let Some(endpoint) = &settings.otlp_tracing_endpoint {
+        let otlp_exporter = opentelemetry_otlp::new_exporter()
+            .tonic()
+            .with_endpoint(endpoint);
+        let tracer =
+            opentelemetry_otlp::new_pipeline()
+                .tracing()
+                .with_exporter(otlp_exporter)
+                .with_trace_config(trace::config().with_resource(Resource::new(vec![
+                    KeyValue::new("service.name", settings.service_name.clone()),
+                ])))
+                .install_batch(opentelemetry::runtime::TokioCurrentThread)?;
         let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
 
         // Initialize the global logging with telemetry
