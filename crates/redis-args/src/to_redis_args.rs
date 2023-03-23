@@ -14,6 +14,7 @@ pub(crate) fn to_redis_args(input: TokenStream) -> TokenStream {
         ToRedisArgsConversion::Serde => impl_to_redis_args_serde(&ast),
         ToRedisArgsConversion::DirectFormat => impl_to_redis_args_fmt(&ast, "{}"),
         ToRedisArgsConversion::Format(fmt) => impl_to_redis_args_fmt(&ast, fmt.as_str()),
+        ToRedisArgsConversion::Display => impl_to_redis_args_display(&ast),
     }
 }
 
@@ -43,6 +44,7 @@ enum ToRedisArgsConversion {
     Serde,
     DirectFormat,
     Format(String),
+    Display,
 }
 
 enum Fields {
@@ -55,7 +57,7 @@ fn parse_to_redis_args_attribute_parameters(
     parameters: proc_macro2::TokenStream,
 ) -> ToRedisArgsConversion {
     fn fail_with_generic_message() -> ToRedisArgsConversion {
-        panic!("Attribute #[to_redis_args(...)] requires either `fmt`, `fmt = \"...\"` or `serde` parameter");
+        panic!("Attribute #[to_redis_args(...)] requires either `fmt`, `fmt = \"...\"`, `serde`, or `Display`  parameter");
     }
     match parameters.into_iter().next() {
         Some(proc_macro2::TokenTree::Group(group)) => {
@@ -70,6 +72,9 @@ fn parse_to_redis_args_attribute_parameters(
                 }
                 Some(proc_macro2::TokenTree::Ident(ident)) if ident == "serde" => {
                     ToRedisArgsConversion::Serde
+                }
+                Some(proc_macro2::TokenTree::Ident(ident)) if ident == "Display" => {
+                    ToRedisArgsConversion::Display
                 }
                 _ => fail_with_generic_message(),
             };
@@ -194,6 +199,23 @@ fn impl_to_redis_args_serde(input: &syn::DeriveInput) -> TokenStream {
             {
                 let json_val = serde_json::to_vec(self).expect("Failed to serialize");
                 out.write_arg(&json_val);
+            }
+        }
+    };
+    TokenStream::from(expanded)
+}
+
+fn impl_to_redis_args_display(input: &syn::DeriveInput) -> TokenStream {
+    let generics = &input.generics;
+    let ident = &input.ident;
+
+    let expanded = quote! {
+        impl #generics redis::ToRedisArgs for #ident #generics {
+            fn write_redis_args<W>(&self, out: &mut W)
+            where
+                W: ?Sized + redis::RedisWrite
+            {
+                out.write_arg_fmt(&self);
             }
         }
     };
