@@ -12,11 +12,11 @@ use actix_web::web::{Data, Json, Path, Query, ReqData};
 use actix_web::{delete, get, post, put};
 use chrono::{DateTime, Utc};
 use database::{DatabaseError, Db};
-use db_storage::invites::{Invite, InviteCodeId, NewInvite, UpdateInvite};
+use db_storage::invites::{Invite, NewInvite, UpdateInvite};
 use db_storage::rooms::Room;
 use db_storage::users::User;
 use serde::{Deserialize, Serialize};
-use types::core::RoomId;
+use types::core::{InviteCodeId, RoomId};
 use validator::Validate;
 
 /// Public invite details

@@ -20,7 +20,7 @@ use actix_web::{get, ResponseError};
 use actix_web_httpauth::headers::authorization::{Authorization, Bearer};
 use arc_swap::ArcSwap;
 use database::{Db, OptionalExt};
-use db_storage::invites::{Invite, InviteCodeId};
+use db_storage::invites::Invite;
 use db_storage::users::User;
 use either::Either;
 use openidconnect::AccessToken;
@@ -30,6 +30,7 @@ use rand::{CryptoRng, Rng};
 use ring::hmac;
 use serde::Serialize;
 use std::str::FromStr;
+use types::core::InviteCodeId;
 
 /// TURN access credentials for users.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

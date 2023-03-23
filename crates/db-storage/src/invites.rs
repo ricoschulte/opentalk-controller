@@ -11,10 +11,9 @@ use diesel::{
     RunQueryDsl,
 };
 use std::collections::{HashMap, HashSet};
-use types::core::RoomId;
+use types::core::{InviteCodeId, RoomId};
 
 types::diesel_newtype! {
-    #[derive(Copy)] InviteCodeId(uuid::Uuid) => diesel::sql_types::Uuid,
     #[derive(Copy)] InviteCodeSerialId(i64) => diesel::sql_types::BigInt
 }
 

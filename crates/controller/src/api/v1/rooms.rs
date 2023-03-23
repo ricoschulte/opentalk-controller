@@ -22,7 +22,7 @@ use actix_web::web::{self, Data, Json, Path, ReqData};
 use actix_web::{delete, get, patch, post};
 use chrono::{DateTime, Utc};
 use database::Db;
-use db_storage::invites::{Invite, InviteCodeId};
+use db_storage::invites::Invite;
 use db_storage::rooms::{self as db_rooms, Room};
 use db_storage::sip_configs::NewSipConfig;
 use db_storage::users::User;
@@ -30,7 +30,7 @@ use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
 use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use types::core::{BreakoutRoomId, RoomId};
+use types::core::{BreakoutRoomId, InviteCodeId, RoomId};
 use validator::Validate;
 
 /// A Room
