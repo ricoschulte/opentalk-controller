@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::api::signaling::resumption::ResumptionToken;
 use crate::api::signaling::ticket::start_or_continue_signaling_session;
 use crate::api::signaling::ticket::TicketToken;
 use crate::api::v1::response::ApiError;
@@ -21,7 +20,7 @@ use database::Db;
 use db_storage::rooms::Room;
 use futures::TryStreamExt;
 use serde::{Deserialize, Serialize};
-use types::core::RoomId;
+use types::core::{ResumptionToken, RoomId};
 
 const REQUIRED_RECORDING_ROLE: &str = "opentalk-recorder";
 

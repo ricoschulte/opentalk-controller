@@ -11,7 +11,6 @@ use super::response::error::{ApiError, ValidationErrorEntry};
 use super::response::{NoContent, CODE_INVALID_VALUE};
 use super::users::PublicUserProfile;
 use crate::api::signaling::prelude::*;
-use crate::api::signaling::resumption::ResumptionToken;
 use crate::api::signaling::ticket::{start_or_continue_signaling_session, TicketToken};
 use crate::api::v1::tariffs::TariffResource;
 use crate::api::v1::{ApiResponse, PagePaginationQuery};
@@ -30,7 +29,7 @@ use kustos::policies_builder::{GrantingAccess, PoliciesBuilder};
 use kustos::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
-use types::core::{BreakoutRoomId, InviteCodeId, RoomId};
+use types::core::{BreakoutRoomId, InviteCodeId, ResumptionToken, RoomId};
 use validator::Validate;
 
 /// A Room

@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::api::signaling::resumption::ResumptionToken;
 use crate::api::signaling::ticket::{start_or_continue_signaling_session, TicketToken};
 use crate::api::v1::response::ApiError;
 use crate::api::Participant;
@@ -14,7 +13,7 @@ use actix_web::web::{Data, Json};
 use database::Db;
 use db_storage::sip_configs::{SipConfig, SipId, SipPassword};
 use serde::{Deserialize, Serialize};
-use types::core::RoomId;
+use types::core::{ResumptionToken, RoomId};
 use validator::Validate;
 
 pub const REQUIRED_CALL_IN_ROLE: &str = "opentalk-call-in";

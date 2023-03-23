@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use super::resumption::{ResumptionData, ResumptionToken};
+use super::resumption::{ResumptionData, ResumptionRedisKey};
 use crate::{api::v1::response::ApiError, prelude::*};
 use anyhow::Context;
 use db_storage::users::UserId;
@@ -10,7 +10,7 @@ use rand::Rng;
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
-use types::core::{BreakoutRoomId, ParticipantId, RoomId};
+use types::core::{BreakoutRoomId, ParticipantId, ResumptionToken, RoomId};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TicketToken(String);
@@ -104,7 +104,7 @@ async fn use_resumption_token(
     room: RoomId,
     token: ResumptionToken,
 ) -> Result<Option<ParticipantId>, ApiError> {
-    let resumption_redis_key = token.into_redis_key();
+    let resumption_redis_key = ResumptionRedisKey(token);
 
     // Check for resumption data behind resumption token
     let resumption_data: Option<ResumptionData> =
