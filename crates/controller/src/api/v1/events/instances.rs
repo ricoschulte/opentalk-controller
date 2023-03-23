@@ -7,7 +7,7 @@ use super::{
     EventRoomInfo, EventStatus, EventType, InstanceId, LOCAL_DT_FORMAT,
 };
 use crate::api::v1::cursor::Cursor;
-use crate::api::v1::events::enrich_invitees_from_keycloak;
+use crate::api::v1::events::{enrich_invitees_from_keycloak, DateTimeTzFromDb};
 use crate::api::v1::response::{ApiError, NoContent};
 use crate::api::v1::users::PublicUserProfile;
 use crate::api::v1::util::{GetUserProfilesBatched, UserProfilesBatch};

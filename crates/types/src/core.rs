@@ -9,6 +9,7 @@
 
 mod asset_id;
 mod breakout_room_id;
+mod date_time_tz;
 mod event_id;
 mod group_name;
 mod participant_id;
@@ -19,6 +20,7 @@ mod timestamp;
 
 pub use asset_id::AssetId;
 pub use breakout_room_id::BreakoutRoomId;
+pub use date_time_tz::DateTimeTz;
 pub use event_id::EventId;
 pub use group_name::GroupName;
 pub use participant_id::ParticipantId;

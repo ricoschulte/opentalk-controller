@@ -41,7 +41,7 @@ use kustos::{Authz, Resource, ResourceId};
 use rrule::{Frequency, RRuleSet};
 use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
-use types::core::{EventId, RoomId, TimeZone};
+use types::core::{DateTimeTz, EventId, RoomId, TimeZone};
 use validator::{Validate, ValidationError};
 
 pub mod favorites;
@@ -110,15 +110,14 @@ impl<'de> Visitor<'de> for InstanceIdVisitor {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DateTimeTz {
-    /// UTC datetime
-    pub datetime: DateTime<Utc>,
-    /// Timezone in which the datetime was created in
-    pub timezone: TimeZone,
+pub(crate) trait DateTimeTzFromDb: Sized {
+    fn maybe_from_db(utc_dt: Option<DateTime<Utc>>, tz: Option<TimeZone>) -> Option<Self>;
+    fn starts_at_of(event: &Event) -> Option<Self>;
+    fn ends_at_of(event: &Event) -> Option<Self>;
+    fn to_datetime_tz(self) -> DateTime<Tz>;
 }
 
-impl DateTimeTz {
+impl DateTimeTzFromDb for DateTimeTz {
     /// Create a [`DateTimeTz`] from the database results
     ///
     /// Returns None if any of them are none.
@@ -149,7 +148,7 @@ impl DateTimeTz {
     }
 
     /// Creates the `ends_at` DateTimeTz from an event
-    pub fn ends_at_of(event: &Event) -> Option<Self> {
+    fn ends_at_of(event: &Event) -> Option<Self> {
         event.ends_at_of_first_occurrence().map(|(dt, tz)| Self {
             datetime: dt,
             timezone: tz,
