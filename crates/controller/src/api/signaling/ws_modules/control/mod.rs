@@ -7,9 +7,8 @@
 //! Actual control 'module' code can be found inside `crate::api::signaling::ws::runner`
 use crate::prelude::*;
 use anyhow::Result;
-use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
-use types::core::{ParticipantId, Timestamp};
+use types::core::{ParticipantId, ParticipationKind, Timestamp};
 
 pub mod incoming;
 pub mod outgoing;
@@ -89,24 +88,5 @@ impl ControlData {
             // worst case we have a ghost participant,
             left_at,
         })
-    }
-}
-
-#[derive(
-    Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, ToRedisArgs, FromRedisValue,
-)]
-#[serde(rename_all = "snake_case")]
-#[to_redis_args(serde)]
-#[from_redis_value(serde)]
-pub enum ParticipationKind {
-    User,
-    Guest,
-    Sip,
-    Recorder,
-}
-
-impl ParticipationKind {
-    pub fn is_visible(&self) -> bool {
-        !matches!(self, Self::Recorder)
     }
 }

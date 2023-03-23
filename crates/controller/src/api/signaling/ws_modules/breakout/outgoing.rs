@@ -35,13 +35,12 @@ pub enum Error {
 
 #[cfg(test)]
 mod test {
-    use crate::api::signaling::{prelude::control::ParticipationKind, Role};
-
     use super::*;
+    use crate::api::signaling::Role;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use test_util::assert_eq_json;
-    use types::core::{ParticipantId, Timestamp};
+    use types::core::{ParticipantId, ParticipationKind, Timestamp};
 
     #[test]
     fn started() {

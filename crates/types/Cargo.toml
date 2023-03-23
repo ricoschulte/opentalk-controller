@@ -19,6 +19,7 @@ rand = { version = "0.8.5", optional = true }
 redis = { version = "0.22", optional = true }
 redis-args = { path = "../redis-args", package = "k3k-redis-args", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
+strum = { version = "0.24", features = ["derive"] }
 uuid = { version = "1" }
 validator = { version = "0.16", features = ["derive"], optional = true }
 
@@ -36,3 +37,6 @@ serde = [
   "chrono/serde",
   "chrono-tz/serde",
 ]
+
+[dev-dependencies]
+pretty_assertions = "1.3"
