@@ -9,6 +9,7 @@
 
 mod asset_id;
 mod breakout_room_id;
+mod call_in;
 mod date_time_tz;
 mod event_id;
 mod group_id;
@@ -24,6 +25,7 @@ mod timestamp;
 
 pub use asset_id::AssetId;
 pub use breakout_room_id::BreakoutRoomId;
+pub use call_in::{CallInId, CallInPassword};
 pub use date_time_tz::DateTimeTz;
 pub use event_id::EventId;
 pub use group_id::GroupId;

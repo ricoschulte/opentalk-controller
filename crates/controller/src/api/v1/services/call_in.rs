@@ -11,17 +11,17 @@ use actix_web::error::Result;
 use actix_web::post;
 use actix_web::web::{Data, Json};
 use database::Db;
-use db_storage::sip_configs::{SipConfig, SipId, SipPassword};
+use db_storage::sip_configs::SipConfig;
 use serde::{Deserialize, Serialize};
-use types::core::{ResumptionToken, RoomId};
+use types::core::{CallInId, CallInPassword, ResumptionToken, RoomId};
 use validator::Validate;
 
 pub const REQUIRED_CALL_IN_ROLE: &str = "opentalk-call-in";
 
 #[derive(Deserialize)]
 pub struct CallInStartRequestBody {
-    id: SipId,
-    pin: SipPassword,
+    id: CallInId,
+    pin: CallInPassword,
 }
 
 #[derive(Serialize)]
