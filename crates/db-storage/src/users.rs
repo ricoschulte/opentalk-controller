@@ -12,24 +12,12 @@ use diesel::{
     BelongingToDsl, BoolExpressionMethods, ExpressionMethods, GroupedBy, Identifiable, Insertable,
     OptionalExtension, QueryDsl, Queryable, RunQueryDsl, TextExpressionMethods,
 };
-use kustos::subject::PolicyUser;
 use std::fmt;
-use types::core::{TariffId, TenantId};
+use types::core::{TariffId, TenantId, UserId};
 
 types::diesel_newtype! {
     #[derive(Copy)]
-    SerialUserId(i64) => diesel::sql_types::BigInt,
-
-    #[derive(Copy, redis_args::ToRedisArgs, redis_args::FromRedisValue)]
-    #[to_redis_args(fmt)]
-    #[from_redis_value(FromStr)]
-    UserId(uuid::Uuid) => diesel::sql_types::Uuid, "/users/"
-}
-
-impl From<UserId> for PolicyUser {
-    fn from(id: UserId) -> Self {
-        Self::from(id.into_inner())
-    }
+    SerialUserId(i64) => diesel::sql_types::BigInt
 }
 
 /// Diesel user struct

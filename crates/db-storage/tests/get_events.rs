@@ -12,10 +12,9 @@ use k3k_db_storage::events::{
 };
 use k3k_db_storage::rooms::NewRoom;
 use k3k_db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId};
-use k3k_db_storage::users::UserId;
 use pretty_assertions::assert_eq;
 use serial_test::serial;
-use types::core::{EventId, RoomId, TimeZone};
+use types::core::{EventId, RoomId, TimeZone, UserId};
 
 mod common;
 

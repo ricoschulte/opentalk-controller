@@ -671,10 +671,9 @@ mod tests {
     use crate::api::v1::events::EventInviteeProfile;
 
     use super::*;
-    use db_storage::users::UserId;
     use std::time::SystemTime;
     use test_util::assert_eq_json;
-    use types::core::{RoomId, TimeZone};
+    use types::core::{RoomId, TimeZone, UserId};
     use uuid::Uuid;
 
     #[test]

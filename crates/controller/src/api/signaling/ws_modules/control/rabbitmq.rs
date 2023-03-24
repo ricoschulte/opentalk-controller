@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use crate::api::signaling::SignalingRoomId;
-use db_storage::users::UserId;
 use serde::{Deserialize, Serialize};
-use types::core::ParticipantId;
+use types::core::{ParticipantId, UserId};
 
 /// Control messages sent between controller modules to communicate changes inside a room
 #[derive(Debug, Serialize, Deserialize)]

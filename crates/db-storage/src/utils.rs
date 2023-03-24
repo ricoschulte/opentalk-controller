@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::users::UserId;
 use diesel::deserialize::FromSql;
 use diesel::pg::Pg;
 use diesel::serialize::{IsNull, ToSql};
@@ -10,6 +9,7 @@ use diesel::sql_types;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::io::Write;
+use types::core::UserId;
 
 /// Trait for models that have user-ids attached to them like created_by/updated_by fields
 ///

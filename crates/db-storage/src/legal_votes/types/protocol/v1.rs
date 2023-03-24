@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use super::super::{CancelReason, FinalResults, Parameters, VoteOption};
-use crate::{legal_votes::types::Token, users::UserId};
+use crate::legal_votes::types::Token;
 use chrono::{DateTime, Utc};
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
-use types::core::ParticipantId;
+use types::core::{ParticipantId, UserId};
 
 /// A legal vote protocol entry
 ///

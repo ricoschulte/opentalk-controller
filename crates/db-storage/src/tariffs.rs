@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use crate::schema::{external_tariffs, tariffs, users};
-use crate::users::UserId;
 use crate::utils::Jsonb;
 use chrono::{DateTime, Utc};
 use core::fmt::Debug;
@@ -12,7 +11,7 @@ use diesel::prelude::*;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use types::core::TariffId;
+use types::core::{TariffId, UserId};
 
 types::diesel_newtype! {
     ExternalTariffId(String) => diesel::sql_types::Text

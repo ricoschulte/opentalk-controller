@@ -5,11 +5,10 @@
 use super::resumption::{ResumptionData, ResumptionRedisKey};
 use crate::{api::v1::response::ApiError, prelude::*};
 use anyhow::Context;
-use db_storage::users::UserId;
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
-use types::core::{BreakoutRoomId, ParticipantId, ResumptionToken, RoomId, TicketToken};
+use types::core::{BreakoutRoomId, ParticipantId, ResumptionToken, RoomId, TicketToken, UserId};
 
 /// Typed redis key for a signaling ticket containing [`TicketData`]
 #[derive(Debug, Copy, Clone, ToRedisArgs)]

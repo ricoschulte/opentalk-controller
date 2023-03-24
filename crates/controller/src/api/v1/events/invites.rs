@@ -22,14 +22,14 @@ use db_storage::invites::NewInvite;
 use db_storage::rooms::Room;
 use db_storage::sip_configs::SipConfig;
 use db_storage::tenants::Tenant;
-use db_storage::users::{User, UserId};
+use db_storage::users::User;
 use diesel::Connection;
 use email_address::EmailAddress;
 use keycloak_admin::KeycloakAdminClient;
 use kustos::policies_builder::PoliciesBuilder;
 use kustos::Authz;
 use serde::{Deserialize, Serialize};
-use types::core::EventId;
+use types::core::{EventId, UserId};
 
 /// API Endpoint `GET /events/{event_id}/invites`
 ///

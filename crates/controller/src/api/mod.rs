@@ -8,8 +8,9 @@
 //! APIs for use with our own frontend lie in internal
 //! These directory map to the path prefix `/internal` or `/v1`
 
-use db_storage::users::{User, UserId};
+use db_storage::users::User;
 use serde::{Deserialize, Serialize};
+use types::core::UserId;
 
 pub mod internal;
 mod util;

@@ -12,12 +12,11 @@
 
 use crate::{api::Participant, redis_wrapper::RedisConnection};
 use anyhow::{bail, Context, Result};
-use db_storage::users::UserId;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use tokio::time::sleep_until;
-use types::core::{BreakoutRoomId, ParticipantId, ResumptionToken, RoomId};
+use types::core::{BreakoutRoomId, ParticipantId, ResumptionToken, RoomId, UserId};
 
 /// Redis key for a resumption token containing [`ResumptionData`].
 #[derive(Debug, ToRedisArgs)]

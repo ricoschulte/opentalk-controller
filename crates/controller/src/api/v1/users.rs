@@ -18,9 +18,10 @@ use controller_shared::settings::Settings;
 use database::Db;
 use db_storage::tariffs::Tariff;
 use db_storage::tenants::Tenant;
-use db_storage::users::{UpdateUser, User, UserId};
+use db_storage::users::{UpdateUser, User};
 use keycloak_admin::KeycloakAdminClient;
 use serde::{Deserialize, Serialize};
+use types::core::UserId;
 use validator::Validate;
 
 /// Public user details.

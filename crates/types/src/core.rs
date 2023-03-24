@@ -24,6 +24,7 @@ mod tenant_id;
 mod ticket_token;
 mod time_zone;
 mod timestamp;
+mod user_id;
 
 pub use asset_id::AssetId;
 pub use breakout_room_id::BreakoutRoomId;
@@ -42,3 +43,4 @@ pub use tenant_id::TenantId;
 pub use ticket_token::TicketToken;
 pub use time_zone::TimeZone;
 pub use timestamp::Timestamp;
+pub use user_id::UserId;

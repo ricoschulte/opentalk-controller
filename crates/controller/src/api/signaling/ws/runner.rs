@@ -34,7 +34,7 @@ use controller_shared::settings::SharedSettings;
 use database::Db;
 use db_storage::rooms::Room;
 use db_storage::tariffs::Tariff;
-use db_storage::users::{User, UserId};
+use db_storage::users::User;
 use futures::stream::SelectAll;
 use futures::Future;
 use itertools::Itertools;
@@ -55,7 +55,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{interval, sleep};
 use tokio_stream::StreamExt;
-use types::core::{BreakoutRoomId, ParticipantId, ParticipationKind};
+use types::core::{BreakoutRoomId, ParticipantId, ParticipationKind, UserId};
 use uuid::Uuid;
 
 mod sip;

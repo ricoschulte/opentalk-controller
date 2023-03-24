@@ -3,11 +3,10 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use crate::schema::{tenants, users};
-use crate::users::UserId;
 use chrono::{DateTime, Utc};
 use database::{DbConnection, Result};
 use diesel::prelude::*;
-use types::core::TenantId;
+use types::core::{TenantId, UserId};
 
 types::diesel_newtype! {
     OidcTenantId(String) => diesel::sql_types::Text
