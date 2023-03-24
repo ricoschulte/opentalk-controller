@@ -8,10 +8,10 @@ use crate::api::util::parse_phone_number;
 use crate::prelude::*;
 use controller_shared::settings;
 use database::Db;
-use db_storage::tenants::TenantId;
 use db_storage::users::User;
 use phonenumber::PhoneNumber;
 use std::{convert::TryFrom, sync::Arc};
+use types::core::TenantId;
 
 /// Try to map the provided phone number to a user
 ///

@@ -7,10 +7,9 @@ use crate::users::UserId;
 use chrono::{DateTime, Utc};
 use database::{DbConnection, Result};
 use diesel::prelude::*;
+use types::core::TenantId;
 
 types::diesel_newtype! {
-    #[derive(Copy)]
-    TenantId(uuid::Uuid) => diesel::sql_types::Uuid,
     OidcTenantId(String) => diesel::sql_types::Text
 }
 

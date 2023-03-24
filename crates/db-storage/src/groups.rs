@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: EUPL-1.2
 use super::schema::{groups, user_groups};
 use super::users::{User, UserId};
-use crate::tenants::TenantId;
 use database::{DbConnection, Result};
 use diesel::prelude::*;
-use types::core::{GroupId, GroupName};
+use types::core::{GroupId, GroupName, TenantId};
 
 types::diesel_newtype! {
     #[derive(Copy)]

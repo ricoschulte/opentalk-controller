@@ -7,7 +7,6 @@ use crate::schema::{
     event_exceptions, event_favorites, event_invites, events, rooms, sip_configs, users,
 };
 use crate::sip_configs::SipConfig;
-use crate::tenants::TenantId;
 use crate::users::{User, UserId};
 use crate::utils::HasUsers;
 use chrono::{DateTime, Utc};
@@ -25,7 +24,7 @@ use diesel::{
 use serde::Serialize;
 use std::io::Write;
 use std::str::FromStr;
-use types::core::{EventId, RoomId, TimeZone};
+use types::core::{EventId, RoomId, TenantId, TimeZone};
 
 types::diesel_newtype! {
     #[derive(Copy)] EventSerialId(i64) => diesel::sql_types::BigInt,

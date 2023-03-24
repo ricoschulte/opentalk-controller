@@ -5,7 +5,6 @@
 //! Contains the user specific database structs amd queries
 use super::groups::{Group, UserGroupRelation};
 use super::schema::{groups, users};
-use crate::tenants::TenantId;
 use crate::{levenshtein, lower, soundex};
 use database::{DbConnection, Paginate, Result};
 use diesel::prelude::*;
@@ -15,7 +14,7 @@ use diesel::{
 };
 use kustos::subject::PolicyUser;
 use std::fmt;
-use types::core::TariffId;
+use types::core::{TariffId, TenantId};
 
 types::diesel_newtype! {
     #[derive(Copy)]

@@ -7,8 +7,9 @@ use chrono::Utc;
 use clap::Subcommand;
 use controller_shared::settings::Settings;
 use database::Db;
-use db_storage::tenants::{OidcTenantId, Tenant, TenantId, UpdateTenant};
+use db_storage::tenants::{OidcTenantId, Tenant, UpdateTenant};
 use tabled::{Style, Table, Tabled};
+use types::core::TenantId;
 use uuid::Uuid;
 
 #[derive(Subcommand, Debug, Clone)]

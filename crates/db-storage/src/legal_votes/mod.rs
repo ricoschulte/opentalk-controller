@@ -4,9 +4,8 @@
 
 use self::types::protocol::{NewProtocol, Protocol};
 use crate::schema::legal_votes;
-use crate::tenants::TenantId;
 use crate::users::UserId;
-use ::types::core::RoomId;
+use ::types::core::{RoomId, TenantId};
 use chrono::{DateTime, Utc};
 use database::{DatabaseError, DbConnection, Paginate, Result};
 use diesel::prelude::*;

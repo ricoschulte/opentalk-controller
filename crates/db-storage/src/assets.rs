@@ -4,7 +4,6 @@
 
 use crate::schema::assets;
 use crate::schema::room_assets;
-use crate::tenants::TenantId;
 use chrono::{DateTime, Utc};
 use database::DbConnection;
 use database::Paginate;
@@ -16,7 +15,7 @@ use diesel::JoinOnDsl;
 use diesel::RunQueryDsl;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel::{Identifiable, Queryable};
-use types::core::{AssetId, RoomId};
+use types::core::{AssetId, RoomId, TenantId};
 
 /// Diesel resource struct
 #[derive(Debug, Clone, Queryable, Identifiable)]

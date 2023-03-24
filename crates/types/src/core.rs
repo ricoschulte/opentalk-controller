@@ -20,6 +20,7 @@ mod participation_kind;
 mod resumption_token;
 mod room_id;
 mod tariff_id;
+mod tenant_id;
 mod time_zone;
 mod timestamp;
 
@@ -36,5 +37,6 @@ pub use participation_kind::ParticipationKind;
 pub use resumption_token::ResumptionToken;
 pub use room_id::RoomId;
 pub use tariff_id::TariffId;
+pub use tenant_id::TenantId;
 pub use time_zone::TimeZone;
 pub use timestamp::Timestamp;
