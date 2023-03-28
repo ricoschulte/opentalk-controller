@@ -127,7 +127,7 @@ pub struct UserParameters {
     pub create_pdf: bool,
     /// An optional timezone, defaults to UTC.
     /// Format as standardized by IANA, e.g."CET" or "Europe/Vienna".
-    /// See: https://www.iana.org/time-zones
+    /// See: <https://www.iana.org/time-zones>
     pub timezone: Option<chrono_tz::Tz>,
 }
 
