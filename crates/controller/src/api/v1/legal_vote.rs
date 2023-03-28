@@ -373,6 +373,7 @@ fn parse_v1_entries(
                             auto_close,
                             duration,
                             create_pdf: _,
+                            timezone: _,
                         },
                     token: _,
                 } = start.parameters;
