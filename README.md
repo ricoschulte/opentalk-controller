@@ -14,7 +14,7 @@ This root crate uses all crates to run the controller with its full feature set.
 
 ## Manual
 ```
-k3k-controller 0.3.0-rc.1
+k3k-controller 0.3.0-rc.2
 
 USAGE:
     k3k-controller [FLAGS] [OPTIONS] [SUBCOMMAND]
