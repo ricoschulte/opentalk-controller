@@ -31,7 +31,6 @@ use crate::services::MailService;
 use crate::settings::{Settings, SharedSettings};
 use crate::trace::ReducedSpanBuilder;
 use actix_cors::Cors;
-use actix_web::http::header;
 use actix_web::web::Data;
 use actix_web::{web, App, HttpServer, Scope};
 use anyhow::{anyhow, Context, Result};
@@ -39,7 +38,7 @@ use arc_swap::ArcSwap;
 use breakout::BreakoutRooms;
 use database::Db;
 use keycloak_admin::KeycloakAdminClient;
-use lapin_pool::{RabbitMqChannel, RabbitMqPool};
+use lapin_pool::RabbitMqPool;
 use moderation::ModerationModule;
 use oidc::OidcContext;
 use prelude::*;
@@ -62,7 +61,6 @@ pub mod api;
 
 mod acl;
 mod cli;
-mod ha_sync;
 mod metrics;
 mod oidc;
 mod redis_wrapper;
@@ -162,9 +160,6 @@ pub struct Controller {
     /// RabbitMQ connection pool, can be used to create connections and channels
     pub rabbitmq_pool: Arc<RabbitMqPool>,
 
-    /// General purpose rabbitmq channel
-    pub rabbitmq_channel: Arc<RabbitMqChannel>,
-
     /// Cloneable redis connection manager, can be used to write/read to the controller's redis.
     pub redis: RedisConnection,
 
@@ -233,17 +228,6 @@ impl Controller {
             settings.rabbit_mq.min_connections,
             settings.rabbit_mq.max_channels_per_connection,
         );
-        // create a general purpose rabbitmq channel for endpoints
-        let rabbitmq_channel = Arc::new(
-            rabbitmq_pool
-                .create_channel()
-                .await
-                .context("Could not create rabbitmq channel")?,
-        );
-
-        ha_sync::init(&rabbitmq_channel)
-            .await
-            .context("Failed to init ha_sync")?;
 
         // Connect to postgres
         let mut db = Db::connect(&settings.database).context("Failed to connect to database")?;
@@ -295,7 +279,6 @@ impl Controller {
             oidc,
             kc_admin_client,
             rabbitmq_pool,
-            rabbitmq_channel,
             redis: redis_conn,
             shutdown,
             reload,
@@ -310,10 +293,8 @@ impl Controller {
 
         // Start HTTP Server
         let http_server = {
-            let cors = self.startup_settings.http.cors.clone();
-
+            let settings = self.shared_settings.clone();
             let rabbitmq_pool = Data::from(self.rabbitmq_pool.clone());
-            let rabbitmq_channel = Data::from(self.rabbitmq_channel.clone());
             let signaling_modules = Arc::downgrade(&signaling_modules);
             let signaling_metrics = Data::from(self.metrics.signaling.clone());
             let db = Arc::downgrade(&self.db);
@@ -329,7 +310,8 @@ impl Controller {
             let mail_service = Data::new(MailService::new(
                 self.shared_settings.clone(),
                 self.metrics.endpoint.clone(),
-                self.rabbitmq_channel,
+                self.rabbitmq_pool.clone(),
+                self.rabbitmq_pool.create_channel().await?,
             ));
 
             // TODO(r.floren) what to do with the handle
@@ -349,7 +331,7 @@ impl Controller {
             let metrics = Data::new(self.metrics);
 
             HttpServer::new(move || {
-                let cors = setup_cors(&cors);
+                let cors = setup_cors();
 
                 // Unwraps cannot panic. Server gets stopped before dropping the Arc.
                 let db = Data::from(db.upgrade().unwrap());
@@ -380,7 +362,6 @@ impl Controller {
                     .app_data(redis)
                     .app_data(Data::new(shutdown.clone()))
                     .app_data(rabbitmq_pool.clone())
-                    .app_data(rabbitmq_channel.clone())
                     .app_data(signaling_modules)
                     .app_data(SignalingProtocols::data())
                     .app_data(signaling_metrics.clone())
@@ -388,8 +369,13 @@ impl Controller {
                     .app_data(mail_service)
                     .service(api::signaling::ws_service)
                     .service(metrics::metrics)
-                    .service(v1_scope(db.clone(), oidc_ctx.clone(), acl))
-                    .service(internal_scope(db, oidc_ctx))
+                    .service(v1_scope(
+                        settings.clone(),
+                        db.clone(),
+                        oidc_ctx.clone(),
+                        acl,
+                    ))
+                    .service(internal_scope(settings.clone(), db, oidc_ctx))
             })
         };
 
@@ -477,6 +463,7 @@ impl Controller {
 }
 
 fn v1_scope(
+    settings: SharedSettings,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
     acl: kustos::actix_web::KustosService,
@@ -500,7 +487,11 @@ fn v1_scope(
             // empty scope to differentiate between auth endpoints
             web::scope("")
                 .wrap(acl)
-                .wrap(api::v1::middleware::user_auth::OidcAuth { db, oidc_ctx })
+                .wrap(api::v1::middleware::user_auth::OidcAuth {
+                    settings,
+                    db,
+                    oidc_ctx,
+                })
                 .service(api::v1::users::find)
                 .service(api::v1::users::patch_me)
                 .service(api::v1::users::get_me)
@@ -545,25 +536,37 @@ fn v1_scope(
         )
 }
 
-fn internal_scope(db: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
+fn internal_scope(settings: SharedSettings, db: Data<Db>, oidc_ctx: Data<OidcContext>) -> Scope {
     // internal apis
     web::scope("/internal").service(
         web::scope("")
-            .wrap(api::v1::middleware::user_auth::OidcAuth { db, oidc_ctx })
+            .wrap(api::v1::middleware::user_auth::OidcAuth {
+                settings,
+                db,
+                oidc_ctx,
+            })
             .service(api::internal::rooms::delete),
     )
 }
 
-fn setup_cors(settings: &settings::HttpCors) -> Cors {
-    let mut cors = Cors::default();
+fn setup_cors() -> Cors {
+    use actix_web::http::header::*;
+    use actix_web::http::Method;
 
-    for origin in &settings.allowed_origin {
-        cors = cors.allowed_origin(origin)
-    }
-
-    cors.allowed_header(header::CONTENT_TYPE)
-        .allowed_header(header::AUTHORIZATION)
-        .allow_any_method()
+    // Use a permissive CORS configuration.
+    // The HTTP API is using Bearer tokens for authentication, which are handled by the application and not the browser.
+    Cors::default()
+        .allow_any_origin()
+        .send_wildcard()
+        .allowed_header(CONTENT_TYPE)
+        .allowed_header(AUTHORIZATION)
+        .allowed_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::PATCH,
+            Method::DELETE,
+        ])
 }
 
 fn setup_rustls(tls: &settings::HttpTls) -> Result<rustls::ServerConfig> {

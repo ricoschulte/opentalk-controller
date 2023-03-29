@@ -14,7 +14,7 @@ publish = false
 controller-shared = { path = "../controller-shared-types", package = "k3k-controller-shared" }
 
 ### ORM and Database connector
-diesel = { version = "^2.0.0", features = [
+diesel = { version = "^2.0.3", features = [
     "postgres",
     "uuid",
     "r2d2",
@@ -31,6 +31,6 @@ log = { version = "0.4", features = ["serde"] }
 tracing = { version = "0.1" }
 
 ### Opentelementry metrics
-opentelemetry = { version = "0.17", default-features = false, features = [
+opentelemetry = { version = "0.18", default-features = false, features = [
     "metrics",
 ] }

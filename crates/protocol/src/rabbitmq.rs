@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use crate::outgoing::PdfAsset;
-use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
+use types::core::ParticipantId;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

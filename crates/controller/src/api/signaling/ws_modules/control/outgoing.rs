@@ -2,11 +2,11 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::api::signaling::{Role, Timestamp};
+use crate::api::signaling::Role;
 use crate::api::v1::tariffs::TariffResource;
-use controller_shared::ParticipantId;
 use serde::Serialize;
 use std::collections::HashMap;
+use types::core::{ParticipantId, Timestamp};
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(tag = "message", rename_all = "snake_case")]
@@ -99,9 +99,10 @@ mod test {
 
     use super::*;
     use chrono::DateTime;
-    use db_storage::tariffs::{Tariff, TariffId};
+    use db_storage::tariffs::Tariff;
     use pretty_assertions::assert_eq;
     use serde_json::json;
+    use types::core::TariffId;
 
     fn participant_tariff() -> TariffResource {
         TariffResource {

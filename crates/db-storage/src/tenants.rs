@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use database::{DbConnection, Result};
 use diesel::prelude::*;
 
-diesel_newtype! {
+types::diesel_newtype! {
     #[derive(Copy)]
     TenantId(uuid::Uuid) => diesel::sql_types::Uuid,
     OidcTenantId(String) => diesel::sql_types::Text

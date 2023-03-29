@@ -7,9 +7,9 @@
 //! Actual control 'module' code can be found inside `crate::api::signaling::ws::runner`
 use crate::prelude::*;
 use anyhow::Result;
-use controller_shared::ParticipantId;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
+use types::core::{ParticipantId, Timestamp};
 
 pub mod incoming;
 pub mod outgoing;

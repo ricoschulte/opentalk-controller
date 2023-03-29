@@ -14,8 +14,8 @@
 #   "lapin=WARN",
 #]
 
-# Specify an optional jaeger agent endpoint to export traces to
-#jaeger_agent_endpoint = "localhost:6831"
+# Specify an optional OTLP tracing endpoint to export traces to
+#otlp_tracing_endpoint = "http://localhost:4317"
 
 # Service name when using opentelemetry
 #service_name = "k3k-controller"
@@ -36,8 +36,6 @@ url = "postgres://postgres:password123@localhost:5432/k3k"
 [http]
 # The port to bind the HTTP Server to (defaults to 11311).
 port = 11311
-# URLs that requests are allowed from. Leave empty to allow all.
-cors.allowed_origin = ["https://localhost:8080"]
 
 # Settings for the keycloak which is the user provider
 # and allows authentication via OIDC
@@ -181,9 +179,39 @@ secret_key = "minioadmin"
 # Not recommended without proper outgoing anti-spam protection
 #event_invite_external_email_address = false
 
-# Configuration for the /metric HTTP endpoint
+# Configuration for the /metrics HTTP endpoint
 #[metrics]
 # Allowlist for the /metrics endpoint
 #
 # Example: Allow all traffic from localhost
 #allowlist = ["127.0.0.0/24", "::ffff:0:0/96"]
+
+#[tenants]
+# Configure how users are assigned to tenants
+# The following assignment strategies are available:
+#   - "static" (default): Every user is assigned to a single tenant with a tenant_id specified in the static_tenant_id field.
+#               static_tenant_id's default value is "OpenTalkDefaultTenant".
+#   - "by_external_tenant_id": The OIDC provider (Keycloak) must be configured to include a "tenant_id" field in it's
+#                              id_token's JWT claims. It is used to assign users to the correct tenant.
+#
+# Static Example (Default configuration if nothing is specified):
+#assignment = "static"
+#static_tenant_id = "OpenTalkDefaultTenant"
+#
+# Assignment by JWT tenant_id example:
+#assignment = "by_external_tenant_id"
+
+#[tariffs]
+# Configure how tariffs are assignement to users
+# The following assignment strategies are available:
+#   - "static" (default): Every user is assigned the same tariff with the tariff's name specified in a separate field
+#               called static_tariff_name. The default value is "OpenTalkDefaultTariff".
+#   - "by_external_tariff_id": The OIDC provider (Keycloak) must be configured to include a "tariff_id" field it's
+#                              id_token's JWT claims. It is used to assign users the correct tariff.
+#
+# Static Example (Default configuration if nothing is specified)
+#assignment = "static"
+#static_tariff_name = "OpenTalkDefaultTariff"
+#
+# Assignemnt by JWT tariff_id example:
+#assignment = "by_external_tariff_id"

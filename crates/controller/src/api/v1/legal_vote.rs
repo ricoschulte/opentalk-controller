@@ -15,12 +15,12 @@ use db_storage::legal_votes::types::{
     CancelReason, FinalResults, Invalid, Parameters, Tally, UserParameters, VoteKind, VoteOption,
 };
 use db_storage::legal_votes::{LegalVote, LegalVoteId};
-use db_storage::rooms::RoomId;
 use db_storage::users::User;
 use kustos::prelude::AccessMethod;
 use kustos::{AccessibleResources, Authz};
 use serde::Serialize;
 use std::collections::HashMap;
+use types::core::RoomId;
 
 /// Wrapper struct to display invalid protocols to the API caller
 #[derive(Debug, Serialize)]
@@ -373,6 +373,7 @@ fn parse_v1_entries(
                             auto_close,
                             duration,
                             create_pdf: _,
+                            timezone: _,
                         },
                     token: _,
                 } = start.parameters;

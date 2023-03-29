@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
+use types::core::ParticipantId;
 
 use crate::{MessageId, Scope};
 
@@ -52,9 +52,9 @@ pub enum Error {
 mod test {
     use super::*;
     use controller::prelude::serde_json;
-    use db_storage::groups::GroupName;
     use pretty_assertions::assert_eq;
     use serde_json::json;
+    use types::core::GroupName;
 
     #[test]
     fn global_serialize() {
@@ -103,7 +103,7 @@ mod test {
             id: MessageId::nil(),
             source: ParticipantId::nil(),
             content: "Hello All!".to_string(),
-            scope: Scope::Private(ParticipantId::new_test(1)),
+            scope: Scope::Private(ParticipantId::from_u128(1)),
         }))
         .unwrap();
 

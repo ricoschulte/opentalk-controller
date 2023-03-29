@@ -4,16 +4,14 @@
 
 use super::metrics::SignalingMetrics;
 use super::prelude::*;
-use crate::api::signaling::ws_modules::breakout::BreakoutRoomId;
 use crate::api::signaling::ws_modules::control::ControlData;
-use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
+use crate::api::signaling::{Role, SignalingRoomId};
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
 use crate::storage::ObjectStorage;
 use actix_http::ws::CloseCode;
 use anyhow::Result;
 use bytestring::ByteString;
-use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
 use db_storage::users::User;
@@ -28,6 +26,7 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio_stream::Stream;
+use types::core::{BreakoutRoomId, ParticipantId, Timestamp};
 
 mod actor;
 mod echo;

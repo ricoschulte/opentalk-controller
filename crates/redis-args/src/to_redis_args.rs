@@ -150,7 +150,7 @@ fn impl_to_redis_args_fmt(input: &syn::DeriveInput, fmt: &str) -> TokenStream {
                         panic!("Too many arguments in #[redis_args] format string.")
                     }
 
-                    let field_args = (0..num_arguments).into_iter().map(|i| {
+                    let field_args = (0..num_arguments).map(|i| {
                         let index = syn::Index::from(i);
                         quote! {
                             self.#index

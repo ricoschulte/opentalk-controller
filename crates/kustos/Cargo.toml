@@ -20,8 +20,8 @@ barrel = { version = "0.7", features = ["pg"] }
 
 ### Error handling
 thiserror = "1.0"
-anyhow = "1.0.48"
-http = "0.2.5"
+anyhow = "1.0.69"
+http = "0.2.9"
 
 ### Database ORM
 diesel = { version = "2", features = [
@@ -31,7 +31,7 @@ diesel = { version = "2", features = [
     "serde_json",
     "chrono",
 ] }
-uuid = { version = "1.0.0", features = ["serde", "v4"] }
+uuid = { version = "1.3.0", features = ["serde", "v4"] }
 
 ### Logging utilities
 log = { version = "0.4", features = ["serde"] }
@@ -43,14 +43,14 @@ itertools = "0.10"
 futures = "0.3"
 async-trait = "0.1"
 
-tokio = { version = "1" }
+tokio = { version = "1", features = ["macros"] }
 parking_lot = "0.12"
 
 ### TODO(r.floren) add this as a default feature
 actix-web = { version = "4" }
 
 ### Opentelementry metrics
-opentelemetry = { version = "0.17", default-features = false, features = [
+opentelemetry = { version = "0.18", default-features = false, features = [
     "metrics",
 ] }
 
@@ -61,7 +61,7 @@ default-features = false
 features = ["runtime-tokio", "incremental"]
 
 [dev-dependencies]
-serial_test = "0.7"
+serial_test = "1"
 anyhow = "1.0"
 # TODO(r.floren) remove this in the future. Currently used to migrate in tests. Find something lighter.
 db-storage = { path = "../db-storage", package = "k3k-db-storage" }

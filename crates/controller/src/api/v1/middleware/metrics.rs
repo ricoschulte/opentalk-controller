@@ -8,7 +8,7 @@ use actix_web::dev::{Service, ServiceRequest, ServiceResponse, Transform};
 use actix_web::Error;
 use futures::future::{ready, Ready};
 use futures::{Future, FutureExt};
-use opentelemetry::Key;
+use opentelemetry::{Context, Key};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
@@ -85,12 +85,16 @@ where
                 let status = STATUS_KEY.i64(resp.status().as_u16() as i64);
                 let labels = [handler, method, status];
 
-                metrics
-                    .request_durations
-                    .record(duration.as_secs_f64(), &labels);
+                metrics.request_durations.record(
+                    &Context::current(),
+                    duration.as_secs_f64(),
+                    &labels,
+                );
 
                 if let BodySize::Sized(size) = resp.response().body().size() {
-                    metrics.response_sizes.record(size, &labels);
+                    metrics
+                        .response_sizes
+                        .record(&Context::current(), size, &labels);
                 }
 
                 Ok(resp)

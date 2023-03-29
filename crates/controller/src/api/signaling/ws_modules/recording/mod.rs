@@ -5,8 +5,8 @@
 use crate::api::signaling::prelude::*;
 use crate::api::Participant;
 use anyhow::Result;
-use controller_shared::ParticipantId;
 use serde::{Deserialize, Serialize};
+use types::core::ParticipantId;
 
 mod incoming;
 mod outgoing;

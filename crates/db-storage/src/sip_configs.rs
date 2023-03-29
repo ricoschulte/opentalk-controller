@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use super::rooms::RoomId;
 use super::schema::sip_configs;
 use crate::diesel::RunQueryDsl;
 use database::{DatabaseError, DbConnection, Result};
@@ -10,12 +9,13 @@ use diesel::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel::{Identifiable, Queryable};
 use rand::{distributions::Slice, thread_rng, Rng};
+use types::core::RoomId;
 use validator::{Validate, ValidationError, ValidationErrors};
 
 /// The set of numbers used to generate [`SipId`] & [`SipPassword`]
 const NUMERIC: [char; 10] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 
-diesel_newtype! {
+types::diesel_newtype! {
     NumericId(String) => diesel::sql_types::Text,
     SipId(NumericId) => diesel::sql_types::Text,
     SipPassword(NumericId) => diesel::sql_types::Text

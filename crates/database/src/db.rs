@@ -7,6 +7,7 @@ use crate::{DatabaseError, DbConnection};
 use controller_shared::settings;
 use diesel::r2d2::ConnectionManager;
 use diesel::{r2d2, PgConnection};
+use opentelemetry::Context;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -62,12 +63,13 @@ impl Db {
         let state = self.pool.state();
 
         if let Some(metrics) = &self.metrics {
+            let context = Context::current();
             metrics
                 .dbpool_connections
-                .record(state.connections as u64, &[]);
+                .record(&context, state.connections as u64, &[]);
             metrics
-                .dbpool_connections_idle
-                .record(state.idle_connections as u64, &[]);
+                .dbpool_connections
+                .record(&context, state.idle_connections as u64, &[]);
         }
 
         match res {

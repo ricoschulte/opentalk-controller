@@ -14,6 +14,7 @@ use janus_client::outgoing::{
 };
 use janus_client::types::{SdpAnswer, SdpOffer};
 use janus_client::{ClientId, JanusMessage, JsepType, RoomId as JanusRoomId, TrickleCandidate};
+use lapin_pool::{RabbitMqChannel, RabbitMqPool};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use std::borrow::{Borrow, Cow};
@@ -33,7 +34,7 @@ use tokio_stream::StreamExt;
 
 mod types;
 
-pub use types::*;
+pub use self::types::*;
 
 /// Redis key of the publisher => McuId/JanusRoomId mapping
 ///
@@ -93,7 +94,7 @@ pub struct McuPool {
     // which are being reconnected
     events_sender: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,
 
-    rabbitmq: lapin::Connection,
+    rabbitmq_pool: Arc<RabbitMqPool>,
     redis: RedisConnection,
 
     // Mcu shutdown signal to all janus-client tasks.
@@ -106,7 +107,7 @@ impl McuPool {
     pub async fn build(
         settings: &controller::settings::Settings,
         shared_settings: SharedSettings,
-        rabbitmq: lapin::Connection,
+        rabbitmq_pool: Arc<RabbitMqPool>,
         mut redis: RedisConnection,
         controller_shutdown_sig: broadcast::Receiver<()>,
         controller_reload_sig: broadcast::Receiver<()>,
@@ -121,7 +122,7 @@ impl McuPool {
         let connections = mcu_config.connections.clone();
 
         for connection in connections {
-            let channel = rabbitmq.create_channel().await?;
+            let channel = rabbitmq_pool.create_channel().await?;
 
             let client = McuClient::connect(channel, &mut redis, connection, events_sender.clone())
                 .await
@@ -139,7 +140,7 @@ impl McuPool {
             shared_settings,
             mcu_config,
             events_sender,
-            rabbitmq,
+            rabbitmq_pool,
             redis,
             shutdown,
         });
@@ -214,7 +215,7 @@ impl McuPool {
                 continue;
             }
 
-            let channel = self.rabbitmq.create_channel().await?;
+            let channel = self.rabbitmq_pool.create_channel().await?;
 
             match McuClient::connect(
                 channel,
@@ -561,7 +562,14 @@ async fn attempt_reconnect(
         return;
     }
 
-    let channel = mcu_pool.rabbitmq.create_channel().await.unwrap();
+    let channel = match mcu_pool.rabbitmq_pool.create_channel().await {
+        Ok(channel) => channel,
+        Err(e) => {
+            log::error!("Failed to create channel for McuClient when trying to reconnect, backing off. {e:?}");
+            disco_clients.push(ReconnectBackoff::new(duration, config_to_reconnect));
+            return;
+        }
+    };
 
     match McuClient::connect(
         channel,
@@ -679,7 +687,7 @@ impl McuClient {
 
     #[tracing::instrument(level = "debug", skip(rabbitmq_channel, redis, events_sender))]
     pub async fn connect(
-        rabbitmq_channel: lapin::Channel,
+        rabbitmq_channel: RabbitMqChannel,
         redis: &mut RedisConnection,
         config: settings::Connection,
         events_sender: mpsc::Sender<(ClientId, Arc<JanusMessage>)>,

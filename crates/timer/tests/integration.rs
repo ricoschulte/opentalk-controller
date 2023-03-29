@@ -5,7 +5,6 @@
 use controller::prelude::chrono::Duration;
 use controller::prelude::chrono::Utc;
 use controller::prelude::ModuleTester;
-use controller::prelude::Timestamp;
 use controller::prelude::WsMessageOutgoing;
 use k3k_timer::incoming;
 use k3k_timer::incoming::Stop;
@@ -19,6 +18,7 @@ use serial_test::serial;
 use test_util::USER_1;
 use test_util::USER_2;
 use test_util::{common, TestContext};
+use types::core::Timestamp;
 
 /// Helps to compare expected timestamps.
 #[derive(Debug)]

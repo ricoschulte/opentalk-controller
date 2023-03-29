@@ -11,12 +11,12 @@ authors.workspace = true
 publish = false
 
 [dependencies]
-redis = { version = "0.21", features = ["tokio-comp"] }
+redis = { version = "0.22", features = ["tokio-comp"] }
 tokio = { version = "1", features = ["time"] }
 
 rand = "0.8"
-thiserror = "1.0.25"
-displaydoc = "0.2.1"
+thiserror = "1.0.39"
+displaydoc = "0.2.3"
 
 [dev-dependencies]
 pretty_assertions = "1.3"

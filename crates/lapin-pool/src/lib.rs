@@ -99,6 +99,7 @@ impl RabbitMqPool {
 
         let entry = connections.iter().find(|entry| {
             entry.channels.load(Ordering::Relaxed) < self.max_channels_per_connection
+                && entry.connection.status().connected()
         });
 
         let entry = if let Some(entry) = entry {
@@ -150,35 +151,33 @@ async fn reap_unused_connections(pool: Arc<RabbitMqPool>) {
             continue;
         }
 
-        let removed_entries = remove_where(&mut connections, |entry| {
-            entry.channels.load(Ordering::Relaxed) == 0
+        let removed_entries = drain_filter(&mut connections, |entry| {
+            entry.channels.load(Ordering::Relaxed) == 0 || !entry.connection.status().connected()
         });
 
         drop(connections);
 
         for entry in removed_entries {
-            if let Err(e) = entry.connection.close(0, "closing").await {
-                log::error!("Failed to close connection in gc {}", e);
+            if entry.connection.status().connected() {
+                if let Err(e) = entry.connection.close(0, "closing").await {
+                    log::error!("Failed to close connection in gc {}", e);
+                }
             }
         }
     }
 }
 
-fn remove_where<T>(vec: &mut Vec<T>, mut f: impl FnMut(&T) -> bool) -> Vec<T> {
-    let mut ret = vec![];
-
-    let mut skip = 0;
-
-    while let Some((i, _)) = vec
-        .iter()
-        .enumerate()
-        .skip(skip)
-        .find(|(_, entry)| f(entry))
-    {
-        ret.push(vec.remove(i));
-        skip = i;
+/// Placeholder for Vec::drain_filter https://doc.rust-lang.org/std/vec/struct.Vec.html#method.drain_filter
+fn drain_filter<T>(vec: &mut Vec<T>, mut predicate: impl FnMut(&T) -> bool) -> Vec<T> {
+    let mut i = 0;
+    let mut ret = Vec::new();
+    while i < vec.len() {
+        if predicate(&mut vec[i]) {
+            ret.push(vec.remove(i));
+        } else {
+            i += 1;
+        }
     }
-
     ret
 }
 
@@ -187,12 +186,12 @@ mod test {
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn test_remove_where() {
+    fn test_drain_filter() {
         let mut items = vec![0, 1, 2, 3, 4, 5];
 
         let mut iterations = 0;
 
-        let removed = super::remove_where(&mut items, |i| {
+        let removed = super::drain_filter(&mut items, |i| {
             iterations += 1;
             *i > 2
         });

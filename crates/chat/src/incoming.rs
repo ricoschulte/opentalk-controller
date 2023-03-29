@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: EUPL-1.2
 
 use crate::Scope;
-use controller::prelude::Timestamp;
 use serde::Deserialize;
+use types::core::Timestamp;
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
@@ -31,10 +31,9 @@ pub struct SendMessage {
 mod test {
     use super::*;
     use controller::prelude::serde_json;
-    use controller_shared::ParticipantId;
-    use db_storage::groups::GroupName;
     use pretty_assertions::assert_eq;
     use serde_json::json;
+    use types::core::{GroupName, ParticipantId};
 
     #[test]
     fn user_private_message() {

@@ -123,7 +123,6 @@ pub(super) async fn poll_results(
     let votes = results(redis_conn, room, config.id).await?;
 
     let votes = (0..config.choices.len())
-        .into_iter()
         .map(|i| {
             let id = ChoiceId(i as u32);
             let count = votes.get(&id).copied().unwrap_or_default();

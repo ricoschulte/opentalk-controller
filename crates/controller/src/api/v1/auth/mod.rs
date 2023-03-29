@@ -7,23 +7,21 @@ use super::events::EventPoliciesBuilderExt;
 use super::rooms::RoomsPoliciesBuilderExt;
 use crate::api::v1::response::error::AuthenticationError;
 use crate::api::v1::response::ApiError;
-use crate::ha_sync::user_update;
 use crate::oidc::{OidcContext, VerifyError};
 use crate::settings::SharedSettingsActix;
 use actix_web::web::{Data, Json};
 use actix_web::{get, post};
+use controller_shared::settings::{TariffAssignment, TenantAssignment};
 use core::mem::take;
 use database::{Db, OptionalExt};
-use db_storage::events::EventId;
-use db_storage::groups::{get_or_create_groups_by_name, Group, GroupName};
-use db_storage::rooms::RoomId;
+use db_storage::groups::{get_or_create_groups_by_name, Group};
 use db_storage::tariffs::{ExternalTariffId, Tariff};
 use db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId, TenantId};
 use db_storage::users::User;
 use kustos::prelude::PoliciesBuilder;
-use lapin_pool::RabbitMqChannel;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use types::core::{EventId, GroupName, RoomId};
 
 mod create_user;
 mod update_user;
@@ -52,7 +50,6 @@ pub async fn login(
     settings: SharedSettingsActix,
     db: Data<Db>,
     oidc_ctx: Data<OidcContext>,
-    rabbitmq_channel: Data<RabbitMqChannel>,
     body: Json<Login>,
     authz: Data<kustos::Authz>,
 ) -> Result<Json<LoginResponse>, ApiError> {
@@ -80,19 +77,39 @@ pub async fn login(
         let settings = settings.load_full();
         let mut conn = db.get_conn()?;
 
-        let tariff =
-            Tariff::get_by_external_id(&mut conn, &ExternalTariffId::from(info.tariff_id.clone()))
-                .optional()?
-                .ok_or_else(|| {
-                    ApiError::internal()
-                        .with_code("invalid_tariff_id")
-                        .with_message("JWT contained unknown tariff_id")
+        // Get tariff depending on the configured assignment
+        let tariff = match &settings.tariffs.assignment {
+            TariffAssignment::Static { static_tariff_name } => {
+                Tariff::get_by_name(&mut conn, static_tariff_name)?
+            }
+            TariffAssignment::ByExternalTariffId => {
+                let external_tariff_id = info.tariff_id.clone().ok_or_else(|| {
+                    ApiError::bad_request()
+                        .with_code("invalid_claims")
+                        .with_message("tariff_id missing in id_token claims")
                 })?;
 
-        let tenant = get_or_create_tenant_by_oidc_id(
-            &mut conn,
-            &OidcTenantId::from(info.tenant_id.clone()),
-        )?;
+                Tariff::get_by_external_id(&mut conn, &ExternalTariffId::from(external_tariff_id))
+                    .optional()?
+                    .ok_or_else(|| {
+                        ApiError::internal()
+                            .with_code("invalid_tariff_id")
+                            .with_message("JWT contained unknown tariff_id")
+                    })?
+            }
+        };
+
+        // Get the tenant_id depending on the configured assignment
+        let tenant_id = match &settings.tenants.assignment {
+            TenantAssignment::Static { static_tenant_id } => static_tenant_id.clone(),
+            TenantAssignment::ByExternalTenantId => info.tenant_id.clone().ok_or_else(|| {
+                ApiError::bad_request()
+                    .with_code("invalid_claims")
+                    .with_message("tenant_id missing in id_token claims")
+            })?,
+        };
+
+        let tenant = get_or_create_tenant_by_oidc_id(&mut conn, &OidcTenantId::from(tenant_id))?;
 
         let groups: Vec<(TenantId, GroupName)> = take(&mut info.x_grp)
             .into_iter()
@@ -118,22 +135,6 @@ pub async fn login(
         Ok(login_result)
     })
     .await??;
-
-    if let LoginResult::UserUpdated {
-        user,
-        groups_removed_from,
-        ..
-    } = &db_result
-    {
-        // The user was updated.
-        let message = user_update::Message {
-            groups: !groups_removed_from.is_empty(),
-        };
-
-        if let Err(e) = message.send_via(&rabbitmq_channel, user.id).await {
-            log::error!("Failed to send user-update message {:?}", e);
-        }
-    }
 
     update_core_user_permissions(authz.as_ref(), db_result).await?;
 

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::rooms::{Room, RoomId};
+use crate::rooms::Room;
 use crate::schema::{
     event_exceptions, event_favorites, event_invites, events, rooms, sip_configs, users,
 };
@@ -27,9 +27,9 @@ use diesel::{
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::str::{from_utf8, FromStr};
+use types::core::{EventId, RoomId};
 
-diesel_newtype! {
-    #[derive(Copy)] EventId(uuid::Uuid) => diesel::sql_types::Uuid, "/events/",
+types::diesel_newtype! {
     #[derive(Copy)] EventSerialId(i64) => diesel::sql_types::BigInt,
 
     #[derive(Copy)] EventExceptionId(uuid::Uuid) => diesel::sql_types::Uuid,

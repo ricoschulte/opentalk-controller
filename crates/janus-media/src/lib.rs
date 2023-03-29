@@ -11,7 +11,6 @@ use anyhow::{bail, Context, Result};
 use controller::prelude::*;
 use controller::settings::SharedSettings;
 use controller::Controller;
-use controller_shared::ParticipantId;
 use focus::FocusDetection;
 use incoming::{RequestMute, TargetConfigure};
 use janus_client::TrickleCandidate;
@@ -28,6 +27,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
+use types::core::ParticipantId;
 
 mod focus;
 mod incoming;
@@ -933,7 +933,7 @@ pub async fn register(controller: &mut Controller) -> Result<()> {
     let mcu_pool = McuPool::build(
         &controller.startup_settings,
         controller.shared_settings.clone(),
-        controller.rabbitmq_pool.make_connection().await?,
+        controller.rabbitmq_pool.clone(),
         controller.redis.clone(),
         controller.shutdown.subscribe(),
         controller.reload.subscribe(),

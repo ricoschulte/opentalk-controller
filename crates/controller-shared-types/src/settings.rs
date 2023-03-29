@@ -82,6 +82,12 @@ pub struct Settings {
 
     pub minio: MinIO,
 
+    #[serde(default)]
+    pub tenants: Tenants,
+
+    #[serde(default)]
+    pub tariffs: Tariffs,
+
     #[serde(flatten)]
     pub extensions: HashMap<String, config::Value>,
 }
@@ -133,8 +139,6 @@ pub struct Http {
     #[serde(default = "default_http_port")]
     pub port: u16,
     #[serde(default)]
-    pub cors: HttpCors,
-    #[serde(default)]
     pub tls: Option<HttpTls>,
 }
 
@@ -142,7 +146,6 @@ impl Default for Http {
     fn default() -> Self {
         Self {
             port: default_http_port(),
-            cors: HttpCors::default(),
             tls: None,
         }
     }
@@ -158,20 +161,13 @@ pub struct HttpTls {
     pub private_key: PathBuf,
 }
 
-/// Settings for CORS (Cross Origin Resource Sharing)
-#[derive(Debug, Clone, Default, Deserialize)]
-pub struct HttpCors {
-    #[serde(default)]
-    pub allowed_origin: Vec<String>,
-}
-
 #[derive(Debug, Clone, Deserialize)]
 pub struct Logging {
     #[serde(default = "default_directives")]
     pub default_directives: Vec<String>,
 
     #[serde(default)]
-    pub jaeger_agent_endpoint: Option<String>,
+    pub otlp_tracing_endpoint: Option<String>,
 
     #[serde(default = "default_service_name")]
     pub service_name: String,
@@ -181,7 +177,7 @@ impl Default for Logging {
     fn default() -> Self {
         Self {
             default_directives: default_directives(),
-            jaeger_agent_endpoint: None,
+            otlp_tracing_endpoint: None,
             service_name: default_service_name(),
         }
     }
@@ -400,6 +396,48 @@ pub struct MinIO {
 #[derive(Debug, Default, Clone, Deserialize)]
 pub struct Metrics {
     pub allowlist: Vec<cidr::IpInet>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TenantAssignment {
+    Static { static_tenant_id: String },
+    ByExternalTenantId,
+}
+
+impl Default for TenantAssignment {
+    fn default() -> Self {
+        Self::Static {
+            static_tenant_id: String::from("OpenTalkDefaultTenant"),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+pub struct Tenants {
+    #[serde(default)]
+    pub assignment: TenantAssignment,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TariffAssignment {
+    Static { static_tariff_name: String },
+    ByExternalTariffId,
+}
+
+impl Default for TariffAssignment {
+    fn default() -> Self {
+        Self::Static {
+            static_tariff_name: String::from("OpenTalkDefaultTariff"),
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, Deserialize)]
+pub struct Tariffs {
+    #[serde(default)]
+    pub assignment: TariffAssignment,
 }
 
 #[cfg(test)]

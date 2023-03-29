@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- controller/settings: remove `http.cors` section as CORS is now statically configured to allow any origin
+- controller/settings: add `tenants` and `tariffs` sections, which allow configuring how users are assigned to each tenant/tariff.
+- legal-vote: add option to set protocol timezone ([#338](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/338))
+
+### Changed
+
+- janus-media: use lapin-pool internally to recover from RabbitMQ connection failures ([#343](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/343))
+- lapin-pool: consider connection status when picking connections for new channels & reap disconnected connections ([#343](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/343))
+- controller: Traces are now exported directly via OTLP. The setting was renamed from `jaeger_agent_endpoint` to `otlp_tracing_endpoint` ([#301](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/301)).
+
 ## [0.3.0-rc.1] - 2023-03-16
 
 ### Added

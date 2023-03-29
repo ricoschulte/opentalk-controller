@@ -26,11 +26,11 @@ use chrono_tz::Tz;
 use controller_shared::settings::Settings;
 use database::{Db, DbConnection};
 use db_storage::events::{
-    email_invites::EventEmailInvite, Event, EventException, EventExceptionKind, EventId,
-    EventInvite, EventInviteStatus, NewEvent, TimeZone, UpdateEvent,
+    email_invites::EventEmailInvite, Event, EventException, EventExceptionKind, EventInvite,
+    EventInviteStatus, NewEvent, TimeZone, UpdateEvent,
 };
 use db_storage::invites::Invite;
-use db_storage::rooms::{NewRoom, Room, RoomId, UpdateRoom};
+use db_storage::rooms::{NewRoom, Room, UpdateRoom};
 use db_storage::sip_configs::{NewSipConfig, SipConfig};
 use db_storage::tenants::Tenant;
 use db_storage::users::User;
@@ -41,6 +41,7 @@ use kustos::{Authz, Resource, ResourceId};
 use rrule::{Frequency, RRuleSet};
 use serde::de::Visitor;
 use serde::{Deserialize, Serialize};
+use types::core::{EventId, RoomId};
 use validator::{Validate, ValidationError};
 
 pub mod favorites;
@@ -2139,10 +2140,10 @@ async fn enrich_from_keycloak(
 mod tests {
     use super::*;
     use db_storage::events::TimeZone;
-    use db_storage::rooms::RoomId;
     use db_storage::users::UserId;
     use std::time::SystemTime;
     use test_util::assert_eq_json;
+    use types::core::RoomId;
     use uuid::Uuid;
 
     #[test]

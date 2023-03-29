@@ -12,12 +12,13 @@ publish = false
 
 [dependencies]
 controller = { path = "../controller", package = "k3k-controller-core" }
-redis = "0.21"
+redis = "0.22"
 redis-args = { path = "../redis-args", package = "k3k-redis-args" }
 serde = { version = "1", features = ["derive"] }
+types = { path = "../types", package = "k3k-types", features = ["backend"] }
 
 [dev-dependencies]
 test-util = { path = "../test-util", package = "k3k-test-util", features = ["controller"] }
 pretty_assertions = "1.3"
-serial_test = "0.7"
-actix-rt = "2.2"
+serial_test = "1"
+actix-rt = "2.8"

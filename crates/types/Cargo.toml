@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
+#
+# SPDX-License-Identifier: EUPL-1.2
+
+[package]
+name = "k3k-types"
+edition = "2021"
+authors.workspace = true
+version.workspace = true
+publish = false
+
+[dependencies]
+chrono = "0.4"
+diesel = { version = "2", features = ["postgres", "uuid"], optional = true }
+kustos = { path = "../kustos", optional = true }
+rand = { version = "0.8.5", optional = true }
+redis = { version = "0.22", optional = true }
+redis-args = { path = "../redis-args", package = "k3k-redis-args", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+uuid = { version = "1" }
+validator = { version = "0.16", features = ["derive"], optional = true }
+
+[features]
+default = ["frontend"]
+backend = ["diesel", "redis", "kustos", "serde", "rand"]
+frontend = ["serde"]
+diesel = ["serde", "dep:diesel"]
+redis = ["serde", "dep:redis", "dep:redis-args"]
+kustos = ["dep:kustos"]
+rand = ["dep:rand", "uuid/v4"]
+serde = [
+  "dep:serde",
+  "dep:validator",
+  "chrono/serde",
+]

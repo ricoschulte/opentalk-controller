@@ -15,9 +15,9 @@ use super::{
 };
 use crate::api::signaling::prelude::control::incoming::Join;
 use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlData, NAMESPACE};
-use crate::api::signaling::prelude::{BreakoutRoomId, InitContext, ModuleContext};
+use crate::api::signaling::prelude::{InitContext, ModuleContext};
 use crate::api::signaling::ws_modules::control::ParticipationKind;
-use crate::api::signaling::{Role, SignalingRoomId, Timestamp};
+use crate::api::signaling::{Role, SignalingRoomId};
 use crate::api::v1::tariffs::TariffResource;
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
@@ -25,10 +25,8 @@ use crate::storage::ObjectStorage;
 use actix_http::ws::CloseCode;
 use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
-use controller_shared::ParticipantId;
 use database::Db;
 use db_storage::rooms::Room;
-use db_storage::tariffs::TariffId;
 use db_storage::users::{User, UserId};
 use futures::stream::SelectAll;
 use kustos::Authz;
@@ -44,6 +42,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task;
 use tokio::time::timeout;
 use tokio_stream::StreamExt;
+use types::core::{BreakoutRoomId, ParticipantId, TariffId, Timestamp};
 
 /// A module tester that simulates a runner environment for provided module.
 ///
