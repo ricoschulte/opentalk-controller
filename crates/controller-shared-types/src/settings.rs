@@ -171,6 +171,12 @@ pub struct Logging {
 
     #[serde(default = "default_service_name")]
     pub service_name: String,
+
+    #[serde(default = "default_service_namespace")]
+    pub service_namespace: String,
+
+    #[serde(default)]
+    pub service_instance_id: Option<String>,
 }
 
 impl Default for Logging {
@@ -179,12 +185,18 @@ impl Default for Logging {
             default_directives: default_directives(),
             otlp_tracing_endpoint: None,
             service_name: default_service_name(),
+            service_namespace: default_service_namespace(),
+            service_instance_id: None,
         }
     }
 }
 
 fn default_service_name() -> String {
     "k3k-controller".into()
+}
+
+fn default_service_namespace() -> String {
+    "opentalk".into()
 }
 
 fn default_directives() -> Vec<String> {
