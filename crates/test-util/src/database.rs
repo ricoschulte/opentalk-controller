@@ -8,11 +8,11 @@ use db_storage::groups::{get_or_create_groups_by_name, insert_user_into_groups};
 use db_storage::migrations::migrate_from_url;
 use db_storage::rooms::{NewRoom, Room};
 use db_storage::tariffs::Tariff;
-use db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId, TenantId};
-use db_storage::users::{NewUser, User, UserId};
+use db_storage::tenants::{get_or_create_tenant_by_oidc_id, OidcTenantId};
+use db_storage::users::{NewUser, User};
 use diesel::{Connection, PgConnection, RunQueryDsl};
 use std::sync::Arc;
-use types::core::{GroupName, RoomId};
+use types::core::{GroupName, RoomId, TenantId, UserId};
 
 /// Contains the [`Db`] as well as information about the test database
 pub struct DatabaseContext {

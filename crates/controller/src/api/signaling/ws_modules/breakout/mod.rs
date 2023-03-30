@@ -5,7 +5,6 @@
 //! Breakout room module
 
 use self::storage::BreakoutConfig;
-use super::control::ParticipationKind;
 use crate::api::signaling::SignalingRoomId;
 use crate::prelude::*;
 use actix_http::ws::CloseCode;
@@ -16,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 use tokio::time::sleep;
-use types::core::{BreakoutRoomId, ParticipantId, RoomId, Timestamp};
+use types::core::{BreakoutRoomId, ParticipantId, ParticipationKind, RoomId, Timestamp};
 
 pub mod incoming;
 pub mod outgoing;

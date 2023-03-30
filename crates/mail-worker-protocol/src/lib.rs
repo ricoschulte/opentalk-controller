@@ -224,13 +224,11 @@ impl From<String> for v1::ExternalUser {
 }
 
 #[cfg(feature = "client")]
-impl From<(chrono::DateTime<chrono::Utc>, db_storage::events::TimeZone)> for v1::Time {
-    fn from(
-        (time, timezone): (chrono::DateTime<chrono::Utc>, db_storage::events::TimeZone),
-    ) -> Self {
+impl From<(chrono::DateTime<chrono::Utc>, types::core::TimeZone)> for v1::Time {
+    fn from((time, timezone): (chrono::DateTime<chrono::Utc>, types::core::TimeZone)) -> Self {
         v1::Time {
             time,
-            timezone: timezone.0.to_string(),
+            timezone: timezone.to_string(),
         }
     }
 }

@@ -5,10 +5,9 @@
 use crate::{api::signaling::prelude::*, redis_wrapper::RedisConnection};
 use actix_http::ws::CloseCode;
 use anyhow::Result;
-use db_storage::users::UserId;
 use serde::Serialize;
 use std::collections::HashMap;
-use types::core::{ParticipantId, RoomId};
+use types::core::{ParticipantId, RoomId, UserId};
 
 pub mod incoming;
 pub mod outgoing;

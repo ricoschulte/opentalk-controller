@@ -7,27 +7,24 @@ use crate::schema::{
     event_exceptions, event_favorites, event_invites, events, rooms, sip_configs, users,
 };
 use crate::sip_configs::SipConfig;
-use crate::tenants::TenantId;
-use crate::users::{User, UserId};
+use crate::users::User;
 use crate::utils::HasUsers;
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use database::{DatabaseError, DbConnection, Paginate, Result};
-use diesel::backend::RawValue;
 use diesel::deserialize::FromSql;
 use diesel::expression::AsExpression;
 use diesel::pg::Pg;
 use diesel::prelude::*;
-use diesel::serialize::{self, IsNull, Output, ToSql};
 use diesel::sql_types::{Nullable, Record, Timestamptz, Uuid};
 use diesel::{
-    deserialize, BoolExpressionMethods, ExpressionMethods, JoinOnDsl, NullableExpressionMethods,
+    BoolExpressionMethods, ExpressionMethods, JoinOnDsl, NullableExpressionMethods,
     OptionalExtension, PgSortExpressionMethods, QueryDsl, Queryable, RunQueryDsl,
 };
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::io::Write;
-use std::str::{from_utf8, FromStr};
-use types::core::{EventId, RoomId};
+use std::str::FromStr;
+use types::core::{EventId, RoomId, TenantId, TimeZone, UserId};
 
 types::diesel_newtype! {
     #[derive(Copy)] EventSerialId(i64) => diesel::sql_types::BigInt,
@@ -38,26 +35,6 @@ types::diesel_newtype! {
 }
 
 pub mod email_invites;
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, FromSqlRow, AsExpression, Serialize, Deserialize)]
-#[diesel(sql_type = diesel::sql_types::Text)]
-pub struct TimeZone(pub chrono_tz::Tz);
-
-impl ToSql<diesel::sql_types::Text, Pg> for TimeZone {
-    fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
-        write!(out, "{}", self.0)?;
-        Ok(IsNull::No)
-    }
-}
-
-impl FromSql<diesel::sql_types::Text, Pg> for TimeZone {
-    fn from_sql(bytes: RawValue<Pg>) -> deserialize::Result<Self> {
-        let s = from_utf8(bytes.as_bytes())?;
-        let tz = Tz::from_str(s)?;
-
-        Ok(Self(tz))
-    }
-}
 
 #[derive(Debug, Clone, Queryable, Identifiable, Associations, PartialEq, Eq)]
 #[diesel(table_name = events)]

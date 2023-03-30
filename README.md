@@ -134,3 +134,5 @@ Inside the crates folder following crates can be found:
 * [kustos](crates/kustos)
     - authz abstraction based on casbin-rs
 * [test-util](crates/test-util)
+* [types](crates/types)
+    - types that are shared across different crates, such as Web API and signaling messages

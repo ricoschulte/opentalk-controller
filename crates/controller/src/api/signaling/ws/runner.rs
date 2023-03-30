@@ -19,7 +19,7 @@ use crate::api::signaling::ws::actor::WsCommand;
 use crate::api::signaling::ws_modules::control::outgoing::Participant;
 use crate::api::signaling::ws_modules::control::storage::ParticipantIdRunnerLock;
 use crate::api::signaling::ws_modules::control::{
-    incoming, outgoing, rabbitmq, storage, ControlData, ParticipationKind, NAMESPACE,
+    incoming, outgoing, rabbitmq, storage, ControlData, NAMESPACE,
 };
 use crate::api::signaling::{Role, SignalingRoomId};
 use crate::api::v1::tariffs::TariffResource;
@@ -34,7 +34,7 @@ use controller_shared::settings::SharedSettings;
 use database::Db;
 use db_storage::rooms::Room;
 use db_storage::tariffs::Tariff;
-use db_storage::users::{User, UserId};
+use db_storage::users::User;
 use futures::stream::SelectAll;
 use futures::Future;
 use itertools::Itertools;
@@ -55,7 +55,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc};
 use tokio::time::{interval, sleep};
 use tokio_stream::StreamExt;
-use types::core::{BreakoutRoomId, ParticipantId};
+use types::core::{BreakoutRoomId, ParticipantId, ParticipationKind, UserId};
 use uuid::Uuid;
 
 mod sip;

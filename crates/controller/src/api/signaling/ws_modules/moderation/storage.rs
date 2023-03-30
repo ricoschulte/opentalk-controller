@@ -4,10 +4,9 @@
 
 use crate::redis_wrapper::RedisConnection;
 use anyhow::{Context, Result};
-use db_storage::users::UserId;
 use redis::AsyncCommands;
 use redis_args::ToRedisArgs;
-use types::core::{ParticipantId, RoomId};
+use types::core::{ParticipantId, RoomId, UserId};
 
 /// Set of user-ids banned in a room
 #[derive(ToRedisArgs)]

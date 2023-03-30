@@ -10,12 +10,10 @@
 use anyhow::{Context, Error, Result};
 use controller_shared::settings::Settings;
 use database::{Db, DbConnection};
-use db_storage::{
-    rooms::Room,
-    users::{User, UserId},
-};
+use db_storage::{rooms::Room, users::User};
 use kustos::prelude::*;
 use std::sync::Arc;
+use types::core::UserId;
 
 pub(crate) struct FixAclConfig {
     pub(crate) user_roles: bool,

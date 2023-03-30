@@ -7,15 +7,14 @@ use crate::diesel::RunQueryDsl;
 use crate::schema::rooms;
 use crate::schema::users;
 use crate::tariffs::Tariff;
-use crate::tenants::TenantId;
-use crate::users::{User, UserId};
+use crate::users::User;
 use chrono::{DateTime, Utc};
 use database::DbConnection;
 use database::{Paginate, Result};
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel::{Identifiable, Queryable};
-use types::core::RoomId;
+use types::core::{RoomId, TenantId, UserId};
 
 types::diesel_newtype! {
     #[derive(Copy)] SerialRoomId(i64) => diesel::sql_types::BigInt

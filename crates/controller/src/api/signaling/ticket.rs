@@ -2,34 +2,13 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use super::resumption::{ResumptionData, ResumptionToken};
+use super::resumption::{ResumptionData, ResumptionRedisKey};
 use crate::{api::v1::response::ApiError, prelude::*};
 use anyhow::Context;
-use db_storage::users::UserId;
-use rand::Rng;
 use redis::AsyncCommands;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
-use types::core::{BreakoutRoomId, ParticipantId, RoomId};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TicketToken(String);
-
-impl TicketToken {
-    pub fn generate() -> Self {
-        let token = rand::thread_rng()
-            .sample_iter(rand::distributions::Alphanumeric)
-            .take(64)
-            .map(char::from)
-            .collect();
-
-        Self(token)
-    }
-
-    pub fn redis_key(&self) -> TicketRedisKey<'_> {
-        TicketRedisKey { ticket: &self.0 }
-    }
-}
+use types::core::{BreakoutRoomId, ParticipantId, ResumptionToken, RoomId, TicketToken, UserId};
 
 /// Typed redis key for a signaling ticket containing [`TicketData`]
 #[derive(Debug, Copy, Clone, ToRedisArgs)]
@@ -88,7 +67,7 @@ pub async fn start_or_continue_signaling_session(
 
     // let the ticket expire in 30 seconds
     redis_conn
-        .set_ex(ticket.redis_key(), &ticket_data, 30)
+        .set_ex(ticket.as_str(), &ticket_data, 30)
         .await
         .map_err(|e| {
             log::error!("Unable to store ticket in redis, {}", e);
@@ -104,7 +83,7 @@ async fn use_resumption_token(
     room: RoomId,
     token: ResumptionToken,
 ) -> Result<Option<ParticipantId>, ApiError> {
-    let resumption_redis_key = token.into_redis_key();
+    let resumption_redis_key = ResumptionRedisKey(token);
 
     // Check for resumption data behind resumption token
     let resumption_data: Option<ResumptionData> =

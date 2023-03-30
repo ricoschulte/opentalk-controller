@@ -101,7 +101,12 @@ pub mod core;
 
 mod imports {
     #[cfg(feature = "diesel")]
-    pub use diesel::{deserialize::FromSqlRow, expression::AsExpression};
+    pub use diesel::{
+        deserialize::{FromSql, FromSqlRow},
+        expression::AsExpression,
+        pg::Pg,
+        serialize::ToSql,
+    };
 
     #[cfg(feature = "redis")]
     pub use {

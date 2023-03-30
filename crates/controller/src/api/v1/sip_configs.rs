@@ -6,17 +6,17 @@ use super::response::error::ApiError;
 use actix_web::web::{Data, Json, Path};
 use actix_web::{delete, get, put, HttpResponse};
 use database::Db;
-use db_storage::sip_configs::{NewSipConfig, SipConfig, SipId, SipPassword, UpdateSipConfig};
+use db_storage::sip_configs::{NewSipConfig, SipConfig, UpdateSipConfig};
 use serde::{Deserialize, Serialize};
-use types::core::RoomId;
+use types::core::{CallInId, CallInPassword, RoomId};
 use validator::{Validate, ValidationError};
 
 /// The sip config returned by the API endpoints
 #[derive(Debug, Clone, Serialize)]
 pub struct SipConfigResource {
     pub room: RoomId,
-    pub sip_id: SipId,
-    pub password: SipPassword,
+    pub sip_id: CallInId,
+    pub password: CallInPassword,
     pub lobby: bool,
 }
 
@@ -25,7 +25,7 @@ pub struct SipConfigResource {
 #[validate(schema(function = "disallow_empty"))]
 pub struct PutSipConfig {
     #[validate]
-    pub password: Option<SipPassword>,
+    pub password: Option<CallInPassword>,
     pub lobby: Option<bool>,
 }
 

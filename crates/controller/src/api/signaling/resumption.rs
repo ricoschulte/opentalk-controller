@@ -12,39 +12,16 @@
 
 use crate::{api::Participant, redis_wrapper::RedisConnection};
 use anyhow::{bail, Context, Result};
-use db_storage::users::UserId;
-use rand::Rng;
 use redis_args::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use tokio::time::sleep_until;
-use types::core::{BreakoutRoomId, ParticipantId, RoomId};
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ResumptionToken(String);
-
-impl ResumptionToken {
-    pub fn generate() -> Self {
-        let token = rand::thread_rng()
-            .sample_iter(rand::distributions::Alphanumeric)
-            .take(64)
-            .map(char::from)
-            .collect();
-
-        Self(token)
-    }
-
-    pub fn into_redis_key(self) -> ResumptionRedisKey {
-        ResumptionRedisKey { resumption: self.0 }
-    }
-}
+use types::core::{BreakoutRoomId, ParticipantId, ResumptionToken, RoomId, UserId};
 
 /// Redis key for a resumption token containing [`ResumptionData`].
 #[derive(Debug, ToRedisArgs)]
-#[to_redis_args(fmt = "k3k-signaling:resumption={resumption}")]
-pub struct ResumptionRedisKey {
-    pub resumption: String,
-}
+#[to_redis_args(fmt = "k3k-signaling:resumption={}")]
+pub struct ResumptionRedisKey(pub ResumptionToken);
 
 /// Data saved in redis behind the [`ResumptionRedisKey`]
 #[derive(Debug, Serialize, Deserialize, ToRedisArgs, FromRedisValue)]
@@ -71,9 +48,7 @@ pub struct ResumptionTokenUsed(());
 impl ResumptionTokenKeepAlive {
     pub fn new(token: ResumptionToken, data: ResumptionData) -> Self {
         Self {
-            redis_key: ResumptionRedisKey {
-                resumption: token.0,
-            },
+            redis_key: ResumptionRedisKey(token),
             data,
             next_refresh: Instant::now() + Duration::from_secs(60),
         }

@@ -8,85 +8,22 @@ use database::{DatabaseError, DbConnection, Result};
 use diesel::prelude::*;
 use diesel::{ExpressionMethods, QueryDsl};
 use diesel::{Identifiable, Queryable};
-use rand::{distributions::Slice, thread_rng, Rng};
-use types::core::RoomId;
-use validator::{Validate, ValidationError, ValidationErrors};
-
-/// The set of numbers used to generate [`SipId`] & [`SipPassword`]
-const NUMERIC: [char; 10] = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-
-types::diesel_newtype! {
-    NumericId(String) => diesel::sql_types::Text,
-    SipId(NumericId) => diesel::sql_types::Text,
-    SipPassword(NumericId) => diesel::sql_types::Text
-}
-
-impl NumericId {
-    pub fn generate() -> Self {
-        let numeric_dist = Slice::new(&NUMERIC).unwrap();
-
-        Self::from(thread_rng().sample_iter(numeric_dist).take(10).collect())
-    }
-}
-
-impl Validate for NumericId {
-    fn validate(&self) -> Result<(), ValidationErrors> {
-        let mut errors = ValidationErrors::new();
-
-        if self.inner().len() != 10 {
-            errors.add("0", ValidationError::new("Invalid id length"));
-            return Err(errors);
-        }
-
-        for c in self.inner().chars() {
-            if !c.is_ascii_digit() {
-                errors.add("0", ValidationError::new("Non numeric character"));
-                return Err(errors);
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl SipId {
-    pub fn generate() -> Self {
-        Self::from(NumericId::generate())
-    }
-}
-
-impl Validate for SipId {
-    fn validate(&self) -> Result<(), ValidationErrors> {
-        self.inner().validate()
-    }
-}
-
-impl SipPassword {
-    pub fn generate() -> Self {
-        Self::from(NumericId::generate())
-    }
-}
-
-impl Validate for SipPassword {
-    fn validate(&self) -> Result<(), ValidationErrors> {
-        self.inner().validate()
-    }
-}
+use types::core::{CallInId, CallInPassword, RoomId};
 
 /// Diesel SipConfig struct
 #[derive(Debug, Clone, Queryable, Identifiable)]
 pub struct SipConfig {
     pub id: i64,
     pub room: RoomId,
-    pub sip_id: SipId,
-    pub password: SipPassword,
+    pub sip_id: CallInId,
+    pub password: CallInPassword,
     pub lobby: bool,
 }
 
 impl SipConfig {
     /// Get the sip config for the specified sip_id
     #[tracing::instrument(err, skip_all)]
-    pub fn get(conn: &mut DbConnection, sip_id: SipId) -> Result<Option<SipConfig>> {
+    pub fn get(conn: &mut DbConnection, sip_id: CallInId) -> Result<Option<SipConfig>> {
         let query = sip_configs::table.filter(sip_configs::sip_id.eq(&sip_id));
         let sip_config = query.get_result(conn).optional()?;
 
@@ -124,8 +61,8 @@ impl SipConfig {
 #[diesel(table_name = sip_configs)]
 pub struct NewSipConfig {
     pub room: RoomId,
-    pub sip_id: SipId,
-    pub password: SipPassword,
+    pub sip_id: CallInId,
+    pub password: CallInPassword,
     pub enable_lobby: bool,
 }
 
@@ -133,14 +70,14 @@ impl NewSipConfig {
     pub fn new(room_id: RoomId, enable_lobby: bool) -> Self {
         Self {
             room: room_id,
-            sip_id: SipId::generate(),
-            password: SipPassword::generate(),
+            sip_id: CallInId::generate(),
+            password: CallInPassword::generate(),
             enable_lobby,
         }
     }
 
     fn re_generate_id(&mut self) {
-        self.sip_id = SipId::generate();
+        self.sip_id = CallInId::generate();
     }
 
     #[tracing::instrument(err, skip_all)]
@@ -174,7 +111,7 @@ impl NewSipConfig {
 #[derive(Debug, AsChangeset)]
 #[diesel(table_name = sip_configs)]
 pub struct UpdateSipConfig {
-    pub password: Option<SipPassword>,
+    pub password: Option<CallInPassword>,
     pub enable_lobby: Option<bool>,
 }
 

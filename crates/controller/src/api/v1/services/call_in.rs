@@ -2,8 +2,7 @@
 //
 // SPDX-License-Identifier: EUPL-1.2
 
-use crate::api::signaling::resumption::ResumptionToken;
-use crate::api::signaling::ticket::{start_or_continue_signaling_session, TicketToken};
+use crate::api::signaling::ticket::start_or_continue_signaling_session;
 use crate::api::v1::response::ApiError;
 use crate::api::Participant;
 use crate::redis_wrapper::RedisConnection;
@@ -12,17 +11,17 @@ use actix_web::error::Result;
 use actix_web::post;
 use actix_web::web::{Data, Json};
 use database::Db;
-use db_storage::sip_configs::{SipConfig, SipId, SipPassword};
+use db_storage::sip_configs::SipConfig;
 use serde::{Deserialize, Serialize};
-use types::core::RoomId;
+use types::core::{CallInId, CallInPassword, ResumptionToken, RoomId, TicketToken};
 use validator::Validate;
 
 pub const REQUIRED_CALL_IN_ROLE: &str = "opentalk-call-in";
 
 #[derive(Deserialize)]
 pub struct CallInStartRequestBody {
-    id: SipId,
-    pin: SipPassword,
+    id: CallInId,
+    pin: CallInPassword,
 }
 
 #[derive(Serialize)]

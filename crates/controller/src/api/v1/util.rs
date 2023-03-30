@@ -6,7 +6,7 @@ use super::users::PublicUserProfile;
 use controller_shared::settings::Settings;
 use database::DbConnection;
 use database::Result;
-use db_storage::users::{User, UserId};
+use db_storage::users::User;
 use db_storage::utils::HasUsers;
 use serde::de;
 use serde::de::Visitor;
@@ -16,6 +16,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;
+use types::core::UserId;
 
 /// Utility to fetch user profiles batched
 ///

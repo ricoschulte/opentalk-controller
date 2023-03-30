@@ -16,7 +16,6 @@ use super::{
 use crate::api::signaling::prelude::control::incoming::Join;
 use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlData, NAMESPACE};
 use crate::api::signaling::prelude::{InitContext, ModuleContext};
-use crate::api::signaling::ws_modules::control::ParticipationKind;
 use crate::api::signaling::{Role, SignalingRoomId};
 use crate::api::v1::tariffs::TariffResource;
 use crate::api::Participant;
@@ -27,7 +26,7 @@ use actix_rt::task::JoinHandle;
 use anyhow::{bail, Context, Result};
 use database::Db;
 use db_storage::rooms::Room;
-use db_storage::users::{User, UserId};
+use db_storage::users::User;
 use futures::stream::SelectAll;
 use kustos::Authz;
 use serde_json::Value;
@@ -42,7 +41,7 @@ use tokio::sync::{broadcast, mpsc};
 use tokio::task;
 use tokio::time::timeout;
 use tokio_stream::StreamExt;
-use types::core::{BreakoutRoomId, ParticipantId, TariffId, Timestamp};
+use types::core::{BreakoutRoomId, ParticipantId, ParticipationKind, TariffId, Timestamp, UserId};
 
 /// A module tester that simulates a runner environment for provided module.
 ///
