@@ -14,14 +14,47 @@ stages:
 variables:
   # Enable one network per build for the test container and services
   FF_NETWORK_PER_BUILD: 'true'
+  # Will be set to the same namespace as the source project for a MR,
+  # or the same namespace as the current project for the `main` branch.
+  # Can be overridden entirely from project settings.
+  ENTERPRISE_CANARY_PROJECT: ''
+  ENTERPRISE_PROJECT: $CI_PROJECT_NAMESPACE/controller-enterprise
+  ENTERPRISE_REF: main
+  COMMUNITY_EDITION_UPSTREAM: $CI_PROJECT_PATH
 
 trigger_enterprise_ci:
   rules:
-    - if: $CI_COMMIT_BRANCH =~ /^main$/
+    - if: $CI_COMMIT_BRANCH =~ /^main$/ || $CI_PIPELINE_SOURCE == 'merge_request_event'
       exists:
         - crates/community-modules/Cargo.toml
-  trigger:
-    project: opentalk/controller-enterprise
+  script:
+    - set -x
+    - shopt -s expand_aliases
+    - |
+      if [ "$ENTERPRISE_CANARY_PROJECT" == "" ]; then
+        if [[ $CI_MERGE_REQUEST_SOURCE_PROJECT_PATH != "" ]]; then
+          SOURCE_PROJECT_NAMESPACE="${CI_MERGE_REQUEST_SOURCE_PROJECT_PATH%\/*}"
+          export ENTERPRISE_CANARY_PROJECT="$SOURCE_PROJECT_NAMESPACE"/controller-enterprise-canary
+          export ENTERPRISE_PROJECT="$SOURCE_PROJECT_NAMESPACE"/controller-enterprise
+          export COMMUNITY_EDITION_UPSTREAM="$CI_MERGE_REQUEST_SOURCE_PROJECT_PATH"
+        else
+          export ENTERPRISE_CANARY_PROJECT="$CI_PROJECT_NAMESPACE"/controller-enterprise-canary
+          export ENTERPRISE_PROJECT="$CI_PROJECT_NAMESPACE"/controller-enterprise
+          export COMMUNITY_EDITION_UPSTREAM="$CI_PROJECT_PATH"
+        fi
+      fi
+    # https://stackoverflow.com/a/28055173
+    - alias encode_uri='perl -pe '\''s/([^a-zA-Z0-9_.!~*()'\''\'\'''\''-])/sprintf("%%%02X",ord($1))/ge'\'
+    - export ENCODED_ENTERPRISE_PROJECT="$(echo -n "$ENTERPRISE_PROJECT" | encode_uri)"
+    - |
+      curl \
+        --request POST \
+        --form "token=$CI_JOB_TOKEN" \
+        --form "ref=$ENTERPRISE_REF" \
+        --form "variables[CANARY_REPO_PROJECT_PATH]=$ENTERPRISE_CANARY_PROJECT" \
+        --form "variables[COMMUNITY_EDITION_COMMITISH]=$CI_COMMIT_SHA" \
+        --form "variables[COMMUNITY_EDITION_UPSTREAM]=$COMMUNITY_EDITION_UPSTREAM" \
+        "$CI_API_V4_URL/projects/$ENCODED_ENTERPRISE_PROJECT/trigger/pipeline"
 
 lint:fmt:
   rules:
