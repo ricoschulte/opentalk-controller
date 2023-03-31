@@ -25,7 +25,10 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use tokio_stream::Stream;
-use types::core::{BreakoutRoomId, ParticipantId, Timestamp};
+use types::{
+    core::{BreakoutRoomId, ParticipantId, Timestamp},
+    signaling::NamespacedCommand,
+};
 
 mod actor;
 mod echo;
@@ -281,7 +284,7 @@ where
         self.rabbitmq_publish_any(
             Some(exchange),
             routing_key,
-            Namespaced {
+            NamespacedCommand {
                 namespace: M::NAMESPACE,
                 payload: message,
             },
@@ -314,7 +317,7 @@ where
         self.rabbitmq_publish_any(
             Some(exchange),
             routing_key,
-            Namespaced {
+            NamespacedCommand {
                 namespace: control::NAMESPACE,
                 payload: message,
             },
@@ -425,16 +428,6 @@ pub trait SignalingModule: Sized + 'static {
 
     /// Before dropping the module this function will be called
     async fn on_destroy(self, ctx: DestroyContext<'_>);
-}
-
-/// An envelope of module messages annotated with their respective module name.
-///
-/// This is used for incoming WebSocket messages and rabbitMQ messages.
-/// The Namespace is used to route the message to appropriate [`SignalingModule`]
-#[derive(Deserialize, Serialize)]
-pub(crate) struct Namespaced<'n, O> {
-    pub namespace: &'n str,
-    pub payload: O,
 }
 
 /// The root of all outgoing websocket messages.

@@ -7,7 +7,7 @@ use super::modules::{
     AnyStream, DynBroadcastEvent, DynEventCtx, DynTargetedEvent, Modules, NoSuchModuleError,
 };
 use super::{
-    DestroyContext, Namespaced, NamespacedOutgoing, RabbitMqBinding, RabbitMqExchange,
+    DestroyContext, NamespacedCommand, NamespacedOutgoing, RabbitMqBinding, RabbitMqExchange,
     RabbitMqPublish, Timestamp,
 };
 use crate::api;
@@ -699,7 +699,7 @@ impl Runner {
                                 self.room_id.room_id(),
                             )),
                             control::rabbitmq::room_all_routing_key(),
-                            serde_json::to_string(&Namespaced {
+                            serde_json::to_string(&NamespacedCommand {
                                 namespace: moderation::NAMESPACE,
                                 payload: moderation::rabbitmq::Message::LeftWaitingRoom(self.id),
                             })
@@ -900,7 +900,7 @@ impl Runner {
     async fn handle_ws_message(&mut self, message: Message) {
         log::trace!("Received websocket message {:?}", message);
 
-        let value: Result<Namespaced<'_, Value>, _> = match message {
+        let value: Result<NamespacedCommand<'_, Value>, _> = match message {
             Message::Text(ref text) => serde_json::from_str(text),
             Message::Binary(ref binary) => serde_json::from_slice(binary),
             _ => unreachable!(),
@@ -1062,7 +1062,7 @@ impl Runner {
                                     .as_str(),
                             ),
                             control::rabbitmq::room_all_routing_key(),
-                            serde_json::to_string(&Namespaced {
+                            serde_json::to_string(&NamespacedCommand {
                                 namespace: moderation::NAMESPACE,
                                 payload: moderation::rabbitmq::Message::LeftWaitingRoom(self.id),
                             })
@@ -1300,7 +1300,7 @@ impl Runner {
             timestamp,
             Some(breakout::rabbitmq::global_exchange_name(self.room_id.room_id()).as_str()),
             control::rabbitmq::room_all_routing_key(),
-            serde_json::to_string(&Namespaced {
+            serde_json::to_string(&NamespacedCommand {
                 namespace: moderation::NAMESPACE,
                 payload: moderation::rabbitmq::Message::JoinedWaitingRoom(self.id),
             })
@@ -1580,13 +1580,14 @@ impl Runner {
             }
             ).into();
 
-            let namespaced = match serde_json::from_slice::<Namespaced<Value>>(&delivery.data) {
-                Ok(namespaced) => namespaced,
-                Err(e) => {
-                    log::error!("Failed to read incoming rabbit-mq message, {}", e);
-                    return;
-                }
-            };
+            let namespaced =
+                match serde_json::from_slice::<NamespacedCommand<Value>>(&delivery.data) {
+                    Ok(namespaced) => namespaced,
+                    Err(e) => {
+                        log::error!("Failed to read incoming rabbit-mq message, {}", e);
+                        return;
+                    }
+                };
 
             if namespaced.namespace == NAMESPACE {
                 let msg = match serde_json::from_value::<rabbitmq::Message>(namespaced.payload) {
@@ -1865,7 +1866,7 @@ impl Runner {
         recipient: Option<ParticipantId>,
         message: rabbitmq::Message,
     ) {
-        let message = Namespaced {
+        let message = NamespacedCommand {
             namespace: NAMESPACE,
             payload: message,
         };
