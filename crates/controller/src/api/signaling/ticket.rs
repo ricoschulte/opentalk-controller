@@ -67,7 +67,13 @@ pub async fn start_or_continue_signaling_session(
 
     // let the ticket expire in 30 seconds
     redis_conn
-        .set_ex(ticket.as_str(), &ticket_data, 30)
+        .set_ex(
+            TicketRedisKey {
+                ticket: ticket.as_str(),
+            },
+            &ticket_data,
+            30,
+        )
         .await
         .map_err(|e| {
             log::error!("Unable to store ticket in redis, {}", e);
