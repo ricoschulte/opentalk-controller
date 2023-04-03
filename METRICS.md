@@ -6,7 +6,6 @@ SPDX-License-Identifier: EUPL-1.2
 
 # Metrics
 
-
 ## Web-API
 
 | Key                                       | Type      | Labels                  | Description                                                     |
