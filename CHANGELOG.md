@@ -26,6 +26,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - controller: authenticated users can join meetings without a password ([#335](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/335))
 - controller: Traces are now exported directly via OTLP. The setting was renamed from `jaeger_agent_endpoint` to `otlp_tracing_endpoint` ([#301](https://git.opentalk.dev/opentalk/k3k-controller/-/issues/301)).
 
+### Moved
+
+- types: Move `Namespaced` to `types::signaling::NamespacedCommand`
+- types: Move `NamespacedOutgoing` to `types::signaling::NamespacedEvent`
+
 ## [0.2.0] - 2023-03-13
 
 ### Added

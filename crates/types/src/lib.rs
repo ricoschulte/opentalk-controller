@@ -98,6 +98,7 @@
 mod macros;
 
 pub mod core;
+pub mod signaling;
 
 mod imports {
     #[cfg(feature = "diesel")]

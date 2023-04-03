@@ -337,7 +337,13 @@ where
 
         let mut ws_messages_serialized = ws_messages
             .into_iter()
-            .map(|message| Message::Text(message.to_json()))
+            .map(|message| {
+                Message::Text(
+                    serde_json::to_string(&message)
+                        .expect("Failed to convert namespaced to json")
+                        .into(),
+                )
+            })
             .collect();
 
         dyn_ctx.ws_messages.append(&mut ws_messages_serialized);
@@ -370,7 +376,13 @@ where
 
         let mut ws_messages_serialized = ws_messages
             .into_iter()
-            .map(|message| Message::Text(message.to_json()))
+            .map(|message| {
+                Message::Text(
+                    serde_json::to_string(&message)
+                        .expect("Failed to convert namespaced to json")
+                        .into(),
+                )
+            })
             .collect();
 
         dyn_ctx.ws_messages.append(&mut ws_messages_serialized);

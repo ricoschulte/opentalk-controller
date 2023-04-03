@@ -11,7 +11,7 @@
 //! The idea is to simulate a frontend websocket connection. See the LegalVote integration tests for examples.
 use super::modules::AnyStream;
 use super::{
-    DestroyContext, Event, Namespaced, NamespacedOutgoing, RabbitMqPublish, SignalingModule,
+    DestroyContext, Event, NamespacedCommand, NamespacedEvent, RabbitMqPublish, SignalingModule,
 };
 use crate::api::signaling::prelude::control::incoming::Join;
 use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlData, NAMESPACE};
@@ -740,7 +740,7 @@ where
     }
 
     fn publish_rabbitmq_control(&mut self, message: control::rabbitmq::Message) -> Result<()> {
-        let message = serde_json::to_string(&Namespaced {
+        let message = serde_json::to_string(&NamespacedCommand {
             namespace: NAMESPACE,
             payload: message,
         })?;
@@ -787,8 +787,9 @@ where
             }
         }
 
-        let namespaced = serde_json::from_str::<Namespaced<Value>>(&rabbitmq_publish.message)
-            .context("Failed to read incoming rabbitmq message")?;
+        let namespaced =
+            serde_json::from_str::<NamespacedCommand<Value>>(&rabbitmq_publish.message)
+                .context("Failed to read incoming rabbitmq message")?;
 
         if namespaced.namespace == NAMESPACE {
             let control_message = serde_json::from_value(namespaced.payload)?;
@@ -817,7 +818,7 @@ where
 
     async fn handle_module_requested_actions(
         &mut self,
-        ws_messages: Vec<NamespacedOutgoing<'_, M::Outgoing>>,
+        ws_messages: Vec<NamespacedEvent<'_, M::Outgoing>>,
         rabbitmq_publish: Vec<RabbitMqPublish>,
         invalidate_data: bool,
         events: SelectAll<AnyStream>,

@@ -25,12 +25,12 @@ validator = { version = "0.16", features = ["derive"], optional = true }
 
 [features]
 default = ["frontend"]
-backend = ["diesel", "redis", "kustos", "serde", "rand"]
-frontend = ["serde"]
+backend = ["diesel", "kustos", "rand", "redis", "serde"]
 diesel = ["serde", "dep:diesel"]
-redis = ["serde", "dep:redis", "dep:redis-args"]
+frontend = ["serde"]
 kustos = ["dep:kustos"]
 rand = ["dep:rand", "uuid/v4"]
+redis = ["serde", "dep:redis", "dep:redis-args"]
 serde = [
   "dep:serde",
   "dep:validator",
