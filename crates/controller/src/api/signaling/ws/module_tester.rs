@@ -11,7 +11,7 @@
 //! The idea is to simulate a frontend websocket connection. See the LegalVote integration tests for examples.
 use super::modules::AnyStream;
 use super::{
-    DestroyContext, Event, NamespacedCommand, NamespacedOutgoing, RabbitMqPublish, SignalingModule,
+    DestroyContext, Event, NamespacedCommand, NamespacedEvent, RabbitMqPublish, SignalingModule,
 };
 use crate::api::signaling::prelude::control::incoming::Join;
 use crate::api::signaling::prelude::control::{self, outgoing, storage, ControlData, NAMESPACE};
@@ -818,7 +818,7 @@ where
 
     async fn handle_module_requested_actions(
         &mut self,
-        ws_messages: Vec<NamespacedOutgoing<'_, M::Outgoing>>,
+        ws_messages: Vec<NamespacedEvent<'_, M::Outgoing>>,
         rabbitmq_publish: Vec<RabbitMqPublish>,
         invalidate_data: bool,
         events: SelectAll<AnyStream>,

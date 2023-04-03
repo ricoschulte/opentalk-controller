@@ -7,4 +7,4 @@
 
 mod namespaced;
 
-pub use namespaced::NamespacedCommand;
+pub use namespaced::{NamespacedCommand, NamespacedEvent};

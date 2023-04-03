@@ -7,7 +7,7 @@ use super::modules::{
     AnyStream, DynBroadcastEvent, DynEventCtx, DynTargetedEvent, Modules, NoSuchModuleError,
 };
 use super::{
-    DestroyContext, NamespacedCommand, NamespacedOutgoing, RabbitMqBinding, RabbitMqExchange,
+    DestroyContext, NamespacedCommand, NamespacedEvent, RabbitMqBinding, RabbitMqExchange,
     RabbitMqPublish, Timestamp,
 };
 use crate::api;
@@ -1287,7 +1287,7 @@ impl Runner {
 
         self.ws
             .send(Message::Text(
-                serde_json::to_string(&NamespacedOutgoing {
+                serde_json::to_string(&NamespacedEvent {
                     namespace: moderation::NAMESPACE,
                     timestamp,
                     payload: moderation::outgoing::Message::InWaitingRoom,
@@ -1736,7 +1736,7 @@ impl Runner {
 
                         self.ws
                             .send(Message::Text(
-                                serde_json::to_string(&NamespacedOutgoing {
+                                serde_json::to_string(&NamespacedEvent {
                                     namespace: moderation::NAMESPACE,
                                     timestamp,
                                     payload: moderation::outgoing::Message::Accepted,
@@ -1804,7 +1804,7 @@ impl Runner {
 
                 self.ws
                     .send(Message::Text(
-                        serde_json::to_string(&NamespacedOutgoing {
+                        serde_json::to_string(&NamespacedEvent {
                             namespace: moderation::NAMESPACE,
                             timestamp,
                             payload: moderation::outgoing::Message::RaisedHandResetByModerator {
@@ -1818,7 +1818,7 @@ impl Runner {
             rabbitmq::Message::EnableRaiseHands { issued_by } => {
                 self.ws
                     .send(Message::Text(
-                        serde_json::to_string(&NamespacedOutgoing {
+                        serde_json::to_string(&NamespacedEvent {
                             namespace: moderation::NAMESPACE,
                             timestamp,
                             payload: moderation::outgoing::Message::RaiseHandsEnabled { issued_by },
@@ -1841,7 +1841,7 @@ impl Runner {
 
                 self.ws
                     .send(Message::Text(
-                        serde_json::to_string(&NamespacedOutgoing {
+                        serde_json::to_string(&NamespacedEvent {
                             namespace: moderation::NAMESPACE,
                             timestamp,
                             payload: moderation::outgoing::Message::RaiseHandsDisabled {
@@ -2035,7 +2035,7 @@ impl Runner {
     async fn ws_send_control(&mut self, timestamp: Timestamp, payload: outgoing::Message) {
         self.ws
             .send(Message::Text(
-                serde_json::to_string(&NamespacedOutgoing {
+                serde_json::to_string(&NamespacedEvent {
                     namespace: NAMESPACE,
                     timestamp,
                     payload,

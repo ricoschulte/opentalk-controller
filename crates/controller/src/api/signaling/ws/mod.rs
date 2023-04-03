@@ -27,7 +27,7 @@ use std::sync::Arc;
 use tokio_stream::Stream;
 use types::{
     core::{BreakoutRoomId, ParticipantId, Timestamp},
-    signaling::NamespacedCommand,
+    signaling::{NamespacedCommand, NamespacedEvent},
 };
 
 mod actor;
@@ -233,7 +233,7 @@ where
     M: SignalingModule,
 {
     role: Role,
-    ws_messages: &'ctx mut Vec<NamespacedOutgoing<'static, M::Outgoing>>,
+    ws_messages: &'ctx mut Vec<NamespacedEvent<'static, M::Outgoing>>,
     timestamp: Timestamp,
     rabbitmq_publish: &'ctx mut Vec<RabbitMqPublish>,
     redis_conn: &'ctx mut RedisConnection,
@@ -267,7 +267,7 @@ where
 
     /// Similar to `ws_send` but sets an explicit timestamp
     pub fn ws_send_overwrite_timestamp(&mut self, message: M::Outgoing, timestamp: Timestamp) {
-        self.ws_messages.push(NamespacedOutgoing {
+        self.ws_messages.push(NamespacedEvent {
             namespace: M::NAMESPACE,
             timestamp,
             payload: message,
@@ -428,14 +428,4 @@ pub trait SignalingModule: Sized + 'static {
 
     /// Before dropping the module this function will be called
     async fn on_destroy(self, ctx: DestroyContext<'_>);
-}
-
-/// The root of all outgoing websocket messages.
-///
-/// This is similar to [`Namespaced`] but includes a timestamp field.
-#[derive(Deserialize, Serialize)]
-pub(super) struct NamespacedOutgoing<'n, O> {
-    pub namespace: &'n str,
-    pub timestamp: Timestamp,
-    pub payload: O,
 }
