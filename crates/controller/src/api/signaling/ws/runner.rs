@@ -699,11 +699,11 @@ impl Runner {
                                 self.room_id.room_id(),
                             )),
                             control::rabbitmq::room_all_routing_key(),
-                            Namespaced {
+                            serde_json::to_string(&Namespaced {
                                 namespace: moderation::NAMESPACE,
                                 payload: moderation::rabbitmq::Message::LeftWaitingRoom(self.id),
-                            }
-                            .to_json(),
+                            })
+                            .expect("Failed to convert namespaced to json"),
                         )
                         .await;
                     }
@@ -1062,11 +1062,11 @@ impl Runner {
                                     .as_str(),
                             ),
                             control::rabbitmq::room_all_routing_key(),
-                            Namespaced {
+                            serde_json::to_string(&Namespaced {
                                 namespace: moderation::NAMESPACE,
                                 payload: moderation::rabbitmq::Message::LeftWaitingRoom(self.id),
-                            }
-                            .to_json(),
+                            })
+                            .expect("Failed to convert namespaced to json"),
                         )
                         .await;
 
@@ -1287,12 +1287,12 @@ impl Runner {
 
         self.ws
             .send(Message::Text(
-                NamespacedOutgoing {
+                serde_json::to_string(&NamespacedOutgoing {
                     namespace: moderation::NAMESPACE,
                     timestamp,
                     payload: moderation::outgoing::Message::InWaitingRoom,
-                }
-                .to_json(),
+                })?
+                .into(),
             ))
             .await;
 
@@ -1300,11 +1300,11 @@ impl Runner {
             timestamp,
             Some(breakout::rabbitmq::global_exchange_name(self.room_id.room_id()).as_str()),
             control::rabbitmq::room_all_routing_key(),
-            Namespaced {
+            serde_json::to_string(&Namespaced {
                 namespace: moderation::NAMESPACE,
                 payload: moderation::rabbitmq::Message::JoinedWaitingRoom(self.id),
-            }
-            .to_json(),
+            })
+            .expect("Failed to convert namespaced to json"),
         )
         .await;
 
@@ -1735,12 +1735,12 @@ impl Runner {
 
                         self.ws
                             .send(Message::Text(
-                                NamespacedOutgoing {
+                                serde_json::to_string(&NamespacedOutgoing {
                                     namespace: moderation::NAMESPACE,
                                     timestamp,
                                     payload: moderation::outgoing::Message::Accepted,
-                                }
-                                .to_json(),
+                                })?
+                                .into(),
                             ))
                             .await;
                     }
@@ -1803,26 +1803,26 @@ impl Runner {
 
                 self.ws
                     .send(Message::Text(
-                        NamespacedOutgoing {
+                        serde_json::to_string(&NamespacedOutgoing {
                             namespace: moderation::NAMESPACE,
                             timestamp,
                             payload: moderation::outgoing::Message::RaisedHandResetByModerator {
                                 issued_by,
                             },
-                        }
-                        .to_json(),
+                        })?
+                        .into(),
                     ))
                     .await;
             }
             rabbitmq::Message::EnableRaiseHands { issued_by } => {
                 self.ws
                     .send(Message::Text(
-                        NamespacedOutgoing {
+                        serde_json::to_string(&NamespacedOutgoing {
                             namespace: moderation::NAMESPACE,
                             timestamp,
                             payload: moderation::outgoing::Message::RaiseHandsEnabled { issued_by },
-                        }
-                        .to_json(),
+                        })?
+                        .into(),
                     ))
                     .await;
             }
@@ -1840,14 +1840,14 @@ impl Runner {
 
                 self.ws
                     .send(Message::Text(
-                        NamespacedOutgoing {
+                        serde_json::to_string(&NamespacedOutgoing {
                             namespace: moderation::NAMESPACE,
                             timestamp,
                             payload: moderation::outgoing::Message::RaiseHandsDisabled {
                                 issued_by,
                             },
-                        }
-                        .to_json(),
+                        })?
+                        .into(),
                     ))
                     .await;
             }
@@ -1876,8 +1876,13 @@ impl Runner {
             Cow::Borrowed(rabbitmq::room_all_routing_key())
         };
 
-        self.rabbitmq_publish(timestamp, None, &routing_key, message.to_json())
-            .await;
+        self.rabbitmq_publish(
+            timestamp,
+            None,
+            &routing_key,
+            serde_json::to_string(&message).expect("Failed to convert namespaced to json"),
+        )
+        .await;
     }
 
     /// Publish a rabbitmq message
@@ -2029,12 +2034,13 @@ impl Runner {
     async fn ws_send_control(&mut self, timestamp: Timestamp, payload: outgoing::Message) {
         self.ws
             .send(Message::Text(
-                NamespacedOutgoing {
+                serde_json::to_string(&NamespacedOutgoing {
                     namespace: NAMESPACE,
                     timestamp,
                     payload,
-                }
-                .to_json(),
+                })
+                .expect("Failed to convert namespaced to json")
+                .into(),
             ))
             .await;
     }

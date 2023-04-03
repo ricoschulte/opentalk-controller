@@ -11,7 +11,6 @@ use crate::redis_wrapper::RedisConnection;
 use crate::storage::ObjectStorage;
 use actix_http::ws::CloseCode;
 use anyhow::Result;
-use bytestring::ByteString;
 use database::Db;
 use db_storage::rooms::Room;
 use db_storage::users::User;
@@ -438,14 +437,6 @@ pub(crate) struct Namespaced<'n, O> {
     pub payload: O,
 }
 
-impl<'n, O> Namespaced<'n, O>
-where
-    O: Serialize,
-{
-    pub fn to_json(&self) -> String {
-        serde_json::to_string(self).expect("Failed to convert namespaced to json")
-    }
-}
 /// The root of all outgoing websocket messages.
 ///
 /// This is similar to [`Namespaced`] but includes a timestamp field.
@@ -454,15 +445,4 @@ pub(super) struct NamespacedOutgoing<'n, O> {
     pub namespace: &'n str,
     pub timestamp: Timestamp,
     pub payload: O,
-}
-
-impl<'n, O> NamespacedOutgoing<'n, O>
-where
-    O: Serialize,
-{
-    pub fn to_json(&self) -> ByteString {
-        serde_json::to_string(self)
-            .expect("Failed to convert namespaced to json")
-            .into()
-    }
 }
