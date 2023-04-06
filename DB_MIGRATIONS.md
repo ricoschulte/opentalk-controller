@@ -6,13 +6,13 @@ SPDX-License-Identifier: EUPL-1.2
 
 # Requirements
 
-* install the diesel cli tool with `cargo install diesel_cli --version 1.4.1 --no-default-features --features="barrel-migrations,barrel/pg,postgres"`
-* make sure `rustfmt` is installed with `rustup component add rustfmt`
+- install the diesel cli tool with `cargo install diesel_cli --version 1.4.1 --no-default-features --features="barrel-migrations,barrel/pg,postgres"`
+- make sure `rustfmt` is installed with `rustup component add rustfmt`
 
-# How to change the schema?
+# How to change the schema
 
-* add file `V<version_nr>__<name>.rs` under crates/controller/src/db/migrations/
-* implement the following structure:
+- add file `V<version_nr>__<name>.rs` under crates/controller/src/db/migrations/
+- implement the following structure:
 
 ```rust
 pub fn migration() -> String {
@@ -25,7 +25,6 @@ pub fn migration() -> String {
 ```
 
 Run `cargo xtask generate-db-schema` to generate a new diesel schema in `crates/db-storage/src/db/schema.rs`.
-This creates a random database by default and deletes it afterwards.  
+This creates a random database by default and deletes it afterwards.
 See `cargo xtask generate-db-schema --help` for information what options are possbile to not use default values
 or specify a fixed database.
-

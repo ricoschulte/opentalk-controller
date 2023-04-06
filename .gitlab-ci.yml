@@ -10,6 +10,7 @@ stages:
   - test
   - build
   - package
+  - trigger
 
 variables:
   # Enable one network per build for the test container and services
@@ -23,6 +24,7 @@ variables:
   COMMUNITY_EDITION_UPSTREAM: $CI_PROJECT_PATH
 
 trigger_enterprise_ci:
+  stage: trigger
   rules:
     - if: $CI_COMMIT_BRANCH =~ /^main$/ || $CI_PIPELINE_SOURCE == 'merge_request_event'
       exists:
@@ -111,6 +113,16 @@ lint:openapi:
     entrypoint: ['']
   script:
     - /usr/local/bin/openapi lint api/controller/frontend_api.yaml
+
+lint:markdown:
+  needs: []
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+    - if: $CI_PIPELINE_SOURCE == 'schedule'
+  stage: lint
+  image: registry.gitlab.com/pipeline-components/markdownlint:latest
+  script:
+    - mdl --style .markdown_style.rb  --warnings .
 
 lint:licensing:
   rules:
@@ -222,6 +234,13 @@ package:controller-container-dev:
       --dockerfile $CI_PROJECT_DIR/ci/Dockerfile
       --destination $CI_REGISTRY_IMAGE:dev
       --force
+
+trigger-docs:
+  stage: trigger
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  trigger:
+    project: opentalk/backend/docs
 
 package:controller-container-tag:
   rules:

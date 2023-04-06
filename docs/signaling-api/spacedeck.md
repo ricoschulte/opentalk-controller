@@ -2,7 +2,7 @@
 
 ## Terminology
 
-* __Space__ The actual whiteboard. Terminology inherited from spacedeck.
+- __Space__ The actual whiteboard. Terminology inherited from spacedeck.
 
 ## Overview
 
@@ -29,8 +29,8 @@ The module data has the following structure:
 
 ### Overview
 
-* [`initialize`](#initialize)
-* [`generate_pdf`](#generatepdf)
+- [`initialize`](#initialize)
+- [`generate_pdf`](#generatepdf)
 
 ### Initialize
 
@@ -86,9 +86,9 @@ A [`PdfUrl`](#pdfurl)message with the access URL to the PDF document is sent to 
 
 ### Overview
 
-* [`space_url`](#spaceurl)
-* [`pdf_url`](#pdfurl)
-* [`error`](#error)
+- [`space_url`](#spaceurl)
+- [`pdf_url`](#pdfurl)
+- [`error`](#error)
 
 ### SpaceUrl
 

@@ -2,7 +2,7 @@
 
 ## Terminology
 
-* __Etherpad__ - Open source online editor that allows users to collaboratively edit a document in real-time.
+- __Etherpad__ - Open source online editor that allows users to collaboratively edit a document in real-time.
 
 ## Overview
 

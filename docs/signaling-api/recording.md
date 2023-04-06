@@ -22,9 +22,9 @@ The participant list contains the recording-consent status in the `recording`-mo
 
 ### Overview
 
-* [`start`](#start)
-* [`stop`](#stop)
-* [`set_consent`](#SetConsent)
+- [`start`](#start)
+- [`stop`](#stop)
+- [`set_consent`](#SetConsent)
 
 ### Start
 
@@ -100,8 +100,8 @@ By default, the consent is always off (`false`).
 
 ### Overview
 
-* [`started`](#started)
-* [`stopped`](#stopped)
+- [`started`](#started)
+- [`stopped`](#stopped)
 
 ### Started
 

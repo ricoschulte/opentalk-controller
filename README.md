@@ -13,7 +13,8 @@ The controller is split into multiple crates to allow for extensibility.
 This root crate uses all crates to run the controller with its full feature set.
 
 ## Manual
-```
+
+```text
 k3k-controller 0.1.0-rc.1
 
 USAGE:
@@ -42,9 +43,8 @@ The `Dockerfile` is located at `container/Dockerfile`.
 To build the image, execute in the root of the repository:
 
 ```bash
- docker build -f container/Dockerfile . --tag <your tag>
+docker build -f container/Dockerfile . --tag <your tag>
 ```
-
 
 ## Configuration
 
@@ -102,37 +102,37 @@ This subcommand is expected to change frequently when more features for access r
 
 Inside the crates folder following crates can be found:
 
-* [controller](crates/controller)
+- [controller](crates/controller)
     - core crate which contains all of the controllers core features
     - OpenID Connect user authentication
     - Database connection and interfacing
     - `actix_web` based HTTP servers for external and internal APIs
     - Extensible signaling websocket endpoint for video room signaling
-* [controller-shared-types](crates/controller-shared-types)
+- [controller-shared-types](crates/controller-shared-types)
     - Shared types among the controller and modules
-* [db-storage](crates/db-storage)
+- [db-storage](crates/db-storage)
     - Database types used for the controller and modules
-* [janus-media](crates/janus-media)
+- [janus-media](crates/janus-media)
     - media signaling module using the `janus-client` crate
-* [community-modules](crates/community-modules)
+- [community-modules](crates/community-modules)
     - functionality for registering all modules in the community edition
     - depends on all modules in the community edition
-* [chat](crates/chat)
+- [chat](crates/chat)
     - chat signaling module which implements a simple room, group and private chat
-* [automod](crates/automod)
+- [automod](crates/automod)
     - signaling module implementing automoderation for videoconferences
-* [legal-vote](crates/legal-vote)
+- [legal-vote](crates/legal-vote)
     - signaling module implementing legal vote for videoconferences
-* [polls](crates/polls)
+- [polls](crates/polls)
     - signaling module implementing polls for videoconferences
-* [client](crates/client) EXPERIMENTAL
+- [client](crates/client) EXPERIMENTAL
     - Client side implementation of the controllers APIs used for testing
-* [r3dlock](crates/r3dlock)
+- [r3dlock](crates/r3dlock)
     - redis redlock distributed lock implementation for a single instance
-* [janus-client](crates/janus-client)
+- [janus-client](crates/janus-client)
     - janus client library for interfacing with the [Janus WebRTC Server](https://janus.conf.meetecho.com/)
-* [kustos](crates/kustos)
+- [kustos](crates/kustos)
     - authz abstraction based on casbin-rs
-* [test-util](crates/test-util)
-* [types](crates/types)
+- [test-util](crates/test-util)
+- [types](crates/types)
     - types that are shared across different crates, such as Web API and signaling messages
