@@ -238,7 +238,7 @@ package:controller-container-dev:
 trigger-docs:
   stage: trigger
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_PROJECT_NAME !~ /^.*canary$/
   trigger:
     project: opentalk/backend/docs
 
