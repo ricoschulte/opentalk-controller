@@ -1,3 +1,6 @@
+This is a 'local-copy-fork' of the opentalk controller from https://gitlab.opencode.de/opentalk/controller
+
+
 <!--
 SPDX-FileCopyrightText: OpenTalk GmbH <mail@opentalk.eu>
 
