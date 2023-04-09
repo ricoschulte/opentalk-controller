@@ -497,6 +497,14 @@ struct RoomGroupChatHistory {
     group: GroupId,
 }
 
+/// A event for a participant enters or leaved a room
+#[derive(ToRedisArgs)]
+#[to_redis_args(fmt = "k3k-signaling:room={room}:participant={participant}:participant:event")]
+struct ParticipantRoomEvent {
+    room: SignalingRoomId,
+    participant: ParticipantId,
+}
+
 pub async fn add_participant_to_set(
     redis_conn: &mut RedisConnection,
     room: SignalingRoomId,
@@ -514,6 +522,11 @@ pub async fn add_participant_to_set(
         .sadd(RoomGroupParticipants { room, group }, participant)
         .await
         .context("Failed to add own participant id to set")?;
+    
+    redis_conn
+        .publish(ParticipantRoomEvent { room, participant }, format!("{{\"room\":\"{}\",\"participant\":\"{}\",\"event\":\"joined\"}}", room ,participant))
+        .await
+        .context("Failed to publish participant joined room event")?;
 
     guard
         .unlock(redis_conn)
@@ -534,6 +547,11 @@ pub async fn remove_participant_from_set(
         .srem(RoomGroupParticipants { room, group }, participant)
         .await
         .context("Failed to remove participant from participants-set")?;
+
+    redis_conn
+        .publish(ParticipantRoomEvent { room, participant }, format!("{{\"room\":\"{}\",\"participant\":\"{}\",\"event\":\"left\"}}", room ,participant))
+        .await
+        .context("Failed to publish participant left room event")?;
 
     redis_conn
         .scard(RoomGroupParticipants { room, group })
